@@ -7,7 +7,7 @@ const curlExample = `curl -X POST https://api.unclick.world/v1/links/pages \\
   -H "Content-Type: application/json" \\
   -d '{
     "slug": "my-consulting",
-    "title": "Chris – Strategy Consultant",
+    "title": "Chris - Strategy Consultant",
     "links": [
       { "label": "Book a call", "url": "https://cal.com/chris" },
       { "label": "My newsletter", "url": "https://newsletter.chris.com" }
@@ -21,13 +21,39 @@ const curlResponse = `{
   "status": "published"
 }`;
 
-const aiExample = `"Create a link page for my consulting business.
-Include a 'Book a call' link and a link to my newsletter."`;
+const mcpConfig = `// mcp.json - add UnClick to your agent once
+{
+  "mcpServers": {
+    "unclick": {
+      "url": "https://api.unclick.world/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}`;
 
-type Tab = "curl" | "ai";
+const mcpCall = `// Your agent now has these tools available:
+//   unclick_create_link_page
+//   unclick_create_booking
+//   unclick_create_form
+//   ... and more
+
+// When it needs a link page, it calls:
+POST /v1/links/pages
+{
+  "slug": "my-consulting",
+  "title": "Chris - Strategy Consultant"
+}
+
+// Response
+201 Created · 38ms
+{ "id": "pg_01j9k2m4...", "url": "https://unclick.world/my-consulting" }`;
+
+type Tab = "api" | "mcp";
 
 const CodeBlock = () => {
-  const [tab, setTab] = useState<Tab>("curl");
+  const [tab, setTab] = useState<Tab>("mcp");
 
   return (
     <section id="for-developers" className="mx-auto max-w-3xl px-6 py-32">
@@ -38,13 +64,14 @@ const CodeBlock = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Simple enough for a curl command.
+          Wire it into your agent. Ship the rest.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          Whether you're calling it directly or wiring it to an AI agent, the API is the same.
-          RESTful, JSON, predictable.
+          You add UnClick to your agent's MCP config or call the REST API directly. Your agent gets
+          clean endpoints for link pages, scheduling, and more. No browser scraping. No DOM parsing.
+          Just HTTP.
         </p>
       </FadeIn>
 
@@ -61,7 +88,7 @@ const CodeBlock = () => {
               <div className="h-3 w-3 rounded-full bg-[hsl(140_50%_40%)]" />
             </div>
             <div className="flex gap-1">
-              {(["curl", "ai"] as Tab[]).map((t) => (
+              {(["mcp", "api"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -69,7 +96,7 @@ const CodeBlock = () => {
                     tab === t ? "bg-primary/10 text-primary" : "text-muted-custom hover:text-body"
                   }`}
                 >
-                  {t === "curl" ? "curl / fetch" : "natural language"}
+                  {t === "mcp" ? "mcp setup" : "rest api"}
                 </button>
               ))}
             </div>
@@ -77,7 +104,7 @@ const CodeBlock = () => {
 
           {/* Content */}
           <div className="p-6 sm:p-8">
-            {tab === "curl" ? (
+            {tab === "api" ? (
               <div className="space-y-4">
                 <div>
                   <div className="mb-2 font-mono text-xs text-muted-custom">Request</div>
@@ -91,18 +118,13 @@ const CodeBlock = () => {
             ) : (
               <div className="space-y-6">
                 <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">You say to your AI agent</div>
-                  <div className="rounded-lg border border-border/40 bg-card/40 p-4 font-mono text-sm text-heading leading-relaxed">
-                    {aiExample}
-                  </div>
+                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 1 - add to your MCP config</div>
+                  <pre className="overflow-x-auto font-mono text-xs text-heading leading-relaxed whitespace-pre-wrap">{mcpConfig}</pre>
                 </div>
                 <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Your agent calls UnClick</div>
-                  <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed">{curlResponse}</pre>
+                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 2 - your agent calls UnClick directly</div>
+                  <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed whitespace-pre-wrap">{mcpCall}</pre>
                 </div>
-                <p className="text-xs text-muted-custom">
-                  Your agent handles the translation. You just describe what you want.
-                </p>
               </div>
             )}
 
