@@ -61,7 +61,7 @@ export function createApp() {
   // -------------------------------------------------------------------------
   app.route('/health', healthRouter);
 
-  // Public link-page render endpoint — returns structured JSON for any consumer
+  // Public link-page render endpoint : returns structured JSON for any consumer
   app.get('/v1/p/:slug', async (c) => {
     const ip = c.req.header('CF-Connecting-IP')
       ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
@@ -127,20 +127,20 @@ export function createApp() {
   });
 
   // -------------------------------------------------------------------------
-  // Feedback — POST is public, GET requires auth
+  // Feedback : POST is public, GET requires auth
   // -------------------------------------------------------------------------
   const feedbackRouter = createFeedbackRouter(db, auth);
   app.route('/api/feedback', feedbackRouter);
 
   // -------------------------------------------------------------------------
-  // Solve API — mixed public/authenticated endpoints, mounted before global
+  // Solve API : mixed public/authenticated endpoints, mounted before global
   // auth so public routes don't require a token; auth is applied inline.
   // -------------------------------------------------------------------------
   const solveRouter = createSolveRouter(db, auth);
   app.route('/v1/solve', solveRouter);
 
   // -------------------------------------------------------------------------
-  // Public scheduling endpoints — must be before auth middleware
+  // Public scheduling endpoints : must be before auth middleware
   // Rate limited by IP (30 req/min)
   // -------------------------------------------------------------------------
   const schedulePublicWindows = new Map<string, number[]>();
@@ -168,7 +168,7 @@ export function createApp() {
   app.route('/v1/schedule', publicBookingRouter);
 
   // -------------------------------------------------------------------------
-  // Public click tracking — must be before auth middleware
+  // Public click tracking : must be before auth middleware
   // Looks up the page's org_id from DB; never trusts the request body for it
   // -------------------------------------------------------------------------
   app.post('/track/:page_id/click', async (c) => {
@@ -180,7 +180,7 @@ export function createApp() {
     const { linkPages, linkClicks, links } = await import('./db/schema.js');
     const { eq, and, isNull } = await import('drizzle-orm');
 
-    // Look up the page to get org_id — never trust body for this
+    // Look up the page to get org_id : never trust body for this
     const [page] = await db
       .select({ orgId: linkPages.orgId })
       .from(linkPages)
@@ -189,7 +189,7 @@ export function createApp() {
 
     if (!page) return c.json({ error: { code: 'not_found', message: 'Page not found' } }, 404);
 
-    // Verify the link belongs to this page — prevents cross-page click injection
+    // Verify the link belongs to this page : prevents cross-page click injection
     const [link] = await db
       .select({ id: links.id })
       .from(links)
@@ -229,7 +229,7 @@ export function createApp() {
   // Webhook management
   app.route('/v1/webhooks', createWebhooksRouter(db));
 
-  // Themes (read-only — anyone with a valid key can list themes)
+  // Themes (read-only : anyone with a valid key can list themes)
   const themesRouter = createThemesRouter(db);
   app.route('/v1/themes', themesRouter);
 
@@ -237,11 +237,11 @@ export function createApp() {
   const pagesRouter = createPagesRouter(db);
   app.route('/v1/links/pages', pagesRouter);
 
-  // Links — nested under pages
+  // Links : nested under pages
   const linksRouter = createLinksRouter(db);
   app.route('/v1/links/pages/:page_id/links', linksRouter);
 
-  // Analytics — nested under pages
+  // Analytics : nested under pages
   const analyticsRouter = createAnalyticsRouter(db);
   app.route('/v1/links/pages/:page_id/analytics', analyticsRouter);
 

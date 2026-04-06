@@ -145,7 +145,7 @@ export function createWebhooksRouter(db: Db) {
     return new Response(null, { status: 204 });
   });
 
-  // POST /webhooks/:id/test — send a test event
+  // POST /webhooks/:id/test : send a test event
   router.post('/:id/test', requireScope('webhooks:write'), async (c) => {
     const { orgId } = c.get('org');
     const { id } = c.req.param();

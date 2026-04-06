@@ -40,7 +40,7 @@ export function createApiKeysRouter(db: Db) {
 
     await db.insert(apiKeys).values(key);
 
-    // Return the plaintext key once — never shown again
+    // Return the plaintext key once : never shown again
     return created(c, {
       id: key.id,
       name: key.name,
@@ -92,7 +92,7 @@ export function createApiKeysRouter(db: Db) {
     })), { total, page, per_page, has_more: page * per_page < total });
   });
 
-  // DELETE /keys/:id — revoke
+  // DELETE /keys/:id : revoke
   router.delete('/:id', requireScope('keys:write'), async (c) => {
     const { orgId, keyId } = c.get('org');
     const { id } = c.req.param();

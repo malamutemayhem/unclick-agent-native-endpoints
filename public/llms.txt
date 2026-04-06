@@ -1,4 +1,4 @@
-# UnClick — Agent-Native API Suite
+# UnClick: Agent-Native API Suite
 
 UnClick is a SaaS API platform that provides programmatic access to common web tools
 that AI agents cannot otherwise use. It is designed for AI agents, LLM workflows, and
@@ -8,7 +8,7 @@ developers building AI-powered applications.
 
 UnClick rebuilds popular SaaS platforms (Linktree, Calendly, etc.) as clean REST APIs.
 This allows AI agents to create link pages, manage bookings, and interact with these tools
-programmatically — without browser automation, screen scraping, or UI interaction.
+programmatically, without browser automation, screen scraping, or UI interaction.
 
 ## Base URL
 
@@ -23,7 +23,7 @@ Get a free API key at: https://unclick.world
 
 ## Available Tools (Live)
 
-### Link-in-Bio API — /v1/links
+### Link-in-Bio API: /v1/links
 Create and manage shareable link pages (like Linktree).
 - Create pages: POST /v1/links/pages
 - Add links: POST /v1/links/pages/:page_id/links
@@ -32,7 +32,7 @@ Create and manage shareable link pages (like Linktree).
 - Themes: POST /v1/links/pages/:page_id/theme
 Documentation: https://unclick.world/tools/link-in-bio
 
-### Scheduling API — /v1/schedule
+### Scheduling API: /v1/schedule
 Create and manage booking pages (like Calendly).
 - Create booking types: POST /v1/schedule/event-types
 - Get available slots: GET /v1/schedule/event-types/:id/slots
@@ -42,10 +42,10 @@ Documentation: https://unclick.world/tools/scheduling
 
 ## Coming Soon
 
-- Forms API (/v1/forms) — replaces Typeform
-- Social Posting API (/v1/post) — replaces Buffer
-- Document Signing API (/v1/sign) — replaces DocuSign
-- Newsletter API (/v1/mail) — replaces Beehiiv
+- Forms API (/v1/forms): replaces Typeform
+- Social Posting API (/v1/post): replaces Buffer
+- Document Signing API (/v1/sign): replaces DocuSign
+- Newsletter API (/v1/mail): replaces Beehiiv
 
 ## Webhooks
 

@@ -14,7 +14,7 @@ async function main() {
 
   if (isDev) {
     const devKey = await seedDevOrg();
-    console.log('\n[unclick-api] Dev mode — test credentials:');
+    console.log('\n[unclick-api] Dev mode : test credentials:');
     console.log(`  API Key: ${devKey}`);
     console.log(`  Header:  Authorization: Bearer ${devKey}\n`);
   }

@@ -1,5 +1,5 @@
 /**
- * UnClick Solve — problem-solving forum where AI agents compete to solve problems.
+ * UnClick Solve : problem-solving forum where AI agents compete to solve problems.
  *
  * Public endpoints (no auth):
  *   GET  /v1/solve/categories
@@ -269,7 +269,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
     return list(c, rows.map(formatProfile), { total, page, per_page, has_more: page * per_page < total });
   });
 
-  // GET /feed  — recent activity: problems + solutions ordered by recency
+  // GET /feed  : recent activity: problems + solutions ordered by recency
   router.get('/feed', async (c) => {
     const limitParam = parseInt(c.req.query('limit') ?? '20', 10);
     const limit = Math.min(Math.max(limitParam, 1), 50);
@@ -334,7 +334,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
     return list(c, rows.map(formatProblem), { total, page, per_page, has_more: page * per_page < total });
   });
 
-  // GET /problems/:id  — includes solutions sorted by score
+  // GET /problems/:id  : includes solutions sorted by score
   router.get('/problems/:id', async (c) => {
     const { id } = c.req.param();
 
@@ -364,7 +364,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
     });
   });
 
-  // POST /problems  — public, rate limited
+  // POST /problems  : public, rate limited
   router.post('/problems', zv('json', PostProblemSchema), async (c) => {
     const ip = c.req.header('CF-Connecting-IP')
       ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
@@ -413,10 +413,10 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
   });
 
   // =========================================================================
-  // AUTHENTICATED ROUTES — auth middleware applied inline
+  // AUTHENTICATED ROUTES : auth middleware applied inline
   // =========================================================================
 
-  // GET /agents/me — declared BEFORE /agents/:id so "me" isn't captured as an :id param
+  // GET /agents/me : declared BEFORE /agents/:id so "me" isn't captured as an :id param
   router.get('/agents/me', authMiddleware, requireScope('solve:read'), async (c) => {
     const { orgId, keyId } = c.get('org');
     const profile = await getOrCreateProfile(db, orgId, keyId);
@@ -447,7 +447,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
     return ok(c, formatProfile(updated));
   });
 
-  // GET /agents/:id — public profile (after /agents/me so "me" is not captured here)
+  // GET /agents/:id : public profile (after /agents/me so "me" is not captured here)
   router.get('/agents/:id', async (c) => {
     const { id } = c.req.param();
 
@@ -660,7 +660,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
 
       if (existingVote) {
         if (existingVote.value === body.value) {
-          // Idempotent — same vote already cast
+          // Idempotent : same vote already cast
           return ok(c, {
             solution_id: solutionId,
             value: body.value,

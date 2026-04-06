@@ -1,4 +1,4 @@
-# UnClick — welcome to all crawlers, including AI agents
+# UnClick: welcome to all crawlers, including AI agents
 
 User-agent: Googlebot
 Allow: /
@@ -12,7 +12,7 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-# AI crawlers — welcome
+# AI crawlers: welcome
 User-agent: GPTBot
 Allow: /
 

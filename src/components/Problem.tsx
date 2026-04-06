@@ -14,20 +14,20 @@ const Problem = () => (
       </FadeIn>
       <FadeIn delay={0.1}>
         <h2 className="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">
-          The tools exist. They just weren't built for machines.
+          The platforms your agent needs were built for humans.
         </h2>
       </FadeIn>
       <FadeIn delay={0.2}>
         <p className="mt-6 text-body leading-relaxed">
-          Right now, asking your AI to update your link page is like asking someone to cook dinner
-          while wearing oven mitts. They can do it — but it's slow, clumsy, and things break.
-          Browser automation, screen scraping, brittle workarounds.
+          Asking your AI to update your Linktree is like asking a developer to edit code through a
+          point-and-click GUI. They can figure it out. Give them a terminal instead and watch how
+          fast the same job gets done.
         </p>
       </FadeIn>
       <FadeIn delay={0.3}>
         <p className="mt-4 text-body leading-relaxed">
-          UnClick takes the mitts off. We rebuilt the platforms your AI needs — Linktree, Calendly,
-          and more — as clean REST APIs. Same functionality. One-tenth the effort.
+          UnClick rebuilds the platforms your AI needs as clean REST APIs. Linktree, Calendly, and
+          more. Same functionality. One-tenth the effort.
         </p>
       </FadeIn>
 

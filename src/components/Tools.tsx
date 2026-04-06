@@ -29,7 +29,7 @@ const tools: Tool[] = [
     name: "Scheduling",
     slug: "scheduling",
     replaces: "Calendly",
-    description: "Set up booking pages, manage availability, and handle appointments — all via API, no calendar UI needed.",
+    description: "Set up booking pages, manage availability, and handle appointments. All via API, no calendar UI needed.",
     endpoint: "/v1/schedule",
     status: "live",
     stats: ["30 endpoints", "Webhooks", "Multi-timezone"],
@@ -65,7 +65,7 @@ const tools: Tool[] = [
     name: "Document Signing",
     slug: "sign",
     replaces: "DocuSign",
-    description: "Send contracts for signature, track status, and retrieve signed documents — all programmatically.",
+    description: "Send contracts for signature, track status, and retrieve signed documents. All programmatically.",
     endpoint: "/v1/sign",
     status: "coming-soon",
     stats: ["Coming Q4 2026"],
@@ -162,7 +162,7 @@ const Tools = () => {
               <p className="mt-2 text-xs text-body leading-relaxed flex-1">{tool.description}</p>
 
               {tool.status === "live" && (
-                <p className="mt-2 font-mono text-[10px] text-primary/70">Free — 500 API calls/day</p>
+                <p className="mt-2 font-mono text-[10px] text-primary/70">Free, 500 API calls/day</p>
               )}
 
               <div className="mt-3 flex flex-wrap gap-2">

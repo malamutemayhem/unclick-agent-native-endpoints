@@ -19,7 +19,7 @@ const signals = [
   {
     icon: "◈",
     title: "99.9% uptime target",
-    desc: "Deployed on Cloudflare Workers — globally distributed, zero cold starts. Your agents don't wait.",
+    desc: "Deployed on Cloudflare Workers. Globally distributed, zero cold starts. Your agents don't wait.",
   },
 ];
 

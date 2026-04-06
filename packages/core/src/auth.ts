@@ -4,11 +4,11 @@ import { createHash, randomBytes } from 'node:crypto';
 export type KeyEnvironment = 'live' | 'test';
 
 export interface GeneratedKey {
-  /** The full plaintext key — shown once, never stored */
+  /** The full plaintext key : shown once, never stored */
   key: string;
-  /** First 8 chars of the random portion — used for UI identification */
+  /** First 8 chars of the random portion : used for UI identification */
   prefix: string;
-  /** SHA-256 hex of the full key — stored in the database */
+  /** SHA-256 hex of the full key : stored in the database */
   hash: string;
   environment: KeyEnvironment;
 }

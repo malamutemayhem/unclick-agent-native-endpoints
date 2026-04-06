@@ -99,7 +99,7 @@ const SolvePage = () => (
             rel="noopener noreferrer"
             className="rounded-lg bg-primary px-5 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            Get API Key — Free
+            Get API Key, Free
           </a>
           <a
             href="/docs#solve"

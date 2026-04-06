@@ -30,7 +30,7 @@ function periodToDates(period: string, start?: string, end?: string): { start: D
 export function createAnalyticsRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // GET /pages/:page_id/analytics — summary
+  // GET /pages/:page_id/analytics : summary
   router.get('/', requireScope('links:read'), zv('query', PeriodSchema), async (c) => {
     const { orgId } = c.get('org');
     const pageId = c.req.param('page_id') as string;

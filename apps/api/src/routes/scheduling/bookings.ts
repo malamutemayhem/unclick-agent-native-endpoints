@@ -205,7 +205,7 @@ export function createBookingsRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
   // =========================================================================
-  // PUBLIC endpoints — no auth required
+  // PUBLIC endpoints : no auth required
   // These are registered before auth middleware in app.ts
   // =========================================================================
 

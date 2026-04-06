@@ -54,7 +54,7 @@ function formatPage(row: typeof linkPages.$inferSelect) {
 export function createPagesRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /pages — create a page
+  // POST /pages : create a page
   router.post('/', requireScope('links:write'), zv('json', CreatePageSchema), async (c) => {
     const { orgId } = c.get('org');
     const body = c.req.valid('json');
@@ -92,7 +92,7 @@ export function createPagesRouter(db: Db) {
     return created(c, formatPage(inserted));
   });
 
-  // GET /pages — list pages for org
+  // GET /pages : list pages for org
   router.get('/', requireScope('links:read'), async (c) => {
     const { orgId } = c.get('org');
     const { page, per_page } = parsePagination(c.req.query() as Record<string, string>);
@@ -118,7 +118,7 @@ export function createPagesRouter(db: Db) {
     });
   });
 
-  // GET /pages/:id — get single page
+  // GET /pages/:id : get single page
   router.get('/:id', requireScope('links:read'), async (c) => {
     const { orgId } = c.get('org');
     const { id } = c.req.param();
@@ -133,7 +133,7 @@ export function createPagesRouter(db: Db) {
     return ok(c, formatPage(row));
   });
 
-  // PATCH /pages/:id — update page
+  // PATCH /pages/:id : update page
   router.patch('/:id', requireScope('links:write'), zv('json', UpdatePageSchema), async (c) => {
     const { orgId } = c.get('org');
     const { id } = c.req.param();
@@ -178,7 +178,7 @@ export function createPagesRouter(db: Db) {
     return ok(c, formatPage(updated));
   });
 
-  // DELETE /pages/:id — soft delete
+  // DELETE /pages/:id : soft delete
   router.delete('/:id', requireScope('links:write'), async (c) => {
     const { orgId } = c.get('org');
     const { id } = c.req.param();

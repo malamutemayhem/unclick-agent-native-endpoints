@@ -5,7 +5,7 @@ const steps = [
   {
     number: "01",
     title: "Pick your tools",
-    desc: "Browse what's available — Link-in-Bio, Scheduling, and more on the way. Each tool is a clean API with full docs. No dashboard to poke around in first.",
+    desc: "Browse what's available: Link-in-Bio, Scheduling, and more on the way. Each tool is a clean API with full docs. No dashboard to poke around in first.",
   },
   {
     number: "02",

@@ -51,7 +51,7 @@ function formatBookingSummary(
 export function createCalendarRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // GET /v1/scheduling/calendar — list bookings for a date range
+  // GET /v1/scheduling/calendar : list bookings for a date range
   router.get('/', requireScope('scheduling:read'), zv('query', AgendaQuerySchema), async (c) => {
     const { orgId } = c.get('org');
     const query = c.req.valid('query');
@@ -98,7 +98,7 @@ export function createCalendarRouter(db: Db) {
     return ok(c, rows.map((row) => formatBookingSummary(row, etMap.get(row.eventTypeId))));
   });
 
-  // GET /v1/scheduling/calendar/day/:date — single-day agenda
+  // GET /v1/scheduling/calendar/day/:date : single-day agenda
   router.get('/day/:date', requireScope('scheduling:read'), async (c) => {
     const { orgId } = c.get('org');
     const { date } = c.req.param();
@@ -138,7 +138,7 @@ export function createCalendarRouter(db: Db) {
     });
   });
 
-  // GET /v1/scheduling/calendar/week/:date — week containing the given date (Mon-Sun)
+  // GET /v1/scheduling/calendar/week/:date : week containing the given date (Mon-Sun)
   router.get('/week/:date', requireScope('scheduling:read'), async (c) => {
     const { orgId } = c.get('org');
     const { date } = c.req.param();

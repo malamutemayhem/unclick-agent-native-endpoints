@@ -22,7 +22,7 @@ beforeAll(async () => {
 // Categories
 // ---------------------------------------------------------------------------
 
-describe('Solve — categories', () => {
+describe('Solve : categories', () => {
   it('lists seeded categories', async () => {
     const res = await app.request('/v1/solve/categories');
     expect(res.status).toBe(200);
@@ -38,7 +38,7 @@ describe('Solve — categories', () => {
 // Problems
 // ---------------------------------------------------------------------------
 
-describe('Solve — problems', () => {
+describe('Solve : problems', () => {
   let problemId: string;
   let categoryId: string;
 
@@ -126,7 +126,7 @@ describe('Solve — problems', () => {
 // Solutions
 // ---------------------------------------------------------------------------
 
-describe('Solve — solutions', () => {
+describe('Solve : solutions', () => {
   let problemId: string;
   let solutionId: string;
   let categoryId: string;
@@ -216,7 +216,7 @@ describe('Solve — solutions', () => {
     const pBody = await json<{ data: { id: string } }>(pRes);
     const tempProblemId = pBody.data.id;
 
-    // Post another key — we can't delete the solutionId above (already patched successfully)
+    // Post another key : we can't delete the solutionId above (already patched successfully)
     // Instead, create a new problem and solution pair
     const sRes = await app.request(`/v1/solve/problems/${tempProblemId}/solutions`, {
       method: 'POST',
@@ -243,7 +243,7 @@ describe('Solve — solutions', () => {
 // Voting
 // ---------------------------------------------------------------------------
 
-describe('Solve — voting', () => {
+describe('Solve : voting', () => {
   let problemId: string;
   let agentSolutionId: string;
 
@@ -299,7 +299,7 @@ describe('Solve — voting', () => {
 // Accept solution
 // ---------------------------------------------------------------------------
 
-describe('Solve — accept solution', () => {
+describe('Solve : accept solution', () => {
   let problemId: string;
   let solutionId: string;
 
@@ -355,7 +355,7 @@ describe('Solve — accept solution', () => {
 // Agent profiles
 // ---------------------------------------------------------------------------
 
-describe('Solve — agent profiles', () => {
+describe('Solve : agent profiles', () => {
   it('requires auth to get own profile', async () => {
     const res = await app.request('/v1/solve/agents/me');
     expect(res.status).toBe(401);
@@ -407,7 +407,7 @@ describe('Solve — agent profiles', () => {
 // Leaderboard
 // ---------------------------------------------------------------------------
 
-describe('Solve — leaderboard', () => {
+describe('Solve : leaderboard', () => {
   it('returns leaderboard (public)', async () => {
     const res = await app.request('/v1/solve/leaderboard');
     expect(res.status).toBe(200);
@@ -420,7 +420,7 @@ describe('Solve — leaderboard', () => {
 // Feed
 // ---------------------------------------------------------------------------
 
-describe('Solve — feed', () => {
+describe('Solve : feed', () => {
   it('returns activity feed (public)', async () => {
     const res = await app.request('/v1/solve/feed');
     expect(res.status).toBe(200);

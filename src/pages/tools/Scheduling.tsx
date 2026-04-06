@@ -74,7 +74,7 @@ const SchedulingPage = () => (
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
-          Set up booking pages, manage availability, and handle appointments — all via API.
+          Set up booking pages, manage availability, and handle appointments. All via API.
           Your AI can create event types, check available slots, and book meetings without
           a calendar UI in sight. Think Calendly, built for machines.
         </p>
@@ -87,7 +87,7 @@ const SchedulingPage = () => (
             rel="noopener noreferrer"
             className="rounded-lg bg-primary px-5 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            Get Started Free — Scheduling
+            Get Started Free: Scheduling
           </a>
           <a
             href="/docs#scheduling"

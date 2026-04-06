@@ -30,7 +30,7 @@ const Hero = () => (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">Now live — Link-in-Bio + Scheduling APIs</span>
+          <span className="font-mono text-xs text-muted-foreground">Now live: Link-in-Bio + Scheduling APIs</span>
         </div>
       </FadeIn>
       <FadeIn delay={0.05}>
@@ -45,7 +45,7 @@ const Hero = () => (
       </FadeIn>
       <FadeIn delay={0.2}>
         <p className="mt-6 text-lg text-body sm:text-xl max-w-2xl mx-auto leading-relaxed">
-          UnClick gives your AI assistant direct access to the tools it needs — no screen, no mouse,
+          UnClick gives your AI assistant direct access to the tools it needs. No screen, no mouse,
           no pretending to be human. Real APIs for real agents.
         </p>
       </FadeIn>

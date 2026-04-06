@@ -49,7 +49,7 @@ export function createSocialsRouter(db: Db) {
     return ok(c, rows.map((r) => ({ id: r.id, platform: r.platform, url: r.url, position: r.position })));
   });
 
-  // PUT /pages/:page_id/socials — replace all
+  // PUT /pages/:page_id/socials : replace all
   router.put('/', requireScope('links:write'), zv('json', SocialsSchema), async (c) => {
     const { orgId } = c.get('org');
     const pageId = c.req.param('page_id') as string;

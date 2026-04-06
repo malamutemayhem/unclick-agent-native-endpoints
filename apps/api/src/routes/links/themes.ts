@@ -51,7 +51,7 @@ export function createThemesRouter(db: Db) {
     });
   });
 
-  // POST /pages/:page_id/theme — apply theme
+  // POST /pages/:page_id/theme : apply theme
   router.post('/', requireScope('links:write'), zv('json', z.object({ theme_id: z.string() })), async (c) => {
     const { orgId } = c.get('org');
     const pageId = c.req.param('page_id') as string;
@@ -71,7 +71,7 @@ export function createThemesRouter(db: Db) {
     });
   });
 
-  // PATCH /pages/:page_id/theme — customize theme
+  // PATCH /pages/:page_id/theme : customize theme
   router.patch('/', requireScope('links:write'), zv('json', ThemeOverrideSchema), async (c) => {
     const { orgId } = c.get('org');
     const pageId = c.req.param('page_id') as string;

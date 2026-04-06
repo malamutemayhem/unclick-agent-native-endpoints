@@ -1,8 +1,8 @@
 /**
- * Feedback & bug reporting — public endpoint, shared across all UnClick tools.
+ * Feedback & bug reporting : public endpoint, shared across all UnClick tools.
  *
- * POST /api/feedback   — submit a report (rate limited, no auth required)
- * GET  /api/feedback   — list reports (requires auth, internal use)
+ * POST /api/feedback   : submit a report (rate limited, no auth required)
+ * GET  /api/feedback   : list reports (requires auth, internal use)
  *
  * GitHub Issues integration: reports are shaped so they can be forwarded
  * to GitHub Issues via the REST API. Hook point: `toGitHubIssue()`.
@@ -111,7 +111,7 @@ function checkFeedbackRateLimit(ip: string): boolean {
 export function createFeedbackRouter(db: Db, authMiddleware?: MiddlewareHandler<any>) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /api/feedback — public, rate limited
+  // POST /api/feedback : public, rate limited
   router.post('/', zv('json', SubmitFeedbackSchema), async (c) => {
     const ip = c.req.header('CF-Connecting-IP')
       ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
@@ -138,7 +138,7 @@ export function createFeedbackRouter(db: Db, authMiddleware?: MiddlewareHandler<
 
     await db.insert(feedbackReports).values(report);
 
-    // Expose the GitHub issue shape — caller can wire up to GitHub API
+    // Expose the GitHub issue shape : caller can wire up to GitHub API
     const githubIssue = toGitHubIssue({
       ...report,
       tool: report.tool ?? 'unknown',
@@ -155,7 +155,7 @@ export function createFeedbackRouter(db: Db, authMiddleware?: MiddlewareHandler<
     });
   });
 
-  // GET /api/feedback — requires auth
+  // GET /api/feedback : requires auth
   if (authMiddleware) {
     router.use('/', authMiddleware);
     router.use('/', requireScope('feedback:read'));

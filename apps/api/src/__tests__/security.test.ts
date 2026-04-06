@@ -196,7 +196,7 @@ describe('API key management', () => {
 
 // ─── Input Validation ─────────────────────────────────────────────────────────
 
-describe('Input validation — pages', () => {
+describe('Input validation : pages', () => {
   it('rejects missing required fields', async () => {
     const res = await app.request('/v1/links/pages', {
       method: 'POST',
@@ -264,7 +264,7 @@ describe('Input validation — pages', () => {
   });
 });
 
-describe('Input validation — links', () => {
+describe('Input validation : links', () => {
   let pageId: string;
 
   beforeAll(async () => {
@@ -375,7 +375,7 @@ describe('Feedback endpoint', () => {
 
 // ─── Click Tracking Bug ───────────────────────────────────────────────────────
 
-describe('Click tracking — track/click endpoint', () => {
+describe('Click tracking : track/click endpoint', () => {
   let pageId: string;
   let linkId: string;
 
@@ -399,13 +399,13 @@ describe('Click tracking — track/click endpoint', () => {
 
   it('track/click ignores body.org_id and uses page\'s org from DB', async () => {
     // The endpoint is public (no auth). org_id is looked up from the DB via
-    // the page_id — injecting a fake org_id in the body has no effect.
+    // the page_id : injecting a fake org_id in the body has no effect.
     const res = await app.request(`/track/${pageId}/click`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         link_id: linkId,
-        org_id: 'org_totally_fake', // ignored — org comes from DB
+        org_id: 'org_totally_fake', // ignored : org comes from DB
       }),
     });
     expect(res.status).toBe(200);
@@ -483,7 +483,7 @@ describe('404 handling', () => {
 
 // ─── Public page render ───────────────────────────────────────────────────────
 
-describe('Public page render — /v1/p/:slug', () => {
+describe('Public page render : /v1/p/:slug', () => {
   const slug = `public-qa-${Date.now()}`;
 
   it('returns 404 for unpublished slug (page not created yet)', async () => {

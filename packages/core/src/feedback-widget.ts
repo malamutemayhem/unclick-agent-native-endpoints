@@ -1,5 +1,5 @@
 /**
- * Feedback widget helper — drop this pattern into any UnClick frontend.
+ * Feedback widget helper : drop this pattern into any UnClick frontend.
  *
  * Usage in React/Next.js/any framework:
  *
@@ -10,7 +10,7 @@
  *     Report issue
  *   </button>
  *
- * The widget is intentionally design-free — drop the submit function into
+ * The widget is intentionally design-free : drop the submit function into
  * whatever UI you want. A minimal footer link is the recommended pattern:
  * small, unobtrusive, but always present.
  */
