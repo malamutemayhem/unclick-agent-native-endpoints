@@ -35,6 +35,9 @@ import { createCsvRouter } from './routes/csv.js';
 import { createJsonRouter } from './routes/json.js';
 import { createMarkdownRouter } from './routes/markdown.js';
 import { createDiffRouter } from './routes/diff.js';
+import { createRegexRouter } from './routes/regex.js';
+import { createColorRouter } from './routes/color.js';
+import { createIpRouter } from './routes/ip.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -356,6 +359,21 @@ export function createApp() {
   // Diff utility (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/diff', createDiffRouter());
+
+  // -------------------------------------------------------------------------
+  // Regex utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/regex', createRegexRouter());
+
+  // -------------------------------------------------------------------------
+  // Color utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/color', createColorRouter());
+
+  // -------------------------------------------------------------------------
+  // IP utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/ip', createIpRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
