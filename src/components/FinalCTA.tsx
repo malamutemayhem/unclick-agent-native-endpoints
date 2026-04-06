@@ -23,9 +23,7 @@ const FinalCTA = () => (
       </FadeIn>
       <FadeIn delay={0.2}>
         <motion.a
-          href="https://tally.so/r/mZdkxe"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/docs"
           className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground"
           whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
           whileTap={{ scale: 0.98 }}

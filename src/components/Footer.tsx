@@ -1,5 +1,5 @@
 const footerLinks = [
-  { label: "Get Started Free", href: "https://tally.so/r/mZdkxe", external: true },
+  { label: "Get Started Free", href: "/docs" },
   { label: "Docs", href: "/docs" },
   { label: "GitHub", href: "https://github.com/unclick-world", external: true },
   { label: "Terms", href: "/terms" },

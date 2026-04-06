@@ -93,7 +93,7 @@ const Tools = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Everything your AI needs to get things done.
+          The tools your AI needs, built as proper APIs.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
@@ -176,9 +176,7 @@ const Tools = () => {
                       Docs →
                     </a>
                     <a
-                      href="https://tally.so/r/mZdkxe"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="/docs"
                       className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
                     >
                       Get Started Free
@@ -186,9 +184,7 @@ const Tools = () => {
                   </div>
                 ) : (
                   <a
-                    href="https://tally.so/r/mZdkxe"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href="/docs"
                     className="shrink-0 rounded-md border border-border/60 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary/30 hover:text-body transition-colors"
                   >
                     Notify Me

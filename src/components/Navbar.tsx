@@ -17,9 +17,7 @@ const Navbar = () => {
 
         <div className="flex items-center gap-3">
           <a
-            href="https://tally.so/r/mZdkxe"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs"
             className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Get Started Free
@@ -64,9 +62,7 @@ const Navbar = () => {
               <a href="#tools" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Tools</a>
               <a href="/docs" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Docs</a>
               <a
-                href="https://tally.so/r/mZdkxe"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/docs"
                 className="mt-2 rounded-md bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground"
               >
                 Get Started Free

@@ -45,8 +45,8 @@ const Hero = () => (
       </FadeIn>
       <FadeIn delay={0.2}>
         <p className="mt-6 text-lg text-body sm:text-xl max-w-2xl mx-auto leading-relaxed">
-          UnClick gives your AI assistant direct access to the tools it needs. No screen, no mouse,
-          no pretending to be human. Real APIs for real agents.
+          Your AI needs to do things in the world. We built the APIs for that. No browser,
+          no pretending to be human, no slow clicks through a UI.
         </p>
       </FadeIn>
       <FadeIn delay={0.4}>

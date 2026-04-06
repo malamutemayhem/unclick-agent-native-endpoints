@@ -35,9 +35,7 @@ const Pricing = () => (
             <li className="flex items-center gap-2"><span className="text-primary">✓</span> No credit card required</li>
           </ul>
           <motion.a
-            href="https://tally.so/r/mZdkxe"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs"
             className="mt-8 inline-block w-full rounded-lg bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             whileHover={{ scale: 1.01, boxShadow: "0 0 30px 4px rgba(226,185,59,0.2)" }}
             whileTap={{ scale: 0.99 }}

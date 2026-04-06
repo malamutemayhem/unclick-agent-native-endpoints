@@ -25,8 +25,8 @@ const Problem = () => (
       </FadeIn>
       <FadeIn delay={0.3}>
         <p className="mt-4 text-body leading-relaxed">
-          UnClick gives AI agents direct API access to the tools they actually need. Link pages,
-          scheduling, forms, and more. Clean endpoints. Real responses. No browser required.
+          UnClick builds proper APIs for the things AI agents constantly need to do. Link pages,
+          scheduling, forms, and more. Call an endpoint. Get JSON back. No browser involved.
         </p>
       </FadeIn>
 
