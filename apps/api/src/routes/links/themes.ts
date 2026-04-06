@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import { zv } from '../../middleware/validate.js';
 import { z } from 'zod';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { ok, Errors } from '@unclick/core';
 import type { Db } from '../../db/index.js';
 import { themes, linkPages } from '../../db/schema.js';
 import type { AppVariables } from '../../middleware/types.js';
 import { requireScope } from '../../middleware/auth.js';
+import { assertPageOwnership } from '../../lib/ownership.js';
 
 const ThemeOverrideSchema = z.object({
   base_theme: z.string().optional(),
@@ -56,12 +57,7 @@ export function createThemesRouter(db: Db) {
     const pageId = c.req.param('page_id') as string;
     const { theme_id } = c.req.valid('json');
 
-    const [page] = await db
-      .select()
-      .from(linkPages)
-      .where(and(eq(linkPages.id, pageId), eq(linkPages.orgId, orgId), isNull(linkPages.deletedAt)))
-      .limit(1);
-    if (!page) throw Errors.notFound('Page not found');
+    await assertPageOwnership(db, pageId, orgId);
 
     const [theme] = await db.select().from(themes).where(eq(themes.id, theme_id)).limit(1);
     if (!theme) throw Errors.notFound('Theme not found');
@@ -81,14 +77,10 @@ export function createThemesRouter(db: Db) {
     const pageId = c.req.param('page_id') as string;
     const body = c.req.valid('json');
 
-    const [page] = await db
-      .select()
-      .from(linkPages)
-      .where(and(eq(linkPages.id, pageId), eq(linkPages.orgId, orgId), isNull(linkPages.deletedAt)))
-      .limit(1);
-    if (!page) throw Errors.notFound('Page not found');
+    await assertPageOwnership(db, pageId, orgId);
 
-    const existingOverrides = JSON.parse(page.themeOverrides ?? '{}');
+    const [page] = await db.select({ themeOverrides: linkPages.themeOverrides }).from(linkPages).where(eq(linkPages.id, pageId)).limit(1);
+    const existingOverrides = JSON.parse(page!.themeOverrides ?? '{}');
     const newOverrides = { ...existingOverrides, ...(body.overrides ?? {}) };
 
     const updates: Partial<typeof linkPages.$inferInsert> = {

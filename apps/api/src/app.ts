@@ -169,7 +169,7 @@ export function createApp() {
 
     if (!body.link_id) return c.json({ error: 'link_id required' }, 400);
 
-    const { linkPages, linkClicks } = await import('./db/schema.js');
+    const { linkPages, linkClicks, links } = await import('./db/schema.js');
     const { eq, and, isNull } = await import('drizzle-orm');
 
     // Look up the page to get org_id — never trust body for this
@@ -180,6 +180,15 @@ export function createApp() {
       .limit(1);
 
     if (!page) return c.json({ error: { code: 'not_found', message: 'Page not found' } }, 404);
+
+    // Verify the link belongs to this page — prevents cross-page click injection
+    const [link] = await db
+      .select({ id: links.id })
+      .from(links)
+      .where(and(eq(links.id, body.link_id), eq(links.pageId, pageId), isNull(links.deletedAt)))
+      .limit(1);
+
+    if (!link) return c.json({ error: { code: 'not_found', message: 'Link not found' } }, 404);
 
     const userAgent = c.req.header('User-Agent') ?? '';
     const deviceType = /Mobile|Android|iPhone/i.test(userAgent) ? 'mobile'

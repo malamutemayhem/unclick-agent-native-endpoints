@@ -1,3 +1,5 @@
+# UnClick — welcome to all crawlers, including AI agents
+
 User-agent: Googlebot
 Allow: /
 
@@ -10,5 +12,26 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
+# AI crawlers — welcome
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
 User-agent: *
 Allow: /
+
+Sitemap: https://unclick.world/sitemap.xml

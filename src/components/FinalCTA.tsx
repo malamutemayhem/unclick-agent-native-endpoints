@@ -16,16 +16,21 @@ const FinalCTA = () => (
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
-        <p className="mt-4 text-sm text-muted-custom italic">beneath the UI</p>
+        <p className="mt-4 text-body max-w-md mx-auto">
+          Free to start. Both tools included. No credit card.
+          Join the developers and AI builders already using UnClick.
+        </p>
       </FadeIn>
       <FadeIn delay={0.2}>
         <motion.a
-          href="#"
+          href="https://tally.so/r/mZdkxe"
+          target="_blank"
+          rel="noopener noreferrer"
           className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground"
           whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
           whileTap={{ scale: 0.98 }}
         >
-          Get Your API Key
+          Get your free API key
           <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
         </motion.a>
       </FadeIn>

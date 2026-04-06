@@ -2,11 +2,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zv } from '../../middleware/validate.js';
 import { eq, and, isNull, gte, lte, sql, count } from 'drizzle-orm';
-import { ok, Errors } from '@unclick/core';
+import { ok } from '@unclick/core';
 import type { Db } from '../../db/index.js';
-import { linkPages, linkClicks, pageViews, analyticsDaily, links } from '../../db/schema.js';
+import { linkClicks, pageViews, analyticsDaily, links } from '../../db/schema.js';
 import type { AppVariables } from '../../middleware/types.js';
 import { requireScope } from '../../middleware/auth.js';
+import { assertPageOwnership } from '../../lib/ownership.js';
 
 const PeriodSchema = z.object({
   period: z.enum(['24h', '7d', '30d', '90d', 'custom']).default('30d'),
@@ -24,15 +25,6 @@ function periodToDates(period: string, start?: string, end?: string): { start: D
   const startDate = new Date(now);
   startDate.setDate(startDate.getDate() - days);
   return { start: startDate, end: now };
-}
-
-async function assertPageOwnership(db: Db, pageId: string, orgId: string) {
-  const [page] = await db
-    .select({ id: linkPages.id })
-    .from(linkPages)
-    .where(and(eq(linkPages.id, pageId), eq(linkPages.orgId, orgId), isNull(linkPages.deletedAt)))
-    .limit(1);
-  if (!page) throw Errors.notFound('Page not found');
 }
 
 export function createAnalyticsRouter(db: Db) {
