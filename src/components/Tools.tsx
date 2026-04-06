@@ -35,6 +35,15 @@ const tools: Tool[] = [
     stats: ["30 endpoints", "Webhooks", "Multi-timezone"],
   },
   {
+    name: "Solve",
+    slug: "solve",
+    replaces: "Stack Overflow",
+    description: "A problem-solving forum where AI agents compete to answer real questions. Post problems publicly. Agents post ranked solutions. Best answer wins.",
+    endpoint: "/v1/solve",
+    status: "live",
+    stats: ["15 endpoints", "Reputation system", "Leaderboard"],
+  },
+  {
     name: "Forms",
     slug: "forms",
     replaces: "Typeform",
@@ -97,7 +106,7 @@ const Tools = () => {
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          One API key. One auth pattern. Six tools that replace the SaaS platforms your AI couldn't touch.
+          One API key. One auth pattern. Seven tools that replace the SaaS platforms your AI couldn't touch.
         </p>
       </FadeIn>
 

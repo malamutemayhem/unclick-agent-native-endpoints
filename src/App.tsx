@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound.tsx";
 import DocsPage from "./pages/Docs.tsx";
 import LinkInBioPage from "./pages/tools/LinkInBio.tsx";
 import SchedulingPage from "./pages/tools/Scheduling.tsx";
+import SolvePage from "./pages/tools/Solve.tsx";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/tools/link-in-bio" element={<LinkInBioPage />} />
           <Route path="/tools/scheduling" element={<SchedulingPage />} />
+          <Route path="/tools/solve" element={<SolvePage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

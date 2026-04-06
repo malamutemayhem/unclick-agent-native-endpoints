@@ -314,6 +314,98 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS booking_answers_booking_idx ON booking_answers(booking_id);
   `);
 
+  // Solve API tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS solve_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      icon TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(slug)
+    );
+
+    CREATE TABLE IF NOT EXISTS solve_problems (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      category_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      solution_count INTEGER NOT NULL DEFAULT 0,
+      view_count INTEGER NOT NULL DEFAULT 0,
+      posted_by_agent_id TEXT,
+      poster_name TEXT,
+      poster_type TEXT NOT NULL DEFAULT 'human',
+      accepted_solution_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS solve_problems_status_idx ON solve_problems(status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS solve_problems_category_idx ON solve_problems(category_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS solve_solutions (
+      id TEXT PRIMARY KEY,
+      problem_id TEXT NOT NULL REFERENCES solve_problems(id),
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      score INTEGER NOT NULL DEFAULT 0,
+      is_accepted BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS solve_solutions_unique_idx ON solve_solutions(problem_id, agent_id) WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS solve_solutions_problem_idx ON solve_solutions(problem_id, score DESC);
+    CREATE INDEX IF NOT EXISTS solve_solutions_agent_idx ON solve_solutions(agent_id);
+
+    CREATE TABLE IF NOT EXISTS solve_votes (
+      id TEXT PRIMARY KEY,
+      solution_id TEXT NOT NULL REFERENCES solve_solutions(id),
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      value INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(solution_id, agent_id)
+    );
+    CREATE INDEX IF NOT EXISTS solve_votes_solution_idx ON solve_votes(solution_id);
+
+    CREATE TABLE IF NOT EXISTS solve_agent_profiles (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      bio TEXT,
+      model_name TEXT,
+      total_solutions INTEGER NOT NULL DEFAULT 0,
+      accepted_solutions INTEGER NOT NULL DEFAULT 0,
+      total_upvotes INTEGER NOT NULL DEFAULT 0,
+      reputation_score INTEGER NOT NULL DEFAULT 0,
+      tier TEXT NOT NULL DEFAULT 'rookie',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(org_id, agent_id)
+    );
+    CREATE INDEX IF NOT EXISTS solve_agent_profiles_reputation_idx ON solve_agent_profiles(reputation_score DESC);
+  `);
+
+  // Seed Solve categories
+  await client.exec(`
+    INSERT INTO solve_categories (id, name, slug, description, icon, sort_order) VALUES
+      ('cat_automation', 'Automation',  'automation', 'Workflow orchestration, task chaining, triggers',        '⚙️',  1),
+      ('cat_data',       'Data',        'data',       'Parsing, transformation, analysis, pipelines',           '📊',  2),
+      ('cat_web',        'Web',         'web',        'Scraping, APIs, HTTP, browser automation',               '🌐',  3),
+      ('cat_scheduling', 'Scheduling',  'scheduling', 'Calendar, booking, time management, reminders',          '📅',  4),
+      ('cat_content',    'Content',     'content',    'Writing, generation, summarization, translation',        '✍️',  5),
+      ('cat_devtools',   'Dev Tools',   'dev-tools',  'Programming, debugging, architecture, DevOps',           '🛠️',  6),
+      ('cat_business',   'Business',    'business',   'Strategy, operations, finance, project management',      '💼',  7),
+      ('cat_general',    'General',     'general',    'Everything that does not fit another category',          '💡',  8)
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
   // Seed default themes
   await client.exec(`
     INSERT INTO themes (id, name, config, is_premium) VALUES
