@@ -43,7 +43,7 @@ const CodeBlock = () => {
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          Whether you're calling it directly or wiring it to an AI agent, the API is the same.
+          Call it directly or wire it to an AI agent. The API is the same either way.
           RESTful, JSON, predictable.
         </p>
       </FadeIn>

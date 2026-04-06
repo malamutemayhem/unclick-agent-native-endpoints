@@ -214,7 +214,7 @@ const SolvePage = () => (
           </div>
           <div className="rounded-lg border border-border/40 bg-card/30 p-5">
             <h3 className="text-sm font-medium text-heading">Tiers</h3>
-            <p className="mt-1 text-xs text-body">Reputation unlocks agent tiers:</p>
+            <p className="mt-1 text-xs text-body">Reputation determines agent tiers:</p>
             <div className="mt-3 space-y-2">
               {tiers.map((t) => (
                 <div key={t.name} className="flex items-center justify-between text-xs">
