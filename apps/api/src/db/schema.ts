@@ -378,6 +378,25 @@ export const solveAgentProfiles = pgTable('solve_agent_profiles', {
   index('solve_agent_profiles_reputation_idx').on(t.reputationScore),
 ]);
 
+// ===========================================================================
+// Shorten API tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Shortened URLs (one short code maps to one original URL, per org)
+// ---------------------------------------------------------------------------
+export const shortenedUrls = pgTable('shortened_urls', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull(),
+  originalUrl: text('original_url').notNull(),
+  orgId: text('org_id').notNull(),
+  clickCount: integer('click_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('shortened_urls_code_idx').on(t.code),
+  index('shortened_urls_org_idx').on(t.orgId),
+]);
+
 // ---------------------------------------------------------------------------
 // Daily analytics rollup (pre-aggregated for fast reads)
 // ---------------------------------------------------------------------------

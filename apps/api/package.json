@@ -12,18 +12,20 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@unclick/core": "*",
     "@electric-sql/pglite": "^0.2.13",
     "@hono/node-server": "^1.13.7",
     "@hono/zod-openapi": "^0.18.3",
     "@scalar/hono-api-reference": "^0.5.162",
+    "@unclick/core": "*",
     "drizzle-orm": "^0.38.3",
     "hono": "^4.6.3",
+    "qrcode": "^1.5.4",
     "ulid": "^2.3.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.30.4",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",

@@ -392,6 +392,20 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS solve_agent_profiles_reputation_idx ON solve_agent_profiles(reputation_score DESC);
   `);
 
+  // Shorten API tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS shortened_urls (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      original_url TEXT NOT NULL,
+      org_id TEXT NOT NULL,
+      click_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS shortened_urls_code_idx ON shortened_urls(code);
+    CREATE INDEX IF NOT EXISTS shortened_urls_org_idx ON shortened_urls(org_id);
+  `);
+
   // Seed Solve categories
   await client.exec(`
     INSERT INTO solve_categories (id, name, slug, description, icon, sort_order) VALUES
