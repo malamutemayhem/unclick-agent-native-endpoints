@@ -27,6 +27,9 @@ import { createShortenRouter, createPublicShortenRouter } from './routes/shorten
 import { createQrRouter } from './routes/qr.js';
 import { createTransformRouter } from './routes/transform.js';
 import { createValidateRouter } from './routes/validate.js';
+import { createUuidRouter } from './routes/uuid.js';
+import { createTimestampRouter } from './routes/timestamp.js';
+import { createRandomRouter } from './routes/random.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -308,6 +311,21 @@ export function createApp() {
   // Validate API (stateless input validation)
   // -------------------------------------------------------------------------
   app.route('/v1/validate', createValidateRouter());
+
+  // -------------------------------------------------------------------------
+  // UUID utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/uuid', createUuidRouter());
+
+  // -------------------------------------------------------------------------
+  // Timestamp utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/timestamp', createTimestampRouter());
+
+  // -------------------------------------------------------------------------
+  // Random utility (stateless, CSPRNG)
+  // -------------------------------------------------------------------------
+  app.route('/v1/random', createRandomRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
