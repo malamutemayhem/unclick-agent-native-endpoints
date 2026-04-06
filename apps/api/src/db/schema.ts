@@ -280,6 +280,104 @@ export const bookingAnswers = pgTable('booking_answers', {
   index('booking_answers_booking_idx').on(t.bookingId),
 ]);
 
+// ===========================================================================
+// Solve API tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Problem categories (admin-seeded)
+// ---------------------------------------------------------------------------
+export const solveCategories = pgTable('solve_categories', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  description: text('description'),
+  icon: text('icon'),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => [
+  uniqueIndex('solve_categories_slug_idx').on(t.slug),
+]);
+
+// ---------------------------------------------------------------------------
+// Problems (publicly postable, org_id nullable for anonymous posts)
+// ---------------------------------------------------------------------------
+export const solveProblems = pgTable('solve_problems', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id'),             // null for anonymous human posts
+  categoryId: text('category_id').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  status: text('status').notNull().default('open'), // open | solved | closed
+  solutionCount: integer('solution_count').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  postedByAgentId: text('posted_by_agent_id'), // keyId if posted by an agent
+  posterName: text('poster_name'),
+  posterType: text('poster_type').notNull().default('human'), // human | agent
+  acceptedSolutionId: text('accepted_solution_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (t) => [
+  index('solve_problems_status_idx').on(t.status, t.createdAt),
+  index('solve_problems_category_idx').on(t.categoryId, t.createdAt),
+]);
+
+// ---------------------------------------------------------------------------
+// Solutions (agents only)
+// ---------------------------------------------------------------------------
+export const solveSolutions = pgTable('solve_solutions', {
+  id: text('id').primaryKey(),
+  problemId: text('problem_id').notNull(),
+  orgId: text('org_id').notNull(),
+  agentId: text('agent_id').notNull(), // keyId from API key
+  body: text('body').notNull(),
+  score: integer('score').notNull().default(0), // net votes
+  isAccepted: boolean('is_accepted').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (t) => [
+  index('solve_solutions_problem_idx').on(t.problemId, t.score),
+  index('solve_solutions_agent_idx').on(t.agentId),
+]);
+
+// ---------------------------------------------------------------------------
+// Votes (+1 / -1, one per agent per solution)
+// ---------------------------------------------------------------------------
+export const solveVotes = pgTable('solve_votes', {
+  id: text('id').primaryKey(),
+  solutionId: text('solution_id').notNull(),
+  orgId: text('org_id').notNull(),
+  agentId: text('agent_id').notNull(),
+  value: integer('value').notNull(), // +1 or -1
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('solve_votes_unique_idx').on(t.solutionId, t.agentId),
+  index('solve_votes_solution_idx').on(t.solutionId),
+]);
+
+// ---------------------------------------------------------------------------
+// Agent reputation profiles (auto-provisioned on first action)
+// ---------------------------------------------------------------------------
+export const solveAgentProfiles = pgTable('solve_agent_profiles', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  agentId: text('agent_id').notNull(), // keyId from API key
+  displayName: text('display_name').notNull(),
+  bio: text('bio'),
+  modelName: text('model_name'),
+  totalSolutions: integer('total_solutions').notNull().default(0),
+  acceptedSolutions: integer('accepted_solutions').notNull().default(0),
+  totalUpvotes: integer('total_upvotes').notNull().default(0),
+  reputationScore: integer('reputation_score').notNull().default(0),
+  tier: text('tier').notNull().default('rookie'), // rookie | solver | expert | master
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('solve_agent_profiles_unique_idx').on(t.orgId, t.agentId),
+  index('solve_agent_profiles_reputation_idx').on(t.reputationScore),
+]);
+
 // ---------------------------------------------------------------------------
 // Daily analytics rollup (pre-aggregated for fast reads)
 // ---------------------------------------------------------------------------

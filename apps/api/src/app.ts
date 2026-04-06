@@ -20,6 +20,7 @@ import { createSchedulesRouter } from './routes/scheduling/schedules.js';
 import { createEventTypesRouter } from './routes/scheduling/event-types.js';
 import { createBookingsRouter, createPublicBookingRouter } from './routes/scheduling/bookings.js';
 import { createCalendarRouter } from './routes/scheduling/calendar.js';
+import { createSolveRouter } from './routes/solve.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -130,6 +131,13 @@ export function createApp() {
   // -------------------------------------------------------------------------
   const feedbackRouter = createFeedbackRouter(db, auth);
   app.route('/api/feedback', feedbackRouter);
+
+  // -------------------------------------------------------------------------
+  // Solve API — mixed public/authenticated endpoints, mounted before global
+  // auth so public routes don't require a token; auth is applied inline.
+  // -------------------------------------------------------------------------
+  const solveRouter = createSolveRouter(db, auth);
+  app.route('/v1/solve', solveRouter);
 
   // -------------------------------------------------------------------------
   // Public scheduling endpoints — must be before auth middleware
