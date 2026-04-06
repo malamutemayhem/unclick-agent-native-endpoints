@@ -1,8 +1,14 @@
 import FadeIn from "./FadeIn";
+import NetworkGraph from "./NetworkGraph";
 import { motion } from "framer-motion";
 
 const Hero = () => (
   <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+    {/* Network graph background */}
+    <div className="pointer-events-none absolute inset-0">
+      <NetworkGraph />
+    </div>
+
     {/* Animated grid */}
     <div className="pointer-events-none absolute inset-0 animated-grid" />
 
@@ -14,11 +20,20 @@ const Hero = () => (
 
     {/* Radial glow behind headline */}
     <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px]">
-      <div className="h-full w-full rounded-full bg-primary/[0.06] blur-[100px]" />
+      <div className="h-full w-full rounded-full bg-primary/[0.08] blur-[100px]" />
     </div>
 
     <div className="relative z-20 mx-auto max-w-3xl text-center">
       <FadeIn>
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-4 py-1.5 backdrop-blur-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+          <span className="font-mono text-xs text-muted-foreground">v2.1 — 6 tools live</span>
+        </div>
+      </FadeIn>
+      <FadeIn delay={0.05}>
         <motion.h1
           className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
           initial={{ letterSpacing: "0.05em" }}
@@ -29,20 +44,28 @@ const Hero = () => (
         </motion.h1>
       </FadeIn>
       <FadeIn delay={0.2}>
-        <p className="mt-6 text-lg text-body sm:text-xl">
+        <p className="mt-6 text-lg text-body sm:text-xl max-w-xl mx-auto">
           Agent-native APIs that replace the platforms your AI can't use.
         </p>
       </FadeIn>
       <FadeIn delay={0.4}>
-        <motion.a
-          href="#"
-          className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all"
-          whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
-          whileTap={{ scale: 0.98 }}
-        >
-          Get Your API Key
-          <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
-        </motion.a>
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <motion.a
+            href="#"
+            className="group inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all"
+            whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Get Your API Key
+            <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
+          </motion.a>
+          <a
+            href="#tools"
+            className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-7 py-3.5 text-sm font-medium text-heading backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/60"
+          >
+            Explore the suite
+          </a>
+        </div>
       </FadeIn>
 
       {/* Scroll indicator */}

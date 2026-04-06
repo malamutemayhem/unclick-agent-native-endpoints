@@ -1,21 +1,23 @@
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Strip from "@/components/Strip";
+import Stats from "@/components/Stats";
 import Problem from "@/components/Problem";
+import HowItWorks from "@/components/HowItWorks";
 import Tools from "@/components/Tools";
 import CodeBlock from "@/components/CodeBlock";
 import Pricing from "@/components/Pricing";
 import FinalCTA from "@/components/FinalCTA";
 import Footer from "@/components/Footer";
-import Particles from "@/components/Particles";
 
 const Index = () => (
-  <div className="film-grain min-h-screen">
-    <Particles />
+  <div className="min-h-screen">
     <Navbar />
     <Hero />
     <Strip />
+    <Stats />
     <Problem />
+    <HowItWorks />
     <Tools />
     <CodeBlock />
     <Pricing />
