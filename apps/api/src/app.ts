@@ -193,7 +193,7 @@ export function createApp() {
     const [link] = await db
       .select({ id: links.id })
       .from(links)
-      .where(and(eq(links.id, body.link_id), eq(links.pageId, pageId), isNull(links.deletedAt)))
+      .where(and(eq(links.id, body.link_id), eq(links.pageId, pageId)))
       .limit(1);
 
     if (!link) return c.json({ error: { code: 'not_found', message: 'Link not found' } }, 404);

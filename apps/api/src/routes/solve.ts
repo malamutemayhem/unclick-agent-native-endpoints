@@ -108,18 +108,13 @@ function computeTier(score: number): string {
 }
 
 async function adjustReputation(db: Db, agentId: string, delta: number): Promise<void> {
-  const [profile] = await db
-    .select({ reputationScore: solveAgentProfiles.reputationScore })
-    .from(solveAgentProfiles)
-    .where(eq(solveAgentProfiles.agentId, agentId))
-    .limit(1);
-
-  if (!profile) return;
-
-  const newScore = Math.max(0, profile.reputationScore + delta);
   await db
     .update(solveAgentProfiles)
-    .set({ reputationScore: newScore, tier: computeTier(newScore), updatedAt: new Date() })
+    .set({
+      reputationScore: sql`GREATEST(${solveAgentProfiles.reputationScore} + ${delta}, 0)`,
+      tier: sql`CASE WHEN GREATEST(${solveAgentProfiles.reputationScore} + ${delta}, 0) >= 500 THEN 'expert' WHEN GREATEST(${solveAgentProfiles.reputationScore} + ${delta}, 0) >= 100 THEN 'solver' ELSE 'rookie' END`,
+      updatedAt: new Date(),
+    })
     .where(eq(solveAgentProfiles.agentId, agentId));
 }
 
@@ -686,8 +681,9 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
           .where(eq(solveSolutions.id, solutionId));
 
         // Reputation delta: for a flip (+1→-1 = -20, -1→+1 = +20)
-        const repDelta = diff > 0 ? 15 : -5;
-        await adjustReputation(db, solution.agentId, repDelta * Math.abs(diff));
+        const oldEffect = existingVote.value === 1 ? 15 : -5;
+        const newEffect = body.value === 1 ? 15 : -5;
+        await adjustReputation(db, solution.agentId, newEffect - oldEffect);
       } else {
         // New vote
         await db.insert(solveVotes).values({
@@ -715,7 +711,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
               totalUpvotes: sql`${solveAgentProfiles.totalUpvotes} + 1`,
               updatedAt: now,
             })
-            .where(eq(solveAgentProfiles.agentId, solution.agentId));
+            .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
         }
       }
 
@@ -748,7 +744,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
     // Reverse reputation effect
     const repRevert = existingVote.value === 1 ? -15 : 5;
     const [solution] = await db
-      .select({ agentId: solveSolutions.agentId })
+      .select({ agentId: solveSolutions.agentId, orgId: solveSolutions.orgId })
       .from(solveSolutions)
       .where(eq(solveSolutions.id, solutionId))
       .limit(1);
@@ -761,7 +757,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
             totalUpvotes: sql`GREATEST(${solveAgentProfiles.totalUpvotes} - 1, 0)`,
             updatedAt: new Date(),
           })
-          .where(eq(solveAgentProfiles.agentId, solution.agentId));
+          .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
       }
     }
 
@@ -828,7 +824,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
           acceptedSolutions: sql`${solveAgentProfiles.acceptedSolutions} + 1`,
           updatedAt: new Date(),
         })
-        .where(eq(solveAgentProfiles.agentId, solution.agentId));
+        .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
       await adjustReputation(db, solution.agentId, 50);
 
       const [updatedProblem] = await db
