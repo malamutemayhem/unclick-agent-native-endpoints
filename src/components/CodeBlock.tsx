@@ -2,15 +2,32 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import FadeIn from "./FadeIn";
 
+const agentConversation = `// Works with Claude Cowork, OpenClaw, ChatGPT plugins,
+// custom agents, or any MCP-compatible tool
+
+You say to your agent:
+  "Create a link page for my consulting business.
+   Add a Book a Call button and a link to my portfolio."
+
+Your agent calls UnClick:
+  POST /v1/links/pages
+  { "title": "My Consulting", "slug": "my-consulting",
+    "links": [{ "label": "Book a Call", ... }] }
+  → 201 Created · 38ms
+
+Your agent replies:
+  "Done. Your link page is live at
+   unclick.world/my-consulting"`;
+
 const curlExample = `curl -X POST https://api.unclick.world/v1/links/pages \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "slug": "my-consulting",
-    "title": "Chris - Strategy Consultant",
+    "title": "My Consulting",
     "links": [
       { "label": "Book a call", "url": "https://cal.com/chris" },
-      { "label": "My newsletter", "url": "https://newsletter.chris.com" }
+      { "label": "My portfolio", "url": "https://chris.com" }
     ]
   }'`;
 
@@ -21,57 +38,28 @@ const curlResponse = `{
   "status": "published"
 }`;
 
-const mcpConfig = `// mcp.json - add UnClick to your agent once
-{
-  "mcpServers": {
-    "unclick": {
-      "url": "https://api.unclick.world/v1/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
-    }
-  }
-}`;
-
-const mcpCall = `// Your agent now has these tools available:
-//   unclick_create_link_page
-//   unclick_create_booking
-//   unclick_create_form
-//   ... and more
-
-// When it needs a link page, it calls:
-POST /v1/links/pages
-{
-  "slug": "my-consulting",
-  "title": "Chris - Strategy Consultant"
-}
-
-// Response
-201 Created · 38ms
-{ "id": "pg_01j9k2m4...", "url": "https://unclick.world/my-consulting" }`;
-
-type Tab = "api" | "mcp";
+type Tab = "agent" | "api";
 
 const CodeBlock = () => {
-  const [tab, setTab] = useState<Tab>("mcp");
+  const [tab, setTab] = useState<Tab>("agent");
 
   return (
-    <section id="for-developers" className="mx-auto max-w-3xl px-6 py-32">
+    <section id="how-it-works" className="mx-auto max-w-3xl px-6 py-32">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
-          For Developers
+          How it works
         </span>
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Wire it into your agent. Ship the rest.
+          Your agent does the work. You just ask.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          You add UnClick to your agent's MCP config or call the REST API directly. Your agent gets
-          clean endpoints for link pages, scheduling, and more. No browser scraping. No DOM parsing.
-          Just HTTP.
+          Add UnClick once to Claude Cowork, OpenClaw, ChatGPT, or any MCP-compatible agent.
+          Then ask it to build link pages, set up booking, create forms, whatever you need.
+          The agent calls UnClick's API and comes back with a live URL.
         </p>
       </FadeIn>
 
@@ -88,7 +76,7 @@ const CodeBlock = () => {
               <div className="h-3 w-3 rounded-full bg-[hsl(140_50%_40%)]" />
             </div>
             <div className="flex gap-1">
-              {(["mcp", "api"] as Tab[]).map((t) => (
+              {(["agent", "api"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -96,7 +84,7 @@ const CodeBlock = () => {
                     tab === t ? "bg-primary/10 text-primary" : "text-muted-custom hover:text-body"
                   }`}
                 >
-                  {t === "mcp" ? "mcp setup" : "rest api"}
+                  {t === "agent" ? "in your agent" : "rest api"}
                 </button>
               ))}
             </div>
@@ -104,7 +92,15 @@ const CodeBlock = () => {
 
           {/* Content */}
           <div className="p-6 sm:p-8">
-            {tab === "api" ? (
+            {tab === "agent" ? (
+              <div className="space-y-4">
+                <pre className="overflow-x-auto font-mono text-xs text-heading leading-relaxed whitespace-pre-wrap">{agentConversation}</pre>
+                <p className="text-xs text-muted-custom pt-2">
+                  No code on your end. You add UnClick to your agent's tools once, then use it
+                  through natural language. The API call happens automatically.
+                </p>
+              </div>
+            ) : (
               <div className="space-y-4">
                 <div>
                   <div className="mb-2 font-mono text-xs text-muted-custom">Request</div>
@@ -113,17 +109,6 @@ const CodeBlock = () => {
                 <div>
                   <div className="mb-2 font-mono text-xs text-muted-custom">Response <span className="text-primary">201 Created · 41ms</span></div>
                   <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed">{curlResponse}</pre>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 1 - add to your MCP config</div>
-                  <pre className="overflow-x-auto font-mono text-xs text-heading leading-relaxed whitespace-pre-wrap">{mcpConfig}</pre>
-                </div>
-                <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 2 - your agent calls UnClick directly</div>
-                  <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed whitespace-pre-wrap">{mcpCall}</pre>
                 </div>
               </div>
             )}
