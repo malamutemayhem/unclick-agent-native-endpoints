@@ -18,7 +18,7 @@ const FinalCTA = () => (
       <FadeIn delay={0.1}>
         <p className="mt-4 text-body max-w-md mx-auto">
           Just your email. Both tools included. No credit card.
-          Join the developers and AI builders already using UnClick.
+          Be one of the first to try it.
         </p>
       </FadeIn>
       <FadeIn delay={0.2}>
