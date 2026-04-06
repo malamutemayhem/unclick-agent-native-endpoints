@@ -27,6 +27,8 @@ import { createShortenRouter, createPublicShortenRouter } from './routes/shorten
 import { createQrRouter } from './routes/qr.js';
 import { createTransformRouter } from './routes/transform.js';
 import { createValidateRouter } from './routes/validate.js';
+import { createImageRouter } from './routes/image.js';
+import { createCsvRouter } from './routes/csv.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -308,6 +310,16 @@ export function createApp() {
   // Validate API (stateless input validation)
   // -------------------------------------------------------------------------
   app.route('/v1/validate', createValidateRouter());
+
+  // -------------------------------------------------------------------------
+  // Image API (stateless image processing)
+  // -------------------------------------------------------------------------
+  app.route('/v1/image', createImageRouter());
+
+  // -------------------------------------------------------------------------
+  // CSV API (stateless CSV processing)
+  // -------------------------------------------------------------------------
+  app.route('/v1/csv', createCsvRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
