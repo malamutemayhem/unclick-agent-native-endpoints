@@ -1,0 +1,13 @@
+name = "unclick-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+
+# Uncomment and configure for production:
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "unclick-prod"
+# database_id = "YOUR_D1_DATABASE_ID"

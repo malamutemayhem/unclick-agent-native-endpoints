@@ -3,25 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Lovable App</title>
-    <meta name="description" content="Lovable Generated Project">
-    <meta name="author" content="Lovable" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    
-    
+    <title>UnClick — Agent-Native APIs for AI Assistants</title>
+    <meta name="description" content="UnClick gives your AI assistant direct access to the tools it needs — no screen, no mouse, no pretending to be human. Link-in-Bio and Scheduling APIs, free to start." />
+    <meta name="author" content="UnClick" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://unclick.world/" />
+
+    <!-- OpenGraph -->
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ba1cf649-9d7f-4757-b752-856e247153d9/id-preview-63dcad3b--fe8481b6-3044-4da5-a2da-37f31a229398.lovable.app-1775452401057.png">
+    <meta property="og:site_name" content="UnClick" />
+    <meta property="og:title" content="UnClick — Agent-Native APIs for AI Assistants" />
+    <meta property="og:description" content="UnClick gives your AI assistant direct access to the tools it needs — no screen, no mouse, no pretending to be human. Link-in-Bio and Scheduling APIs, free to start." />
+    <meta property="og:url" content="https://unclick.world/" />
+    <meta property="og:image" content="https://unclick.world/og-image.png" />
 
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ba1cf649-9d7f-4757-b752-856e247153d9/id-preview-63dcad3b--fe8481b6-3044-4da5-a2da-37f31a229398.lovable.app-1775452401057.png">
-    <meta property="og:title" content="Lovable App">
-  <meta name="twitter:title" content="Lovable App">
-  <meta property="og:description" content="Lovable Generated Project">
-  <meta name="twitter:description" content="Lovable Generated Project">
-</head>
+    <meta name="twitter:site" content="@unclickworld" />
+    <meta name="twitter:title" content="UnClick — Agent-Native APIs for AI Assistants" />
+    <meta name="twitter:description" content="Your AI was never meant to click buttons. UnClick gives it direct API access to Linktree, Calendly, and more." />
+    <meta name="twitter:image" content="https://unclick.world/og-image.png" />
+
+    <!-- Schema.org structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://unclick.world/#org",
+          "name": "UnClick",
+          "url": "https://unclick.world",
+          "description": "Agent-native API suite that gives AI assistants direct programmatic access to common web tools.",
+          "foundingLocation": "Melbourne, Australia",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "chris@unclick.world",
+            "contactType": "customer support"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://unclick.world/#website",
+          "url": "https://unclick.world",
+          "name": "UnClick",
+          "publisher": { "@id": "https://unclick.world/#org" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://unclick.world/#app",
+          "name": "UnClick",
+          "applicationCategory": "DeveloperApplication",
+          "description": "A suite of agent-native REST APIs that replace SaaS platforms for AI agents. Includes Link-in-Bio API and Scheduling API.",
+          "url": "https://unclick.world",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "description": "Free tier — 500 API calls/day, both tools included"
+          },
+          "publisher": { "@id": "https://unclick.world/#org" }
+        }
+      ]
+    }
+    </script>
+
+    <!-- AI agent discovery -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="UnClick for AI agents" />
+  </head>
 
   <body>
     <div id="root"></div>

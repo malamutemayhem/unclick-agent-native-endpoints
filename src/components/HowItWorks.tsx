@@ -4,18 +4,18 @@ import { motion } from "framer-motion";
 const steps = [
   {
     number: "01",
-    title: "Your AI decides to act",
-    desc: "An agent needs to schedule a meeting, send an email, or publish a link page.",
+    title: "Get your API key — free",
+    desc: "Sign up and grab a key in under a minute. No credit card, no setup wizard, no 14-day trial. Both tools are included.",
   },
   {
     number: "02",
-    title: "One API call",
-    desc: "Instead of navigating a human UI, it hits a clean REST endpoint.",
+    title: "Tell your AI what you need",
+    desc: "Just describe the task in plain language: \"set up a booking page for 30-min consultations\" or \"create a link page for my new product launch.\"",
   },
   {
     number: "03",
-    title: "Done in milliseconds",
-    desc: "No browser automation. No scraping. No brittle workarounds. Just results.",
+    title: "It's done. No clicking, no tabs, no UI.",
+    desc: "Your AI calls the UnClick API directly and gets a clean JSON response. The whole thing takes under 100ms. No browser. No fumbling.",
   },
 ];
 
@@ -25,6 +25,11 @@ const HowItWorks = () => (
       <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
         How It Works
       </span>
+    </FadeIn>
+    <FadeIn delay={0.05}>
+      <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+        Three steps. Genuinely.
+      </h2>
     </FadeIn>
 
     <div className="mt-14 relative">

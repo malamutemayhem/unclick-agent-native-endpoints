@@ -1,16 +1,22 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "unclick",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "vite",
+    "dev:api": "npm run dev --workspace=apps/api",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:api": "npm run test --workspace=apps/api"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

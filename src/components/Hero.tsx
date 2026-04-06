@@ -30,7 +30,7 @@ const Hero = () => (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">v2.1 — 6 tools live</span>
+          <span className="font-mono text-xs text-muted-foreground">Now live — Link-in-Bio + Scheduling APIs</span>
         </div>
       </FadeIn>
       <FadeIn delay={0.05}>
@@ -44,26 +44,29 @@ const Hero = () => (
         </motion.h1>
       </FadeIn>
       <FadeIn delay={0.2}>
-        <p className="mt-6 text-lg text-body sm:text-xl max-w-xl mx-auto">
-          Agent-native APIs that replace the platforms your AI can't use.
+        <p className="mt-6 text-lg text-body sm:text-xl max-w-2xl mx-auto leading-relaxed">
+          UnClick gives your AI assistant direct access to the tools it needs — no screen, no mouse,
+          no pretending to be human. Real APIs for real agents.
         </p>
       </FadeIn>
       <FadeIn delay={0.4}>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <motion.a
-            href="#"
+            href="https://tally.so/r/mZdkxe"
+            target="_blank"
+            rel="noopener noreferrer"
             className="group inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all"
             whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
             whileTap={{ scale: 0.98 }}
           >
-            Get Your API Key
+            Get Your Free API Key
             <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
           </motion.a>
           <a
             href="#tools"
             className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-7 py-3.5 text-sm font-medium text-heading backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/60"
           >
-            Explore the suite
+            See the tools
           </a>
         </div>
       </FadeIn>
