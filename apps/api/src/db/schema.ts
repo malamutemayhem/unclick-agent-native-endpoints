@@ -379,6 +379,63 @@ export const solveAgentProfiles = pgTable('solve_agent_profiles', {
 ]);
 
 // ===========================================================================
+// Webhook Bin tables (RequestBin-style tool)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Webhook bins — temporary endpoints that capture incoming HTTP requests
+// ---------------------------------------------------------------------------
+export const webhookBins = pgTable('webhook_bins', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (t) => [
+  index('webhook_bins_org_idx').on(t.orgId),
+  index('webhook_bins_expires_idx').on(t.expiresAt),
+]);
+
+// ---------------------------------------------------------------------------
+// Captured requests per bin
+// ---------------------------------------------------------------------------
+export const webhookBinRequests = pgTable('webhook_bin_requests', {
+  id: text('id').primaryKey(),
+  binId: text('bin_id').notNull(),
+  method: text('method').notNull(),
+  /** JSON-encoded headers object */
+  headers: text('headers').notNull().default('{}'),
+  /** Raw request body (capped at 100 KB); null when empty */
+  body: text('body'),
+  /** JSON-encoded query params object */
+  queryParams: text('query_params').notNull().default('{}'),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('webhook_bin_requests_bin_idx').on(t.binId, t.receivedAt),
+]);
+
+// ===========================================================================
+// KV Store tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Key-value scratchpad — org-scoped, optional TTL, values stored as JSON text
+// ---------------------------------------------------------------------------
+export const kvStore = pgTable('kv_store', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  key: text('key').notNull(),
+  /** JSON-serialised value (up to 512 KB) */
+  value: text('value').notNull().default('null'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('kv_store_org_key_idx').on(t.orgId, t.key),
+  index('kv_store_org_idx').on(t.orgId),
+  index('kv_store_expires_idx').on(t.expiresAt),
+]);
+
+// ===========================================================================
 // Shorten API tables
 // ===========================================================================
 

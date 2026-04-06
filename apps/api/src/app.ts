@@ -35,6 +35,9 @@ import { createCsvRouter } from './routes/csv.js';
 import { createJsonRouter } from './routes/json.js';
 import { createMarkdownRouter } from './routes/markdown.js';
 import { createDiffRouter } from './routes/diff.js';
+import { createCronRouter } from './routes/cron.js';
+import { createWebhookBinRouter } from './routes/webhook.js';
+import { createKvRouter } from './routes/kv.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -182,6 +185,9 @@ export function createApp() {
   app.route('/v1/schedule', publicBookingRouter);
 
   // -------------------------------------------------------------------------
+  // Webhook bin — receive endpoint is public; create/list/delete use inline auth
+  app.route('/v1/webhook', createWebhookBinRouter(db, auth));
+
   // Public short-URL redirect — must be before auth middleware
   // GET /r/:code -> 302 to the original URL
   // -------------------------------------------------------------------------
@@ -356,6 +362,16 @@ export function createApp() {
   // Diff utility (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/diff', createDiffRouter());
+
+  // -------------------------------------------------------------------------
+  // Cron utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/cron', createCronRouter());
+
+  // -------------------------------------------------------------------------
+  // KV store (persistent key-value scratchpad)
+  // -------------------------------------------------------------------------
+  app.route('/v1/kv', createKvRouter(db));
 
   // -------------------------------------------------------------------------
   // Error handling

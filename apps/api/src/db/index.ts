@@ -392,6 +392,45 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS solve_agent_profiles_reputation_idx ON solve_agent_profiles(reputation_score DESC);
   `);
 
+  // Webhook Bin tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS webhook_bins (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS webhook_bins_org_idx ON webhook_bins(org_id);
+    CREATE INDEX IF NOT EXISTS webhook_bins_expires_idx ON webhook_bins(expires_at);
+
+    CREATE TABLE IF NOT EXISTS webhook_bin_requests (
+      id TEXT PRIMARY KEY,
+      bin_id TEXT NOT NULL REFERENCES webhook_bins(id),
+      method TEXT NOT NULL,
+      headers TEXT NOT NULL DEFAULT '{}',
+      body TEXT,
+      query_params TEXT NOT NULL DEFAULT '{}',
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS webhook_bin_requests_bin_idx ON webhook_bin_requests(bin_id, received_at DESC);
+  `);
+
+  // KV Store tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS kv_store (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL DEFAULT 'null',
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(org_id, key)
+    );
+    CREATE INDEX IF NOT EXISTS kv_store_org_idx ON kv_store(org_id);
+    CREATE INDEX IF NOT EXISTS kv_store_expires_idx ON kv_store(expires_at) WHERE expires_at IS NOT NULL;
+  `);
+
   // Shorten API tables
   await client.exec(`
     CREATE TABLE IF NOT EXISTS shortened_urls (
