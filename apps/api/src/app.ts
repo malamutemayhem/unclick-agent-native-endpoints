@@ -21,6 +21,8 @@ import { createEventTypesRouter } from './routes/scheduling/event-types.js';
 import { createBookingsRouter, createPublicBookingRouter } from './routes/scheduling/bookings.js';
 import { createCalendarRouter } from './routes/scheduling/calendar.js';
 import { createSolveRouter } from './routes/solve.js';
+import { createShortenRouter, createPublicShortenRouter } from './routes/shorten.js';
+import { createQrRouter } from './routes/qr.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -168,6 +170,13 @@ export function createApp() {
   app.route('/v1/schedule', publicBookingRouter);
 
   // -------------------------------------------------------------------------
+  // Public short-URL redirect — must be before auth middleware
+  // GET /r/:code -> 302 to the original URL
+  // -------------------------------------------------------------------------
+  const publicShortenRouter = createPublicShortenRouter(db);
+  app.route('/r', publicShortenRouter);
+
+  // -------------------------------------------------------------------------
   // Public click tracking — must be before auth middleware
   // Looks up the page's org_id from DB; never trusts the request body for it
   // -------------------------------------------------------------------------
@@ -259,6 +268,14 @@ export function createApp() {
   // Theme application per page
   const pageThemeRouter = createThemesRouter(db);
   app.route('/v1/links/pages/:page_id/theme', pageThemeRouter);
+
+  // -------------------------------------------------------------------------
+  // Shorten API (authenticated)
+  // -------------------------------------------------------------------------
+  app.route('/v1/shorten', createShortenRouter(db));
+
+  // QR code generator (authenticated, stateless)
+  app.route('/v1/qr', createQrRouter(db));
 
   // -------------------------------------------------------------------------
   // Scheduling API (authenticated)
