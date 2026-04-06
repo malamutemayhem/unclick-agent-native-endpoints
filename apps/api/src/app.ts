@@ -21,6 +21,8 @@ import { createEventTypesRouter } from './routes/scheduling/event-types.js';
 import { createBookingsRouter, createPublicBookingRouter } from './routes/scheduling/bookings.js';
 import { createCalendarRouter } from './routes/scheduling/calendar.js';
 import { createSolveRouter } from './routes/solve.js';
+import { createHashRouter } from './routes/hash.js';
+import { createEncodeRouter } from './routes/encode.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -267,6 +269,16 @@ export function createApp() {
   app.route('/v1/scheduling/event-types', createEventTypesRouter(db));
   app.route('/v1/scheduling/bookings', createBookingsRouter(db));
   app.route('/v1/scheduling/calendar', createCalendarRouter(db));
+
+  // -------------------------------------------------------------------------
+  // Hash utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/hash', createHashRouter());
+
+  // -------------------------------------------------------------------------
+  // Encode/decode utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1', createEncodeRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
