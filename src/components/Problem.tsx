@@ -65,7 +65,10 @@ const Problem = () => (
               <div>POST /v1/schedule/events</div>
               <div className="text-primary">→ 201 Created</div>
             </div>
-            <div className="mt-3 font-mono text-xs text-primary/50">~38ms</div>
+            <div className="mt-3 flex justify-between font-mono text-xs text-primary/50">
+              <span>~38ms</span>
+              <span>~120 tokens</span>
+            </div>
           </motion.div>
         </div>
       </FadeIn>
