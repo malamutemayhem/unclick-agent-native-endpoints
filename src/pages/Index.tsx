@@ -6,7 +6,6 @@ import Problem from "@/components/Problem";
 import HowItWorks from "@/components/HowItWorks";
 import Tools from "@/components/Tools";
 import CodeBlock from "@/components/CodeBlock";
-import Pricing from "@/components/Pricing";
 import TrustSignals from "@/components/TrustSignals";
 import FinalCTA from "@/components/FinalCTA";
 import Footer from "@/components/Footer";
@@ -21,7 +20,6 @@ const Index = () => (
     <HowItWorks />
     <Tools />
     <CodeBlock />
-    <Pricing />
     <TrustSignals />
     <FinalCTA />
     <Footer />

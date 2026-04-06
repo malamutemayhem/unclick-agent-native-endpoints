@@ -17,7 +17,7 @@ const FinalCTA = () => (
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-4 text-body max-w-md mx-auto">
-          Free to start. Both tools included. No credit card.
+          Just your email. Both tools included. No credit card.
           Join the developers and AI builders already using UnClick.
         </p>
       </FadeIn>
@@ -30,7 +30,7 @@ const FinalCTA = () => (
           whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
           whileTap={{ scale: 0.98 }}
         >
-          Get your free API key
+          Get Started Free
           <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
         </motion.a>
       </FadeIn>

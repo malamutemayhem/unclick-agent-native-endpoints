@@ -12,7 +12,6 @@ const Navbar = () => {
         {/* Desktop nav */}
         <div className="hidden items-center gap-8 md:flex">
           <a href="#tools" className="text-sm text-body transition-colors hover:text-heading">Tools</a>
-          <a href="#pricing" className="text-sm text-body transition-colors hover:text-heading">Pricing</a>
           <a href="/docs" className="text-sm text-body transition-colors hover:text-heading">Docs</a>
         </div>
 
@@ -23,7 +22,7 @@ const Navbar = () => {
             rel="noopener noreferrer"
             className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
-            Get API Key
+            Get Started Free
           </a>
 
           {/* Hamburger button */}
@@ -63,7 +62,6 @@ const Navbar = () => {
           >
             <div className="flex flex-col gap-1 px-6 py-4">
               <a href="#tools" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Tools</a>
-              <a href="#pricing" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Pricing</a>
               <a href="/docs" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Docs</a>
               <a
                 href="https://tally.so/r/mZdkxe"
@@ -71,7 +69,7 @@ const Navbar = () => {
                 rel="noopener noreferrer"
                 className="mt-2 rounded-md bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground"
               >
-                Get API Key
+                Get Started Free
               </a>
             </div>
           </motion.div>

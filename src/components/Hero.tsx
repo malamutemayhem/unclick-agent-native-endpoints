@@ -52,21 +52,19 @@ const Hero = () => (
       <FadeIn delay={0.4}>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <motion.a
-            href="https://tally.so/r/mZdkxe"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#tools"
             className="group inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all"
             whileHover={{ scale: 1.03, boxShadow: "0 0 40px 8px rgba(226,185,59,0.25)" }}
             whileTap={{ scale: 0.98 }}
           >
-            Get Your Free API Key
-            <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
+            Explore Tools
+            <span className="inline-block transition-transform group-hover:translate-x-1">↓</span>
           </motion.a>
           <a
-            href="#tools"
+            href="/docs"
             className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-7 py-3.5 text-sm font-medium text-heading backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/60"
           >
-            See the tools
+            View Docs
           </a>
         </div>
       </FadeIn>

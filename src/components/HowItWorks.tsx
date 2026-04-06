@@ -4,18 +4,18 @@ import { motion } from "framer-motion";
 const steps = [
   {
     number: "01",
-    title: "Get your API key — free",
-    desc: "Sign up and grab a key in under a minute. No credit card, no setup wizard, no 14-day trial. Both tools are included.",
+    title: "Pick your tools",
+    desc: "Browse what's available — Link-in-Bio, Scheduling, and more on the way. Each tool is a clean API with full docs. No dashboard to poke around in first.",
   },
   {
     number: "02",
-    title: "Tell your AI what you need",
-    desc: "Just describe the task in plain language: \"set up a booking page for 30-min consultations\" or \"create a link page for my new product launch.\"",
+    title: "Sign up free",
+    desc: "Just your email. No credit card, no setup wizard, no 14-day trial. You'll get an API key that covers all live tools immediately.",
   },
   {
     number: "03",
-    title: "It's done. No clicking, no tabs, no UI.",
-    desc: "Your AI calls the UnClick API directly and gets a clean JSON response. The whole thing takes under 100ms. No browser. No fumbling.",
+    title: "Your AI gets to work",
+    desc: "Point your agent at the UnClick API. It calls endpoints directly and gets clean JSON responses. The whole thing takes under 100ms. No browser. No clicking.",
   },
 ];
 

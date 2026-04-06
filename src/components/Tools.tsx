@@ -161,22 +161,45 @@ const Tools = () => {
 
               <p className="mt-2 text-xs text-body leading-relaxed flex-1">{tool.description}</p>
 
+              {tool.status === "live" && (
+                <p className="mt-2 font-mono text-[10px] text-primary/70">Free — 500 API calls/day</p>
+              )}
+
               <div className="mt-3 flex flex-wrap gap-2">
                 {tool.stats.map((s) => (
                   <span key={s} className="font-mono text-[10px] text-muted-foreground">{s}</span>
                 ))}
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-4 flex items-center justify-between gap-2">
                 <span className="font-mono text-xs text-primary/50 group-hover:text-primary/80 transition-colors">
                   {tool.endpoint}
                 </span>
-                {tool.status === "live" && (
+                {tool.status === "live" ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/tools/${tool.slug}`}
+                      className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
+                    >
+                      Docs →
+                    </a>
+                    <a
+                      href="https://tally.so/r/mZdkxe"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                    >
+                      Get Started Free
+                    </a>
+                  </div>
+                ) : (
                   <a
-                    href={`/tools/${tool.slug}`}
-                    className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
+                    href="https://tally.so/r/mZdkxe"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-md border border-border/60 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary/30 hover:text-body transition-colors"
                   >
-                    View Docs →
+                    Notify Me
                   </a>
                 )}
               </div>
