@@ -1,70 +1,71 @@
 import FadeIn from "./FadeIn";
-import { motion } from "framer-motion";
+import { PlugZap, LayoutGrid, MessageSquare } from "lucide-react";
 
 const steps = [
   {
-    number: "01",
-    title: "Connect UnClick to your AI",
-    desc: "Add the UnClick MCP server to Claude Desktop, Cursor, or any MCP-compatible agent. Takes about 30 seconds. Or use a direct API key if you prefer.",
+    number: "1",
+    Icon: PlugZap,
+    title: "Connect",
+    desc: "Add UnClick to Claude Desktop, Cursor, or any MCP-compatible AI. Paste one JSON config. Takes 30 seconds.",
   },
   {
-    number: "02",
-    title: "Your AI can now use any tool",
-    desc: "Once connected, your AI has access to all 26 tools in the marketplace. It can browse them, pick the right one, and call it directly. No extra setup per tool.",
+    number: "2",
+    Icon: LayoutGrid,
+    title: "Browse",
+    desc: "Your AI now has access to all 26 tools in the marketplace. No extra setup per tool.",
   },
   {
-    number: "03",
-    title: "Just ask",
-    desc: "Tell your AI to shorten a link, resize an image, generate a QR code, or hash some data. It handles the API call. You get the result. That is it.",
+    number: "3",
+    Icon: MessageSquare,
+    title: "Use",
+    desc: 'Just ask. "Shorten this link." "Make a QR code." Your AI handles the rest.',
   },
 ];
 
 const HowItWorks = () => (
-  <section id="how-it-works" className="relative mx-auto max-w-3xl px-6 py-32">
+  <section id="how-it-works" className="relative mx-auto max-w-4xl px-6 py-24">
     <FadeIn>
-      <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
-        How It Works
-      </span>
-    </FadeIn>
-    <FadeIn delay={0.05}>
-      <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-        Three steps. No jargon.
-      </h2>
-    </FadeIn>
-    <FadeIn delay={0.1}>
-      <p className="mt-3 text-body max-w-lg">
-        You do not need to be a developer to use UnClick. If you can use Claude, ChatGPT, or OpenClaw, you can use this.
-      </p>
-    </FadeIn>
-
-    <div className="mt-14 relative">
-      {/* Vertical connector line */}
-      <div className="absolute left-[23px] top-0 bottom-0 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent hidden sm:block" />
-
-      <div className="space-y-12">
-        {steps.map((step, i) => (
-          <FadeIn key={step.number} delay={i * 0.15}>
-            <motion.div
-              className="flex gap-6 items-start group"
-              whileHover={{ x: 4 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="relative flex-shrink-0">
-                <div className="w-12 h-12 rounded-full border border-primary/30 bg-card flex items-center justify-center font-mono text-sm text-primary group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
-                  {step.number}
-                </div>
-                <div className="absolute inset-0 rounded-full bg-primary/10 blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </div>
-
-              <div className="pt-2">
-                <h3 className="text-lg font-medium text-heading">{step.title}</h3>
-                <p className="mt-1.5 text-sm text-body leading-relaxed">{step.desc}</p>
-              </div>
-            </motion.div>
-          </FadeIn>
-        ))}
+      <div className="text-center mb-12">
+        <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
+          How It Works
+        </span>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+          Three steps.
+        </h2>
       </div>
+    </FadeIn>
+
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {steps.map((step, i) => (
+        <FadeIn key={step.number} delay={i * 0.1}>
+          <div className="relative rounded-xl border border-border/50 bg-card/40 p-6 text-center hover:border-primary/30 hover:bg-card/60 transition-all">
+            {/* Step number badge */}
+            <div className="mb-4 flex justify-center">
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
+                <step.Icon size={20} className="text-primary" strokeWidth={1.75} />
+                <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary font-mono text-[10px] font-bold text-primary-foreground">
+                  {step.number}
+                </span>
+              </div>
+            </div>
+            <h3 className="text-base font-semibold text-heading">{step.title}</h3>
+            <p className="mt-2 text-sm text-body leading-relaxed">{step.desc}</p>
+          </div>
+        </FadeIn>
+      ))}
     </div>
+
+    <FadeIn delay={0.4}>
+      <div className="mt-8 text-center">
+        <a
+          href="#install"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+        >
+          See the install guide
+          <span aria-hidden="true">↓</span>
+        </a>
+      </div>
+    </FadeIn>
   </section>
 );
 

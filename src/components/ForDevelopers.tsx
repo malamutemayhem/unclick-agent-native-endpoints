@@ -10,7 +10,7 @@ const perks = [
   {
     icon: "◎",
     title: "Automated security scanning",
-    desc: "Every tool listing goes through automated security validation before it reaches users. Keeps the marketplace safe. Takes the audit burden off you.",
+    desc: "Every tool listing goes through automated security validation before it reaches users. Keeps the marketplace safe and takes the audit burden off you.",
   },
   {
     icon: "⊞",
@@ -20,7 +20,7 @@ const perks = [
   {
     icon: "⊕",
     title: "Built-in distribution",
-    desc: "List once, reach every agent that uses UnClick. Claude Cowork, OpenClaw, ChatGPT via MCP, Cursor — your tool shows up everywhere.",
+    desc: "List once, reach every agent that uses UnClick. Claude, OpenClaw, ChatGPT via MCP, Cursor - your tool shows up everywhere.",
   },
 ];
 
@@ -28,7 +28,7 @@ const ForDevelopers = () => (
   <section id="developers" className="relative overflow-hidden">
     <div className="pointer-events-none absolute top-1/2 -right-40 -translate-y-1/2 w-[500px] h-[500px] bg-primary/[0.03] blur-[120px] rounded-full" />
 
-    <div className="mx-auto max-w-4xl px-6 py-32">
+    <div className="mx-auto max-w-4xl px-6 py-24">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
           For Developers
@@ -67,14 +67,12 @@ const ForDevelopers = () => (
             <div>
               <h3 className="text-lg font-semibold text-heading">Ready to list your tool?</h3>
               <p className="mt-2 text-sm text-body max-w-sm">
-                You need a REST API and a short description. We handle the rest — listing, auth, billing, and distribution.
+                You need a REST API and a short description. We handle the rest - listing, auth, billing, and distribution.
               </p>
             </div>
             <div className="flex flex-col gap-3 shrink-0">
               <motion.a
-                href="https://tally.so/r/mZdkxe"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="mailto:hello@unclick.world"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
                 whileHover={{ scale: 1.03, boxShadow: "0 0 30px 6px rgba(226,185,59,0.2)" }}
                 whileTap={{ scale: 0.98 }}

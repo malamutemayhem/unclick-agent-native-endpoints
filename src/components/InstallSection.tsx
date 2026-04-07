@@ -54,6 +54,12 @@ const configs: Record<Client, { code: string; label: string; file: string }> = {
 
 const clients: Client[] = ["Claude Desktop", "Cursor", "Direct API"];
 
+const steps = [
+  { n: "1", label: "Get your free API key", detail: "Email hello@unclick.world - keys are free, takes a few minutes." },
+  { n: "2", label: "Copy the config below", detail: "Pick your AI client, copy the snippet, and replace YOUR_API_KEY." },
+  { n: "3", label: "Restart your AI and ask", detail: 'Your AI now has all 26 tools. Try: "shorten this link" or "make a QR code."' },
+];
+
 const InstallSection = () => {
   const [active, setActive] = useState<Client>("Claude Desktop");
   const [copied, setCopied] = useState(false);
@@ -65,7 +71,7 @@ const InstallSection = () => {
   };
 
   return (
-    <section id="install" className="relative mx-auto max-w-4xl px-6 py-32">
+    <section id="install" className="relative mx-auto max-w-4xl px-6 py-24">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
           Quick Install
@@ -73,18 +79,33 @@ const InstallSection = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Add UnClick to your AI in 30 seconds.
+          Connect in under 2 minutes.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          Copy the config, paste it into your AI client, add your API key. That is all.
-          Your AI can now use every tool in the marketplace.
+          No developer knowledge needed. If you can edit a text file, you can install UnClick.
         </p>
       </FadeIn>
 
+      {/* Steps */}
       <FadeIn delay={0.15}>
-        <div className="mt-10 rounded-xl border border-border/60 bg-card/40 overflow-hidden">
+        <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {steps.map((s) => (
+            <div key={s.n} className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-bold text-primary">
+                {s.n}
+              </div>
+              <p className="text-sm font-medium text-heading">{s.label}</p>
+              <p className="mt-1 text-xs text-body leading-relaxed">{s.detail}</p>
+            </div>
+          ))}
+        </div>
+      </FadeIn>
+
+      {/* Code block */}
+      <FadeIn delay={0.2}>
+        <div className="mt-8 rounded-xl border border-border/60 bg-card/40 overflow-hidden">
           {/* Tab row */}
           <div className="flex items-center border-b border-border/60 bg-card/60 px-1">
             {clients.map((client) => (
@@ -105,7 +126,7 @@ const InstallSection = () => {
             </div>
           </div>
 
-          {/* Code block */}
+          {/* Code */}
           <div className="relative p-5">
             <pre className="overflow-x-auto font-mono text-xs text-body leading-relaxed">
               <code>{configs[active].code}</code>
@@ -121,20 +142,17 @@ const InstallSection = () => {
         </div>
       </FadeIn>
 
-      <FadeIn delay={0.25}>
-        <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            Need an API key?
-          </p>
+      <FadeIn delay={0.3}>
+        <p className="mt-5 text-xs text-muted-foreground">
+          Need a key? Email{" "}
           <a
-            href="https://tally.so/r/mZdkxe"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+            href="mailto:hello@unclick.world"
+            className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
           >
-            Get one free — takes 30 seconds
+            hello@unclick.world
           </a>
-        </div>
+          . Keys are free - we just want to know who is using the API.
+        </p>
       </FadeIn>
     </section>
   );
