@@ -1702,6 +1702,58 @@ export const CATALOG: ToolDef[] = [
     ],
   },
 
+  // ─── PLATFORM ──────────────────────────────────────────────────────
+  {
+    slug: "report-bug",
+    name: "Bug Reporter",
+    description:
+      "Report bugs and errors directly from within an agent workflow. When you encounter an error using any UnClick tool, call this endpoint to automatically file a bug report. Severity is auto-detected from the error message (HTTP 500 → critical, timeout/bad response → high, validation errors → medium, other → low) or you can set it manually.",
+    category: "platform",
+    scope: "",
+    endpoints: [
+      {
+        id: "report_bug.create",
+        name: "Report Bug",
+        description:
+          "Submit a bug report when you encounter an error using an UnClick tool. Include the tool name, the error you received, what you sent, and optionally what you expected to happen.",
+        method: "POST",
+        path: "/v1/report-bug",
+        requiresAuth: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            tool_name: {
+              type: "string",
+              description: "Name of the UnClick tool that produced the error (e.g. 'hash', 'image', 'kv')",
+            },
+            error_message: {
+              type: "string",
+              description: "The full error message or description of what went wrong",
+            },
+            request_payload: {
+              type: "object",
+              description: "The exact request body you sent to the tool when the error occurred",
+            },
+            expected_behavior: {
+              type: "string",
+              description: "What you expected the tool to do (optional but helpful for triage)",
+            },
+            severity: {
+              type: "string",
+              enum: ["critical", "high", "medium", "low"],
+              description: "Override auto-detected severity. Leave blank to let UnClick detect it.",
+            },
+            agent_context: {
+              type: "object",
+              description: "Any additional context about your agent, task, or environment",
+            },
+          },
+          required: ["tool_name", "error_message"],
+        },
+      },
+    ],
+  },
+
   // ─── STORAGE ───────────────────────────────────────────────────────
   {
     slug: "kv",

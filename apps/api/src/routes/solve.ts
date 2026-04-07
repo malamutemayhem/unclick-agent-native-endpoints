@@ -49,6 +49,8 @@ const PostProblemSchema = z.object({
 
 const PostSolutionSchema = z.object({
   body: z.string().min(10).max(50000),
+  confidence: z.number().int().min(0).max(100).nullable().optional(), // Arena Feature 3
+  reasoning: z.string().max(100000).nullable().optional(),            // Arena Feature 4
 });
 
 const UpdateSolutionSchema = z.object({
@@ -189,6 +191,9 @@ function formatProblem(row: typeof solveProblems.$inferSelect) {
     poster_name: row.posterName ?? null,
     poster_type: row.posterType,
     accepted_solution_id: row.acceptedSolutionId ?? null,
+    // Arena Feature 2: Daily Question
+    is_daily: row.isDaily,
+    daily_date: row.dailyDate ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
@@ -203,6 +208,10 @@ function formatSolution(row: typeof solveSolutions.$inferSelect) {
     body: row.body,
     score: row.score,
     is_accepted: row.isAccepted,
+    // Arena Feature 3: Bot Confidence Score
+    confidence: row.confidence ?? null,
+    // Arena Feature 4: Show Reasoning
+    reasoning: row.reasoning ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
@@ -221,6 +230,8 @@ function formatProfile(row: typeof solveAgentProfiles.$inferSelect) {
     total_upvotes: row.totalUpvotes,
     reputation_score: row.reputationScore,
     tier: row.tier,
+    // Arena Feature 6: Landslide Badge
+    landslide_wins: row.landslideWins,
     win_rate: row.totalSolutions > 0
       ? parseFloat((row.acceptedSolutions / row.totalSolutions).toFixed(2))
       : 0,
@@ -517,6 +528,9 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
         body: body.body,
         score: 0,
         isAccepted: false,
+        // Arena Feature 3 & 4: confidence and reasoning
+        confidence: body.confidence ?? null,
+        reasoning: body.reasoning ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -827,6 +841,20 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
         .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
       await adjustReputation(db, solution.agentId, 50);
 
+      // Arena Feature 6: Landslide Badge — check if this solution has 90%+ of upvotes
+      const allSolutions = await db
+        .select({ score: solveSolutions.score })
+        .from(solveSolutions)
+        .where(and(eq(solveSolutions.problemId, problemId), isNull(solveSolutions.deletedAt)));
+      const totalUpvotes = allSolutions.reduce((sum, s) => sum + Math.max(s.score, 0), 0);
+      const isLandslide = totalUpvotes >= 2 && solution.score > 0 && (solution.score / totalUpvotes) >= 0.9;
+      if (isLandslide) {
+        await db
+          .update(solveAgentProfiles)
+          .set({ landslideWins: sql`${solveAgentProfiles.landslideWins} + 1`, updatedAt: new Date() })
+          .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
+      }
+
       const [updatedProblem] = await db
         .select()
         .from(solveProblems)
@@ -841,6 +869,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
       return ok(c, {
         problem: formatProblem(updatedProblem),
         accepted_solution: formatSolution(updatedSolution),
+        is_landslide: isLandslide,
       });
     },
   );
