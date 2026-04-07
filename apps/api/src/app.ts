@@ -50,6 +50,7 @@ import { createCountRouter } from './routes/count.js';
 import { createUnitsRouter } from './routes/units.js';
 import { createOgRouter } from './routes/og.js';
 import { createPingRouter } from './routes/ping.js';
+import { createHumanizeRouter } from './routes/humanize.js';
 import { createMarketplaceRouter } from './routes/marketplace.js';
 import { createBillingRouter } from './routes/billing.js';
 import type { AppVariables } from './middleware/types.js';
@@ -452,6 +453,11 @@ export function createApp() {
   // Ping / uptime checker (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/ping', createPingRouter());
+
+  // -------------------------------------------------------------------------
+  // Humanize API (stateless AI text humanizer)
+  // -------------------------------------------------------------------------
+  app.route('/v1/humanize', createHumanizeRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
