@@ -431,6 +431,39 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS kv_store_expires_idx ON kv_store(expires_at) WHERE expires_at IS NOT NULL;
   `);
 
+  // Paste API tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS pastes (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      title TEXT,
+      content TEXT NOT NULL,
+      language TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS pastes_org_idx ON pastes(org_id);
+    CREATE INDEX IF NOT EXISTS pastes_expires_idx ON pastes(expires_at) WHERE expires_at IS NOT NULL;
+  `);
+
+  // Secret API tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS secrets (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      encrypted_content TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      auth_tag TEXT NOT NULL,
+      passphrase_hash TEXT,
+      viewed BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS secrets_org_idx ON secrets(org_id);
+    CREATE INDEX IF NOT EXISTS secrets_expires_idx ON secrets(expires_at);
+  `);
+
   // Shorten API tables
   await client.exec(`
     CREATE TABLE IF NOT EXISTS shortened_urls (

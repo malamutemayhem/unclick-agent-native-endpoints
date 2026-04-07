@@ -436,6 +436,54 @@ export const kvStore = pgTable('kv_store', {
 ]);
 
 // ===========================================================================
+// Paste API tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Pastes — org-scoped text snippets with optional expiry
+// ---------------------------------------------------------------------------
+export const pastes = pgTable('pastes', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  title: text('title'),
+  content: text('content').notNull(),
+  language: text('language'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (t) => [
+  index('pastes_org_idx').on(t.orgId),
+  index('pastes_expires_idx').on(t.expiresAt),
+]);
+
+// ===========================================================================
+// Secret API tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Secrets — one-time encrypted text, destroyed on first read
+// ---------------------------------------------------------------------------
+export const secrets = pgTable('secrets', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  /** Base64-encoded AES-256-GCM ciphertext */
+  encryptedContent: text('encrypted_content').notNull(),
+  /** Base64-encoded 12-byte GCM IV */
+  iv: text('iv').notNull(),
+  /** Base64-encoded 16-byte PBKDF2 salt */
+  salt: text('salt').notNull(),
+  /** Base64-encoded 16-byte GCM auth tag */
+  authTag: text('auth_tag').notNull(),
+  /** SHA-256 hex of the passphrase, or null if no passphrase */
+  passphraseHash: text('passphrase_hash'),
+  viewed: boolean('viewed').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (t) => [
+  index('secrets_org_idx').on(t.orgId),
+  index('secrets_expires_idx').on(t.expiresAt),
+]);
+
+// ===========================================================================
 // Shorten API tables
 // ===========================================================================
 
