@@ -44,6 +44,9 @@ import { createIpRouter } from './routes/ip.js';
 import { createPasteRouter } from './routes/paste.js';
 import { createSecretRouter } from './routes/secret.js';
 import { createLoremRouter } from './routes/lorem.js';
+import { createDnsRouter } from './routes/dns.js';
+import { createHeadersRouter } from './routes/headers.js';
+import { createCountRouter } from './routes/count.js';
 import { createMarketplaceRouter } from './routes/marketplace.js';
 import { createBillingRouter } from './routes/billing.js';
 import type { AppVariables } from './middleware/types.js';
@@ -416,6 +419,21 @@ export function createApp() {
   // Lorem ipsum generator (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/lorem', createLoremRouter());
+
+  // -------------------------------------------------------------------------
+  // DNS lookup utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/dns', createDnsRouter());
+
+  // -------------------------------------------------------------------------
+  // HTTP headers inspector (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/headers', createHeadersRouter());
+
+  // -------------------------------------------------------------------------
+  // Text count utility (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/count', createCountRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
