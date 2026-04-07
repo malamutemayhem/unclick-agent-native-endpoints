@@ -51,7 +51,7 @@ const META_TOOLS = [
       properties: {
         query: {
           type: "string",
-          description: "Search term — describe what you want to do",
+          description: "Search term - describe what you want to do",
         },
         category: {
           type: "string",
@@ -302,7 +302,7 @@ const DIRECT_TOOLS = [
   },
   {
     name: "unclick_ip_parse",
-    description: "Parse an IP address — get decimal, binary, hex, and type (private/loopback/multicast).",
+    description: "Parse an IP address - get decimal, binary, hex, and type (private/loopback/multicast).",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -572,7 +572,7 @@ export function createServer(): Server {
         for (const [cat, tools] of Object.entries(byCategory)) {
           lines.push(`## ${cat.toUpperCase()}`);
           for (const tool of tools) {
-            lines.push(`- **${tool.name}** (\`${tool.slug}\`) — ${tool.description}`);
+            lines.push(`- **${tool.name}** (\`${tool.slug}\`) - ${tool.description}`);
           }
           lines.push("");
         }
@@ -613,7 +613,7 @@ export function createServer(): Server {
         ];
 
         for (const ep of tool.endpoints) {
-          lines.push(`### \`${ep.id}\` — ${ep.name}`);
+          lines.push(`### \`${ep.id}\` - ${ep.name}`);
           lines.push(ep.description);
           lines.push(`**Method:** ${ep.method}  |  **Path:** ${ep.path}`);
           lines.push(`**Input Schema:**`);
@@ -696,6 +696,6 @@ export async function startServer(): Promise<void> {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // Server is running — errors go to stderr so they don't corrupt the MCP stream
+  // Server is running - errors go to stderr so they don't corrupt the MCP stream
   process.stderr.write("UnClick MCP server running on stdio\n");
 }

@@ -1,17 +1,17 @@
 /**
- * UnClick CSV — stateless CSV processing utility.
+ * UnClick CSV - stateless CSV processing utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: csv:use
  *
- *   POST /v1/csv/parse   — parse CSV string to JSON array
- *   POST /v1/csv/generate — convert JSON array to CSV string
- *   POST /v1/csv/query   — filter rows by column conditions
- *   POST /v1/csv/sort    — sort rows by column(s)
- *   POST /v1/csv/columns — list column names and inferred types
- *   POST /v1/csv/stats   — basic statistics for numeric columns
+ *   POST /v1/csv/parse   - parse CSV string to JSON array
+ *   POST /v1/csv/generate - convert JSON array to CSV string
+ *   POST /v1/csv/query   - filter rows by column conditions
+ *   POST /v1/csv/sort    - sort rows by column(s)
+ *   POST /v1/csv/columns - list column names and inferred types
+ *   POST /v1/csv/stats   - basic statistics for numeric columns
  */
 import { Hono } from 'hono';
 import Papa from 'papaparse';

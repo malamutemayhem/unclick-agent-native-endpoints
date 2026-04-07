@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Paste — /v1/paste
+ * Tests for UnClick Paste - /v1/paste
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

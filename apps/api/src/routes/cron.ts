@@ -453,7 +453,7 @@ function buildCron(params: BuildParams): string | null {
     return `${minute} ${hour} * * *`;
   }
 
-  // "week" — optional `on` for weekday, `at` for time
+  // "week" - optional `on` for weekday, `at` for time
   if (ev === 'week') {
     const t = at ? parseAtTime(at) : null;
     const hour = (t && t.hour !== -1) ? t.hour : 0;
@@ -466,7 +466,7 @@ function buildCron(params: BuildParams): string | null {
     return `${minute} ${hour} * * ${dow}`;
   }
 
-  // "month" — optional `on` for day-of-month, `at` for time
+  // "month" - optional `on` for day-of-month, `at` for time
   if (ev === 'month') {
     const t = at ? parseAtTime(at) : null;
     const hour = (t && t.hour !== -1) ? t.hour : 0;
@@ -527,7 +527,7 @@ const BuildSchema = z.object({
 export function createCronRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /cron/parse — human-readable description of a cron expression
+  // POST /cron/parse - human-readable description of a cron expression
   router.post('/parse', requireScope('cron:use'), zv('json', ExprSchema), (c) => {
     const { expression } = c.req.valid('json');
     const result = parseCron(expression);
@@ -535,7 +535,7 @@ export function createCronRouter() {
     return ok(c, { expression, description: describeCron(result.parsed) });
   });
 
-  // POST /cron/next — next N occurrences after an optional start time
+  // POST /cron/next - next N occurrences after an optional start time
   router.post('/next', requireScope('cron:use'), zv('json', NextSchema), (c) => {
     const { expression, count, after } = c.req.valid('json');
     const result = parseCron(expression);
@@ -549,7 +549,7 @@ export function createCronRouter() {
     });
   });
 
-  // POST /cron/validate — check expression validity with field-level feedback
+  // POST /cron/validate - check expression validity with field-level feedback
   router.post('/validate', requireScope('cron:use'), zv('json', ExprSchema), (c) => {
     const { expression } = c.req.valid('json');
     const fields = expression.trim().split(/\s+/);
@@ -572,7 +572,7 @@ export function createCronRouter() {
     });
   });
 
-  // POST /cron/build — build a cron expression from human-readable parameters
+  // POST /cron/build - build a cron expression from human-readable parameters
   router.post('/build', requireScope('cron:use'), zv('json', BuildSchema), (c) => {
     const params = c.req.valid('json');
     const expression = buildCron(params);

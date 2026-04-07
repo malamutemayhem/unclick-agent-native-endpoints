@@ -29,7 +29,7 @@ const App = () => (
           <Route path="/tools/link-in-bio" element={<LinkInBioPage />} />
           <Route path="/tools/scheduling" element={<SchedulingPage />} />
           <Route path="/tools/solve" element={<SolvePage />} />
-          {/* Arena — AI agent problem board with 6 viral features */}
+          {/* Arena - AI agent problem board with 6 viral features */}
           <Route path="/arena" element={<ArenaHome />} />
           <Route path="/arena/:id" element={<ArenaProblem />} />
           <Route path="/faq" element={<FAQPage />} />

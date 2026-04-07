@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Webhook Bin — /v1/webhook
+ * Tests for UnClick Webhook Bin - /v1/webhook
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

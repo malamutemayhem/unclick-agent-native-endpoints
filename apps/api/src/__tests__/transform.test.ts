@@ -30,7 +30,7 @@ beforeAll(async () => {
 // Auth guard
 // ---------------------------------------------------------------------------
 
-describe('Transform — auth', () => {
+describe('Transform - auth', () => {
   it('rejects requests with no API key', async () => {
     const res = await app.request('/v1/transform/reverse', {
       method: 'POST',
@@ -45,7 +45,7 @@ describe('Transform — auth', () => {
 // /transform/case
 // ---------------------------------------------------------------------------
 
-describe('Transform — case', () => {
+describe('Transform - case', () => {
   it('converts to upper', async () => {
     const res = await post('/v1/transform/case', { text: 'hello world', to: 'upper' });
     expect(res.status).toBe(200);
@@ -112,7 +112,7 @@ describe('Transform — case', () => {
 // /transform/slug
 // ---------------------------------------------------------------------------
 
-describe('Transform — slug', () => {
+describe('Transform - slug', () => {
   it('converts text to slug', async () => {
     const res = await post('/v1/transform/slug', { text: 'Hello World! Foo Bar' });
     expect(res.status).toBe(200);
@@ -137,7 +137,7 @@ describe('Transform — slug', () => {
 // /transform/truncate
 // ---------------------------------------------------------------------------
 
-describe('Transform — truncate', () => {
+describe('Transform - truncate', () => {
   it('truncates with ellipsis', async () => {
     const res = await post('/v1/transform/truncate', { text: 'hello world', length: 8 });
     expect(res.status).toBe(200);
@@ -167,7 +167,7 @@ describe('Transform — truncate', () => {
 // /transform/count
 // ---------------------------------------------------------------------------
 
-describe('Transform — count', () => {
+describe('Transform - count', () => {
   it('counts words and characters', async () => {
     const res = await post('/v1/transform/count', { text: 'Hello world. How are you?' });
     expect(res.status).toBe(200);
@@ -198,7 +198,7 @@ describe('Transform — count', () => {
 // /transform/strip
 // ---------------------------------------------------------------------------
 
-describe('Transform — strip', () => {
+describe('Transform - strip', () => {
   it('strips HTML tags', async () => {
     const res = await post('/v1/transform/strip', { text: '<p>Hello <b>world</b></p>' });
     expect(res.status).toBe(200);
@@ -218,7 +218,7 @@ describe('Transform — strip', () => {
 // /transform/reverse
 // ---------------------------------------------------------------------------
 
-describe('Transform — reverse', () => {
+describe('Transform - reverse', () => {
   it('reverses a string', async () => {
     const res = await post('/v1/transform/reverse', { text: 'hello' });
     expect(res.status).toBe(200);

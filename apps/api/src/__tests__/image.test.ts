@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Image — /v1/image
+ * Tests for UnClick Image - /v1/image
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import sharp from 'sharp';

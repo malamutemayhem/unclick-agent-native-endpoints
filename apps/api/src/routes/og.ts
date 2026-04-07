@@ -1,12 +1,12 @@
 /**
- * UnClick OG — Open Graph & meta tag extraction utility.
+ * UnClick OG - Open Graph & meta tag extraction utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: og:use
  *
- *   POST /v1/og/extract — scrape OG / Twitter Card / standard meta tags from a URL
+ *   POST /v1/og/extract - scrape OG / Twitter Card / standard meta tags from a URL
  */
 import { Hono } from 'hono';
 import { z } from 'zod';

@@ -1,5 +1,5 @@
 /**
- * Agent bug reporting — authenticated endpoint for AI agents to self-report
+ * Agent bug reporting - authenticated endpoint for AI agents to self-report
  * errors they encounter while using any UnClick tool.
  *
  * POST /v1/report-bug
@@ -72,7 +72,7 @@ export function createReportBugRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
   // POST /v1/report-bug
-  // Auth is applied globally on /v1/* — any valid API key can report bugs.
+  // Auth is applied globally on /v1/* - any valid API key can report bugs.
   router.post('/', zv('json', ReportBugSchema), async (c) => {
     const org = c.get('org');
     const body = c.req.valid('json');

@@ -1,16 +1,16 @@
 /**
- * UnClick Timestamp — stateless timestamp utility.
+ * UnClick Timestamp - stateless timestamp utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: timestamp:use
  *
- *   POST /v1/timestamp/now     — current time in ISO, Unix seconds, Unix ms, UTC string
- *   POST /v1/timestamp/convert — accept ISO / Unix-s / Unix-ms, return all formats
- *   POST /v1/timestamp/diff    — difference between two timestamps
- *   POST /v1/timestamp/add     — add a duration to a timestamp
- *   POST /v1/timestamp/format  — format a timestamp with a pattern string
+ *   POST /v1/timestamp/now     - current time in ISO, Unix seconds, Unix ms, UTC string
+ *   POST /v1/timestamp/convert - accept ISO / Unix-s / Unix-ms, return all formats
+ *   POST /v1/timestamp/diff    - difference between two timestamps
+ *   POST /v1/timestamp/add     - add a duration to a timestamp
+ *   POST /v1/timestamp/format  - format a timestamp with a pattern string
  */
 import { Hono } from 'hono';
 import { z } from 'zod';

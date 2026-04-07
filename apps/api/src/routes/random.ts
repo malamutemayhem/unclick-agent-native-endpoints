@@ -1,5 +1,5 @@
 /**
- * UnClick Random — stateless secure-random utility.
+ * UnClick Random - stateless secure-random utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
@@ -8,12 +8,12 @@
  *
  * Scope: random:use
  *
- *   POST /v1/random/number    — random number in a range
- *   POST /v1/random/string    — random string with configurable charset
- *   POST /v1/random/password  — random password with complexity options
- *   POST /v1/random/pick      — pick random item(s) from an array
- *   POST /v1/random/shuffle   — shuffle an array
- *   POST /v1/random/color     — random color in hex, RGB, or HSL
+ *   POST /v1/random/number    - random number in a range
+ *   POST /v1/random/string    - random string with configurable charset
+ *   POST /v1/random/password  - random password with complexity options
+ *   POST /v1/random/pick      - pick random item(s) from an array
+ *   POST /v1/random/shuffle   - shuffle an array
+ *   POST /v1/random/color     - random color in hex, RGB, or HSL
  */
 import { Hono } from 'hono';
 import { randomBytes, randomInt } from 'node:crypto';

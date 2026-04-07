@@ -1,17 +1,17 @@
 /**
- * UnClick Transform — stateless text transformation utility.
+ * UnClick Transform - stateless text transformation utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: transform:use
  *
- *   POST /v1/transform/case      — convert text to a target case
- *   POST /v1/transform/slug      — convert text to a URL-friendly slug
- *   POST /v1/transform/truncate  — truncate text with optional ellipsis
- *   POST /v1/transform/count     — word / char / sentence / paragraph / reading-time counts
- *   POST /v1/transform/strip     — strip HTML tags, decode common entities
- *   POST /v1/transform/reverse   — reverse a string (Unicode-safe)
+ *   POST /v1/transform/case      - convert text to a target case
+ *   POST /v1/transform/slug      - convert text to a URL-friendly slug
+ *   POST /v1/transform/truncate  - truncate text with optional ellipsis
+ *   POST /v1/transform/count     - word / char / sentence / paragraph / reading-time counts
+ *   POST /v1/transform/strip     - strip HTML tags, decode common entities
+ *   POST /v1/transform/reverse   - reverse a string (Unicode-safe)
  */
 import { Hono } from 'hono';
 import { z } from 'zod';

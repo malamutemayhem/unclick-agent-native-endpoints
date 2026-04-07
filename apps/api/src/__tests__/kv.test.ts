@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick KV — /v1/kv
+ * Tests for UnClick KV - /v1/kv
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -112,7 +112,7 @@ describe('POST /v1/kv/delete', () => {
     expect(get.status).toBe(404);
   });
 
-  it('is idempotent — deleting a non-existent key returns 204', async () => {
+  it('is idempotent - deleting a non-existent key returns 204', async () => {
     const res = await kv('/delete', { key: 'never-existed' });
     expect(res.status).toBe(204);
   });

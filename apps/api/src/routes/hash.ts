@@ -33,14 +33,14 @@ function computeHash(text: string, algorithm: Algorithm): string {
 export function createHashRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /hash — compute a hash
+  // POST /hash - compute a hash
   router.post('/', requireScope('hash:use'), zv('json', HashSchema), (c) => {
     const { text, algorithm } = c.req.valid('json');
     const hash = computeHash(text, algorithm);
     return ok(c, { algorithm, hash, length: hash.length });
   });
 
-  // POST /hash/verify — check text against a hash
+  // POST /hash/verify - check text against a hash
   router.post('/verify', requireScope('hash:use'), zv('json', VerifySchema), (c) => {
     const { text, hash, algorithm } = c.req.valid('json');
     const computed = computeHash(text, algorithm);
@@ -51,14 +51,14 @@ export function createHashRouter() {
     return ok(c, { match, algorithm });
   });
 
-  // POST /hash/hmac — compute an HMAC
+  // POST /hash/hmac - compute an HMAC
   router.post('/hmac', requireScope('hash:use'), zv('json', HmacSchema), (c) => {
     const { text, key, algorithm } = c.req.valid('json');
     try {
       const hmac = createHmac(algorithm, key).update(text, 'utf8').digest('hex');
       return ok(c, { algorithm, hmac, length: hmac.length });
     } catch {
-      throw Errors.validation('Failed to compute HMAC — check the key and algorithm');
+      throw Errors.validation('Failed to compute HMAC - check the key and algorithm');
     }
   });
 

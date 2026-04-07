@@ -47,7 +47,7 @@ const IncrementSchema = z.object({
 export function createKvRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /kv/set — create or overwrite a key
+  // POST /kv/set - create or overwrite a key
   router.post('/set', requireScope('kv:write'), zv('json', SetSchema), async (c) => {
     const { orgId } = c.get('org');
     const { key, value, ttl } = c.req.valid('json');
@@ -91,7 +91,7 @@ export function createKvRouter(db: Db) {
     });
   });
 
-  // POST /kv/get — retrieve a value by key
+  // POST /kv/get - retrieve a value by key
   router.post('/get', requireScope('kv:read'), zv('json', KeySchema), async (c) => {
     const { orgId } = c.get('org');
     const { key } = c.req.valid('json');
@@ -113,7 +113,7 @@ export function createKvRouter(db: Db) {
     });
   });
 
-  // POST /kv/delete — remove a key (idempotent)
+  // POST /kv/delete - remove a key (idempotent)
   router.post('/delete', requireScope('kv:write'), zv('json', KeySchema), async (c) => {
     const { orgId } = c.get('org');
     const { key } = c.req.valid('json');
@@ -123,7 +123,7 @@ export function createKvRouter(db: Db) {
     return noContent();
   });
 
-  // POST /kv/list — list all live keys for this org
+  // POST /kv/list - list all live keys for this org
   router.post('/list', requireScope('kv:read'), zv('json', ListSchema), async (c) => {
     const { orgId } = c.get('org');
     const { prefix, page, limit: perPage } = c.req.valid('json');
@@ -167,7 +167,7 @@ export function createKvRouter(db: Db) {
     );
   });
 
-  // POST /kv/exists — check whether a key exists (and hasn't expired)
+  // POST /kv/exists - check whether a key exists (and hasn't expired)
   router.post('/exists', requireScope('kv:read'), zv('json', KeySchema), async (c) => {
     const { orgId } = c.get('org');
     const { key } = c.req.valid('json');
@@ -181,7 +181,7 @@ export function createKvRouter(db: Db) {
     return ok(c, { key, exists: !!row });
   });
 
-  // POST /kv/increment — atomically increment a numeric value
+  // POST /kv/increment - atomically increment a numeric value
   router.post('/increment', requireScope('kv:write'), zv('json', IncrementSchema), async (c) => {
     const { orgId } = c.get('org');
     const { key, amount } = c.req.valid('json');
@@ -194,7 +194,7 @@ export function createKvRouter(db: Db) {
       .limit(1);
 
     if (!row) {
-      // Key doesn't exist — seed it with the increment amount
+      // Key doesn't exist - seed it with the increment amount
       const newValue = amount;
       await db.insert(kvStore).values({
         id: `kv_${newId()}`,

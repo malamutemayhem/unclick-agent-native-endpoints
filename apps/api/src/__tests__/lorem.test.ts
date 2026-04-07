@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Lorem — /v1/lorem
+ * Tests for UnClick Lorem - /v1/lorem
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

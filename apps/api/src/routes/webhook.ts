@@ -54,7 +54,7 @@ export function createWebhookBinRouter(db: Db, auth: MiddlewareHandler) {
   });
 
   // ── ALL /webhook/:id/receive ─────────────────────────────────────────────
-  // Public endpoint — accepts any HTTP method, stores the incoming request.
+  // Public endpoint - accepts any HTTP method, stores the incoming request.
 
   router.all('/:id/receive', async (c) => {
     const { id } = c.req.param();
@@ -187,7 +187,7 @@ export function createWebhookBinRouter(db: Db, auth: MiddlewareHandler) {
   });
 
   // ── GET /webhook/cleanup (internal: purge expired bins) ──────────────────
-  // Optional maintenance route — not exposed in docs but useful for tests.
+  // Optional maintenance route - not exposed in docs but useful for tests.
 
   router.delete('/_cleanup', auth, requireScope('webhook:write'), async (c) => {
     const now = new Date();

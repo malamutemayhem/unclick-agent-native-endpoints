@@ -1,5 +1,5 @@
 /**
- * UnClick Arena — enhanced public-facing problem board with viral features.
+ * UnClick Arena - enhanced public-facing problem board with viral features.
  *
  * Extends the Solve API with:
  *   - Feature 2: Daily Question (auto-promoted, pinned at top)
@@ -81,7 +81,7 @@ function computeConsensus(solutions: Array<{ score: number }>): number {
   return Math.round((top / total) * 100);
 }
 
-/** Feature 6: Landslide detection — top solution has 90%+ of all upvotes */
+/** Feature 6: Landslide detection - top solution has 90%+ of all upvotes */
 function isLandslide(solutions: Array<{ score: number; is_accepted: boolean }>): boolean {
   const positiveScores = solutions.map((s) => Math.max(s.score, 0));
   const total = positiveScores.reduce((a, b) => a + b, 0);
@@ -135,7 +135,7 @@ async function promoteDaily(db: Db): Promise<typeof solveProblems.$inferSelect |
 export function createArenaRouter(db: Db) {
   const router = new Hono();
 
-  // GET /v1/arena/daily — Feature 2: Daily Question
+  // GET /v1/arena/daily - Feature 2: Daily Question
   router.get('/daily', async (c) => {
     const daily = await promoteDaily(db);
     if (!daily) throw Errors.notFound('No problems posted yet');
@@ -165,7 +165,7 @@ export function createArenaRouter(db: Db) {
     });
   });
 
-  // GET /v1/arena/problems — all problems, daily pinned first
+  // GET /v1/arena/problems - all problems, daily pinned first
   router.get('/problems', async (c) => {
     const limitParam = parseInt(c.req.query('limit') ?? '20', 10);
     const limit = Math.min(Math.max(limitParam, 1), 100);
@@ -192,7 +192,7 @@ export function createArenaRouter(db: Db) {
     return ok(c, rows.map(formatProblem));
   });
 
-  // GET /v1/arena/problems/:id — problem detail with all Arena features
+  // GET /v1/arena/problems/:id - problem detail with all Arena features
   router.get('/problems/:id', async (c) => {
     const { id } = c.req.param();
 
@@ -234,13 +234,13 @@ export function createArenaRouter(db: Db) {
       consensus_pct: consensus,
       consensus_label: consensus >= 80
         ? `${consensus}% consensus`
-        : `Agents divided — ${consensus}% consensus`,
+        : `Agents divided - ${consensus}% consensus`,
       // Feature 6: Landslide
       is_landslide: landslide,
     });
   });
 
-  // GET /v1/arena/problems/:id/card — Feature 1: OG card data for sharing
+  // GET /v1/arena/problems/:id/card - Feature 1: OG card data for sharing
   router.get('/problems/:id/card', async (c) => {
     const { id } = c.req.param();
 
@@ -277,7 +277,7 @@ export function createArenaRouter(db: Db) {
       solution_count: problem.solutionCount,
       winner: winnerData,
       share_url: `https://api.unclick.world/share/arena/${problem.id}`,
-      og_title: `${problem.title} — UnClick Arena`,
+      og_title: `${problem.title} - UnClick Arena`,
       og_description: winnerData
         ? `Winning answer (${winnerData.score} votes): ${winnerData.body}`
         : `${problem.solutionCount} agents competing. Join the Arena.`,
@@ -300,8 +300,8 @@ export async function arenaShareHandler(db: Db, id: string): Promise<string> {
     .limit(1);
 
   const title = problem
-    ? `${problem.title} — UnClick Arena`
-    : 'UnClick Arena — AI Agent Problem Board';
+    ? `${problem.title} - UnClick Arena`
+    : 'UnClick Arena - AI Agent Problem Board';
 
   let description = 'See which AI agent solved it best.';
   if (problem?.acceptedSolutionId) {
@@ -325,7 +325,7 @@ export async function arenaShareHandler(db: Db, id: string): Promise<string> {
   <meta charset="UTF-8" />
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}" />
-  <!-- OpenGraph — Feature 1: Shareable Verdict Cards -->
+  <!-- OpenGraph - Feature 1: Shareable Verdict Cards -->
   <meta property="og:type" content="article" />
   <meta property="og:site_name" content="UnClick Arena" />
   <meta property="og:title" content="${escapeHtml(title)}" />

@@ -1,17 +1,17 @@
 /**
- * UnClick Color — stateless color utility.
+ * UnClick Color - stateless color utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: color:use
  *
- *   POST /v1/color/convert   — convert a color between hex, RGB, HSL, HSV
- *   POST /v1/color/palette   — generate a palette from a base color
- *   POST /v1/color/mix       — mix two colors with an optional weight
- *   POST /v1/color/contrast  — WCAG contrast ratio between two colors
- *   POST /v1/color/lighten   — lighten a color by percentage
- *   POST /v1/color/darken    — darken a color by percentage
+ *   POST /v1/color/convert   - convert a color between hex, RGB, HSL, HSV
+ *   POST /v1/color/palette   - generate a palette from a base color
+ *   POST /v1/color/mix       - mix two colors with an optional weight
+ *   POST /v1/color/contrast  - WCAG contrast ratio between two colors
+ *   POST /v1/color/lighten   - lighten a color by percentage
+ *   POST /v1/color/darken    - darken a color by percentage
  *
  * Pure math, no dependencies beyond Zod and Hono.
  */
@@ -278,14 +278,14 @@ function contrastRatio(rgb1: Rgb, rgb2: Rgb): number {
 export function createColorRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /color/convert — accept any format, return all
+  // POST /color/convert - accept any format, return all
   router.post('/convert', requireScope('color:use'), zv('json', ConvertSchema), (c) => {
     const { color } = c.req.valid('json');
     const rgb = toRgb(color);
     return ok(c, allFormats(rgb));
   });
 
-  // POST /color/palette — generate named palette from base color
+  // POST /color/palette - generate named palette from base color
   router.post('/palette', requireScope('color:use'), zv('json', PaletteSchema), (c) => {
     const { color, type } = c.req.valid('json');
     const base = rgbToHsl(toRgb(color));
@@ -324,7 +324,7 @@ export function createColorRouter() {
     return ok(c, { base: allFormats(toRgb(color)), type, swatches });
   });
 
-  // POST /color/mix — blend two colors by weight
+  // POST /color/mix - blend two colors by weight
   router.post('/mix', requireScope('color:use'), zv('json', MixSchema), (c) => {
     const { color1, color2, weight } = c.req.valid('json');
     const a = toRgb(color1);
@@ -342,7 +342,7 @@ export function createColorRouter() {
     });
   });
 
-  // POST /color/contrast — WCAG contrast ratio with AA/AAA pass/fail
+  // POST /color/contrast - WCAG contrast ratio with AA/AAA pass/fail
   router.post('/contrast', requireScope('color:use'), zv('json', ContrastSchema), (c) => {
     const { color1, color2 } = c.req.valid('json');
     const a = toRgb(color1);
@@ -363,7 +363,7 @@ export function createColorRouter() {
     });
   });
 
-  // POST /color/lighten — increase HSL lightness by amount percent points
+  // POST /color/lighten - increase HSL lightness by amount percent points
   router.post('/lighten', requireScope('color:use'), zv('json', AdjustSchema), (c) => {
     const { color, amount } = c.req.valid('json');
     const hsl = rgbToHsl(toRgb(color));
@@ -375,7 +375,7 @@ export function createColorRouter() {
     });
   });
 
-  // POST /color/darken — decrease HSL lightness by amount percent points
+  // POST /color/darken - decrease HSL lightness by amount percent points
   router.post('/darken', requireScope('color:use'), zv('json', AdjustSchema), (c) => {
     const { color, amount } = c.req.valid('json');
     const hsl = rgbToHsl(toRgb(color));

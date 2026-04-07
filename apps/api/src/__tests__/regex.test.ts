@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Regex — /v1/regex
+ * Tests for UnClick Regex - /v1/regex
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

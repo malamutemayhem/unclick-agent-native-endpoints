@@ -30,7 +30,7 @@ beforeAll(async () => {
 // Auth guard
 // ---------------------------------------------------------------------------
 
-describe('Validate — auth', () => {
+describe('Validate - auth', () => {
   it('rejects requests with no API key', async () => {
     const res = await app.request('/v1/validate/email', {
       method: 'POST',
@@ -45,7 +45,7 @@ describe('Validate — auth', () => {
 // /validate/email
 // ---------------------------------------------------------------------------
 
-describe('Validate — email', () => {
+describe('Validate - email', () => {
   it('accepts a valid email', async () => {
     const res = await post('/v1/validate/email', { email: 'user@example.com' });
     expect(res.status).toBe(200);
@@ -73,7 +73,7 @@ describe('Validate — email', () => {
 // /validate/url
 // ---------------------------------------------------------------------------
 
-describe('Validate — url', () => {
+describe('Validate - url', () => {
   it('accepts a valid URL', async () => {
     const res = await post('/v1/validate/url', { url: 'https://example.com/path?q=1' });
     expect(res.status).toBe(200);
@@ -102,7 +102,7 @@ describe('Validate — url', () => {
 // /validate/phone
 // ---------------------------------------------------------------------------
 
-describe('Validate — phone', () => {
+describe('Validate - phone', () => {
   it('accepts a valid international phone number', async () => {
     const res = await post('/v1/validate/phone', { phone: '+1 (555) 123-4567' });
     expect(res.status).toBe(200);
@@ -130,7 +130,7 @@ describe('Validate — phone', () => {
 // /validate/json
 // ---------------------------------------------------------------------------
 
-describe('Validate — json', () => {
+describe('Validate - json', () => {
   it('accepts valid JSON object', async () => {
     const res = await post('/v1/validate/json', { json: '{"key": "value", "num": 42}' });
     expect(res.status).toBe(200);
@@ -161,7 +161,7 @@ describe('Validate — json', () => {
 // /validate/credit-card
 // ---------------------------------------------------------------------------
 
-describe('Validate — credit-card', () => {
+describe('Validate - credit-card', () => {
   it('accepts a valid Visa test card number', async () => {
     // Standard Luhn-valid Visa test number
     const res = await post('/v1/validate/credit-card', { number: '4532015112830366' });
@@ -199,7 +199,7 @@ describe('Validate — credit-card', () => {
 // /validate/ip
 // ---------------------------------------------------------------------------
 
-describe('Validate — ip', () => {
+describe('Validate - ip', () => {
   it('accepts a valid IPv4 address', async () => {
     const res = await post('/v1/validate/ip', { ip: '192.168.1.1' });
     expect(res.status).toBe(200);
@@ -236,7 +236,7 @@ describe('Validate — ip', () => {
 // /validate/color
 // ---------------------------------------------------------------------------
 
-describe('Validate — color', () => {
+describe('Validate - color', () => {
   it('accepts a 6-digit hex color', async () => {
     const res = await post('/v1/validate/color', { color: '#ff0000' });
     expect(res.status).toBe(200);

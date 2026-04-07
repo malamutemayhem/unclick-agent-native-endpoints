@@ -28,9 +28,9 @@ function stripMarkdown(src: string): string {
     .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, '$2')
     // Strikethrough
     .replace(/~~(.*?)~~/g, '$1')
-    // Images — drop entirely
+    // Images - drop entirely
     .replace(/!\[.*?\]\(.*?\)/g, '')
-    // Links — keep label
+    // Links - keep label
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     // Reference-style links
     .replace(/\[([^\]]+)\]\[[^\]]*\]/g, '$1')
@@ -122,7 +122,7 @@ function lintMarkdown(src: string): LintIssue[] {
     if (/^\s{4}/.test(line) || /^`/.test(line)) continue;
     const linkOpen = /\[[^\]]*\]\([^)]*$/.exec(line);
     if (linkOpen) {
-      issues.push({ line: i + 1, message: 'Possibly malformed link — missing closing ")"' });
+      issues.push({ line: i + 1, message: 'Possibly malformed link - missing closing ")"' });
     }
   }
 
@@ -141,7 +141,7 @@ function lintMarkdown(src: string): LintIssue[] {
       const stripped = line.replace(/\\`/g, '');
       const backticks = (stripped.match(/`/g) ?? []).length;
       if (backticks % 2 !== 0) {
-        issues.push({ line: i + 1, message: 'Odd number of backticks — possible unclosed inline code' });
+        issues.push({ line: i + 1, message: 'Odd number of backticks - possible unclosed inline code' });
       }
     }
   }
@@ -161,28 +161,28 @@ function lintMarkdown(src: string): LintIssue[] {
 export function createMarkdownRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /markdown/to-html — convert markdown to HTML
+  // POST /markdown/to-html - convert markdown to HTML
   router.post('/to-html', requireScope('markdown:use'), zv('json', InputSchema), (c) => {
     const { markdown } = c.req.valid('json');
     const html = marked.parse(markdown, { async: false }) as string;
     return ok(c, { html, bytes: html.length });
   });
 
-  // POST /markdown/to-text — strip formatting, return plain text
+  // POST /markdown/to-text - strip formatting, return plain text
   router.post('/to-text', requireScope('markdown:use'), zv('json', InputSchema), (c) => {
     const { markdown } = c.req.valid('json');
     const text = stripMarkdown(markdown);
     return ok(c, { text, bytes: text.length });
   });
 
-  // POST /markdown/toc — extract table of contents
+  // POST /markdown/toc - extract table of contents
   router.post('/toc', requireScope('markdown:use'), zv('json', InputSchema), (c) => {
     const { markdown } = c.req.valid('json');
     const headings = extractToc(markdown);
     return ok(c, { headings, count: headings.length });
   });
 
-  // POST /markdown/lint — basic lint checks
+  // POST /markdown/lint - basic lint checks
   router.post('/lint', requireScope('markdown:use'), zv('json', InputSchema), (c) => {
     const { markdown } = c.req.valid('json');
     const issues = lintMarkdown(markdown);

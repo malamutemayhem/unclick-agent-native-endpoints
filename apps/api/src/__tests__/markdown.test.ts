@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Markdown — /v1/markdown
+ * Tests for UnClick Markdown - /v1/markdown
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

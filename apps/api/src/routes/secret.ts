@@ -11,7 +11,7 @@ import { zv } from '../middleware/validate.js';
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
-// Number of PBKDF2 iterations — can be lowered via env for tests.
+// Number of PBKDF2 iterations - can be lowered via env for tests.
 const PBKDF2_ITERATIONS = parseInt(process.env.PBKDF2_ITERATIONS ?? '100000', 10);
 
 // Server-side secret blended into key derivation so DB-only access is insufficient.
@@ -92,7 +92,7 @@ const ExistsSchema = z.object({
 export function createSecretRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /secret/create — create a one-time secret
+  // POST /secret/create - create a one-time secret
   router.post('/create', requireScope('secret:write'), zv('json', CreateSchema), async (c) => {
     const { orgId } = c.get('org');
     const { text, passphrase, expiry_hours } = c.req.valid('json');
@@ -126,7 +126,7 @@ export function createSecretRouter(db: Db) {
     });
   });
 
-  // POST /secret/view — view and immediately destroy a secret
+  // POST /secret/view - view and immediately destroy a secret
   router.post('/view', requireScope('secret:read'), zv('json', ViewSchema), async (c) => {
     const { id, passphrase } = c.req.valid('json');
 
@@ -159,7 +159,7 @@ export function createSecretRouter(db: Db) {
         passphrase ?? '',
       );
     } catch {
-      throw Errors.forbidden('Decryption failed — passphrase may be incorrect');
+      throw Errors.forbidden('Decryption failed - passphrase may be incorrect');
     }
 
     // Mark as viewed immediately (one-read guarantee).
@@ -175,7 +175,7 @@ export function createSecretRouter(db: Db) {
     });
   });
 
-  // POST /secret/exists — check if a secret exists without revealing its content
+  // POST /secret/exists - check if a secret exists without revealing its content
   router.post('/exists', requireScope('secret:read'), zv('json', ExistsSchema), async (c) => {
     const { id } = c.req.valid('json');
 

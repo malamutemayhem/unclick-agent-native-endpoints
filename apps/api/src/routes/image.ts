@@ -1,5 +1,5 @@
 /**
- * UnClick Image — stateless image processing utility.
+ * UnClick Image - stateless image processing utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
@@ -9,13 +9,13 @@
  * Images are accepted and returned as base64-encoded strings.
  * An optional data URI prefix (data:image/...;base64,) is stripped on input.
  *
- *   POST /v1/image/resize    — resize to width × height
- *   POST /v1/image/convert   — convert between JPEG, PNG, WebP, AVIF
- *   POST /v1/image/compress  — compress with quality parameter
- *   POST /v1/image/metadata  — extract dimensions, format, size, color space
- *   POST /v1/image/crop      — crop with x, y, width, height
- *   POST /v1/image/rotate    — rotate by degrees
- *   POST /v1/image/grayscale — convert to grayscale
+ *   POST /v1/image/resize    - resize to width × height
+ *   POST /v1/image/convert   - convert between JPEG, PNG, WebP, AVIF
+ *   POST /v1/image/compress  - compress with quality parameter
+ *   POST /v1/image/metadata  - extract dimensions, format, size, color space
+ *   POST /v1/image/crop      - crop with x, y, width, height
+ *   POST /v1/image/rotate    - rotate by degrees
+ *   POST /v1/image/grayscale - convert to grayscale
  */
 import { Hono } from 'hono';
 import sharp from 'sharp';
@@ -105,7 +105,7 @@ export function createImageRouter() {
       const output = await sharp(input).resize(width, height, { fit }).toBuffer();
       return ok(c, { image: output.toString('base64'), width, height });
     } catch {
-      throw Errors.validation('Failed to resize image — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to resize image - check that the input is a valid base64-encoded image');
     }
   });
 
@@ -117,7 +117,7 @@ export function createImageRouter() {
       const output = await sharp(input).toFormat(format, { quality }).toBuffer();
       return ok(c, { image: output.toString('base64'), format });
     } catch {
-      throw Errors.validation('Failed to convert image — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to convert image - check that the input is a valid base64-encoded image');
     }
   });
 
@@ -139,7 +139,7 @@ export function createImageRouter() {
         compressed_size: output.length,
       });
     } catch {
-      throw Errors.validation('Failed to compress image — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to compress image - check that the input is a valid base64-encoded image');
     }
   });
 
@@ -160,7 +160,7 @@ export function createImageRouter() {
         density: meta.density ?? null,
       });
     } catch {
-      throw Errors.validation('Failed to read image metadata — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to read image metadata - check that the input is a valid base64-encoded image');
     }
   });
 
@@ -174,7 +174,7 @@ export function createImageRouter() {
         .toBuffer();
       return ok(c, { image: output.toString('base64'), x, y, width, height });
     } catch {
-      throw Errors.validation('Failed to crop image — check that the crop region is within the image bounds');
+      throw Errors.validation('Failed to crop image - check that the crop region is within the image bounds');
     }
   });
 
@@ -186,7 +186,7 @@ export function createImageRouter() {
       const output = await sharp(input).rotate(degrees).toBuffer();
       return ok(c, { image: output.toString('base64'), degrees });
     } catch {
-      throw Errors.validation('Failed to rotate image — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to rotate image - check that the input is a valid base64-encoded image');
     }
   });
 
@@ -198,7 +198,7 @@ export function createImageRouter() {
       const output = await sharp(input).grayscale().toBuffer();
       return ok(c, { image: output.toString('base64') });
     } catch {
-      throw Errors.validation('Failed to convert image to grayscale — check that the input is a valid base64-encoded image');
+      throw Errors.validation('Failed to convert image to grayscale - check that the input is a valid base64-encoded image');
     }
   });
 

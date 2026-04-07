@@ -1,13 +1,13 @@
 /**
- * UnClick Units — stateless unit conversion utility.
+ * UnClick Units - stateless unit conversion utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: units:use
  *
- *   POST /v1/units/convert — convert a value from one unit to another
- *   POST /v1/units/list    — list all supported categories and units
+ *   POST /v1/units/convert - convert a value from one unit to another
+ *   POST /v1/units/list    - list all supported categories and units
  */
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -17,7 +17,7 @@ import { requireScope } from '../middleware/auth.js';
 import type { AppVariables } from '../middleware/types.js';
 
 // ---------------------------------------------------------------------------
-// Unit definitions — each non-temperature unit stores its factor relative to
+// Unit definitions - each non-temperature unit stores its factor relative to
 // the category's canonical base unit.
 // ---------------------------------------------------------------------------
 
@@ -81,7 +81,7 @@ for (const [cat, def] of Object.entries(LINEAR_UNITS) as [LinearCategory, { unit
   }
 }
 for (const t of TEMPERATURE_UNITS) {
-  // reserve temperature — handled separately, not in UNIT_TO_CATEGORY
+  // reserve temperature - handled separately, not in UNIT_TO_CATEGORY
   void t;
 }
 

@@ -1,16 +1,16 @@
 /**
- * UnClick Regex — stateless regex utility.
+ * UnClick Regex - stateless regex utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: regex:use
  *
- *   POST /v1/regex/test     — test a pattern against a string, return all matches with groups/indices
- *   POST /v1/regex/replace  — apply regex replace, support backreferences ($1, $2)
- *   POST /v1/regex/extract  — extract all matches from text as an array of strings
- *   POST /v1/regex/split    — split a string by regex pattern
- *   POST /v1/regex/validate — check if a pattern is valid, return error message if not
+ *   POST /v1/regex/test     - test a pattern against a string, return all matches with groups/indices
+ *   POST /v1/regex/replace  - apply regex replace, support backreferences ($1, $2)
+ *   POST /v1/regex/extract  - extract all matches from text as an array of strings
+ *   POST /v1/regex/split    - split a string by regex pattern
+ *   POST /v1/regex/validate - check if a pattern is valid, return error message if not
  *
  * ReDoS protection: input capped at 100 KB; iteration capped at 1 000 matches.
  * All regex execution is wrapped in try/catch to catch engines that throw on
@@ -27,9 +27,9 @@ import type { AppVariables } from '../middleware/types.js';
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_INPUT = 100_000; // 100 KB — hard cap to mitigate ReDoS
+const MAX_INPUT = 100_000; // 100 KB - hard cap to mitigate ReDoS
 const MAX_MATCHES = 1_000;
-const VALID_FLAGS_RE = /^[gimsuy]*$/; // 'd' excluded — not universally available
+const VALID_FLAGS_RE = /^[gimsuy]*$/; // 'd' excluded - not universally available
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -92,7 +92,7 @@ function withoutGlobal(flags: string): string {
 export function createRegexRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /regex/test — find all matches, return groups and positions
+  // POST /regex/test - find all matches, return groups and positions
   router.post('/test', requireScope('regex:use'), zv('json', TestSchema), (c) => {
     const { pattern, flags, input } = c.req.valid('json');
     const effectiveFlags = withGlobal(flags);
@@ -145,7 +145,7 @@ export function createRegexRouter() {
     });
   });
 
-  // POST /regex/replace — replace matches, supports $1 $2 backreferences
+  // POST /regex/replace - replace matches, supports $1 $2 backreferences
   router.post('/replace', requireScope('regex:use'), zv('json', ReplaceSchema), (c) => {
     const { pattern, flags, input, replacement, global: isGlobal } = c.req.valid('json');
 
@@ -169,7 +169,7 @@ export function createRegexRouter() {
     });
   });
 
-  // POST /regex/extract — return flat array of all matched strings
+  // POST /regex/extract - return flat array of all matched strings
   router.post('/extract', requireScope('regex:use'), zv('json', ExtractSchema), (c) => {
     const { pattern, flags, input } = c.req.valid('json');
     const effectiveFlags = withGlobal(flags);
@@ -202,7 +202,7 @@ export function createRegexRouter() {
     });
   });
 
-  // POST /regex/split — split input by pattern
+  // POST /regex/split - split input by pattern
   router.post('/split', requireScope('regex:use'), zv('json', SplitSchema), (c) => {
     const { pattern, flags, input, limit } = c.req.valid('json');
     // 'g' flag has no effect on split; strip it to avoid surprises
@@ -225,7 +225,7 @@ export function createRegexRouter() {
     });
   });
 
-  // POST /regex/validate — check if the pattern compiles without throwing
+  // POST /regex/validate - check if the pattern compiles without throwing
   router.post('/validate', requireScope('regex:use'), zv('json', PatternSchema), (c) => {
     const { pattern, flags } = c.req.valid('json');
     try {

@@ -95,7 +95,7 @@ export function createApp() {
   // -------------------------------------------------------------------------
   app.route('/health', healthRouter);
 
-  // Public link-page render endpoint — returns structured JSON for any consumer
+  // Public link-page render endpoint - returns structured JSON for any consumer
   app.get('/v1/p/:slug', async (c) => {
     const ip = c.req.header('CF-Connecting-IP')
       ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
@@ -161,26 +161,26 @@ export function createApp() {
   });
 
   // -------------------------------------------------------------------------
-  // Feedback — POST is public, GET requires auth
+  // Feedback - POST is public, GET requires auth
   // -------------------------------------------------------------------------
   const feedbackRouter = createFeedbackRouter(db, auth);
   app.route('/api/feedback', feedbackRouter);
 
   // -------------------------------------------------------------------------
-  // Solve API — mixed public/authenticated endpoints, mounted before global
+  // Solve API - mixed public/authenticated endpoints, mounted before global
   // auth so public routes don't require a token; auth is applied inline.
   // -------------------------------------------------------------------------
   const solveRouter = createSolveRouter(db, auth);
   app.route('/v1/solve', solveRouter);
 
   // -------------------------------------------------------------------------
-  // Arena API — 6 viral features (Daily Q, Confidence, Reasoning, Consensus,
+  // Arena API - 6 viral features (Daily Q, Confidence, Reasoning, Consensus,
   // Landslide, Shareable Verdict Cards). All public reads, no auth required.
   // -------------------------------------------------------------------------
   const arenaRouter = createArenaRouter(db);
   app.route('/v1/arena', arenaRouter);
 
-  // Feature 1: OG share page — proper meta tags for Twitter/LinkedIn crawlers
+  // Feature 1: OG share page - proper meta tags for Twitter/LinkedIn crawlers
   app.get('/share/arena/:id', async (c) => {
     const { id } = c.req.param();
     const html = await arenaShareHandler(db, id);
@@ -188,7 +188,7 @@ export function createApp() {
   });
 
   // -------------------------------------------------------------------------
-  // Public scheduling endpoints — must be before auth middleware
+  // Public scheduling endpoints - must be before auth middleware
   // Rate limited by IP (30 req/min)
   // -------------------------------------------------------------------------
   const schedulePublicWindows = new Map<string, number[]>();
@@ -216,23 +216,23 @@ export function createApp() {
   app.route('/v1/schedule', publicBookingRouter);
 
   // -------------------------------------------------------------------------
-  // Webhook bin — receive endpoint is public; create/list/delete use inline auth
+  // Webhook bin - receive endpoint is public; create/list/delete use inline auth
   app.route('/v1/webhook', createWebhookBinRouter(db, auth));
 
-  // Marketplace — most routes are public reads; rate endpoint uses inline auth
+  // Marketplace - most routes are public reads; rate endpoint uses inline auth
   app.route('/v1/marketplace', createMarketplaceRouter(db, auth));
 
-  // Billing — pricing is public; usage/history/flush require auth
+  // Billing - pricing is public; usage/history/flush require auth
   app.route('/v1/billing', createBillingRouter(db, auth));
 
-  // Public short-URL redirect — must be before auth middleware
+  // Public short-URL redirect - must be before auth middleware
   // GET /r/:code -> 302 to the original URL
   // -------------------------------------------------------------------------
   const publicShortenRouter = createPublicShortenRouter(db);
   app.route('/r', publicShortenRouter);
 
   // -------------------------------------------------------------------------
-  // Public click tracking — must be before auth middleware
+  // Public click tracking - must be before auth middleware
   // Looks up the page's org_id from DB; never trusts the request body for it
   // -------------------------------------------------------------------------
   app.post('/track/:page_id/click', async (c) => {
@@ -244,7 +244,7 @@ export function createApp() {
     const { linkPages, linkClicks, links } = await import('./db/schema.js');
     const { eq, and, isNull } = await import('drizzle-orm');
 
-    // Look up the page to get org_id — never trust body for this
+    // Look up the page to get org_id - never trust body for this
     const [page] = await db
       .select({ orgId: linkPages.orgId })
       .from(linkPages)
@@ -253,7 +253,7 @@ export function createApp() {
 
     if (!page) return c.json({ error: { code: 'not_found', message: 'Page not found' } }, 404);
 
-    // Verify the link belongs to this page — prevents cross-page click injection
+    // Verify the link belongs to this page - prevents cross-page click injection
     const [link] = await db
       .select({ id: links.id })
       .from(links)
@@ -293,7 +293,7 @@ export function createApp() {
   // Webhook management
   app.route('/v1/webhooks', createWebhooksRouter(db));
 
-  // Themes (read-only — anyone with a valid key can list themes)
+  // Themes (read-only - anyone with a valid key can list themes)
   const themesRouter = createThemesRouter(db);
   app.route('/v1/themes', themesRouter);
 
@@ -301,11 +301,11 @@ export function createApp() {
   const pagesRouter = createPagesRouter(db);
   app.route('/v1/links/pages', pagesRouter);
 
-  // Links — nested under pages
+  // Links - nested under pages
   const linksRouter = createLinksRouter(db);
   app.route('/v1/links/pages/:page_id/links', linksRouter);
 
-  // Analytics — nested under pages
+  // Analytics - nested under pages
   const analyticsRouter = createAnalyticsRouter(db);
   app.route('/v1/links/pages/:page_id/analytics', analyticsRouter);
 
@@ -476,7 +476,7 @@ export function createApp() {
   app.route('/v1/humanize', createHumanizeRouter());
 
   // -------------------------------------------------------------------------
-  // Bug reporting — agents self-report errors they encounter
+  // Bug reporting - agents self-report errors they encounter
   // -------------------------------------------------------------------------
   app.route('/v1/report-bug', createReportBugRouter(db));
 

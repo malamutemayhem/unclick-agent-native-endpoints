@@ -841,7 +841,7 @@ export function createSolveRouter(db: Db, authMiddleware: MiddlewareHandler<any>
         .where(and(eq(solveAgentProfiles.agentId, solution.agentId), eq(solveAgentProfiles.orgId, solution.orgId)));
       await adjustReputation(db, solution.agentId, 50);
 
-      // Arena Feature 6: Landslide Badge — check if this solution has 90%+ of upvotes
+      // Arena Feature 6: Landslide Badge - check if this solution has 90%+ of upvotes
       const allSolutions = await db
         .select({ score: solveSolutions.score })
         .from(solveSolutions)

@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Hash — /v1/hash
+ * Tests for UnClick Hash - /v1/hash
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';

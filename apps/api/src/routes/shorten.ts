@@ -25,7 +25,7 @@ const CreateShortenSchema = z.object({
 export function createShortenRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST / — shorten a URL
+  // POST / - shorten a URL
   router.post('/', requireScope('shorten:write'), zv('json', CreateShortenSchema), async (c) => {
     const { orgId } = c.get('org');
     const { url } = c.req.valid('json');
@@ -66,7 +66,7 @@ export function createShortenRouter(db: Db) {
     });
   });
 
-  // GET /:code/stats — click stats for a short URL (org-scoped)
+  // GET /:code/stats - click stats for a short URL (org-scoped)
   router.get('/:code/stats', requireScope('shorten:read'), async (c) => {
     const { orgId } = c.get('org');
     const { code } = c.req.param();
@@ -92,7 +92,7 @@ export function createShortenRouter(db: Db) {
 }
 
 /**
- * Public redirect router — no auth required.
+ * Public redirect router - no auth required.
  * Mounted at /r/:code so it resolves before the /v1/* auth middleware.
  */
 export function createPublicShortenRouter(db: Db) {
@@ -111,7 +111,7 @@ export function createPublicShortenRouter(db: Db) {
       return c.json({ error: { code: 'not_found', message: 'Short URL not found' } }, 404);
     }
 
-    // Increment click count in the background — don't block the redirect
+    // Increment click count in the background - don't block the redirect
     db.update(shortenedUrls)
       .set({ clickCount: sql`${shortenedUrls.clickCount} + 1` })
       .where(eq(shortenedUrls.id, row.id))

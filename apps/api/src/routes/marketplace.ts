@@ -1,16 +1,16 @@
 /**
- * UnClick Marketplace — tool registry API.
+ * UnClick Marketplace - tool registry API.
  *
  * Public endpoints (no auth):
- *   GET  /v1/marketplace/tools           — list approved tools
- *   GET  /v1/marketplace/tools/:slug     — tool detail + endpoints
- *   GET  /v1/marketplace/categories      — all categories
- *   GET  /v1/marketplace/search          — full-text search (?q=)
- *   GET  /v1/marketplace/featured        — top-rated + most-used
- *   GET  /v1/marketplace/stats           — aggregate stats
+ *   GET  /v1/marketplace/tools           - list approved tools
+ *   GET  /v1/marketplace/tools/:slug     - tool detail + endpoints
+ *   GET  /v1/marketplace/categories      - all categories
+ *   GET  /v1/marketplace/search          - full-text search (?q=)
+ *   GET  /v1/marketplace/featured        - top-rated + most-used
+ *   GET  /v1/marketplace/stats           - aggregate stats
  *
  * Authenticated (API key):
- *   POST /v1/marketplace/tools/:slug/rate — submit a star rating + review
+ *   POST /v1/marketplace/tools/:slug/rate - submit a star rating + review
  */
 import { Hono, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
@@ -104,7 +104,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
   // PUBLIC ROUTES
   // =========================================================================
 
-  // GET /tools — list all approved tools, filterable by category, paginated
+  // GET /tools - list all approved tools, filterable by category, paginated
   router.get('/tools', async (c) => {
     const rawPage = Number(c.req.query('page') ?? '1');
     const rawPerPage = Number(c.req.query('per_page') ?? '20');
@@ -141,7 +141,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
     });
   });
 
-  // GET /tools/:slug — full tool detail including endpoints
+  // GET /tools/:slug - full tool detail including endpoints
   router.get('/tools/:slug', async (c) => {
     const { slug } = c.req.param();
 
@@ -182,7 +182,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
     });
   });
 
-  // GET /categories — all categories ordered by sort_order
+  // GET /categories - all categories ordered by sort_order
   router.get('/categories', async (c) => {
     const rows = await db
       .select()
@@ -192,7 +192,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
     return ok(c, rows.map(formatCategory));
   });
 
-  // GET /search?q=... — search tools by name, tagline, or description
+  // GET /search?q=... - search tools by name, tagline, or description
   router.get('/search', async (c) => {
     const q = (c.req.query('q') ?? '').trim();
     if (!q) {
@@ -219,7 +219,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
     return ok(c, rows.map(formatTool));
   });
 
-  // GET /featured — top 10 tools by monthly_calls, then by rating
+  // GET /featured - top 10 tools by monthly_calls, then by rating
   router.get('/featured', async (c) => {
     const rows = await db
       .select()
@@ -234,7 +234,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
     return ok(c, rows.map(formatTool));
   });
 
-  // GET /stats — aggregate marketplace stats
+  // GET /stats - aggregate marketplace stats
   router.get('/stats', async (c) => {
     const [toolStats] = await db
       .select({
@@ -263,7 +263,7 @@ export function createMarketplaceRouter(db: Db, authMiddleware: MiddlewareHandle
   // AUTHENTICATED ROUTES
   // =========================================================================
 
-  // POST /tools/:slug/rate — submit or update a rating
+  // POST /tools/:slug/rate - submit or update a rating
   router.post('/tools/:slug/rate', authMiddleware, requireScope('marketplace:rate'), zv('json', RateSchema), async (c) => {
     const { slug } = c.req.param();
     const { orgId } = c.get('org');

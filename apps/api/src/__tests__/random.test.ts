@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Random — /v1/random
+ * Tests for UnClick Random - /v1/random
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -33,7 +33,7 @@ beforeAll(async () => {
 // Auth guard
 // ---------------------------------------------------------------------------
 
-describe('Random — auth', () => {
+describe('Random - auth', () => {
   it('rejects requests with no API key', async () => {
     const res = await app.request('/v1/random/number', {
       method: 'POST',
@@ -48,7 +48,7 @@ describe('Random — auth', () => {
 // POST /v1/random/number
 // ---------------------------------------------------------------------------
 
-describe('Random — number', () => {
+describe('Random - number', () => {
   it('returns a number in range with default settings', async () => {
     const res = await post('/v1/random/number', { min: 1, max: 10 });
     expect(res.status).toBe(200);
@@ -93,7 +93,7 @@ describe('Random — number', () => {
 // POST /v1/random/string
 // ---------------------------------------------------------------------------
 
-describe('Random — string', () => {
+describe('Random - string', () => {
   it('generates an alphanumeric string by default', async () => {
     const res = await post('/v1/random/string', { length: 16 });
     expect(res.status).toBe(200);
@@ -151,7 +151,7 @@ describe('Random — string', () => {
 // POST /v1/random/password
 // ---------------------------------------------------------------------------
 
-describe('Random — password', () => {
+describe('Random - password', () => {
   it('generates a password with all options by default', async () => {
     const res = await post('/v1/random/password', { length: 20 });
     expect(res.status).toBe(200);
@@ -205,7 +205,7 @@ describe('Random — password', () => {
 // POST /v1/random/pick
 // ---------------------------------------------------------------------------
 
-describe('Random — pick', () => {
+describe('Random - pick', () => {
   const items = ['apple', 'banana', 'cherry', 'date', 'elderberry'];
 
   it('picks one item by default', async () => {
@@ -249,7 +249,7 @@ describe('Random — pick', () => {
 // POST /v1/random/shuffle
 // ---------------------------------------------------------------------------
 
-describe('Random — shuffle', () => {
+describe('Random - shuffle', () => {
   it('returns a shuffled array of the same elements', async () => {
     const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const res = await post('/v1/random/shuffle', { items });
@@ -273,7 +273,7 @@ describe('Random — shuffle', () => {
 // POST /v1/random/color
 // ---------------------------------------------------------------------------
 
-describe('Random — color', () => {
+describe('Random - color', () => {
   it('generates a hex color by default', async () => {
     const res = await post('/v1/random/color', {});
     expect(res.status).toBe(200);

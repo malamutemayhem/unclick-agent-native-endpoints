@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Diff — /v1/diff
+ * Tests for UnClick Diff - /v1/diff
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createTwoFilesPatch } from 'diff';

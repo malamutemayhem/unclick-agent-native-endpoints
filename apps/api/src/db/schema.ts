@@ -398,7 +398,7 @@ export const solveAgentProfiles = pgTable('solve_agent_profiles', {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Webhook bins — temporary endpoints that capture incoming HTTP requests
+// Webhook bins - temporary endpoints that capture incoming HTTP requests
 // ---------------------------------------------------------------------------
 export const webhookBins = pgTable('webhook_bins', {
   id: text('id').primaryKey(),
@@ -433,7 +433,7 @@ export const webhookBinRequests = pgTable('webhook_bin_requests', {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Key-value scratchpad — org-scoped, optional TTL, values stored as JSON text
+// Key-value scratchpad - org-scoped, optional TTL, values stored as JSON text
 // ---------------------------------------------------------------------------
 export const kvStore = pgTable('kv_store', {
   id: text('id').primaryKey(),
@@ -455,7 +455,7 @@ export const kvStore = pgTable('kv_store', {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Pastes — org-scoped text snippets with optional expiry
+// Pastes - org-scoped text snippets with optional expiry
 // ---------------------------------------------------------------------------
 export const pastes = pgTable('pastes', {
   id: text('id').primaryKey(),
@@ -475,7 +475,7 @@ export const pastes = pgTable('pastes', {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Secrets — one-time encrypted text, destroyed on first read
+// Secrets - one-time encrypted text, destroyed on first read
 // ---------------------------------------------------------------------------
 export const secrets = pgTable('secrets', {
   id: text('id').primaryKey(),
@@ -522,7 +522,7 @@ export const shortenedUrls = pgTable('shortened_urls', {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Publishers — orgs that list tools in the marketplace
+// Publishers - orgs that list tools in the marketplace
 // ---------------------------------------------------------------------------
 export const publishers = pgTable('publishers', {
   id: text('id').primaryKey(),
@@ -649,7 +649,7 @@ export const marketplaceRatings = pgTable('marketplace_ratings', {
 ]);
 
 // ===========================================================================
-// Marketplace billing — agent-native metering + Stripe payment rails
+// Marketplace billing - agent-native metering + Stripe payment rails
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -676,7 +676,7 @@ export const toolPricing = pgTable('tool_pricing', {
 ]);
 
 // ---------------------------------------------------------------------------
-// Billing events — append-only metering ledger per API call
+// Billing events - append-only metering ledger per API call
 // Batched and reported to Stripe Metering API for automatic agent billing
 // ---------------------------------------------------------------------------
 export const billingEvents = pgTable('billing_events', {
@@ -698,7 +698,7 @@ export const billingEvents = pgTable('billing_events', {
 ]);
 
 // ---------------------------------------------------------------------------
-// Billing meters — pre-aggregated monthly usage per org per tool
+// Billing meters - pre-aggregated monthly usage per org per tool
 // ---------------------------------------------------------------------------
 export const billingMeters = pgTable('billing_meters', {
   id: text('id').primaryKey(),
@@ -746,7 +746,7 @@ export const revenueShare = pgTable('revenue_share', {
 ]);
 
 // ===========================================================================
-// Bug Reports — agent-submitted error reports via POST /v1/report-bug
+// Bug Reports - agent-submitted error reports via POST /v1/report-bug
 // ===========================================================================
 
 export const bugReports = pgTable('bug_reports', {

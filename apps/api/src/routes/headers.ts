@@ -115,7 +115,7 @@ async function fetchHeaders(url: string): Promise<Record<string, string>> {
 export function createHeadersRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /headers/inspect — return all response headers
+  // POST /headers/inspect - return all response headers
   router.post('/inspect', requireScope('headers:use'), zv('json', InspectSchema), async (c) => {
     const { url } = c.req.valid('json');
     try {
@@ -129,7 +129,7 @@ export function createHeadersRouter() {
     }
   });
 
-  // POST /headers/security — grade security headers
+  // POST /headers/security - grade security headers
   router.post('/security', requireScope('headers:use'), zv('json', SecuritySchema), async (c) => {
     const { url } = c.req.valid('json');
     try {

@@ -1,18 +1,18 @@
 /**
- * UnClick Validate — stateless input validation utility.
+ * UnClick Validate - stateless input validation utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: validate:use
  *
- *   POST /v1/validate/email        — validate email address format
- *   POST /v1/validate/url          — validate URL format (optional reachability check)
- *   POST /v1/validate/phone        — basic phone number format validation
- *   POST /v1/validate/json         — validate JSON string, return parsed value or error
- *   POST /v1/validate/credit-card  — validate credit card via Luhn algorithm only
- *   POST /v1/validate/ip           — validate IPv4 or IPv6 address
- *   POST /v1/validate/color        — validate hex, RGB, RGBA, or HSL color values
+ *   POST /v1/validate/email        - validate email address format
+ *   POST /v1/validate/url          - validate URL format (optional reachability check)
+ *   POST /v1/validate/phone        - basic phone number format validation
+ *   POST /v1/validate/json         - validate JSON string, return parsed value or error
+ *   POST /v1/validate/credit-card  - validate credit card via Luhn algorithm only
+ *   POST /v1/validate/ip           - validate IPv4 or IPv6 address
+ *   POST /v1/validate/color        - validate hex, RGB, RGBA, or HSL color values
  */
 import { Hono } from 'hono';
 import { z } from 'zod';

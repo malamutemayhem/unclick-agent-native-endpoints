@@ -1,14 +1,14 @@
 /**
- * UnClick UUID — stateless UUID utility.
+ * UnClick UUID - stateless UUID utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: uuid:use
  *
- *   POST /v1/uuid/v4        — generate one or more UUIDv4s
- *   POST /v1/uuid/validate  — check if a string is a valid UUID, return version
- *   POST /v1/uuid/parse     — parse UUID into its RFC 4122 components
+ *   POST /v1/uuid/v4        - generate one or more UUIDv4s
+ *   POST /v1/uuid/validate  - check if a string is a valid UUID, return version
+ *   POST /v1/uuid/parse     - parse UUID into its RFC 4122 components
  */
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
@@ -82,14 +82,14 @@ function parseUuid(uuid: string) {
 export function createUuidRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /uuid/v4 — generate UUIDv4(s)
+  // POST /uuid/v4 - generate UUIDv4(s)
   router.post('/v4', requireScope('uuid:use'), zv('json', GenerateSchema), (c) => {
     const { count } = c.req.valid('json');
     const uuids = Array.from({ length: count }, () => randomUUID());
     return ok(c, { count, uuids: count === 1 ? undefined : uuids, uuid: count === 1 ? uuids[0] : undefined });
   });
 
-  // POST /uuid/validate — check if a string is a valid UUID
+  // POST /uuid/validate - check if a string is a valid UUID
   router.post('/validate', requireScope('uuid:use'), zv('json', ValidateSchema), (c) => {
     const { uuid } = c.req.valid('json');
     const version = detectUuidVersion(uuid);
@@ -100,12 +100,12 @@ export function createUuidRouter() {
     });
   });
 
-  // POST /uuid/parse — parse UUID into RFC 4122 components
+  // POST /uuid/parse - parse UUID into RFC 4122 components
   router.post('/parse', requireScope('uuid:use'), zv('json', ParseSchema), (c) => {
     const { uuid } = c.req.valid('json');
     const parts = parseUuid(uuid.trim());
     if (!parts) {
-      throw Errors.validation('Input is not a valid UUID — expected 32 hex digits in 8-4-4-4-12 format');
+      throw Errors.validation('Input is not a valid UUID - expected 32 hex digits in 8-4-4-4-12 format');
     }
     return ok(c, { input: uuid, ...parts });
   });

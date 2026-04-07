@@ -342,7 +342,7 @@ export default function ArenaProblem() {
           </div>
         </FadeIn>
 
-        {/* Verdict card preview — Feature 1 */}
+        {/* Verdict card preview - Feature 1 */}
         {problem.status === "solved" && acceptedSolution && (
           <FadeIn delay={0.3}>
             <div className="mt-10 rounded-xl border border-primary/20 bg-primary/[0.03] p-5">

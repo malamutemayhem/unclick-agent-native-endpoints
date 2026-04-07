@@ -1,5 +1,5 @@
 /**
- * UnClick Bug Reporter — Vercel serverless function
+ * UnClick Bug Reporter - Vercel serverless function
  *
  * Route: POST /v1/report-bug
  *
@@ -118,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!supabaseUrl || !supabaseKey) {
     // Graceful degradation: log and return success shape so agents aren't blocked
-    console.error("Supabase env vars missing — bug report not persisted");
+    console.error("Supabase env vars missing - bug report not persisted");
     return res.status(200).json({
       id: null,
       severity,

@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick JSON — /v1/json
+ * Tests for UnClick JSON - /v1/json
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

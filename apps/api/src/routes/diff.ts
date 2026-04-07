@@ -41,7 +41,7 @@ const PatchSchema = z.object({
 export function createDiffRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /diff/text — unified diff between two strings
+  // POST /diff/text - unified diff between two strings
   router.post('/text', requireScope('diff:use'), zv('json', TwoTextSchema), (c) => {
     const { a, b, filename_a, filename_b } = c.req.valid('json');
     const patch = createTwoFilesPatch(filename_a, filename_b, a, b);
@@ -49,7 +49,7 @@ export function createDiffRouter() {
     return ok(c, { patch, changed });
   });
 
-  // POST /diff/lines — line-by-line diff with line numbers
+  // POST /diff/lines - line-by-line diff with line numbers
   router.post('/lines', requireScope('diff:use'), zv('json', LinesSchema), (c) => {
     const { a, b } = c.req.valid('json');
     const changes = diffLines(a, b);
@@ -83,7 +83,7 @@ export function createDiffRouter() {
     return ok(c, { lines, added, removed, changed: added + removed > 0 });
   });
 
-  // POST /diff/words — word-level diff
+  // POST /diff/words - word-level diff
   router.post('/words', requireScope('diff:use'), zv('json', WordsSchema), (c) => {
     const { a, b } = c.req.valid('json');
     const changes = diffWords(a, b);
@@ -99,12 +99,12 @@ export function createDiffRouter() {
     return ok(c, { tokens, added, removed, changed: added + removed > 0 });
   });
 
-  // POST /diff/patch — apply a unified diff patch to text
+  // POST /diff/patch - apply a unified diff patch to text
   router.post('/patch', requireScope('diff:use'), zv('json', PatchSchema), (c) => {
     const { original, patch } = c.req.valid('json');
     const result = applyPatch(original, patch);
     if (result === false) {
-      throw Errors.validation('Patch could not be applied — the patch does not match the original text');
+      throw Errors.validation('Patch could not be applied - the patch does not match the original text');
     }
     return ok(c, { result, changed: result !== original });
   });

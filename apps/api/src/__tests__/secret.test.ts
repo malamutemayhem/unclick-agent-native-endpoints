@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Secret — /v1/secret
+ * Tests for UnClick Secret - /v1/secret
  *
  * Set PBKDF2_ITERATIONS=1 in the test environment for speed.
  */

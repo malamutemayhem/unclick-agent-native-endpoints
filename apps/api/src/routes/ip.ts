@@ -1,16 +1,16 @@
 /**
- * UnClick IP — stateless IP / network utility.
+ * UnClick IP - stateless IP / network utility.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: ip:use
  *
- *   POST /v1/ip/lookup  — return the caller's IP address from request headers
- *   POST /v1/ip/parse   — parse an IP: version, decimal, binary, is_private, is_loopback, is_multicast
- *   POST /v1/ip/subnet  — subnet math from CIDR: network, broadcast, first/last host, host count
- *   POST /v1/ip/range   — check whether an IP falls within a CIDR range
- *   POST /v1/ip/convert — convert an IPv4 address between dotted-decimal, binary, and hex
+ *   POST /v1/ip/lookup  - return the caller's IP address from request headers
+ *   POST /v1/ip/parse   - parse an IP: version, decimal, binary, is_private, is_loopback, is_multicast
+ *   POST /v1/ip/subnet  - subnet math from CIDR: network, broadcast, first/last host, host count
+ *   POST /v1/ip/range   - check whether an IP falls within a CIDR range
+ *   POST /v1/ip/convert - convert an IPv4 address between dotted-decimal, binary, and hex
  *
  * Pure math, no external API calls, no geo-lookup database.
  */
@@ -99,9 +99,9 @@ function isPrivateV4(n: number): boolean {
   if ((n >>> 24) === 172 && ((n >>> 16) & 0xff) >= 16 && ((n >>> 16) & 0xff) <= 31) return true;
   // 192.168.0.0/16
   if ((n >>> 24) === 192 && ((n >>> 16) & 0xff) === 168) return true;
-  // 100.64.0.0/10 — carrier-grade NAT
+  // 100.64.0.0/10 - carrier-grade NAT
   if ((n >>> 22) === (0x64400000 >>> 22)) return true;
-  // 169.254.0.0/16 — link-local
+  // 169.254.0.0/16 - link-local
   if ((n >>> 16) === 0xa9fe) return true;
   return false;
 }
@@ -195,9 +195,9 @@ function isMulticastV6(n: bigint): boolean {
 }
 
 function isPrivateV6(n: bigint): boolean {
-  // fc00::/7 — unique local addresses
+  // fc00::/7 - unique local addresses
   if ((n >> 121n) === 0x7en) return true;
-  // fe80::/10 — link-local
+  // fe80::/10 - link-local
   if ((n >> 118n) === 0x3fan) return true;
   return false;
 }
@@ -222,7 +222,7 @@ function parseCidr(cidr: string): { ip: string; prefix: number } {
 export function createIpRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /ip/lookup — return the caller's IP from standard request headers
+  // POST /ip/lookup - return the caller's IP from standard request headers
   router.post('/lookup', requireScope('ip:use'), (c) => {
     const ip =
       c.req.header('CF-Connecting-IP') ??
@@ -235,7 +235,7 @@ export function createIpRouter() {
     return ok(c, { ip, version });
   });
 
-  // POST /ip/parse — parse an IP address into its properties
+  // POST /ip/parse - parse an IP address into its properties
   router.post('/parse', requireScope('ip:use'), zv('json', IpSchema), (c) => {
     const { ip } = c.req.valid('json');
 
@@ -276,7 +276,7 @@ export function createIpRouter() {
     throw Errors.validation(`"${ip}" is not a valid IPv4 or IPv6 address`);
   });
 
-  // POST /ip/subnet — calculate subnet info from CIDR notation
+  // POST /ip/subnet - calculate subnet info from CIDR notation
   router.post('/subnet', requireScope('ip:use'), zv('json', CidrSchema), (c) => {
     const { cidr } = c.req.valid('json');
     const { ip, prefix } = parseCidr(cidr);
@@ -308,7 +308,7 @@ export function createIpRouter() {
     });
   });
 
-  // POST /ip/range — check if an IP is within a CIDR range
+  // POST /ip/range - check if an IP is within a CIDR range
   router.post('/range', requireScope('ip:use'), zv('json', RangeSchema), (c) => {
     const { ip, cidr } = c.req.valid('json');
 
@@ -325,7 +325,7 @@ export function createIpRouter() {
     return ok(c, { ip, cidr, in_range: inRange });
   });
 
-  // POST /ip/convert — convert IPv4 between dotted-decimal, decimal, binary, hex
+  // POST /ip/convert - convert IPv4 between dotted-decimal, decimal, binary, hex
   router.post('/convert', requireScope('ip:use'), zv('json', ConvertSchema), (c) => {
     const { ip } = c.req.valid('json');
 

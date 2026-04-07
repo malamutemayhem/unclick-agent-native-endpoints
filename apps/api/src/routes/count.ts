@@ -48,7 +48,7 @@ function countText(text: string, wpm: number) {
 export function createCountRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /count/text — count words, characters, sentences, paragraphs + reading time
+  // POST /count/text - count words, characters, sentences, paragraphs + reading time
   router.post('/text', requireScope('count:use'), zv('json', TextSchema), (c) => {
     const { text, words_per_minute } = c.req.valid('json');
     return ok(c, countText(text, words_per_minute));

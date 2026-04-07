@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Timestamp — /v1/timestamp
+ * Tests for UnClick Timestamp - /v1/timestamp
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -33,7 +33,7 @@ beforeAll(async () => {
 // Auth guard
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — auth', () => {
+describe('Timestamp - auth', () => {
   it('rejects requests with no API key', async () => {
     const res = await app.request('/v1/timestamp/now', {
       method: 'POST',
@@ -48,7 +48,7 @@ describe('Timestamp — auth', () => {
 // POST /v1/timestamp/now
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — now', () => {
+describe('Timestamp - now', () => {
   it('returns current time in all formats', async () => {
     const before = Date.now();
     const res = await post('/v1/timestamp/now', {});
@@ -71,7 +71,7 @@ describe('Timestamp — now', () => {
 // POST /v1/timestamp/convert
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — convert', () => {
+describe('Timestamp - convert', () => {
   const iso = '2024-01-15T12:00:00.000Z';
   const expectedMs = new Date(iso).getTime();
   const expectedSeconds = Math.floor(expectedMs / 1000);
@@ -110,7 +110,7 @@ describe('Timestamp — convert', () => {
 // POST /v1/timestamp/diff
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — diff', () => {
+describe('Timestamp - diff', () => {
   it('computes the diff between two ISO strings', async () => {
     const from = '2024-01-01T00:00:00.000Z';
     const to = '2024-01-02T00:00:00.000Z';
@@ -147,7 +147,7 @@ describe('Timestamp — diff', () => {
 // POST /v1/timestamp/add
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — add', () => {
+describe('Timestamp - add', () => {
   it('adds days to a timestamp', async () => {
     const ts = '2024-01-01T00:00:00.000Z';
     const res = await post('/v1/timestamp/add', {
@@ -187,7 +187,7 @@ describe('Timestamp — add', () => {
 // POST /v1/timestamp/format
 // ---------------------------------------------------------------------------
 
-describe('Timestamp — format', () => {
+describe('Timestamp - format', () => {
   const ts = '2024-03-07T14:05:09.000Z';
 
   it('formats YYYY-MM-DD', async () => {

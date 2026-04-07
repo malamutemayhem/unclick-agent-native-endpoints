@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Color — /v1/color
+ * Tests for UnClick Color - /v1/color
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -115,7 +115,7 @@ describe('POST /v1/color/palette', () => {
     expect(res.status).toBe(200);
     const { data } = await res.json() as any;
     expect(data.swatches).toHaveLength(2);
-    // Complement of red (hue 0) is hue 180 — cyan
+    // Complement of red (hue 0) is hue 180 - cyan
     expect(data.swatches[1].hex).toBe('#00ffff');
   });
 
@@ -253,7 +253,7 @@ describe('POST /v1/color/contrast', () => {
     expect(data.wcag.aaa_large).toBe(true);
   });
 
-  it('same color gives 1:1 contrast — all WCAG fail', async () => {
+  it('same color gives 1:1 contrast - all WCAG fail', async () => {
     const res = await post('/v1/color/contrast', {
       color1: '#808080',
       color2: '#808080',

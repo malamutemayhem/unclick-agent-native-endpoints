@@ -52,7 +52,7 @@ const tools: Tool[] = [
   // ── Utility ────────────────────────────────────────────────────────────────
   {
     name: "Random",
-    description: "Generate cryptographically secure random values for any use case — numbers, strings, passwords, UUIDs, array shuffles, and color codes. Built for AI agents that need reliable entropy without rolling their own CSPRNG. Works as a drop-in source of randomness for testing, token generation, nonce creation, and simulation workflows.",
+    description: "Generate cryptographically secure random values for any use case: numbers, strings, passwords, UUIDs, array shuffles, and color codes. Built for AI agents that need reliable entropy without rolling their own CSPRNG. Works as a drop-in source of randomness for testing, token generation, nonce creation, and simulation workflows.",
     endpoint: "/v1/random",
     category: "Utility",
     Icon: Shuffle,
@@ -221,7 +221,7 @@ const tools: Tool[] = [
   },
   {
     name: "Lorem",
-    description: "Generate realistic-looking placeholder text — paragraphs, sentences, words, names, email addresses, and postal addresses — for testing, mockups, and development. Avoid the cognitive overhead of Lorem Ipsum by requesting structured fake data in a single API call. Ideal for agents populating databases, generating test fixtures, or building UI mockups without hardcoded strings.",
+    description: "Generate realistic-looking placeholder text (paragraphs, sentences, words, names, email addresses, and postal addresses) for testing, mockups, and development. Avoid the cognitive overhead of Lorem Ipsum by requesting structured fake data in a single API call. Ideal for agents populating databases, generating test fixtures, or building UI mockups without hardcoded strings.",
     endpoint: "/v1/lorem",
     category: "Text",
     Icon: AlignLeft,
@@ -383,7 +383,7 @@ const tools: Tool[] = [
     capabilities: [
       "Classify text as positive, negative, or neutral with a 0-100 confidence score",
       "Fine-grained emotion detection: joy, anger, sadness, surprise, fear, disgust",
-      "Aspect-based sentiment: identify entity-sentiment pairs (e.g. 'battery life — negative')",
+      "Aspect-based sentiment: identify entity-sentiment pairs (e.g. 'battery life: negative')",
       "Batch mode: analyze up to 100 texts in one call with aggregated stats",
     ],
     examplePrompt: "Ask your AI to analyze customer review sentiment and flag any with a negative score above 80%",
@@ -595,7 +595,7 @@ const tools: Tool[] = [
     Icon: Lock,
     capabilities: [
       "Create a one-time secret with configurable TTL (5 minutes to 7 days)",
-      "Secret self-destructs on first read or at expiry — whichever comes first",
+      "Secret self-destructs on first read or at expiry, whichever comes first",
       "AES-256 encryption at rest; secret is never logged or stored in plaintext",
       "Optional passphrase protection for an additional authentication layer",
     ],
@@ -725,7 +725,7 @@ const tools: Tool[] = [
       "Agents post error reports directly via API when they hit unexpected behavior",
       "Auto-classify severity: 500/internal → critical, timeouts → high, 4xx → medium",
       "Store request payload, error message, expected behavior, and agent context",
-      "Status tracking: open, in-progress, resolved — with resolution notes",
+      "Status tracking: open, in-progress, resolved (with resolution notes)",
     ],
     examplePrompt: "Ask your AI to automatically report any tool errors it encounters during a workflow run",
   },

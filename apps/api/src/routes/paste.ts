@@ -37,7 +37,7 @@ const ListSchema = z.object({
 export function createPasteRouter(db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /paste/create — create a new paste
+  // POST /paste/create - create a new paste
   router.post('/create', requireScope('paste:write'), zv('json', CreateSchema), async (c) => {
     const { orgId } = c.get('org');
     const { content, title, language, expiry_hours } = c.req.valid('json');
@@ -67,7 +67,7 @@ export function createPasteRouter(db: Db) {
     });
   });
 
-  // POST /paste/list — list pastes for this org (most recent first)
+  // POST /paste/list - list pastes for this org (most recent first)
   router.post('/list', requireScope('paste:read'), zv('json', ListSchema), async (c) => {
     const { orgId } = c.get('org');
     const { page, limit: perPage } = c.req.valid('json');
@@ -109,7 +109,7 @@ export function createPasteRouter(db: Db) {
     );
   });
 
-  // GET /paste/:id — retrieve a paste by ID
+  // GET /paste/:id - retrieve a paste by ID
   router.get('/:id', requireScope('paste:read'), async (c) => {
     const { orgId } = c.get('org');
     const id = c.req.param('id');
@@ -133,7 +133,7 @@ export function createPasteRouter(db: Db) {
     });
   });
 
-  // DELETE /paste/:id — delete a paste
+  // DELETE /paste/:id - delete a paste
   router.delete('/:id', requireScope('paste:write'), async (c) => {
     const { orgId } = c.get('org');
     const id = c.req.param('id');
@@ -151,7 +151,7 @@ export function createPasteRouter(db: Db) {
     return noContent();
   });
 
-  // POST /paste/:id/raw — get raw text only (no metadata)
+  // POST /paste/:id/raw - get raw text only (no metadata)
   router.post('/:id/raw', requireScope('paste:read'), async (c) => {
     const { orgId } = c.get('org');
     const id = c.req.param('id');

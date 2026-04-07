@@ -91,7 +91,7 @@ export function createEncodeRouter() {
       const decoded = decodeURIComponent(text);
       return ok(c, { decoded });
     } catch {
-      throw Errors.validation('Invalid URL-encoded input — malformed percent-encoding');
+      throw Errors.validation('Invalid URL-encoded input - malformed percent-encoding');
     }
   });
 
@@ -120,7 +120,7 @@ export function createEncodeRouter() {
   router.post('/decode/hex', requireScope('encode:use'), zv('json', TextSchema), (c) => {
     const { text } = c.req.valid('json');
     if (!/^[0-9a-fA-F]*$/.test(text) || text.length % 2 !== 0) {
-      throw Errors.validation('Invalid hex input — must be an even-length hex string');
+      throw Errors.validation('Invalid hex input - must be an even-length hex string');
     }
     try {
       const decoded = Buffer.from(text, 'hex').toString('utf8');

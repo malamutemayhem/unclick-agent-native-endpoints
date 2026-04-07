@@ -1,5 +1,5 @@
 /**
- * UnClick Billing — agent-native metering and Stripe payment rails.
+ * UnClick Billing - agent-native metering and Stripe payment rails.
  *
  * Payment flow (fully automated, no human checkout):
  *   1. Agent makes API call → gateway middleware records a billing_event
@@ -11,15 +11,15 @@
  *   - Stripe Meter Events API: POST /v1/billing/meter_events
  *   - Stripe Metered Subscriptions: price_id with meter_id attached
  *   - Stripe Connect: platform-to-publisher automatic transfers
- *   - No human checkout — agents authorize via API key with billing scope
+ *   - No human checkout - agents authorize via API key with billing scope
  *
  * Endpoints:
- *   GET  /v1/billing/usage              — current period usage by tool
- *   GET  /v1/billing/usage/:tool_slug   — usage detail for one tool
- *   GET  /v1/billing/history            — past billing meters (paginated)
- *   POST /v1/billing/events             — record a billing event (internal/gateway use)
- *   POST /v1/billing/flush              — flush unreported events to Stripe (internal)
- *   GET  /v1/billing/pricing            — tool pricing catalogue (public)
+ *   GET  /v1/billing/usage              - current period usage by tool
+ *   GET  /v1/billing/usage/:tool_slug   - usage detail for one tool
+ *   GET  /v1/billing/history            - past billing meters (paginated)
+ *   POST /v1/billing/events             - record a billing event (internal/gateway use)
+ *   POST /v1/billing/flush              - flush unreported events to Stripe (internal)
+ *   GET  /v1/billing/pricing            - tool pricing catalogue (public)
  */
 import { Hono, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
@@ -122,7 +122,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
   // PUBLIC ROUTES
   // =========================================================================
 
-  // GET /pricing — pricing catalogue for all active tools
+  // GET /pricing - pricing catalogue for all active tools
   router.get('/pricing', async (c) => {
     const rows = await db
       .select()
@@ -144,7 +144,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
   // AUTHENTICATED ROUTES
   // =========================================================================
 
-  // GET /usage — current period usage summary by tool for this org
+  // GET /usage - current period usage summary by tool for this org
   router.get('/usage', authMiddleware, requireScope('billing:read'), async (c) => {
     const { orgId } = c.get('org');
     const period = currentPeriod();
@@ -172,7 +172,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
     });
   });
 
-  // GET /usage/:tool_slug — usage detail for a single tool
+  // GET /usage/:tool_slug - usage detail for a single tool
   router.get('/usage/:tool_slug', authMiddleware, requireScope('billing:read'), async (c) => {
     const { orgId } = c.get('org');
     const { tool_slug: toolSlug } = c.req.param();
@@ -221,7 +221,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
     });
   });
 
-  // GET /history — past billing periods for this org
+  // GET /history - past billing periods for this org
   router.get('/history', authMiddleware, requireScope('billing:read'), async (c) => {
     const { orgId } = c.get('org');
     const rawPage = Number(c.req.query('page') ?? '1');
@@ -267,7 +267,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
   // Protected by billing:internal scope which is not grantable via the UI.
   // =========================================================================
 
-  // POST /events — record a single billing event (called by gateway per request)
+  // POST /events - record a single billing event (called by gateway per request)
   router.post('/events', authMiddleware, requireScope('billing:internal'), zv('json', RecordEventSchema), async (c) => {
     const { orgId } = c.get('org');
     const { tool_slug: toolSlug, api_key_id: apiKeyId, endpoint, response_ms: responseMs } = c.req.valid('json');
@@ -290,7 +290,7 @@ export function createBillingRouter(db: Db, authMiddleware: MiddlewareHandler<an
     return ok(c, { recorded: true });
   });
 
-  // POST /flush — report unreported events to Stripe Metering API
+  // POST /flush - report unreported events to Stripe Metering API
   // This is called by the billing job (cron or background worker).
   // Returns a summary of what was flushed.
   //
@@ -462,7 +462,7 @@ export function createBillingMiddleware(db: Db) {
         });
         await incrementMeter(db, org.orgId, toolSlug, 1, responseMs);
       } catch {
-        // Non-fatal — billing events should never break API responses
+        // Non-fatal - billing events should never break API responses
       }
     });
   };

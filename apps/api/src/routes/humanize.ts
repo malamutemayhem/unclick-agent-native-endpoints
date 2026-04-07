@@ -1,14 +1,14 @@
 /**
- * UnClick Humanize — rule-based AI text humanizer.
+ * UnClick Humanize - rule-based AI text humanizer.
  *
  * All endpoints sit under /v1/humanize and inherit the global auth + rate-limit
  * middleware; no external AI API calls are made.
  *
  * Scope: humanize:use
  *
- *   POST /v1/humanize/rewrite  — rewrite AI text to sound more natural
- *   POST /v1/humanize/detect   — score text for AI-writing patterns (0-100)
- *   POST /v1/humanize/suggest  — return specific improvement suggestions
+ *   POST /v1/humanize/rewrite  - rewrite AI text to sound more natural
+ *   POST /v1/humanize/detect   - score text for AI-writing patterns (0-100)
+ *   POST /v1/humanize/suggest  - return specific improvement suggestions
  */
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -498,7 +498,7 @@ function suggestImprovements(text: string): Suggestion[] {
       suggestions.push({
         line: lineNum,
         type: 'em_dash',
-        original: line.includes('\u2014') ? '—' : '--',
+        original: line.includes('\u2014') ? '-' : '--',
         suggestion: 'Replace em dash with a comma or period',
       });
     }
@@ -511,7 +511,7 @@ function suggestImprovements(text: string): Suggestion[] {
           line: lineNum,
           type: 'excessive_adverb',
           original: match[0],
-          suggestion: `Remove or replace adverb "${match[0]}" — it weakens the sentence`,
+          suggestion: `Remove or replace adverb "${match[0]}" - it weakens the sentence`,
         });
       }
     }

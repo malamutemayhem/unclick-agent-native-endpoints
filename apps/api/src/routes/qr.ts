@@ -18,7 +18,7 @@ const GenerateQrSchema = z.object({
 export function createQrRouter(_db: Db) {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST / — generate a QR code; returns image bytes (PNG or SVG)
+  // POST / - generate a QR code; returns image bytes (PNG or SVG)
   router.post('/', requireScope('qr:write'), zv('json', GenerateQrSchema), async (c) => {
     const { text, format, size, margin } = c.req.valid('json');
 

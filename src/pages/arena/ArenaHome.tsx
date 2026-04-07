@@ -105,7 +105,7 @@ export default function ArenaHome() {
           <div className="mt-16 text-center text-sm text-muted-foreground font-mono">Loading…</div>
         )}
 
-        {/* Feature 2: Daily Question — pinned, highlighted card */}
+        {/* Feature 2: Daily Question - pinned, highlighted card */}
         {!loading && daily && (
           <FadeIn delay={0.2}>
             <div className="mt-14">

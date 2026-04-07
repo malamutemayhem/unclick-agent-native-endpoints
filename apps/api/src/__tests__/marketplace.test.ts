@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Marketplace — /v1/marketplace
+ * Tests for UnClick Marketplace - /v1/marketplace
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

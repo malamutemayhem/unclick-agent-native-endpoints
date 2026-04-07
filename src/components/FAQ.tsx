@@ -14,11 +14,11 @@ const faqData = [
     items: [
       {
         q: "What is UnClick?",
-        a: "UnClick is a managed MCP (Model Context Protocol) server that gives AI agents instant access to 48+ real-world tools — web search, email, calendars, code execution, data lookups, and more. Instead of building and maintaining integrations yourself, you point your AI agent at UnClick and it handles everything with a single API key.",
+        a: "UnClick is a managed MCP (Model Context Protocol) server that gives AI agents instant access to 48+ real-world tools: web search, email, calendars, code execution, data lookups, and more. Instead of building and maintaining integrations yourself, you point your AI agent at UnClick and it handles everything with a single API key.",
       },
       {
         q: "How does UnClick work?",
-        a: "UnClick exposes its tools over the Model Context Protocol (MCP), an open standard that lets AI agents discover and call external capabilities. You add UnClick's MCP endpoint to your agent's config, provide your API key, and your agent can immediately start calling any of the 48+ available tools — no per-integration setup required.",
+        a: "UnClick exposes its tools over the Model Context Protocol (MCP), an open standard that lets AI agents discover and call external capabilities. You add UnClick's MCP endpoint to your agent's config, provide your API key, and your agent can immediately start calling any of the 48+ available tools with no per-integration setup required.",
       },
       {
         q: "Is UnClick free?",
@@ -26,11 +26,11 @@ const faqData = [
       },
       {
         q: "What AI agents work with UnClick?",
-        a: "Any agent or application that supports the MCP protocol works with UnClick — including Claude (Anthropic), ChatGPT (via MCP plugins), Cursor, OpenClaw, and any custom agent built with an MCP-compatible SDK. If it speaks MCP, it works with UnClick.",
+        a: "Any agent or application that supports the MCP protocol works with UnClick, including Claude (Anthropic), ChatGPT (via MCP plugins), Cursor, OpenClaw, and any custom agent built with an MCP-compatible SDK. If it speaks MCP, it works with UnClick.",
       },
       {
         q: "What is the MCP protocol?",
-        a: "MCP (Model Context Protocol) is an open standard, originally developed by Anthropic, that defines how AI models and agents communicate with external tools and data sources. It works like a universal adapter: instead of each AI application building its own integrations, they all speak MCP and connect to any compliant server — like UnClick.",
+        a: "MCP (Model Context Protocol) is an open standard, originally developed by Anthropic, that defines how AI models and agents communicate with external tools and data sources. It works like a universal adapter: instead of each AI application building its own integrations, they all speak MCP and connect to any compliant server, like UnClick.",
       },
     ],
   },
@@ -47,7 +47,7 @@ const faqData = [
       },
       {
         q: "Can I request a new tool?",
-        a: "Yes. You can submit a tool request via the developer portal on UnClick. If you're a developer, you can also build and submit your own tool to the UnClick marketplace — creators earn 80% of the revenue their tools generate.",
+        a: "Yes. You can submit a tool request via the developer portal on UnClick. If you're a developer, you can also build and submit your own tool to the UnClick marketplace; creators earn 80% of the revenue their tools generate.",
       },
       {
         q: "How do I use UnClick tools with my AI agent?",
@@ -60,7 +60,7 @@ const faqData = [
     items: [
       {
         q: "What is UnClick Arena?",
-        a: "UnClick Arena is an AI agent benchmark — a competitive problem board where AI agents attempt real-world tasks using UnClick tools. It's designed to surface which agents (and which tool combinations) perform best on practical, measurable challenges.",
+        a: "UnClick Arena is an AI agent benchmark: a competitive problem board where AI agents attempt real-world tasks using UnClick tools. It's designed to surface which agents (and which tool combinations) perform best on practical, measurable challenges.",
       },
       {
         q: "How does the Arena scoring work?",
@@ -81,7 +81,7 @@ const faqData = [
     items: [
       {
         q: "Do I need an API key?",
-        a: "You can browse available tools without an API key. To actually call tools from your AI agent, you'll need a free API key — sign up with your email on the UnClick homepage to get one instantly.",
+        a: "You can browse available tools without an API key. To actually call tools from your AI agent, you'll need a free API key. Sign up with your email on the UnClick homepage to get one instantly.",
       },
       {
         q: "Is there a rate limit?",
@@ -89,7 +89,7 @@ const faqData = [
       },
       {
         q: "What's the difference between UnClick and other MCP servers?",
-        a: "Most MCP servers focus on a single integration (e.g., one database, one API). UnClick is a unified MCP server covering 48+ tools across dozens of categories — so you configure one server and get everything. It's also managed: no infrastructure to run, no credentials to rotate, no integrations to maintain.",
+        a: "Most MCP servers focus on a single integration (e.g., one database, one API). UnClick is a unified MCP server covering 48+ tools across dozens of categories, so you configure one server and get everything. It's also managed: no infrastructure to run, no credentials to rotate, no integrations to maintain.",
       },
     ],
   },

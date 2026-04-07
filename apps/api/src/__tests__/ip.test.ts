@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick IP — /v1/ip
+ * Tests for UnClick IP - /v1/ip
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -258,7 +258,7 @@ describe('POST /v1/ip/subnet', () => {
     expect(data.last_usable).toBe('10.0.0.1');
   });
 
-  it('normalises host bits — e.g. 192.168.1.100/24 gives network 192.168.1.0', async () => {
+  it('normalises host bits - e.g. 192.168.1.100/24 gives network 192.168.1.0', async () => {
     const res = await post('/v1/ip/subnet', { cidr: '192.168.1.100/24' });
     expect(res.status).toBe(200);
     const { data } = await res.json() as any;

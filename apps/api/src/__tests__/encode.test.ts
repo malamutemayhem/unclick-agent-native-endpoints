@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Encode — /v1/encode/* and /v1/decode/*
+ * Tests for UnClick Encode - /v1/encode/* and /v1/decode/*
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

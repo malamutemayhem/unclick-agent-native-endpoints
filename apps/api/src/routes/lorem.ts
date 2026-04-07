@@ -84,7 +84,7 @@ const STATES = [
 
 // ─── Generation helpers ───────────────────────────────────────────────────────
 
-// Simple deterministic-ish pseudo-random using index cycling — stateless.
+// Simple deterministic-ish pseudo-random using index cycling - stateless.
 function pick<T>(arr: T[], seed: number): T {
   return arr[seed % arr.length]!;
 }
@@ -239,7 +239,7 @@ const AddressSchema = z.object({
 export function createLoremRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /lorem/paragraphs — N paragraphs of lorem ipsum
+  // POST /lorem/paragraphs - N paragraphs of lorem ipsum
   router.post('/paragraphs', requireScope('lorem:use'), zv('json', ParagraphsSchema), (c) => {
     const { count } = c.req.valid('json');
     const paragraphs = generateParagraphs(count);
@@ -250,7 +250,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/sentences — N lorem ipsum sentences
+  // POST /lorem/sentences - N lorem ipsum sentences
   router.post('/sentences', requireScope('lorem:use'), zv('json', SentencesSchema), (c) => {
     const { count } = c.req.valid('json');
     const sentences = generateSentences(count);
@@ -261,7 +261,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/words — N lorem ipsum words
+  // POST /lorem/words - N lorem ipsum words
   router.post('/words', requireScope('lorem:use'), zv('json', WordsSchema), (c) => {
     const { count } = c.req.valid('json');
     const words = generateWords(count);
@@ -272,7 +272,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/text — text of approximate character length
+  // POST /lorem/text - text of approximate character length
   router.post('/text', requireScope('lorem:use'), zv('json', TextSchema), (c) => {
     const { length } = c.req.valid('json');
     const text = generateText(length);
@@ -282,7 +282,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/list — N list items (useful for mock data)
+  // POST /lorem/list - N list items (useful for mock data)
   router.post('/list', requireScope('lorem:use'), zv('json', ListSchema), (c) => {
     const { count } = c.req.valid('json');
     const items = generateListItems(count);
@@ -292,7 +292,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/name — random fake names
+  // POST /lorem/name - random fake names
   router.post('/name', requireScope('lorem:use'), zv('json', NameSchema), (c) => {
     const { count } = c.req.valid('json');
     const names = Array.from({ length: count }, (_, i) => generateName(i));
@@ -303,7 +303,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/email — random fake email addresses
+  // POST /lorem/email - random fake email addresses
   router.post('/email', requireScope('lorem:use'), zv('json', EmailSchema), (c) => {
     const { count } = c.req.valid('json');
     const emails = Array.from({ length: count }, (_, i) => generateEmail(i));
@@ -314,7 +314,7 @@ export function createLoremRouter() {
     });
   });
 
-  // POST /lorem/address — random fake addresses
+  // POST /lorem/address - random fake addresses
   router.post('/address', requireScope('lorem:use'), zv('json', AddressSchema), (c) => {
     const { count } = c.req.valid('json');
     const addresses = Array.from({ length: count }, (_, i) => generateAddress(i));

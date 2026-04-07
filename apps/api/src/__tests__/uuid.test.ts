@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick UUID — /v1/uuid
+ * Tests for UnClick UUID - /v1/uuid
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';
@@ -33,7 +33,7 @@ beforeAll(async () => {
 // Auth guard
 // ---------------------------------------------------------------------------
 
-describe('UUID — auth', () => {
+describe('UUID - auth', () => {
   it('rejects requests with no API key', async () => {
     const res = await app.request('/v1/uuid/v4', {
       method: 'POST',
@@ -48,7 +48,7 @@ describe('UUID — auth', () => {
 // POST /v1/uuid/v4
 // ---------------------------------------------------------------------------
 
-describe('UUID — v4 generation', () => {
+describe('UUID - v4 generation', () => {
   it('generates a single UUID by default', async () => {
     const res = await post('/v1/uuid/v4', {});
     expect(res.status).toBe(200);
@@ -100,7 +100,7 @@ describe('UUID — v4 generation', () => {
 // POST /v1/uuid/validate
 // ---------------------------------------------------------------------------
 
-describe('UUID — validate', () => {
+describe('UUID - validate', () => {
   it('validates a UUIDv4', async () => {
     const res = await post('/v1/uuid/validate', {
       uuid: '550e8400-e29b-41d4-a716-446655440000',
@@ -142,7 +142,7 @@ describe('UUID — validate', () => {
 // POST /v1/uuid/parse
 // ---------------------------------------------------------------------------
 
-describe('UUID — parse', () => {
+describe('UUID - parse', () => {
   it('parses a well-known UUID', async () => {
     const uuid = '550e8400-e29b-41d4-a716-446655440000';
     const res = await post('/v1/uuid/parse', { uuid });

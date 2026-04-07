@@ -222,7 +222,7 @@ function dotQuery(obj: unknown, query: string): unknown[] {
 export function createJsonRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /json/format — pretty-print with configurable indent
+  // POST /json/format - pretty-print with configurable indent
   router.post('/format', requireScope('json:use'), zv('json', FormatSchema), (c) => {
     const { json, indent } = c.req.valid('json');
     const parsed = parseJson(json);
@@ -231,7 +231,7 @@ export function createJsonRouter() {
     return ok(c, { json: formatted, bytes: formatted.length });
   });
 
-  // POST /json/minify — strip all whitespace
+  // POST /json/minify - strip all whitespace
   router.post('/minify', requireScope('json:use'), zv('json', MinifySchema), (c) => {
     const { json } = c.req.valid('json');
     const parsed = parseJson(json);
@@ -239,7 +239,7 @@ export function createJsonRouter() {
     return ok(c, { json: minified, bytes: minified.length });
   });
 
-  // POST /json/query — dot-notation / JSONPath query
+  // POST /json/query - dot-notation / JSONPath query
   router.post('/query', requireScope('json:use'), zv('json', QuerySchema), (c) => {
     const { json, query } = c.req.valid('json');
     const parsed = parseJson(json);
@@ -247,7 +247,7 @@ export function createJsonRouter() {
     return ok(c, { results, count: results.length });
   });
 
-  // POST /json/flatten — nested object → dot-notation keys
+  // POST /json/flatten - nested object → dot-notation keys
   router.post('/flatten', requireScope('json:use'), zv('json', FlattenSchema), (c) => {
     const { json, delimiter } = c.req.valid('json');
     const parsed = parseJson(json);
@@ -259,7 +259,7 @@ export function createJsonRouter() {
     return ok(c, { json: result, keys: Object.keys(result).length });
   });
 
-  // POST /json/unflatten — dot-notation keys → nested object
+  // POST /json/unflatten - dot-notation keys → nested object
   router.post('/unflatten', requireScope('json:use'), zv('json', UnflattenSchema), (c) => {
     const { json, delimiter } = c.req.valid('json');
     const parsed = parseJson(json);
@@ -270,7 +270,7 @@ export function createJsonRouter() {
     return ok(c, { json: result });
   });
 
-  // POST /json/diff — compare two JSON objects
+  // POST /json/diff - compare two JSON objects
   router.post('/diff', requireScope('json:use'), zv('json', DiffSchema), (c) => {
     const { a, b } = c.req.valid('json');
     const objA = parseJson(a, 'a');
@@ -288,7 +288,7 @@ export function createJsonRouter() {
     return ok(c, result);
   });
 
-  // POST /json/merge — deep-merge two or more JSON objects
+  // POST /json/merge - deep-merge two or more JSON objects
   router.post('/merge', requireScope('json:use'), zv('json', MergeSchema), (c) => {
     const { objects } = c.req.valid('json');
     const parsed = objects.map((raw, i) => {
@@ -302,7 +302,7 @@ export function createJsonRouter() {
     return ok(c, { json: result, keys: Object.keys(result).length });
   });
 
-  // POST /json/schema — generate a JSON Schema from a sample
+  // POST /json/schema - generate a JSON Schema from a sample
   router.post('/schema', requireScope('json:use'), zv('json', SchemaGenSchema), (c) => {
     const { json } = c.req.valid('json');
     const parsed = parseJson(json);

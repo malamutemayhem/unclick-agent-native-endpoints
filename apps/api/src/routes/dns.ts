@@ -40,7 +40,7 @@ async function resolveRecord(domain: string, type: RecordType): Promise<unknown>
 export function createDnsRouter() {
   const router = new Hono<{ Variables: AppVariables }>();
 
-  // POST /dns/lookup — resolve a single record type
+  // POST /dns/lookup - resolve a single record type
   router.post('/lookup', requireScope('dns:use'), zv('json', LookupSchema), async (c) => {
     const { domain, type } = c.req.valid('json');
     try {
@@ -55,7 +55,7 @@ export function createDnsRouter() {
     }
   });
 
-  // POST /dns/all — resolve all record types at once
+  // POST /dns/all - resolve all record types at once
   router.post('/all', requireScope('dns:use'), zv('json', AllSchema), async (c) => {
     const { domain } = c.req.valid('json');
 

@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick CSV — /v1/csv
+ * Tests for UnClick CSV - /v1/csv
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

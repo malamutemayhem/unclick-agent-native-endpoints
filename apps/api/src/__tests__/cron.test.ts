@@ -1,5 +1,5 @@
 /**
- * Tests for UnClick Cron — /v1/cron
+ * Tests for UnClick Cron - /v1/cron
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createApp } from '../app.js';

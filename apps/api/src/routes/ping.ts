@@ -1,13 +1,13 @@
 /**
- * UnClick Ping — URL uptime & health checker.
+ * UnClick Ping - URL uptime & health checker.
  *
  * All endpoints sit under /v1/* and inherit the global auth + rate-limit
  * middleware; no database access is needed.
  *
  * Scope: ping:use
  *
- *   POST /v1/ping/check — check a single URL; returns status, latency, SSL, redirects
- *   POST /v1/ping/batch — check up to 10 URLs concurrently
+ *   POST /v1/ping/check - check a single URL; returns status, latency, SSL, redirects
+ *   POST /v1/ping/batch - check up to 10 URLs concurrently
  */
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -34,7 +34,7 @@ const BatchSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// SSL certificate helper — connects via TLS and reads the peer certificate
+// SSL certificate helper - connects via TLS and reads the peer certificate
 // ---------------------------------------------------------------------------
 
 interface SslInfo {
@@ -152,7 +152,7 @@ async function checkUrl(url: string, timeoutMs: number, followRedirects: boolean
 
     const responseTimeMs = Date.now() - start;
 
-    // Collect redirect chain — fetch follows automatically; we record final URL if it changed
+    // Collect redirect chain - fetch follows automatically; we record final URL if it changed
     if (followRedirects && res.url !== url) {
       redirectChain.push(res.url);
     }
