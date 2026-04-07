@@ -2,7 +2,7 @@ import { useState } from "react";
 import FadeIn from "./FadeIn";
 import { motion } from "framer-motion";
 
-type Client = "Claude Desktop" | "Cursor" | "Direct API";
+type Client = "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
 
 const claudeConfig = `{
   "mcpServers": {
@@ -18,6 +18,18 @@ const claudeConfig = `{
 
 const cursorConfig = `// .cursor/mcp.json
 {
+  "mcpServers": {
+    "unclick": {
+      "command": "npx",
+      "args": ["-y", "@unclick/mcp-server"],
+      "env": {
+        "UNCLICK_API_KEY": "YOUR_API_KEY"
+      }
+    }
+  }
+}`;
+
+const openclawConfig = `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
@@ -45,6 +57,11 @@ const configs: Record<Client, { code: string; label: string; file: string }> = {
     label: "Add to .cursor/mcp.json",
     file: ".cursor/mcp.json",
   },
+  OpenClaw: {
+    code: openclawConfig,
+    label: "Add to ~/.openclaw/openclaw.json",
+    file: "openclaw.json",
+  },
   "Direct API": {
     code: apiConfig,
     label: "Call any endpoint directly",
@@ -52,10 +69,10 @@ const configs: Record<Client, { code: string; label: string; file: string }> = {
   },
 };
 
-const clients: Client[] = ["Claude Desktop", "Cursor", "Direct API"];
+const clients: Client[] = ["Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
 
 const steps = [
-  { n: "1", label: "Get your free API key", detail: "Email hello@unclick.world - keys are free, takes a few minutes." },
+  { n: "1", label: "Request your free API key", detail: "Email hello@unclick.world to request a key. Keys are issued instantly once self-serve signup is ready." },
   { n: "2", label: "Copy the config below", detail: "Pick your AI client, copy the snippet, and replace YOUR_API_KEY." },
   { n: "3", label: "Restart your AI and ask", detail: 'Your AI now has all 26 tools. Try: "shorten this link" or "make a QR code."' },
 ];
@@ -144,14 +161,14 @@ const InstallSection = () => {
 
       <FadeIn delay={0.3}>
         <p className="mt-5 text-xs text-muted-foreground">
-          Need a key? Email{" "}
+          Request your free API key at{" "}
           <a
             href="mailto:hello@unclick.world"
             className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
           >
             hello@unclick.world
           </a>
-          . Keys are free - we just want to know who is using the API.
+          . Keys will be issued instantly once self-serve signup is live.
         </p>
       </FadeIn>
     </section>
