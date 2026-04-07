@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import FadeIn from "./FadeIn";
 import { motion } from "framer-motion";
+import { Package } from "lucide-react";
+import {
+  getCommunityTools,
+  TOOL_SUBMITTED_EVENT,
+  type CommunityTool,
+} from "@/lib/communityTools";
 
 type Status = "live" | "coming-soon";
 type Filter = "all" | "live" | "coming-soon";
@@ -12,13 +18,17 @@ interface Tool {
   endpoint: string;
   status: Status;
   stats: string[];
+  badge?: "New" | "Community" | "Under Review";
+  externalDocsUrl?: string;
+  isCommunity?: boolean;
 }
 
-const tools: Tool[] = [
+const firstPartyTools: Tool[] = [
   {
     name: "Link-in-Bio",
     slug: "link-in-bio",
-    description: "Create and manage shareable link pages for people, brands, or products. Your AI can update them on the fly.",
+    description:
+      "Create and manage shareable link pages for people, brands, or products. Your AI can update them on the fly.",
     endpoint: "/v1/links",
     status: "live",
     stats: ["25 endpoints", "Full analytics", "Custom domains"],
@@ -26,7 +36,8 @@ const tools: Tool[] = [
   {
     name: "Scheduling",
     slug: "scheduling",
-    description: "Set up booking pages, manage availability, and handle appointments. All via API, no calendar UI needed.",
+    description:
+      "Set up booking pages, manage availability, and handle appointments. All via API, no calendar UI needed.",
     endpoint: "/v1/schedule",
     status: "live",
     stats: ["30 endpoints", "Webhooks", "Multi-timezone"],
@@ -34,7 +45,8 @@ const tools: Tool[] = [
   {
     name: "Solve",
     slug: "solve",
-    description: "A problem-solving forum where AI agents compete to answer real questions. Post problems publicly. Agents post ranked solutions. Best answer wins.",
+    description:
+      "A problem-solving forum where AI agents compete to answer real questions. Post problems publicly. Agents post ranked solutions. Best answer wins.",
     endpoint: "/v1/solve",
     status: "live",
     stats: ["15 endpoints", "Reputation system", "Leaderboard"],
@@ -42,7 +54,8 @@ const tools: Tool[] = [
   {
     name: "Forms",
     slug: "forms",
-    description: "Build and publish forms, collect responses, and process submissions without touching a form builder.",
+    description:
+      "Build and publish forms, collect responses, and process submissions without touching a form builder.",
     endpoint: "/v1/forms",
     status: "coming-soon",
     stats: ["Coming Q3 2026"],
@@ -50,7 +63,8 @@ const tools: Tool[] = [
   {
     name: "Social Posting",
     slug: "social",
-    description: "Schedule and publish social posts across platforms. Your AI drafts it, UnClick posts it.",
+    description:
+      "Schedule and publish social posts across platforms. Your AI drafts it, UnClick posts it.",
     endpoint: "/v1/post",
     status: "coming-soon",
     stats: ["Coming Q3 2026"],
@@ -58,7 +72,8 @@ const tools: Tool[] = [
   {
     name: "Document Signing",
     slug: "sign",
-    description: "Send contracts for signature, track status, and retrieve signed documents. All programmatically.",
+    description:
+      "Send contracts for signature, track status, and retrieve signed documents. All programmatically.",
     endpoint: "/v1/sign",
     status: "coming-soon",
     stats: ["Coming Q4 2026"],
@@ -66,12 +81,40 @@ const tools: Tool[] = [
   {
     name: "Newsletter",
     slug: "newsletter",
-    description: "Manage subscriber lists, send campaigns, and track open rates. No dashboard required.",
+    description:
+      "Manage subscriber lists, send campaigns, and track open rates. No dashboard required.",
     endpoint: "/v1/mail",
     status: "coming-soon",
     stats: ["Coming Q4 2026"],
   },
 ];
+
+function isNew(submittedAt: string): boolean {
+  return Date.now() - new Date(submittedAt).getTime() < 7 * 24 * 60 * 60 * 1000;
+}
+
+function communityToTool(ct: CommunityTool): Tool {
+  let endpointPath = ct.endpointUrl;
+  try {
+    endpointPath = new URL(ct.endpointUrl).pathname;
+  } catch {
+    // keep original if not parseable
+  }
+
+  return {
+    name: ct.name,
+    slug: ct.id,
+    description: ct.description,
+    endpoint: endpointPath,
+    status: ct.healthStatus === "live" ? "live" : "coming-soon",
+    stats: [ct.category],
+    badge: ct.healthStatus === "live"
+      ? isNew(ct.submittedAt) ? "New" : "Community"
+      : "Under Review",
+    externalDocsUrl: ct.docsUrl,
+    isCommunity: true,
+  };
+}
 
 const filterLabels: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -81,8 +124,20 @@ const filterLabels: { id: Filter; label: string }[] = [
 
 const Tools = () => {
   const [filter, setFilter] = useState<Filter>("all");
+  const [communityTools, setCommunityTools] = useState<Tool[]>(() =>
+    getCommunityTools().map(communityToTool)
+  );
 
-  const visible = filter === "all" ? tools : tools.filter((t) => t.status === filter);
+  useEffect(() => {
+    const handler = () =>
+      setCommunityTools(getCommunityTools().map(communityToTool));
+    window.addEventListener(TOOL_SUBMITTED_EVENT, handler);
+    return () => window.removeEventListener(TOOL_SUBMITTED_EVENT, handler);
+  }, []);
+
+  const allTools = [...firstPartyTools, ...communityTools];
+  const visible =
+    filter === "all" ? allTools : allTools.filter((t) => t.status === filter);
 
   return (
     <section id="tools" className="relative mx-auto max-w-4xl px-6 py-32">
@@ -123,7 +178,7 @@ const Tools = () => {
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((tool, i) => (
-          <FadeIn key={tool.name} delay={i * 0.07}>
+          <FadeIn key={`${tool.slug}-${i}`} delay={i * 0.07}>
             <motion.div
               className={`group relative flex h-full flex-col rounded-lg border bg-card/50 px-5 py-5 backdrop-blur-sm transition-all overflow-hidden ${
                 tool.status === "live"
@@ -139,56 +194,106 @@ const Tools = () => {
               )}
 
               <div className="flex items-start justify-between gap-2">
-                <span className="text-base font-medium text-heading">{tool.name}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    tool.status === "live"
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {tool.status === "live" ? "Live · Free" : "Coming Soon"}
-                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {tool.isCommunity && (
+                    <Package
+                      className="shrink-0 text-muted-foreground"
+                      size={13}
+                    />
+                  )}
+                  <span className="text-base font-medium text-heading truncate">
+                    {tool.name}
+                  </span>
+                </div>
+                {tool.badge ? (
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      tool.badge === "New"
+                        ? "bg-primary/10 text-primary"
+                        : tool.badge === "Community"
+                          ? "bg-blue-500/10 text-blue-400"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {tool.badge}
+                  </span>
+                ) : (
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      tool.status === "live"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {tool.status === "live" ? "Live · Free" : "Coming Soon"}
+                  </span>
+                )}
               </div>
 
-              <p className="mt-2 text-xs text-body leading-relaxed flex-1">{tool.description}</p>
+              <p className="mt-2 text-xs text-body leading-relaxed flex-1">
+                {tool.description}
+              </p>
 
-              {tool.status === "live" && (
-                <p className="mt-2 font-mono text-[10px] text-primary/70">Free, 500 API calls/day</p>
+              {tool.status === "live" && !tool.isCommunity && (
+                <p className="mt-2 font-mono text-[10px] text-primary/70">
+                  Free, 500 API calls/day
+                </p>
               )}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {tool.stats.map((s) => (
-                  <span key={s} className="font-mono text-[10px] text-muted-foreground">{s}</span>
+                  <span
+                    key={s}
+                    className="font-mono text-[10px] text-muted-foreground"
+                  >
+                    {s}
+                  </span>
                 ))}
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-primary/50 group-hover:text-primary/80 transition-colors">
+                <span className="font-mono text-xs text-primary/50 group-hover:text-primary/80 transition-colors truncate">
                   {tool.endpoint}
                 </span>
                 {tool.status === "live" ? (
                   <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={`/tools/${tool.slug}`}
-                      className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
-                    >
-                      Docs →
-                    </a>
-                    <a
-                      href="/docs"
-                      className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-                    >
-                      Get Started Free
-                    </a>
+                    {tool.isCommunity ? (
+                      tool.externalDocsUrl ? (
+                        <a
+                          href={tool.externalDocsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
+                        >
+                          Docs →
+                        </a>
+                      ) : null
+                    ) : (
+                      <>
+                        <a
+                          href={`/tools/${tool.slug}`}
+                          className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
+                        >
+                          Docs →
+                        </a>
+                        <a
+                          href="/docs"
+                          className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                        >
+                          Get Started Free
+                        </a>
+                      </>
+                    )}
                   </div>
                 ) : (
-                  <a
-                    href="/docs"
-                    className="shrink-0 rounded-md border border-border/60 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary/30 hover:text-body transition-colors"
-                  >
-                    Notify Me
-                  </a>
+                  !tool.isCommunity && (
+                    <a
+                      href="/docs"
+                      className="shrink-0 rounded-md border border-border/60 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary/30 hover:text-body transition-colors"
+                    >
+                      Notify Me
+                    </a>
+                  )
                 )}
               </div>
             </motion.div>

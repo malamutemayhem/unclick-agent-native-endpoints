@@ -1,5 +1,5 @@
 import FadeIn from "./FadeIn";
-import { motion } from "framer-motion";
+import ToolSubmitForm from "./ToolSubmitForm";
 
 const perks = [
   {
@@ -61,32 +61,20 @@ const ForDevelopers = () => (
       </FadeIn>
 
       <FadeIn delay={0.5}>
-        <div className="mt-12 rounded-xl border border-border/60 bg-card/30 p-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-            <div>
-              <h3 className="text-lg font-semibold text-heading">Ready to list your tool?</h3>
-              <p className="mt-2 text-sm text-body max-w-sm">
-                You need a REST API and a short description. We handle the rest - listing, auth, billing, and distribution.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 shrink-0">
-              <motion.a
-                href="mailto:hello@unclick.world"
-                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
-                whileHover={{ scale: 1.03, boxShadow: "0 0 30px 6px rgba(226,185,59,0.2)" }}
-                whileTap={{ scale: 0.98 }}
-              >
-                List your first tool
-                <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
-              </motion.a>
-              <a
-                href="/docs"
-                className="text-center text-xs text-muted-foreground underline underline-offset-4 hover:text-body transition-colors"
-              >
-                Read the developer docs
-              </a>
-            </div>
+        <div className="mt-12">
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-heading">List your tool</h3>
+            <p className="mt-2 text-sm text-body max-w-sm">
+              You need a REST endpoint and a short description. We run a quick health check and you're in.
+            </p>
           </div>
+          <ToolSubmitForm />
+          <a
+            href="/docs"
+            className="mt-4 inline-block text-xs text-muted-foreground underline underline-offset-4 hover:text-body transition-colors"
+          >
+            Read the developer docs
+          </a>
         </div>
       </FadeIn>
     </div>
