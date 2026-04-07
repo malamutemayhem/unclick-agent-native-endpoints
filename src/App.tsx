@@ -13,6 +13,7 @@ import SolvePage from "./pages/tools/Solve.tsx";
 import ArenaHome from "./pages/arena/ArenaHome.tsx";
 import ArenaProblem from "./pages/arena/ArenaProblem.tsx";
 import FAQPage from "./pages/FAQPage.tsx";
+import SettingsPage from "./pages/Settings.tsx";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/arena" element={<ArenaHome />} />
           <Route path="/arena/:id" element={<ArenaProblem />} />
           <Route path="/faq" element={<FAQPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -1,29 +1,58 @@
 import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
-  const isHome = typeof window !== "undefined" && window.location.pathname === "/";
-  const toolsHref = isHome ? "#tools" : "/#tools";
+  const { pathname } = useLocation();
+  const isHome = pathname === "/";
   const installHref = isHome ? "#install" : "/#install";
+
+  const navLinks = [
+    { label: "Tools", href: isHome ? "#tools" : "/#tools", anchor: true },
+    { label: "Arena", href: "/arena" },
+    { label: "Docs", href: "/docs" },
+    { label: "FAQ", href: "/faq" },
+  ];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
       <div className="container mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-        <a href="/" className="font-mono text-lg font-semibold text-heading tracking-tight">UnClick</a>
+        <Link to="/" className="font-mono text-lg font-semibold text-heading tracking-tight">
+          UnClick
+        </Link>
 
         {/* Desktop nav */}
         <div className="hidden items-center gap-8 md:flex">
-          <a href={toolsHref} className="text-sm text-body transition-colors hover:text-heading">Tools</a>
-          <a href={installHref} className="text-sm text-body transition-colors hover:text-heading">Install</a>
-          <a href="/docs" className="text-sm text-body transition-colors hover:text-heading">Docs</a>
-          <a href="/faq" className="text-sm text-body transition-colors hover:text-heading">FAQ</a>
+          {navLinks.map((link) =>
+            link.anchor ? (
+              <a
+                key={link.label}
+                href={link.href}
+                className="text-sm text-body transition-colors hover:text-heading"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.label}
+                to={link.href}
+                className={`text-sm transition-colors hover:text-heading ${
+                  pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href))
+                    ? "text-heading"
+                    : "text-body"
+                }`}
+              >
+                {link.label}
+              </Link>
+            )
+          )}
         </div>
 
         <div className="flex items-center gap-3">
           <a
             href={installHref}
-            className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="hidden rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:block"
           >
             Get Started Free
           </a>
@@ -64,12 +93,30 @@ const Navbar = () => {
             className="overflow-hidden border-t border-border/50 bg-background/95 backdrop-blur-md md:hidden"
           >
             <div className="flex flex-col gap-1 px-6 py-4">
-              <a href={toolsHref} onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Tools</a>
-              <a href={installHref} onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Install</a>
-              <a href="/docs" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Docs</a>
-              <a href="/faq" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">FAQ</a>
+              {navLinks.map((link) =>
+                link.anchor ? (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    onClick={() => setOpen(false)}
+                    className="py-2 text-sm text-body transition-colors hover:text-heading"
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={link.label}
+                    to={link.href}
+                    onClick={() => setOpen(false)}
+                    className="py-2 text-sm text-body transition-colors hover:text-heading"
+                  >
+                    {link.label}
+                  </Link>
+                )
+              )}
               <a
                 href={installHref}
+                onClick={() => setOpen(false)}
                 className="mt-2 rounded-md bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground"
               >
                 Get Started Free

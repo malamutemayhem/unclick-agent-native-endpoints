@@ -1,36 +1,86 @@
-const footerLinks = [
-  { label: "Get Started Free", href: "/docs" },
+import { Link } from "react-router-dom";
+
+const PRODUCT_LINKS = [
+  { label: "Tools", href: "/tools" },
+  { label: "Arena", href: "/arena" },
   { label: "Docs", href: "/docs" },
-  { label: "GitHub", href: "https://github.com/unclick-world", external: true },
-  { label: "Terms", href: "/terms" },
-  { label: "Privacy", href: "/privacy" },
-  { label: "Status", href: "https://status.unclick.world", external: true },
-  { label: "Contact", href: "mailto:chris@unclick.world" },
+  { label: "FAQ", href: "/faq" },
 ];
 
+const COMPANY_LINKS = [
+  { label: "About", href: "/about" },
+  { label: "Contact", href: "mailto:chris@unclick.world" },
+  { label: "GitHub", href: "https://github.com/unclick-world", external: true },
+  { label: "Status", href: "https://status.unclick.world", external: true },
+];
+
+const LEGAL_LINKS = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Terms", href: "/terms" },
+];
+
+function FooterLinkGroup({ title, links }: { title: string; links: typeof PRODUCT_LINKS }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-custom">
+        {title}
+      </span>
+      {links.map((link) =>
+        "external" in link && link.external ? (
+          <a
+            key={link.label}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-custom transition-colors hover:text-body"
+          >
+            {link.label}
+          </a>
+        ) : link.href.startsWith("mailto:") ? (
+          <a
+            key={link.label}
+            href={link.href}
+            className="text-xs text-muted-custom transition-colors hover:text-body"
+          >
+            {link.label}
+          </a>
+        ) : (
+          <Link
+            key={link.label}
+            to={link.href}
+            className="text-xs text-muted-custom transition-colors hover:text-body"
+          >
+            {link.label}
+          </Link>
+        )
+      )}
+    </div>
+  );
+}
+
 const Footer = () => (
-  <footer className="border-t border-border px-6 py-10">
+  <footer className="border-t border-border px-6 py-12">
     <div className="container mx-auto max-w-5xl">
-      <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-        <div>
-          <span className="font-mono text-sm font-semibold text-heading">UnClick</span>
-          <p className="mt-1 text-xs text-muted-custom">Agent-native APIs. Built in Melbourne, Australia.</p>
+      <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+        {/* Brand */}
+        <div className="col-span-2 sm:col-span-1">
+          <Link to="/" className="font-mono text-sm font-semibold text-heading">
+            UnClick
+          </Link>
+          <p className="mt-2 text-xs text-muted-custom leading-relaxed">
+            Agent-native APIs.<br />Built in Melbourne, Australia.
+          </p>
         </div>
-        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-          {footerLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className="text-xs text-muted-custom transition-colors hover:text-body"
-            >
-              {link.label}
-            </a>
-          ))}
-        </div>
+
+        <FooterLinkGroup title="Product" links={PRODUCT_LINKS} />
+        <FooterLinkGroup title="Company" links={COMPANY_LINKS} />
+        <FooterLinkGroup title="Legal" links={LEGAL_LINKS} />
       </div>
-      <div className="mt-6 border-t border-border/40 pt-6 text-center">
-        <span className="text-xs text-muted-custom">&copy; 2026 UnClick Pty Ltd. All rights reserved.</span>
+
+      <div className="mt-10 border-t border-border/40 pt-6 text-center">
+        <span className="text-xs text-muted-custom">
+          &copy; 2026 UnClick Pty Ltd. All rights reserved.
+        </span>
       </div>
     </div>
   </footer>
