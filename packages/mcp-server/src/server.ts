@@ -6,6 +6,18 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { CATALOG, TOOL_MAP, ENDPOINT_MAP, type ToolDef } from "./catalog.js";
 import { createClient, type UnClickClient } from "./client.js";
+import {
+  countText,
+  generateSlug,
+  generateLorem,
+  decodeJwt,
+  lookupHttpStatus,
+  searchEmoji,
+  parseUserAgent,
+  generateReadme,
+  generateChangelog,
+  getFaviconUrls,
+} from "./local-tools.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -386,6 +398,165 @@ const DIRECT_TOOLS = [
       required: ["key"],
     },
   },
+  // ── Local tools (no API call required) ────────────────────────────────────
+  {
+    name: "unclick_count_text",
+    description:
+      "Count words, characters, sentences, lines, and paragraphs in any text.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "Text to analyse" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "unclick_slug",
+    description:
+      "Convert any string into a URL-friendly slug: lowercase, ASCII, words joined by a separator.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "Text to slugify" },
+        separator: { type: "string", default: "-", description: "Word separator (default: '-')" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "unclick_lorem_ipsum",
+    description:
+      "Generate Lorem Ipsum placeholder text by words, sentences, or paragraphs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        count: { type: "number", minimum: 1, maximum: 100, default: 5 },
+        unit: {
+          type: "string",
+          enum: ["words", "sentences", "paragraphs"],
+          default: "sentences",
+        },
+        start_with_lorem: {
+          type: "boolean",
+          default: true,
+          description: "Start output with 'Lorem ipsum...'",
+        },
+      },
+    },
+  },
+  {
+    name: "unclick_decode_jwt",
+    description:
+      "Decode a JWT token and inspect its header, payload, and expiry. " +
+      "Does NOT verify the signature — for inspection only.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        token: { type: "string", description: "JWT string (three dot-separated parts)" },
+      },
+      required: ["token"],
+    },
+  },
+  {
+    name: "unclick_http_status",
+    description:
+      "Look up any HTTP status code: get its official phrase, category, and a plain-English description.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        code: { type: "number", description: "HTTP status code, e.g. 404, 200, 429" },
+      },
+      required: ["code"],
+    },
+  },
+  {
+    name: "unclick_emoji_search",
+    description:
+      "Find emoji by keyword. Returns matching emoji with names and keywords.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        keyword: { type: "string", description: "Search term, e.g. 'fire', 'happy', 'rocket'" },
+        limit: { type: "number", minimum: 1, maximum: 30, default: 10 },
+      },
+      required: ["keyword"],
+    },
+  },
+  {
+    name: "unclick_parse_user_agent",
+    description:
+      "Parse a browser User-Agent string into browser, OS, device type, and rendering engine.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        user_agent: {
+          type: "string",
+          description: "Full User-Agent header value",
+        },
+      },
+      required: ["user_agent"],
+    },
+  },
+  {
+    name: "unclick_readme_template",
+    description:
+      "Scaffold a README.md from project info: name, description, install command, usage snippet, license.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Project name" },
+        description: { type: "string", description: "One-line project description" },
+        install: { type: "string", description: "Install command (optional — auto-detected from language)" },
+        usage: { type: "string", description: "Usage code snippet (optional)" },
+        language: {
+          type: "string",
+          enum: ["javascript", "typescript", "python", "rust", "go", "other"],
+          description: "Primary language — used to pick install command if not provided",
+        },
+        license: { type: "string", default: "MIT" },
+        repo: { type: "string", description: "GitHub repo URL (optional, e.g. https://github.com/owner/repo)" },
+        badges: { type: "boolean", default: true },
+      },
+      required: ["name", "description"],
+    },
+  },
+  {
+    name: "unclick_changelog_entry",
+    description:
+      "Format a Keep a Changelog-style entry for a release. " +
+      "Provide the version and lists of added/changed/fixed/removed items.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        version: { type: "string", description: "Semantic version, e.g. '1.2.0'" },
+        date: { type: "string", description: "ISO date (default: today)" },
+        added: { type: "array", items: { type: "string" }, description: "New features" },
+        changed: { type: "array", items: { type: "string" }, description: "Changes to existing functionality" },
+        deprecated: { type: "array", items: { type: "string" } },
+        removed: { type: "array", items: { type: "string" } },
+        fixed: { type: "array", items: { type: "string" }, description: "Bug fixes" },
+        security: { type: "array", items: { type: "string" }, description: "Security fixes" },
+      },
+      required: ["version"],
+    },
+  },
+  {
+    name: "unclick_favicon_url",
+    description:
+      "Get the favicon URLs for any website domain — returns the direct /favicon.ico URL plus " +
+      "reliable fallback URLs via Google and DuckDuckGo favicon APIs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        domain: {
+          type: "string",
+          description: "Domain or URL, e.g. 'github.com' or 'https://github.com/owner/repo'",
+        },
+      },
+      required: ["domain"],
+    },
+  },
   {
     name: "report_bug",
     description:
@@ -501,6 +672,73 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 
   report_bug: (c, a) =>
     c.call("POST", "/v1/report-bug", a as Record<string, unknown>),
+
+  // ── Local handlers (pure computation, no API call) ────────────────────────
+
+  unclick_count_text: async (_c, a) =>
+    countText(String(a.text ?? "")),
+
+  unclick_slug: async (_c, a) =>
+    ({ slug: generateSlug(String(a.text ?? ""), String(a.separator ?? "-")) }),
+
+  unclick_lorem_ipsum: async (_c, a) => {
+    const count = Math.min(100, Math.max(1, Number(a.count ?? 5)));
+    const unit = (a.unit as "words" | "sentences" | "paragraphs") ?? "sentences";
+    const startWithLorem = a.start_with_lorem !== false;
+    return { text: generateLorem(count, unit, startWithLorem), unit, count };
+  },
+
+  unclick_decode_jwt: async (_c, a) =>
+    decodeJwt(String(a.token ?? "")),
+
+  unclick_http_status: async (_c, a) =>
+    lookupHttpStatus(Number(a.code)),
+
+  unclick_emoji_search: async (_c, a) => {
+    const limit = Math.min(30, Math.max(1, Number(a.limit ?? 10)));
+    const results = searchEmoji(String(a.keyword ?? ""), limit);
+    return {
+      keyword: a.keyword,
+      count: results.length,
+      results: results.map((e) => ({ emoji: e.emoji, name: e.name, keywords: e.keywords })),
+    };
+  },
+
+  unclick_parse_user_agent: async (_c, a) =>
+    parseUserAgent(String(a.user_agent ?? "")),
+
+  unclick_readme_template: async (_c, a) => {
+    const md = generateReadme({
+      name: String(a.name ?? ""),
+      description: String(a.description ?? ""),
+      install: a.install ? String(a.install) : undefined,
+      usage: a.usage ? String(a.usage) : undefined,
+      language: a.language ? String(a.language) : undefined,
+      license: a.license ? String(a.license) : "MIT",
+      repo: a.repo ? String(a.repo) : undefined,
+      badges: a.badges !== false,
+    });
+    return { markdown: md };
+  },
+
+  unclick_changelog_entry: async (_c, a) => {
+    const toStrArray = (v: unknown): string[] =>
+      Array.isArray(v) ? v.map(String) : [];
+    const md = generateChangelog({
+      version: String(a.version ?? "0.0.0"),
+      date: a.date ? String(a.date) : undefined,
+      added: toStrArray(a.added),
+      changed: toStrArray(a.changed),
+      deprecated: toStrArray(a.deprecated),
+      removed: toStrArray(a.removed),
+      fixed: toStrArray(a.fixed),
+      security: toStrArray(a.security),
+    });
+    return { markdown: md };
+  },
+
+  unclick_favicon_url: async (_c, a) =>
+    getFaviconUrls(String(a.domain ?? "")),
 };
 
 // ─── Server factory ─────────────────────────────────────────────────────────
