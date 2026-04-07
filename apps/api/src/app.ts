@@ -41,6 +41,9 @@ import { createKvRouter } from './routes/kv.js';
 import { createRegexRouter } from './routes/regex.js';
 import { createColorRouter } from './routes/color.js';
 import { createIpRouter } from './routes/ip.js';
+import { createPasteRouter } from './routes/paste.js';
+import { createSecretRouter } from './routes/secret.js';
+import { createLoremRouter } from './routes/lorem.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -390,6 +393,21 @@ export function createApp() {
   // IP utility (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/ip', createIpRouter());
+
+  // -------------------------------------------------------------------------
+  // Paste API (agent pastebin)
+  // -------------------------------------------------------------------------
+  app.route('/v1/paste', createPasteRouter(db));
+
+  // -------------------------------------------------------------------------
+  // Secret API (one-time encrypted secrets)
+  // -------------------------------------------------------------------------
+  app.route('/v1/secret', createSecretRouter(db));
+
+  // -------------------------------------------------------------------------
+  // Lorem ipsum generator (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/lorem', createLoremRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
