@@ -47,6 +47,9 @@ import { createLoremRouter } from './routes/lorem.js';
 import { createDnsRouter } from './routes/dns.js';
 import { createHeadersRouter } from './routes/headers.js';
 import { createCountRouter } from './routes/count.js';
+import { createUnitsRouter } from './routes/units.js';
+import { createOgRouter } from './routes/og.js';
+import { createPingRouter } from './routes/ping.js';
 import { createMarketplaceRouter } from './routes/marketplace.js';
 import { createBillingRouter } from './routes/billing.js';
 import type { AppVariables } from './middleware/types.js';
@@ -434,6 +437,21 @@ export function createApp() {
   // Text count utility (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/count', createCountRouter());
+
+  // -------------------------------------------------------------------------
+  // Units converter (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/units', createUnitsRouter());
+
+  // -------------------------------------------------------------------------
+  // Open Graph / meta extraction (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/og', createOgRouter());
+
+  // -------------------------------------------------------------------------
+  // Ping / uptime checker (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/ping', createPingRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
