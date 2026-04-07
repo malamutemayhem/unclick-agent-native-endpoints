@@ -431,6 +431,171 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS kv_store_expires_idx ON kv_store(expires_at) WHERE expires_at IS NOT NULL;
   `);
 
+  // Marketplace tables
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS publishers (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT NOT NULL,
+      website_url TEXT,
+      avatar_url TEXT,
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS publishers_slug_idx ON publishers(slug);
+    CREATE INDEX IF NOT EXISTS publishers_org_idx ON publishers(org_id);
+
+    CREATE TABLE IF NOT EXISTS marketplace_categories (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      tool_count INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS marketplace_categories_slug_idx ON marketplace_categories(slug);
+
+    CREATE TABLE IF NOT EXISTS marketplace_tools (
+      id TEXT PRIMARY KEY,
+      publisher_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      tagline TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      icon_url TEXT,
+      openapi_spec TEXT NOT NULL DEFAULT '{}',
+      base_url TEXT NOT NULL,
+      is_internal BOOLEAN NOT NULL DEFAULT FALSE,
+      is_proxied BOOLEAN NOT NULL DEFAULT TRUE,
+      status TEXT NOT NULL DEFAULT 'draft',
+      version TEXT NOT NULL DEFAULT '1.0.0',
+      total_calls INTEGER NOT NULL DEFAULT 0,
+      monthly_calls INTEGER NOT NULL DEFAULT 0,
+      avg_response_ms INTEGER,
+      rating REAL,
+      rating_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      published_at TIMESTAMPTZ
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS marketplace_tools_slug_idx ON marketplace_tools(slug);
+    CREATE INDEX IF NOT EXISTS marketplace_tools_publisher_idx ON marketplace_tools(publisher_id);
+    CREATE INDEX IF NOT EXISTS marketplace_tools_category_idx ON marketplace_tools(category);
+    CREATE INDEX IF NOT EXISTS marketplace_tools_status_idx ON marketplace_tools(status);
+
+    CREATE TABLE IF NOT EXISTS marketplace_endpoints (
+      id TEXT PRIMARY KEY,
+      tool_id TEXT NOT NULL,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      request_schema TEXT NOT NULL DEFAULT '{}',
+      response_schema TEXT NOT NULL DEFAULT '{}',
+      scopes_required TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_endpoints_tool_idx ON marketplace_endpoints(tool_id);
+
+    CREATE TABLE IF NOT EXISTS marketplace_tags (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS marketplace_tags_slug_idx ON marketplace_tags(slug);
+
+    CREATE TABLE IF NOT EXISTS marketplace_tool_tags (
+      id TEXT PRIMARY KEY,
+      tool_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      UNIQUE(tool_id, tag_id)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_tool_tags_tool_idx ON marketplace_tool_tags(tool_id);
+    CREATE INDEX IF NOT EXISTS marketplace_tool_tags_tag_idx ON marketplace_tool_tags(tag_id);
+
+    CREATE TABLE IF NOT EXISTS marketplace_ratings (
+      id TEXT PRIMARY KEY,
+      tool_id TEXT NOT NULL,
+      org_id TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      review TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(tool_id, org_id)
+    );
+    CREATE INDEX IF NOT EXISTS marketplace_ratings_tool_idx ON marketplace_ratings(tool_id);
+  `);
+
+  // Billing / metering tables (Stripe agent payment rails)
+  await client.exec(`
+    CREATE TABLE IF NOT EXISTS tool_pricing (
+      id TEXT PRIMARY KEY,
+      tool_slug TEXT NOT NULL,
+      publisher_id TEXT NOT NULL,
+      price_per_call_micro INTEGER NOT NULL DEFAULT 0,
+      free_tier_calls INTEGER NOT NULL DEFAULT 1000,
+      stripe_price_id TEXT,
+      stripe_meter_id TEXT,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS tool_pricing_tool_slug_idx ON tool_pricing(tool_slug);
+    CREATE INDEX IF NOT EXISTS tool_pricing_publisher_idx ON tool_pricing(publisher_id);
+
+    CREATE TABLE IF NOT EXISTS billing_events (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      tool_slug TEXT NOT NULL,
+      api_key_id TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      response_ms INTEGER,
+      reported BOOLEAN NOT NULL DEFAULT FALSE,
+      stripe_meter_event_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS billing_events_org_idx ON billing_events(org_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS billing_events_tool_idx ON billing_events(tool_slug, created_at DESC);
+    CREATE INDEX IF NOT EXISTS billing_events_unreported_idx ON billing_events(reported) WHERE reported = FALSE;
+
+    CREATE TABLE IF NOT EXISTS billing_meters (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      tool_slug TEXT NOT NULL,
+      period TEXT NOT NULL,
+      calls INTEGER NOT NULL DEFAULT 0,
+      billable_calls INTEGER NOT NULL DEFAULT 0,
+      total_ms INTEGER NOT NULL DEFAULT 0,
+      billed_amount_cents INTEGER NOT NULL DEFAULT 0,
+      billing_status TEXT NOT NULL DEFAULT 'pending',
+      stripe_record_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(org_id, tool_slug, period)
+    );
+    CREATE INDEX IF NOT EXISTS billing_meters_org_idx ON billing_meters(org_id);
+    CREATE INDEX IF NOT EXISTS billing_meters_status_idx ON billing_meters(billing_status);
+
+    CREATE TABLE IF NOT EXISTS revenue_share (
+      id TEXT PRIMARY KEY,
+      publisher_id TEXT NOT NULL,
+      period TEXT NOT NULL,
+      gross_amount_cents INTEGER NOT NULL DEFAULT 0,
+      share_pct REAL NOT NULL DEFAULT 70,
+      net_amount_cents INTEGER NOT NULL DEFAULT 0,
+      stripe_transfer_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(publisher_id, period)
+    );
+    CREATE INDEX IF NOT EXISTS revenue_share_publisher_idx ON revenue_share(publisher_id);
+    CREATE INDEX IF NOT EXISTS revenue_share_status_idx ON revenue_share(status);
+  `);
+
   // Shorten API tables
   await client.exec(`
     CREATE TABLE IF NOT EXISTS shortened_urls (
@@ -456,6 +621,139 @@ export async function initDb(): Promise<void> {
       ('cat_devtools',   'Dev Tools',   'dev-tools',  'Programming, debugging, architecture, DevOps',           '🛠️',  6),
       ('cat_business',   'Business',    'business',   'Strategy, operations, finance, project management',      '💼',  7),
       ('cat_general',    'General',     'general',    'Everything that does not fit another category',          '💡',  8)
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
+  // Seed marketplace: system org, publisher, categories, 23 internal tools
+  await client.exec(`
+    INSERT INTO orgs (id, name, slug, plan) VALUES
+      ('org_system', 'UnClick System', 'unclick-system', 'pro')
+    ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO publishers (id, org_id, display_name, slug, description, website_url, verified, created_at, updated_at) VALUES
+      ('pub_unclick', 'org_system', 'UnClick', 'unclick', 'Official UnClick developer tools — agent-native APIs for every workflow.', 'https://unclick.dev', TRUE, NOW(), NOW())
+    ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO marketplace_categories (id, slug, name, description, icon, tool_count, sort_order) VALUES
+      ('mpcat_utility',      'utility',      'Utility',      'General-purpose tools: UUIDs, encoding, randomness, timestamps',      '🔧', 4, 1),
+      ('mpcat_text',         'text',         'Text',         'Text processing: transform, markdown, diff, regex',                   '📝', 4, 2),
+      ('mpcat_data',         'data',         'Data',         'Data tools: JSON, CSV, key-value storage, validation',                '📊', 4, 3),
+      ('mpcat_media',        'media',        'Media',        'Media generation: images, QR codes, color utilities',                 '🎨', 3, 4),
+      ('mpcat_network',      'network',      'Network',      'Network tools: URL shortener, IP lookup, webhooks, cron',             '🌐', 4, 5),
+      ('mpcat_productivity', 'productivity', 'Productivity', 'Productivity: link pages, scheduling, AI problem solving',            '🚀', 3, 6),
+      ('mpcat_security',     'security',     'Security',     'Security primitives: hashing, HMAC verification',                    '🔒', 1, 7)
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
+  await client.exec(`
+    INSERT INTO marketplace_tools (id, publisher_id, slug, name, tagline, description, category, base_url, is_internal, is_proxied, status, version, created_at, updated_at, published_at) VALUES
+      ('mpt_shorten',    'pub_unclick', 'unclick-shorten',    'URL Shortener',      'Create short, trackable links instantly',                              'Generate short URLs with click tracking. Redirect, analyze, and manage your links programmatically.',                              'network',      '/v1/shorten',    TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_qr',         'pub_unclick', 'unclick-qr',         'QR Code Generator',  'Generate QR codes from any URL or text',                               'Create customizable QR codes as PNG images. Supports URLs, plain text, and arbitrary data.',                                    'media',        '/v1/qr',         TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_hash',       'pub_unclick', 'unclick-hash',       'Hash & HMAC',        'Compute and verify cryptographic hashes',                              'Hash text with MD5, SHA-1, SHA-256, or SHA-512. Verify hashes and compute HMACs for message integrity.',                        'security',     '/v1/hash',       TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_encode',     'pub_unclick', 'unclick-encode',     'Encode / Decode',    'Base64, URL, HTML, and hex encoding utilities',                        'Encode and decode data in Base64, URL encoding, HTML entities, and hexadecimal formats.',                                      'utility',      '/v1',            TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_transform',  'pub_unclick', 'unclick-transform',  'Text Transform',     'Case, whitespace, and structural text transformations',                'Transform text: uppercase, lowercase, camelCase, snake_case, slug, truncate, reverse, and more.',                              'text',         '/v1/transform',  TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_validate',   'pub_unclick', 'unclick-validate',   'Input Validator',    'Validate emails, URLs, UUIDs, IPs, and more',                          'Validate common input formats: email, URL, UUID, IP address, credit card, ISBN, and postal codes.',                            'data',         '/v1/validate',   TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_uuid',       'pub_unclick', 'unclick-uuid',       'UUID Generator',     'Generate v4, v5, and bulk UUIDs',                                      'Generate RFC-4122 UUIDs in v4 (random) or v5 (namespace) formats. Supports bulk generation.',                                  'utility',      '/v1/uuid',       TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_timestamp',  'pub_unclick', 'unclick-timestamp',  'Timestamp',          'Convert and format Unix timestamps',                                   'Convert between Unix timestamps, ISO 8601, and human-readable formats across timezones.',                                      'utility',      '/v1/timestamp',  TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_random',     'pub_unclick', 'unclick-random',     'Random Generator',   'CSPRNG-backed random numbers, strings, and picks',                     'Generate cryptographically secure random integers, floats, strings, UUIDs, and pick from arrays.',                            'utility',      '/v1/random',     TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_image',      'pub_unclick', 'unclick-image',      'Image Processor',    'Resize, convert, and process images via API',                          'Resize, crop, convert formats, adjust quality, and apply filters to images via API.',                                          'media',        '/v1/image',      TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_csv',        'pub_unclick', 'unclick-csv',        'CSV Processor',      'Parse, filter, sort, and transform CSV data',                          'Parse CSV to JSON, filter rows, sort columns, and export back to CSV. Handles large files.',                                   'data',         '/v1/csv',        TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_json',       'pub_unclick', 'unclick-json',       'JSON Utility',       'Format, validate, query, and diff JSON',                               'Pretty-print, minify, validate, extract values with JSONPath, and diff two JSON structures.',                                  'data',         '/v1/json',       TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_markdown',   'pub_unclick', 'unclick-markdown',   'Markdown',           'Render Markdown to HTML',                                              'Convert GitHub-flavoured Markdown to sanitized HTML. Supports tables, code fences, and task lists.',                           'text',         '/v1/markdown',   TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_diff',       'pub_unclick', 'unclick-diff',       'Text Diff',          'Compute line-by-line and word-level diffs',                            'Compare two strings and get structured or unified diff output. Supports line, word, and char modes.',                           'text',         '/v1/diff',       TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_cron',       'pub_unclick', 'unclick-cron',       'Cron Parser',        'Parse, validate, and describe cron expressions',                       'Parse cron expressions, get next N run times, validate syntax, and translate to human language.',                              'network',      '/v1/cron',       TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_kv',         'pub_unclick', 'unclick-kv',         'Key-Value Store',    'Persistent key-value scratchpad with TTL and prefix filtering',        'Set, get, delete, list, and atomically increment values. Supports TTL, prefix filtering, and bulk ops.',                       'data',         '/v1/kv',         TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_regex',      'pub_unclick', 'unclick-regex',      'Regex Tester',       'Test, match, and replace with regular expressions',                    'Test regex patterns against strings, extract matches and capture groups, and perform replacements.',                            'text',         '/v1/regex',      TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_color',      'pub_unclick', 'unclick-color',      'Color Converter',    'Convert, mix, and generate color palettes',                            'Convert between HEX, RGB, HSL, and HSV. Generate palettes, compute contrast ratios, and mix colors.',                         'media',        '/v1/color',      TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_ip',         'pub_unclick', 'unclick-ip',         'IP Lookup',          'Parse and analyze IPv4/IPv6 addresses',                                'Parse IPv4/IPv6 addresses, check CIDR membership, classify address types, and look up request IP.',                            'network',      '/v1/ip',         TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_links',      'pub_unclick', 'unclick-links',      'Link-in-Bio',        'Create and manage link-in-bio pages',                                  'Build link pages with custom themes, social links, analytics, A/B testing, and custom domains.',                               'productivity', '/v1/links',      TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_scheduling', 'pub_unclick', 'unclick-scheduling', 'Scheduling',         'Availability management and booking for AI agents',                    'Set availability schedules, create bookable event types, and accept bookings with custom intake forms.',                       'productivity', '/v1/scheduling', TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_solve',      'pub_unclick', 'unclick-solve',      'Solve',              'AI agent problem-solving forum with reputation scoring',               'Post problems for AI agents to solve. Agents compete, get scored, and build reputation over time.',                            'productivity', '/v1/solve',      TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW()),
+      ('mpt_webhook',    'pub_unclick', 'unclick-webhook',    'Webhook Bin',        'Capture and inspect incoming HTTP requests',                           'Create temporary webhook endpoints to capture, inspect, and replay HTTP requests.',                                            'network',      '/v1/webhook',    TRUE, FALSE, 'approved', '1.0.0', NOW(), NOW(), NOW())
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
+  // Seed primary endpoints for each internal tool
+  await client.exec(`
+    INSERT INTO marketplace_endpoints (id, tool_id, method, path, summary, scopes_required) VALUES
+      ('mpe_shorten_create',      'mpt_shorten',    'POST', '/v1/shorten',               'Create a shortened URL',             '["shorten:write"]'),
+      ('mpe_shorten_list',        'mpt_shorten',    'GET',  '/v1/shorten',               'List shortened URLs',                '["shorten:read"]'),
+      ('mpe_shorten_delete',      'mpt_shorten',    'DELETE','/v1/shorten/:id',           'Delete a shortened URL',             '["shorten:write"]'),
+      ('mpe_qr_generate',         'mpt_qr',         'POST', '/v1/qr',                    'Generate a QR code PNG',             '["qr:use"]'),
+      ('mpe_hash_compute',        'mpt_hash',       'POST', '/v1/hash',                  'Compute a hash',                     '["hash:use"]'),
+      ('mpe_hash_verify',         'mpt_hash',       'POST', '/v1/hash/verify',           'Verify a hash',                      '["hash:use"]'),
+      ('mpe_hash_hmac',           'mpt_hash',       'POST', '/v1/hash/hmac',             'Compute an HMAC',                    '["hash:use"]'),
+      ('mpe_encode_base64',       'mpt_encode',     'POST', '/v1/encode/base64',         'Base64-encode a string',             '["encode:use"]'),
+      ('mpe_decode_base64',       'mpt_encode',     'POST', '/v1/decode/base64',         'Base64-decode a string',             '["encode:use"]'),
+      ('mpe_encode_url',          'mpt_encode',     'POST', '/v1/encode/url',            'URL-encode a string',                '["encode:use"]'),
+      ('mpe_transform',           'mpt_transform',  'POST', '/v1/transform',             'Transform text',                     '["transform:use"]'),
+      ('mpe_validate',            'mpt_validate',   'POST', '/v1/validate',              'Validate an input value',            '["validate:use"]'),
+      ('mpe_uuid_generate',       'mpt_uuid',       'POST', '/v1/uuid',                  'Generate one or more UUIDs',         '["uuid:use"]'),
+      ('mpe_timestamp_convert',   'mpt_timestamp',  'POST', '/v1/timestamp/convert',     'Convert a timestamp',                '["timestamp:use"]'),
+      ('mpe_timestamp_now',       'mpt_timestamp',  'GET',  '/v1/timestamp/now',         'Get the current timestamp',          '["timestamp:use"]'),
+      ('mpe_random_integer',      'mpt_random',     'POST', '/v1/random/integer',        'Generate a random integer',          '["random:use"]'),
+      ('mpe_random_string',       'mpt_random',     'POST', '/v1/random/string',         'Generate a random string',           '["random:use"]'),
+      ('mpe_random_pick',         'mpt_random',     'POST', '/v1/random/pick',           'Pick random items from an array',    '["random:use"]'),
+      ('mpe_image_resize',        'mpt_image',      'POST', '/v1/image/resize',          'Resize an image',                    '["image:use"]'),
+      ('mpe_image_convert',       'mpt_image',      'POST', '/v1/image/convert',         'Convert image format',               '["image:use"]'),
+      ('mpe_csv_parse',           'mpt_csv',        'POST', '/v1/csv/parse',             'Parse CSV to JSON',                  '["csv:use"]'),
+      ('mpe_csv_export',          'mpt_csv',        'POST', '/v1/csv/export',            'Export JSON array to CSV',           '["csv:use"]'),
+      ('mpe_json_format',         'mpt_json',       'POST', '/v1/json/format',           'Pretty-print or minify JSON',        '["json:use"]'),
+      ('mpe_json_validate',       'mpt_json',       'POST', '/v1/json/validate',         'Validate a JSON string',             '["json:use"]'),
+      ('mpe_json_query',          'mpt_json',       'POST', '/v1/json/query',            'Query JSON with JSONPath',           '["json:use"]'),
+      ('mpe_markdown_render',     'mpt_markdown',   'POST', '/v1/markdown/render',       'Render Markdown to HTML',            '["markdown:use"]'),
+      ('mpe_diff',                'mpt_diff',       'POST', '/v1/diff',                  'Compute a text diff',                '["diff:use"]'),
+      ('mpe_cron_parse',          'mpt_cron',       'POST', '/v1/cron/parse',            'Parse a cron expression',            '["cron:use"]'),
+      ('mpe_cron_next',           'mpt_cron',       'POST', '/v1/cron/next',             'Get next N scheduled times',         '["cron:use"]'),
+      ('mpe_kv_set',              'mpt_kv',         'POST', '/v1/kv/set',                'Set a key-value pair',               '["kv:write"]'),
+      ('mpe_kv_get',              'mpt_kv',         'POST', '/v1/kv/get',                'Get a value by key',                 '["kv:read"]'),
+      ('mpe_kv_delete',           'mpt_kv',         'POST', '/v1/kv/delete',             'Delete a key',                       '["kv:write"]'),
+      ('mpe_kv_list',             'mpt_kv',         'POST', '/v1/kv/list',               'List keys with optional prefix',     '["kv:read"]'),
+      ('mpe_kv_increment',        'mpt_kv',         'POST', '/v1/kv/increment',          'Atomically increment a numeric key', '["kv:write"]'),
+      ('mpe_regex_test',          'mpt_regex',      'POST', '/v1/regex/test',            'Test a regex against a string',      '["regex:use"]'),
+      ('mpe_regex_replace',       'mpt_regex',      'POST', '/v1/regex/replace',         'Replace matches in a string',        '["regex:use"]'),
+      ('mpe_color_convert',       'mpt_color',      'POST', '/v1/color/convert',         'Convert a color between formats',    '["color:use"]'),
+      ('mpe_color_palette',       'mpt_color',      'POST', '/v1/color/palette',         'Generate a color palette',           '["color:use"]'),
+      ('mpe_ip_parse',            'mpt_ip',         'POST', '/v1/ip/parse',              'Parse an IP address',                '["ip:use"]'),
+      ('mpe_ip_me',               'mpt_ip',         'GET',  '/v1/ip/me',                 'Get the caller''s IP info',          '["ip:use"]'),
+      ('mpe_links_pages_list',    'mpt_links',      'GET',  '/v1/links/pages',           'List link pages',                    '["links:read"]'),
+      ('mpe_links_pages_create',  'mpt_links',      'POST', '/v1/links/pages',           'Create a link page',                 '["links:write"]'),
+      ('mpe_scheduling_create',   'mpt_scheduling', 'POST', '/v1/scheduling/bookings',   'Create a booking',                   '["scheduling:write"]'),
+      ('mpe_scheduling_list',     'mpt_scheduling', 'GET',  '/v1/scheduling/bookings',   'List bookings',                      '["scheduling:read"]'),
+      ('mpe_solve_problems',      'mpt_solve',      'GET',  '/v1/solve/problems',        'List open problems',                 '[]'),
+      ('mpe_solve_post',          'mpt_solve',      'POST', '/v1/solve/problems',        'Post a new problem',                 '[]'),
+      ('mpe_solve_solution',      'mpt_solve',      'POST', '/v1/solve/problems/:id/solutions', 'Submit a solution',           '["solve:write"]'),
+      ('mpe_webhook_create',      'mpt_webhook',    'POST', '/v1/webhook/create',        'Create a webhook bin',               '["webhook:write"]'),
+      ('mpe_webhook_requests',    'mpt_webhook',    'GET',  '/v1/webhook/:bin_id/requests', 'List captured requests',          '["webhook:read"]')
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
+  // Seed tool pricing — internal tools are free by default (billed at platform level)
+  await client.exec(`
+    INSERT INTO tool_pricing (id, tool_slug, publisher_id, price_per_call_micro, free_tier_calls, active, created_at, updated_at) VALUES
+      ('tp_shorten',    'unclick-shorten',    'pub_unclick', 0, 10000, TRUE, NOW(), NOW()),
+      ('tp_qr',         'unclick-qr',         'pub_unclick', 0, 5000,  TRUE, NOW(), NOW()),
+      ('tp_hash',       'unclick-hash',       'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_encode',     'unclick-encode',     'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_transform',  'unclick-transform',  'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_validate',   'unclick-validate',   'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_uuid',       'unclick-uuid',       'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_timestamp',  'unclick-timestamp',  'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_random',     'unclick-random',     'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_image',      'unclick-image',      'pub_unclick', 0, 2000,  TRUE, NOW(), NOW()),
+      ('tp_csv',        'unclick-csv',        'pub_unclick', 0, 10000, TRUE, NOW(), NOW()),
+      ('tp_json',       'unclick-json',       'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_markdown',   'unclick-markdown',   'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_diff',       'unclick-diff',       'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_cron',       'unclick-cron',       'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_kv',         'unclick-kv',         'pub_unclick', 0, 10000, TRUE, NOW(), NOW()),
+      ('tp_regex',      'unclick-regex',      'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_color',      'unclick-color',      'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_ip',         'unclick-ip',         'pub_unclick', 0, 50000, TRUE, NOW(), NOW()),
+      ('tp_links',      'unclick-links',      'pub_unclick', 0, 5000,  TRUE, NOW(), NOW()),
+      ('tp_scheduling', 'unclick-scheduling', 'pub_unclick', 0, 2000,  TRUE, NOW(), NOW()),
+      ('tp_solve',      'unclick-solve',      'pub_unclick', 0, 5000,  TRUE, NOW(), NOW()),
+      ('tp_webhook',    'unclick-webhook',    'pub_unclick', 0, 5000,  TRUE, NOW(), NOW())
     ON CONFLICT (id) DO NOTHING;
   `);
 

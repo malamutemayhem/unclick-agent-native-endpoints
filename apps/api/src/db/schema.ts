@@ -454,6 +454,234 @@ export const shortenedUrls = pgTable('shortened_urls', {
   index('shortened_urls_org_idx').on(t.orgId),
 ]);
 
+// ===========================================================================
+// Marketplace tables
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Publishers — orgs that list tools in the marketplace
+// ---------------------------------------------------------------------------
+export const publishers = pgTable('publishers', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  displayName: text('display_name').notNull(),
+  slug: text('slug').notNull(),
+  description: text('description').notNull(),
+  websiteUrl: text('website_url'),
+  avatarUrl: text('avatar_url'),
+  verified: boolean('verified').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('publishers_slug_idx').on(t.slug),
+  index('publishers_org_idx').on(t.orgId),
+]);
+
+// ---------------------------------------------------------------------------
+// Marketplace categories
+// ---------------------------------------------------------------------------
+export const marketplaceCategories = pgTable('marketplace_categories', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull(),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  icon: text('icon').notNull(),
+  toolCount: integer('tool_count').notNull().default(0),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => [
+  uniqueIndex('marketplace_categories_slug_idx').on(t.slug),
+]);
+
+// ---------------------------------------------------------------------------
+// Marketplace tool listings
+// ---------------------------------------------------------------------------
+export const marketplaceTools = pgTable('marketplace_tools', {
+  id: text('id').primaryKey(),
+  publisherId: text('publisher_id').notNull(),
+  slug: text('slug').notNull(),
+  name: text('name').notNull(),
+  tagline: text('tagline').notNull(),
+  description: text('description').notNull(),
+  category: text('category').notNull(),
+  iconUrl: text('icon_url'),
+  /** Full OpenAPI spec serialized as JSON string */
+  openapiSpec: text('openapi_spec').notNull().default('{}'),
+  baseUrl: text('base_url').notNull(),
+  isInternal: boolean('is_internal').notNull().default(false),
+  isProxied: boolean('is_proxied').notNull().default(true),
+  /** draft | pending_review | approved | rejected | suspended */
+  status: text('status').notNull().default('draft'),
+  version: text('version').notNull().default('1.0.0'),
+  totalCalls: integer('total_calls').notNull().default(0),
+  monthlyCalls: integer('monthly_calls').notNull().default(0),
+  avgResponseMs: integer('avg_response_ms'),
+  rating: real('rating'),
+  ratingCount: integer('rating_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('marketplace_tools_slug_idx').on(t.slug),
+  index('marketplace_tools_publisher_idx').on(t.publisherId),
+  index('marketplace_tools_category_idx').on(t.category),
+  index('marketplace_tools_status_idx').on(t.status),
+]);
+
+// ---------------------------------------------------------------------------
+// Per-tool endpoint catalogue
+// ---------------------------------------------------------------------------
+export const marketplaceEndpoints = pgTable('marketplace_endpoints', {
+  id: text('id').primaryKey(),
+  toolId: text('tool_id').notNull(),
+  method: text('method').notNull(),
+  path: text('path').notNull(),
+  summary: text('summary').notNull(),
+  description: text('description').notNull().default(''),
+  /** JSON Schema for request body */
+  requestSchema: text('request_schema').notNull().default('{}'),
+  /** JSON Schema for response body */
+  responseSchema: text('response_schema').notNull().default('{}'),
+  /** JSON-encoded string[] of required scopes */
+  scopesRequired: text('scopes_required').notNull().default('[]'),
+}, (t) => [
+  index('marketplace_endpoints_tool_idx').on(t.toolId),
+]);
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+export const marketplaceTags = pgTable('marketplace_tags', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull(),
+  name: text('name').notNull(),
+}, (t) => [
+  uniqueIndex('marketplace_tags_slug_idx').on(t.slug),
+]);
+
+// Tool ↔ tag junction
+export const marketplaceToolTags = pgTable('marketplace_tool_tags', {
+  id: text('id').primaryKey(),
+  toolId: text('tool_id').notNull(),
+  tagId: text('tag_id').notNull(),
+}, (t) => [
+  uniqueIndex('marketplace_tool_tags_unique_idx').on(t.toolId, t.tagId),
+  index('marketplace_tool_tags_tool_idx').on(t.toolId),
+  index('marketplace_tool_tags_tag_idx').on(t.tagId),
+]);
+
+// ---------------------------------------------------------------------------
+// Org ratings for tools (one per org per tool)
+// ---------------------------------------------------------------------------
+export const marketplaceRatings = pgTable('marketplace_ratings', {
+  id: text('id').primaryKey(),
+  toolId: text('tool_id').notNull(),
+  orgId: text('org_id').notNull(),
+  /** 1–5 integer star rating */
+  rating: integer('rating').notNull(),
+  review: text('review'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('marketplace_ratings_unique_idx').on(t.toolId, t.orgId),
+  index('marketplace_ratings_tool_idx').on(t.toolId),
+]);
+
+// ===========================================================================
+// Marketplace billing — agent-native metering + Stripe payment rails
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Pricing config per tool listing
+// ---------------------------------------------------------------------------
+export const toolPricing = pgTable('tool_pricing', {
+  id: text('id').primaryKey(),
+  toolSlug: text('tool_slug').notNull(),
+  publisherId: text('publisher_id').notNull(),
+  /** Price per API call in micro-cents (1000 = $0.00001) */
+  pricePerCallMicro: integer('price_per_call_micro').notNull().default(0),
+  /** Free tier monthly call allowance */
+  freeTierCalls: integer('free_tier_calls').notNull().default(1000),
+  /** Stripe Price ID for metered billing */
+  stripePriceId: text('stripe_price_id'),
+  /** Stripe Meter ID for usage-based billing */
+  stripeMeterId: text('stripe_meter_id'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('tool_pricing_tool_slug_idx').on(t.toolSlug),
+  index('tool_pricing_publisher_idx').on(t.publisherId),
+]);
+
+// ---------------------------------------------------------------------------
+// Billing events — append-only metering ledger per API call
+// Batched and reported to Stripe Metering API for automatic agent billing
+// ---------------------------------------------------------------------------
+export const billingEvents = pgTable('billing_events', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  toolSlug: text('tool_slug').notNull(),
+  apiKeyId: text('api_key_id').notNull(),
+  endpoint: text('endpoint').notNull(),
+  responseMs: integer('response_ms'),
+  /** Whether this event has been reported to Stripe */
+  reported: boolean('reported').notNull().default(false),
+  /** Stripe Meter Event ID after reporting */
+  stripeMeterEventId: text('stripe_meter_event_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('billing_events_org_idx').on(t.orgId, t.createdAt),
+  index('billing_events_tool_idx').on(t.toolSlug, t.createdAt),
+  index('billing_events_unreported_idx').on(t.reported),
+]);
+
+// ---------------------------------------------------------------------------
+// Billing meters — pre-aggregated monthly usage per org per tool
+// ---------------------------------------------------------------------------
+export const billingMeters = pgTable('billing_meters', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  toolSlug: text('tool_slug').notNull(),
+  /** ISO month: '2026-04' */
+  period: text('period').notNull(),
+  calls: integer('calls').notNull().default(0),
+  billableCalls: integer('billable_calls').notNull().default(0),
+  totalMs: integer('total_ms').notNull().default(0),
+  billedAmountCents: integer('billed_amount_cents').notNull().default(0),
+  /** pending | billed | failed | free */
+  billingStatus: text('billing_status').notNull().default('pending'),
+  /** Stripe Invoice or UsageRecord ID */
+  stripeRecordId: text('stripe_record_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('billing_meters_unique_idx').on(t.orgId, t.toolSlug, t.period),
+  index('billing_meters_org_idx').on(t.orgId),
+  index('billing_meters_status_idx').on(t.billingStatus),
+]);
+
+// ---------------------------------------------------------------------------
+// Revenue share payouts to publishers via Stripe Connect
+// ---------------------------------------------------------------------------
+export const revenueShare = pgTable('revenue_share', {
+  id: text('id').primaryKey(),
+  publisherId: text('publisher_id').notNull(),
+  period: text('period').notNull(),
+  grossAmountCents: integer('gross_amount_cents').notNull().default(0),
+  /** Publisher share percentage, e.g. 70 = 70% */
+  sharePct: real('share_pct').notNull().default(70),
+  netAmountCents: integer('net_amount_cents').notNull().default(0),
+  /** Stripe Connect Transfer ID */
+  stripeTransferId: text('stripe_transfer_id'),
+  /** pending | transferred | failed */
+  status: text('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('revenue_share_unique_idx').on(t.publisherId, t.period),
+  index('revenue_share_publisher_idx').on(t.publisherId),
+  index('revenue_share_status_idx').on(t.status),
+]);
+
 // ---------------------------------------------------------------------------
 // Daily analytics rollup (pre-aggregated for fast reads)
 // ---------------------------------------------------------------------------

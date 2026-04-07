@@ -41,6 +41,8 @@ import { createKvRouter } from './routes/kv.js';
 import { createRegexRouter } from './routes/regex.js';
 import { createColorRouter } from './routes/color.js';
 import { createIpRouter } from './routes/ip.js';
+import { createMarketplaceRouter } from './routes/marketplace.js';
+import { createBillingRouter } from './routes/billing.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -190,6 +192,12 @@ export function createApp() {
   // -------------------------------------------------------------------------
   // Webhook bin — receive endpoint is public; create/list/delete use inline auth
   app.route('/v1/webhook', createWebhookBinRouter(db, auth));
+
+  // Marketplace — most routes are public reads; rate endpoint uses inline auth
+  app.route('/v1/marketplace', createMarketplaceRouter(db, auth));
+
+  // Billing — pricing is public; usage/history/flush require auth
+  app.route('/v1/billing', createBillingRouter(db, auth));
 
   // Public short-URL redirect — must be before auth middleware
   // GET /r/:code -> 302 to the original URL
