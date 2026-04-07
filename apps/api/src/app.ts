@@ -44,6 +44,9 @@ import { createIpRouter } from './routes/ip.js';
 import { createPasteRouter } from './routes/paste.js';
 import { createSecretRouter } from './routes/secret.js';
 import { createLoremRouter } from './routes/lorem.js';
+import { createUnitsRouter } from './routes/units.js';
+import { createOgRouter } from './routes/og.js';
+import { createPingRouter } from './routes/ping.js';
 import { createMarketplaceRouter } from './routes/marketplace.js';
 import { createBillingRouter } from './routes/billing.js';
 import type { AppVariables } from './middleware/types.js';
@@ -416,6 +419,21 @@ export function createApp() {
   // Lorem ipsum generator (stateless)
   // -------------------------------------------------------------------------
   app.route('/v1/lorem', createLoremRouter());
+
+  // -------------------------------------------------------------------------
+  // Units converter (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/units', createUnitsRouter());
+
+  // -------------------------------------------------------------------------
+  // Open Graph / meta extraction (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/og', createOgRouter());
+
+  // -------------------------------------------------------------------------
+  // Ping / uptime checker (stateless)
+  // -------------------------------------------------------------------------
+  app.route('/v1/ping', createPingRouter());
 
   // -------------------------------------------------------------------------
   // Error handling
