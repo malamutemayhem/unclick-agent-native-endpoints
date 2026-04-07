@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0f"/>
+      <stop offset="100%" style="stop-color:#0f0f1a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines -->
+  <g stroke="#ffffff08" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="150" y1="0" x2="150" y2="630"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="450" y1="0" x2="450" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="750" y1="0" x2="750" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="1050" y1="0" x2="1050" y2="630"/>
+  </g>
+
+  <!-- Accent glow circle (top-right) -->
+  <circle cx="1050" cy="150" r="300" fill="#6366f1" opacity="0.06"/>
+
+  <!-- Accent glow circle (bottom-left) -->
+  <circle cx="150" cy="500" r="250" fill="#8b5cf6" opacity="0.05"/>
+
+  <!-- Top border accent line -->
+  <rect x="80" y="80" width="120" height="3" rx="2" fill="url(#accent)"/>
+
+  <!-- Logo / Brand -->
+  <text x="80" y="260" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-3">UnClick</text>
+
+  <!-- Tagline -->
+  <text x="82" y="320" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="32" font-weight="400" fill="#a0a0b0" letter-spacing="0">The App Store for AI Agents</text>
+
+  <!-- Divider -->
+  <rect x="80" y="360" width="1040" height="1" fill="#ffffff12"/>
+
+  <!-- Stats row -->
+  <text x="80" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#6366f1" font-weight="600">48 tools</text>
+  <text x="220" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
+  <text x="245" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">One API key</text>
+  <text x="415" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
+  <text x="440" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">Works with Claude, ChatGPT &amp; more</text>
+
+  <!-- Domain -->
+  <text x="80" y="530" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="20" fill="#6366f130" letter-spacing="2">unclick.world</text>
+
+  <!-- Bottom border accent -->
+  <rect x="80" y="545" width="80" height="2" rx="1" fill="url(#accent)" opacity="0.4"/>
+</svg>
