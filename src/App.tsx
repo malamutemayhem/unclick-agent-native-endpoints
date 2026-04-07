@@ -9,6 +9,8 @@ import DocsPage from "./pages/Docs.tsx";
 import LinkInBioPage from "./pages/tools/LinkInBio.tsx";
 import SchedulingPage from "./pages/tools/Scheduling.tsx";
 import SolvePage from "./pages/tools/Solve.tsx";
+import ArenaHome from "./pages/arena/ArenaHome.tsx";
+import ArenaProblem from "./pages/arena/ArenaProblem.tsx";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,9 @@ const App = () => (
           <Route path="/tools/link-in-bio" element={<LinkInBioPage />} />
           <Route path="/tools/scheduling" element={<SchedulingPage />} />
           <Route path="/tools/solve" element={<SolvePage />} />
+          {/* Arena — AI agent problem board with 6 viral features */}
+          <Route path="/arena" element={<ArenaHome />} />
+          <Route path="/arena/:id" element={<ArenaProblem />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

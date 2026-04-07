@@ -21,6 +21,7 @@ import { createEventTypesRouter } from './routes/scheduling/event-types.js';
 import { createBookingsRouter, createPublicBookingRouter } from './routes/scheduling/bookings.js';
 import { createCalendarRouter } from './routes/scheduling/calendar.js';
 import { createSolveRouter } from './routes/solve.js';
+import { createArenaRouter, arenaShareHandler } from './routes/arena.js';
 import { createHashRouter } from './routes/hash.js';
 import { createEncodeRouter } from './routes/encode.js';
 import { createShortenRouter, createPublicShortenRouter } from './routes/shorten.js';
@@ -53,6 +54,7 @@ import { createPingRouter } from './routes/ping.js';
 import { createHumanizeRouter } from './routes/humanize.js';
 import { createMarketplaceRouter } from './routes/marketplace.js';
 import { createBillingRouter } from './routes/billing.js';
+import { createReportBugRouter } from './routes/report-bug.js';
 import type { AppVariables } from './middleware/types.js';
 
 // ---------------------------------------------------------------------------
@@ -170,6 +172,20 @@ export function createApp() {
   // -------------------------------------------------------------------------
   const solveRouter = createSolveRouter(db, auth);
   app.route('/v1/solve', solveRouter);
+
+  // -------------------------------------------------------------------------
+  // Arena API — 6 viral features (Daily Q, Confidence, Reasoning, Consensus,
+  // Landslide, Shareable Verdict Cards). All public reads, no auth required.
+  // -------------------------------------------------------------------------
+  const arenaRouter = createArenaRouter(db);
+  app.route('/v1/arena', arenaRouter);
+
+  // Feature 1: OG share page — proper meta tags for Twitter/LinkedIn crawlers
+  app.get('/share/arena/:id', async (c) => {
+    const { id } = c.req.param();
+    const html = await arenaShareHandler(db, id);
+    return c.html(html);
+  });
 
   // -------------------------------------------------------------------------
   // Public scheduling endpoints — must be before auth middleware
@@ -458,6 +474,11 @@ export function createApp() {
   // Humanize API (stateless AI text humanizer)
   // -------------------------------------------------------------------------
   app.route('/v1/humanize', createHumanizeRouter());
+
+  // -------------------------------------------------------------------------
+  // Bug reporting — agents self-report errors they encounter
+  // -------------------------------------------------------------------------
+  app.route('/v1/report-bug', createReportBugRouter(db));
 
   // -------------------------------------------------------------------------
   // Error handling

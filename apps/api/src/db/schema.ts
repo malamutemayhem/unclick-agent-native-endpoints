@@ -314,12 +314,18 @@ export const solveProblems = pgTable('solve_problems', {
   posterName: text('poster_name'),
   posterType: text('poster_type').notNull().default('human'), // human | agent
   acceptedSolutionId: text('accepted_solution_id'),
+  // Arena Feature 2: Daily Question
+  // SQL: ALTER TABLE solve_problems ADD COLUMN is_daily BOOLEAN NOT NULL DEFAULT false;
+  // SQL: ALTER TABLE solve_problems ADD COLUMN daily_date TEXT;
+  isDaily: boolean('is_daily').notNull().default(false),
+  dailyDate: text('daily_date'), // ISO date '2026-04-07' or null
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (t) => [
   index('solve_problems_status_idx').on(t.status, t.createdAt),
   index('solve_problems_category_idx').on(t.categoryId, t.createdAt),
+  index('solve_problems_daily_idx').on(t.isDaily, t.dailyDate),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -333,6 +339,12 @@ export const solveSolutions = pgTable('solve_solutions', {
   body: text('body').notNull(),
   score: integer('score').notNull().default(0), // net votes
   isAccepted: boolean('is_accepted').notNull().default(false),
+  // Arena Feature 3: Bot Confidence Score
+  // SQL: ALTER TABLE solve_solutions ADD COLUMN confidence INTEGER;
+  confidence: integer('confidence'), // 0-100, null = not provided
+  // Arena Feature 4: Show Reasoning
+  // SQL: ALTER TABLE solve_solutions ADD COLUMN reasoning TEXT;
+  reasoning: text('reasoning'), // chain of thought, null = not provided
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -371,6 +383,9 @@ export const solveAgentProfiles = pgTable('solve_agent_profiles', {
   totalUpvotes: integer('total_upvotes').notNull().default(0),
   reputationScore: integer('reputation_score').notNull().default(0),
   tier: text('tier').notNull().default('rookie'), // rookie | solver | expert | master
+  // Arena Feature 6: Landslide Badge wins counter
+  // SQL: ALTER TABLE solve_agent_profiles ADD COLUMN landslide_wins INTEGER NOT NULL DEFAULT 0;
+  landslideWins: integer('landslide_wins').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
@@ -728,6 +743,30 @@ export const revenueShare = pgTable('revenue_share', {
   uniqueIndex('revenue_share_unique_idx').on(t.publisherId, t.period),
   index('revenue_share_publisher_idx').on(t.publisherId),
   index('revenue_share_status_idx').on(t.status),
+]);
+
+// ===========================================================================
+// Bug Reports — agent-submitted error reports via POST /v1/report-bug
+// ===========================================================================
+
+export const bugReports = pgTable('bug_reports', {
+  id: text('id').primaryKey(),
+  apiKey: text('api_key').notNull(),
+  orgId: text('org_id').notNull(),
+  toolName: text('tool_name').notNull(),
+  errorMessage: text('error_message').notNull(),
+  /** JSON-encoded request payload the agent sent */
+  requestPayload: text('request_payload').notNull().default('{}'),
+  expectedBehavior: text('expected_behavior'),
+  severity: text('severity').notNull().default('low'), // critical | high | medium | low
+  status: text('status').notNull().default('new'),     // new | investigating | fixed | wontfix
+  /** JSON-encoded extra context the agent provides */
+  agentContext: text('agent_context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('bug_reports_org_idx').on(t.orgId, t.createdAt),
+  index('bug_reports_severity_idx').on(t.severity, t.status),
+  index('bug_reports_tool_idx').on(t.toolName),
 ]);
 
 // ---------------------------------------------------------------------------
