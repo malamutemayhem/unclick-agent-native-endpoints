@@ -140,15 +140,62 @@ const DocsPage = () => (
   <div className="min-h-screen">
     <Navbar />
     <main className="mx-auto max-w-5xl px-6 pb-32 pt-28">
+      {/* Friendly intro */}
       <FadeIn>
-        <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">What can your AI do with UnClick?</h1>
+      </FadeIn>
+      <FadeIn delay={0.05}>
+        <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
+          Connect your AI agent once and it gets access to 33 tools across four categories. Here's what each one does.
+        </p>
+      </FadeIn>
+
+      <FadeIn delay={0.1}>
+        <div className="mt-10 grid gap-6 sm:grid-cols-2">
+          {[
+            {
+              title: "Link-in-Bio",
+              desc: "Create shareable link pages for your profiles, portfolios, or projects. Add links, social profiles, and custom themes. Your AI can build and update these pages without you touching a dashboard.",
+            },
+            {
+              title: "Scheduling",
+              desc: "Set up booking pages, manage your availability, and let people book time with you. Think Calendly, but your AI handles the setup, updates, and cancellations.",
+            },
+            {
+              title: "Webhooks",
+              desc: "Get notified when things happen. Your AI can subscribe to events from any tool and react automatically, no polling required.",
+            },
+            {
+              title: "API Keys",
+              desc: "Manage your access. Create keys with specific permissions, update them, or revoke them when you need to. Your AI can handle key rotation on your behalf.",
+            },
+          ].map((item) => (
+            <div key={item.title} className="rounded-xl border border-border/40 bg-card/20 p-5">
+              <h3 className="font-semibold text-heading">{item.title}</h3>
+              <p className="mt-2 text-sm text-body leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </FadeIn>
+
+      {/* Divider */}
+      <FadeIn delay={0.15}>
+        <div className="mt-16 flex items-center gap-4">
+          <div className="flex-1 border-t border-border/40" />
+          <span className="text-sm font-medium text-muted-foreground">For Developers</span>
+          <div className="flex-1 border-t border-border/40" />
+        </div>
+      </FadeIn>
+
+      <FadeIn delay={0.2}>
+        <span className="mt-8 block font-mono text-xs font-medium uppercase tracking-widest text-primary">
           API Reference
         </span>
       </FadeIn>
-      <FadeIn delay={0.05}>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Documentation</h1>
+      <FadeIn delay={0.25}>
+        <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Documentation</h2>
       </FadeIn>
-      <FadeIn delay={0.1}>
+      <FadeIn delay={0.3}>
         <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
           The UnClick API is RESTful, returns JSON, and uses Bearer token authentication.
           Base URL: <code className="font-mono text-sm bg-card/50 px-2 py-0.5 rounded">https://api.unclick.world</code>
@@ -156,7 +203,7 @@ const DocsPage = () => (
       </FadeIn>
 
       {/* Auth note */}
-      <FadeIn delay={0.15}>
+      <FadeIn delay={0.35}>
         <div className="mt-8 rounded-lg border border-primary/20 bg-primary/[0.03] p-5">
           <h2 className="text-sm font-medium text-heading">Authentication</h2>
           <p className="mt-2 text-sm text-body">

@@ -60,6 +60,26 @@ const Hero = ({ search, onSearch }: HeroProps) => (
         </div>
       </FadeIn>
 
+      <FadeIn delay={0.3}>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="#install"
+            className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ scrollBehavior: "smooth" }}
+            onClick={(e) => { e.preventDefault(); document.getElementById("install")?.scrollIntoView({ behavior: "smooth" }); }}
+          >
+            Get Started Free
+          </a>
+          <a
+            href="#tools"
+            className="rounded-lg border border-border/60 bg-card/40 px-6 py-2.5 text-sm font-medium text-heading backdrop-blur-sm transition-colors hover:bg-card/70"
+            onClick={(e) => { e.preventDefault(); document.getElementById("tools")?.scrollIntoView({ behavior: "smooth" }); }}
+          >
+            Explore Tools
+          </a>
+        </div>
+      </FadeIn>
+
       <FadeIn delay={0.35}>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <span className="text-xs text-muted-foreground">Works with</span>
@@ -71,6 +91,11 @@ const Hero = ({ search, onSearch }: HeroProps) => (
               {p}
             </span>
           ))}
+        </div>
+        <div className="mt-3">
+          <a href="/docs" className="text-xs text-muted-foreground transition-colors hover:text-body">
+            View API docs →
+          </a>
         </div>
       </FadeIn>
     </div>
