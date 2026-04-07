@@ -3,31 +3,30 @@ import { motion } from "framer-motion";
 
 const Problem = () => (
   <section className="relative overflow-hidden">
-    {/* Subtle side glow */}
     <div className="pointer-events-none absolute top-1/2 -left-40 -translate-y-1/2 w-[400px] h-[400px] bg-primary/[0.03] blur-[120px] rounded-full" />
 
     <div className="mx-auto max-w-2xl px-6 py-32">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
-          Why This Exists
+          Why UnClick
         </span>
       </FadeIn>
       <FadeIn delay={0.1}>
         <h2 className="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">
-          You have an AI. Why are you still doing this yourself?
+          Your AI is powerful. But it can't shorten a link on its own.
         </h2>
       </FadeIn>
       <FadeIn delay={0.2}>
         <p className="mt-6 text-body leading-relaxed">
-          Right now, asking your AI to update your link page or booking calendar is like asking someone
-          to cook dinner while wearing oven mitts. They can do it, but it's slow, clumsy, and things break.
-          Browser automation, screen scraping, brittle workarounds.
+          Resize an image. Check a cron schedule. Hash a string. Generate a QR code. These are simple tasks
+          that take a human two seconds and an AI agent twenty minutes of browser hacking. The tools exist.
+          They just were not built for machines.
         </p>
       </FadeIn>
       <FadeIn delay={0.3}>
         <p className="mt-4 text-body leading-relaxed">
-          UnClick takes the mitts off. The business tools your AI needs, rebuilt as clean APIs.
-          Same functionality. Your agent handles it in seconds instead of minutes.
+          UnClick is the app store that fills the gap. Every tool your AI needs, available through one
+          API connection. Ask your AI to do the thing. It just works.
         </p>
       </FadeIn>
 
@@ -40,14 +39,13 @@ const Problem = () => (
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
           >
-            <div className="text-xs font-mono text-destructive/60 uppercase tracking-wider mb-3">The old way</div>
+            <div className="text-xs font-mono text-destructive/60 uppercase tracking-wider mb-3">Without UnClick</div>
             <div className="space-y-2 font-mono text-xs text-muted-foreground">
-              <div className="line-through opacity-60">Open browser</div>
-              <div className="line-through opacity-60">Navigate to page</div>
-              <div className="line-through opacity-60">Fill form fields</div>
-              <div className="line-through opacity-60">Click submit</div>
-              <div className="line-through opacity-60">Wait for redirect</div>
-              <div className="line-through opacity-60">Parse response</div>
+              <div className="line-through opacity-60">Launch browser automation</div>
+              <div className="line-through opacity-60">Navigate to tool UI</div>
+              <div className="line-through opacity-60">Locate form fields</div>
+              <div className="line-through opacity-60">Fill and submit</div>
+              <div className="line-through opacity-60">Parse HTML response</div>
             </div>
             <div className="mt-3 flex justify-between font-mono text-xs text-destructive/50">
               <span>~4,200ms</span>
@@ -61,10 +59,10 @@ const Problem = () => (
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
           >
-            <div className="text-xs font-mono text-primary/60 uppercase tracking-wider mb-3">The UnClick way</div>
+            <div className="text-xs font-mono text-primary/60 uppercase tracking-wider mb-3">With UnClick</div>
             <div className="space-y-2 font-mono text-xs text-heading">
-              <div className="text-body italic">"Add a booking link for Friday."</div>
-              <div className="text-primary">Done. 38ms.</div>
+              <div className="text-body italic">"Shorten this URL."</div>
+              <div className="text-primary">POST /shorten — done.</div>
             </div>
             <div className="mt-3 flex justify-between font-mono text-xs text-primary/50">
               <span>~38ms</span>

@@ -1,9 +1,9 @@
 import FadeIn from "./FadeIn";
 
 const Strip = () => {
-  const text = "No browser. No clicks. No workarounds. Just endpoints.";
+  const text = "26 tools. One connection. Any MCP agent.";
   const repeated = `${text}  ·  ${text}  ·  ${text}  ·  ${text}  ·  `;
-  
+
   return (
     <FadeIn>
       <section className="border-y border-border overflow-hidden py-6">

@@ -4,9 +4,10 @@ import Strip from "@/components/Strip";
 import Stats from "@/components/Stats";
 import Problem from "@/components/Problem";
 import HowItWorks from "@/components/HowItWorks";
+import InstallSection from "@/components/InstallSection";
 import Tools from "@/components/Tools";
-import CodeBlock from "@/components/CodeBlock";
 import TrustSignals from "@/components/TrustSignals";
+import ForDevelopers from "@/components/ForDevelopers";
 import FinalCTA from "@/components/FinalCTA";
 import Footer from "@/components/Footer";
 
@@ -18,9 +19,10 @@ const Index = () => (
     <Stats />
     <Problem />
     <HowItWorks />
+    <InstallSection />
     <Tools />
-    <CodeBlock />
     <TrustSignals />
+    <ForDevelopers />
     <FinalCTA />
     <Footer />
   </div>

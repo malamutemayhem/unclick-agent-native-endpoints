@@ -3,23 +3,23 @@ import FadeIn from "./FadeIn";
 const signals = [
   {
     icon: "◎",
-    title: "API-first architecture",
-    desc: "Every feature is available via API before it ever gets a UI. If it's in the product, it's in the endpoints.",
+    title: "Every tool is verified",
+    desc: "All tools in the marketplace pass automated security scanning before listing. No unreviewed third-party code reaches your agent.",
   },
   {
     icon: "⊞",
-    title: "Open-source friendly",
-    desc: "MIT-licensed SDKs. No lock-in. Inspect, fork, and contribute. We're building in public.",
+    title: "One key, all tools",
+    desc: "One API key covers every tool. No separate auth flows, no per-tool sign-ups, no managing multiple tokens.",
   },
   {
     icon: "⊕",
-    title: "Australian made",
-    desc: "Built in Melbourne. Data sovereignty options available. No surprise US data transfers.",
+    title: "Open-source core",
+    desc: "MIT-licensed SDKs. No lock-in. Inspect, fork, and contribute. The MCP server is public on GitHub.",
   },
   {
     icon: "◈",
-    title: "99.9% uptime target",
-    desc: "Deployed on Cloudflare Workers — globally distributed, zero cold starts. Your agents don't wait.",
+    title: "Built for uptime",
+    desc: "Deployed on Cloudflare Workers — globally distributed, zero cold starts. Your agents do not wait.",
   },
 ];
 

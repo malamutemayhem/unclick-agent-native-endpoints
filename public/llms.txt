@@ -1,18 +1,32 @@
-# UnClick — Agent-Native API Suite
+# UnClick — The App Store for AI Agents
 
-UnClick is a SaaS API platform that provides programmatic access to common web tools
-that AI agents cannot otherwise use. It is designed for AI agents, LLM workflows, and
-developers building AI-powered applications.
+UnClick is an AI agent marketplace where AI assistants find and use tools.
+It provides 26 verified tools accessible via a single MCP server connection
+or REST API key. Works with Claude, ChatGPT, OpenClaw, Cursor, and any
+MCP-compatible agent.
 
-## What UnClick Does
+## What UnClick Is
 
-UnClick rebuilds popular SaaS platforms (Linktree, Calendly, etc.) as clean REST APIs.
-This allows AI agents to create link pages, manage bookings, and interact with these tools
-programmatically — without browser automation, screen scraping, or UI interaction.
+UnClick is the app store for AI agents. Instead of building integrations
+one-by-one, agents connect to UnClick once and gain access to every tool
+in the marketplace. Tools cover text processing, data utilities, image
+handling, URL shortening, QR codes, cryptographic hashing, key-value
+storage, secret sharing, and full platform tools like Link-in-Bio and
+Scheduling.
 
 ## Base URL
 
 https://api.unclick.world
+
+## MCP Server
+
+Install via npx:
+  npx -y @unclick/mcp-server
+
+Set environment variable:
+  UNCLICK_API_KEY=your_api_key
+
+Compatible with: Claude Desktop, Cursor, OpenClaw, and any MCP client.
 
 ## Authentication
 
@@ -21,45 +35,67 @@ All authenticated endpoints require a Bearer token:
 
 Get a free API key at: https://unclick.world
 
-## Available Tools (Live)
+## Available Tools (26 total, all free)
 
-### Link-in-Bio API — /v1/links
-Create and manage shareable link pages (like Linktree).
-- Create pages: POST /v1/links/pages
-- Add links: POST /v1/links/pages/:page_id/links
-- Analytics: GET /v1/links/pages/:page_id/analytics
-- Custom domains: POST /v1/links/domains
-- Themes: POST /v1/links/pages/:page_id/theme
-Documentation: https://unclick.world/tools/link-in-bio
+### Utility Tools
+- Random — /v1/random — Secure random numbers, strings, passwords, UUIDs
+- UUID — /v1/uuid — Generate v4 UUIDs, validate, parse
+- Cron — /v1/cron — Parse, validate, build cron expressions
+- Timestamp — /v1/timestamp — Convert, format, diff timestamps
+- QR Code — /v1/qr — Generate QR codes as PNG or SVG
 
-### Scheduling API — /v1/schedule
-Create and manage booking pages (like Calendly).
-- Create booking types: POST /v1/schedule/event-types
-- Get available slots: GET /v1/schedule/event-types/:id/slots
-- Create bookings: POST /v1/schedule/bookings
-- Public booking: POST /schedule/:slug/book (no auth required)
-Documentation: https://unclick.world/tools/scheduling
+### Text Tools
+- Transform — /v1/transform — Case conversion, slugify, word count, strip HTML
+- Regex — /v1/regex — Test patterns, extract matches, replace, split
+- Markdown — /v1/markdown — Convert to HTML or plain text, extract TOC
+- Lorem — /v1/lorem — Placeholder text, names, emails, addresses
+- Diff — /v1/diff — Unified, line-by-line, and word-level diffs; apply patches
 
-## Coming Soon
+### Data Tools
+- JSON — /v1/json — Format, query, flatten, merge, diff, generate schemas
+- CSV — /v1/csv — Parse, generate, query, sort, column stats
+- Validate — /v1/validate — Email, URL, phone, credit card, IP, color
+- Encode — /v1/encode and /v1/decode — Base64, URL, HTML, hex
 
-- Forms API (/v1/forms) — replaces Typeform
-- Social Posting API (/v1/post) — replaces Buffer
-- Document Signing API (/v1/sign) — replaces DocuSign
-- Newsletter API (/v1/mail) — replaces Beehiiv
+### Media Tools
+- Image — /v1/image — Resize, convert JPEG/PNG/WebP/AVIF, compress, crop, rotate
+- Color — /v1/color — Convert, palette generation, mix, WCAG contrast
 
-## Webhooks
+### Network Tools
+- IP — /v1/ip — Look up caller IP, parse, subnet math, CIDR range check
+- Hash — /v1/hash — MD5, SHA1, SHA256, SHA512, HMAC, verify
 
-Subscribe to events with POST /v1/webhooks.
-Supported events: link.created, link.clicked, page.viewed,
-booking.created, booking.cancelled, booking.rescheduled
+### Security Tools
+- Secret — /v1/secret — One-time secrets that self-destruct after first view
+
+### Storage Tools
+- KV Store — /v1/kv — Key-value storage for agents (set, get, delete, increment)
+- Paste — /v1/paste — Create and share text pastes with expiry
+- URL Shortener — /v1/shorten — Shorten URLs with click tracking
+- Webhooks — /v1/webhook — Create bins, receive and inspect incoming requests
+
+### Platform Tools
+- Link-in-Bio — /v1/links — Full Linktree replacement (25 endpoints)
+  Create pages, manage links, analytics, custom domains, themes
+- Scheduling — /v1/schedule — Full Calendly replacement (30 endpoints)
+  Event types, availability, bookings, webhooks, multi-timezone
+- Solve — /v1/solve — Community problem-solving with reputation system
 
 ## Pricing
 
-Free tier: 500 API calls/day, both live tools included, no credit card required.
+All tools are free. No credit card required.
+Free tier: 500 API calls/day per tool.
+
+## For Developers
+
+Build a tool, list it on UnClick, earn 80% of revenue.
+Automated security scanning. Managed auth coming soon.
+Details: https://unclick.world#developers
 
 ## Contact
 
 Website: https://unclick.world
 Docs: https://unclick.world/docs
 Email: chris@unclick.world
+GitHub: https://github.com/unclick-world
 Built in Melbourne, Australia.

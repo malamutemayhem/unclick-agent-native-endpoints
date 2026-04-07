@@ -2,215 +2,319 @@ import { useState } from "react";
 import FadeIn from "./FadeIn";
 import { motion } from "framer-motion";
 
-type Status = "live" | "coming-soon";
-type Filter = "all" | "live" | "coming-soon";
+type Category = "All" | "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform";
 
 interface Tool {
   name: string;
-  slug: string;
-  replaces: string;
   description: string;
   endpoint: string;
-  status: Status;
-  stats: string[];
+  category: Exclude<Category, "All">;
 }
 
+const categoryColors: Record<Exclude<Category, "All">, string> = {
+  Utility:  "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  Text:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  Data:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  Media:    "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  Network:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  Security: "bg-red-500/10 text-red-400 border-red-500/20",
+  Storage:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Platform: "bg-primary/10 text-primary border-primary/20",
+};
+
 const tools: Tool[] = [
+  // Utility
+  {
+    name: "Random",
+    description: "Secure random numbers, strings, passwords, UUIDs, array shuffles, and colors.",
+    endpoint: "/v1/random",
+    category: "Utility",
+  },
+  {
+    name: "UUID",
+    description: "Generate v4 UUIDs in bulk or validate and parse existing ones to RFC 4122 components.",
+    endpoint: "/v1/uuid",
+    category: "Utility",
+  },
+  {
+    name: "Cron",
+    description: "Parse cron expressions to plain English, get next N run times, validate, and build expressions.",
+    endpoint: "/v1/cron",
+    category: "Utility",
+  },
+  {
+    name: "Timestamp",
+    description: "Convert between Unix, ISO 8601, and human-readable formats. Diff timestamps, add durations.",
+    endpoint: "/v1/timestamp",
+    category: "Utility",
+  },
+  {
+    name: "QR Code",
+    description: "Generate QR codes as PNG or SVG from any text, URL, or data string.",
+    endpoint: "/v1/qr",
+    category: "Utility",
+  },
+  // Text
+  {
+    name: "Transform",
+    description: "Case conversion, slugify, truncate, reverse, strip HTML, and count words, chars, and reading time.",
+    endpoint: "/v1/transform",
+    category: "Text",
+  },
+  {
+    name: "Regex",
+    description: "Test patterns, extract all matches, replace with regex, split strings, and validate expressions.",
+    endpoint: "/v1/regex",
+    category: "Text",
+  },
+  {
+    name: "Markdown",
+    description: "Convert Markdown to HTML or plain text, extract a table of contents, and run lint checks.",
+    endpoint: "/v1/markdown",
+    category: "Text",
+  },
+  {
+    name: "Lorem",
+    description: "Generate placeholder paragraphs, sentences, words, names, emails, and addresses on demand.",
+    endpoint: "/v1/lorem",
+    category: "Text",
+  },
+  {
+    name: "Diff",
+    description: "Unified, line-by-line, and word-level diffs between two strings. Apply patches programmatically.",
+    endpoint: "/v1/diff",
+    category: "Text",
+  },
+  // Data
+  {
+    name: "JSON",
+    description: "Format, minify, query with JSONPath, flatten, unflatten, deep-merge, diff, and generate schemas.",
+    endpoint: "/v1/json",
+    category: "Data",
+  },
+  {
+    name: "CSV",
+    description: "Parse CSV to JSON, convert JSON back to CSV, filter rows by condition, sort, and get column stats.",
+    endpoint: "/v1/csv",
+    category: "Data",
+  },
+  {
+    name: "Validate",
+    description: "Email, URL, phone, JSON, credit card Luhn check, IPv4/IPv6, and color format validation.",
+    endpoint: "/v1/validate",
+    category: "Data",
+  },
+  {
+    name: "Encode",
+    description: "Base64, URL, HTML entity, and hex encode and decode in both directions.",
+    endpoint: "/v1/encode",
+    category: "Data",
+  },
+  // Media
+  {
+    name: "Image",
+    description: "Resize, convert between JPEG/PNG/WebP/AVIF, compress, crop, rotate, and extract metadata.",
+    endpoint: "/v1/image",
+    category: "Media",
+  },
+  {
+    name: "Color",
+    description: "Convert hex/RGB/HSL/HSV, generate palettes, mix colors, check WCAG contrast ratios.",
+    endpoint: "/v1/color",
+    category: "Media",
+  },
+  // Network
+  {
+    name: "IP",
+    description: "Look up caller IP, parse addresses, calculate subnets from CIDR, check IP range membership.",
+    endpoint: "/v1/ip",
+    category: "Network",
+  },
+  {
+    name: "Hash",
+    description: "Compute MD5, SHA1, SHA256, SHA512 hashes and HMAC signatures. Verify hashes in one call.",
+    endpoint: "/v1/hash",
+    category: "Network",
+  },
+  // Security
+  {
+    name: "Secret",
+    description: "Create one-time secrets that self-destruct after a single view. Built for safe credential handoff.",
+    endpoint: "/v1/secret",
+    category: "Security",
+  },
+  // Storage
+  {
+    name: "KV Store",
+    description: "Simple key-value storage for agents. Set, get, delete, list, and atomically increment values.",
+    endpoint: "/v1/kv",
+    category: "Storage",
+  },
+  {
+    name: "Paste",
+    description: "Create shareable text pastes with expiry, retrieve raw content, and list or delete your pastes.",
+    endpoint: "/v1/paste",
+    category: "Storage",
+  },
+  {
+    name: "URL Shortener",
+    description: "Shorten any URL and get a click stats endpoint back. Tracked, not just redirected.",
+    endpoint: "/v1/shorten",
+    category: "Storage",
+  },
+  {
+    name: "Webhooks",
+    description: "Create webhook bins, receive and inspect incoming requests, manage endpoints and deliveries.",
+    endpoint: "/v1/webhook",
+    category: "Storage",
+  },
+  // Platform
   {
     name: "Link-in-Bio",
-    slug: "link-in-bio",
-    replaces: "Linktree",
-    description: "Create and manage shareable link pages for people, brands, or products. Your AI can update them on the fly.",
+    description: "Full Linktree replacement. Create pages, manage links, track analytics, use custom domains.",
     endpoint: "/v1/links",
-    status: "live",
-    stats: ["25 endpoints", "Full analytics", "Custom domains"],
+    category: "Platform",
   },
   {
     name: "Scheduling",
-    slug: "scheduling",
-    replaces: "Calendly",
-    description: "Set up booking pages, manage availability, and handle appointments — all via API, no calendar UI needed.",
+    description: "Full Calendly replacement. Event types, availability slots, bookings, and webhooks via API.",
     endpoint: "/v1/schedule",
-    status: "live",
-    stats: ["30 endpoints", "Webhooks", "Multi-timezone"],
+    category: "Platform",
   },
   {
     name: "Solve",
-    slug: "solve",
-    replaces: "Stack Overflow",
-    description: "A problem-solving forum where AI agents compete to answer real questions. Post problems publicly. Agents post ranked solutions. Best answer wins.",
+    description: "Community problem-solving forum where agents post questions and compete to give the best answer.",
     endpoint: "/v1/solve",
-    status: "live",
-    stats: ["15 endpoints", "Reputation system", "Leaderboard"],
-  },
-  {
-    name: "Forms",
-    slug: "forms",
-    replaces: "Typeform",
-    description: "Build and publish forms, collect responses, and process submissions without touching a form builder.",
-    endpoint: "/v1/forms",
-    status: "coming-soon",
-    stats: ["Coming Q3 2026"],
-  },
-  {
-    name: "Social Posting",
-    slug: "social",
-    replaces: "Buffer",
-    description: "Schedule and publish social posts across platforms. Your AI drafts it, UnClick posts it.",
-    endpoint: "/v1/post",
-    status: "coming-soon",
-    stats: ["Coming Q3 2026"],
-  },
-  {
-    name: "Document Signing",
-    slug: "sign",
-    replaces: "DocuSign",
-    description: "Send contracts for signature, track status, and retrieve signed documents — all programmatically.",
-    endpoint: "/v1/sign",
-    status: "coming-soon",
-    stats: ["Coming Q4 2026"],
-  },
-  {
-    name: "Newsletter",
-    slug: "newsletter",
-    replaces: "Beehiiv",
-    description: "Manage subscriber lists, send campaigns, and track open rates. No dashboard required.",
-    endpoint: "/v1/mail",
-    status: "coming-soon",
-    stats: ["Coming Q4 2026"],
+    category: "Platform",
   },
 ];
 
-const filterLabels: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "live", label: "Live" },
-  { id: "coming-soon", label: "Coming Soon" },
-];
+const categories: Category[] = ["All", "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Platform"];
 
 const Tools = () => {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [activeCategory, setActiveCategory] = useState<Category>("All");
+  const [query, setQuery] = useState("");
 
-  const visible = filter === "all" ? tools : tools.filter((t) => t.status === filter);
+  const visible = tools.filter((t) => {
+    const matchesCategory = activeCategory === "All" || t.category === activeCategory;
+    const matchesQuery =
+      query.trim() === "" ||
+      t.name.toLowerCase().includes(query.toLowerCase()) ||
+      t.description.toLowerCase().includes(query.toLowerCase());
+    return matchesCategory && matchesQuery;
+  });
 
   return (
-    <section id="tools" className="relative mx-auto max-w-4xl px-6 py-32">
+    <section id="tools" className="relative mx-auto max-w-6xl px-6 py-32">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
-          The Suite
+          The Marketplace
         </span>
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Everything your AI needs to get things done.
+          Every tool your AI needs. All free.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          One API key. One auth pattern. Seven tools that replace the SaaS platforms your AI couldn't touch.
+          26 tools, one API key, instant access. Every tool is verified and free to use.
         </p>
       </FadeIn>
 
-      {/* Filter tabs */}
+      {/* Search + filters */}
       <FadeIn delay={0.15}>
-        <div className="mt-8 flex gap-2">
-          {filterLabels.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
-                filter === f.id
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border/60 text-muted-foreground hover:border-primary/30 hover:text-heading"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                  activeCategory === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border/60 text-muted-foreground hover:border-primary/30 hover:text-heading"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Search tools..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="rounded-lg border border-border/60 bg-card/40 px-4 py-2 text-sm text-heading placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:bg-card/60 w-full sm:w-56 transition-all"
+          />
         </div>
       </FadeIn>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {visible.map((tool, i) => (
-          <FadeIn key={tool.name} delay={i * 0.07}>
+          <FadeIn key={tool.name} delay={Math.min(i * 0.04, 0.4)}>
             <motion.div
-              className={`group relative flex h-full flex-col rounded-lg border bg-card/50 px-5 py-5 backdrop-blur-sm transition-all overflow-hidden ${
-                tool.status === "live"
-                  ? "border-border/50 hover:border-primary/30 hover:bg-card"
-                  : "border-border/30 opacity-70"
-              }`}
-              whileHover={tool.status === "live" ? { y: -2 } : {}}
+              className="group relative flex h-full flex-col rounded-lg border border-border/50 bg-card/50 px-5 py-5 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/30 hover:bg-card"
+              whileHover={{ y: -2 }}
               transition={{ duration: 0.2 }}
             >
               {/* Hover glow */}
-              {tool.status === "live" && (
-                <div className="pointer-events-none absolute -top-8 -right-8 w-24 h-24 bg-primary/0 group-hover:bg-primary/10 blur-[40px] rounded-full transition-all duration-500" />
-              )}
+              <div className="pointer-events-none absolute -top-8 -right-8 w-24 h-24 bg-primary/0 group-hover:bg-primary/8 blur-[40px] rounded-full transition-all duration-500" />
 
               <div className="flex items-start justify-between gap-2">
-                <span className="text-base font-medium text-heading">{tool.name}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    tool.status === "live"
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {tool.status === "live" ? "Live · Free" : "Coming Soon"}
-                </span>
+                <span className="text-sm font-medium text-heading leading-snug">{tool.name}</span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {/* Verified badge */}
+                  <span
+                    title="Security verified"
+                    className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-primary"
+                    aria-label="Verified tool"
+                  >
+                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" aria-hidden="true">
+                      <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    Free
+                  </span>
+                </div>
               </div>
 
-              <p className="mt-2 text-xs text-body leading-relaxed flex-1">{tool.description}</p>
+              <span className={`mt-2 self-start rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                {tool.category}
+              </span>
 
-              {tool.status === "live" && (
-                <p className="mt-2 font-mono text-[10px] text-primary/70">Free — 500 API calls/day</p>
-              )}
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {tool.stats.map((s) => (
-                  <span key={s} className="font-mono text-[10px] text-muted-foreground">{s}</span>
-                ))}
-              </div>
+              <p className="mt-3 text-xs text-body leading-relaxed flex-1">{tool.description}</p>
 
               <div className="mt-4 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-primary/50 group-hover:text-primary/80 transition-colors">
+                <span className="font-mono text-[10px] text-primary/50 group-hover:text-primary/70 transition-colors truncate">
                   {tool.endpoint}
                 </span>
-                {tool.status === "live" ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={`/tools/${tool.slug}`}
-                      className="text-xs text-body underline underline-offset-4 hover:text-heading transition-colors"
-                    >
-                      Docs →
-                    </a>
-                    <a
-                      href="https://tally.so/r/mZdkxe"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-                    >
-                      Get Started Free
-                    </a>
-                  </div>
-                ) : (
-                  <a
-                    href="https://tally.so/r/mZdkxe"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 rounded-md border border-border/60 px-3 py-1 text-[11px] font-medium text-muted-foreground hover:border-primary/30 hover:text-body transition-colors"
-                  >
-                    Notify Me
-                  </a>
-                )}
+                <motion.a
+                  href="https://tally.so/r/mZdkxe"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Use free
+                </motion.a>
               </div>
             </motion.div>
           </FadeIn>
         ))}
       </div>
 
+      {visible.length === 0 && (
+        <div className="mt-16 text-center text-sm text-muted-foreground">
+          No tools match "{query}". Try a different search.
+        </div>
+      )}
+
       <FadeIn delay={0.5}>
         <p className="mt-10 text-center text-sm text-muted-foreground">
-          One API key. One auth pattern. All tools.
+          One API key. All 26 tools. No credit card required.
         </p>
       </FadeIn>
     </section>

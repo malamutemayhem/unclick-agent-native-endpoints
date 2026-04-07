@@ -6,12 +6,14 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
-      <div className="container mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+      <div className="container mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <a href="/" className="font-mono text-lg font-semibold text-heading tracking-tight">UnClick</a>
 
         {/* Desktop nav */}
         <div className="hidden items-center gap-8 md:flex">
           <a href="#tools" className="text-sm text-body transition-colors hover:text-heading">Tools</a>
+          <a href="#how-it-works" className="text-sm text-body transition-colors hover:text-heading">How It Works</a>
+          <a href="#developers" className="text-sm text-body transition-colors hover:text-heading">Developers</a>
           <a href="/docs" className="text-sm text-body transition-colors hover:text-heading">Docs</a>
         </div>
 
@@ -62,6 +64,8 @@ const Navbar = () => {
           >
             <div className="flex flex-col gap-1 px-6 py-4">
               <a href="#tools" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Tools</a>
+              <a href="#how-it-works" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">How It Works</a>
+              <a href="#developers" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Developers</a>
               <a href="/docs" onClick={() => setOpen(false)} className="py-2 text-sm text-body transition-colors hover:text-heading">Docs</a>
               <a
                 href="https://tally.so/r/mZdkxe"
