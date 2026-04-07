@@ -21,35 +21,30 @@ const curlResponse = `{
   "status": "published"
 }`;
 
-type Tab = "natural" | "api";
+const aiExample = `"Create a link page for my consulting business.
+Include a 'Book a call' link and a link to my newsletter."`;
 
-const platforms = [
-  { name: "Claude Cowork", color: "text-orange-400" },
-  { name: "OpenClaw", color: "text-blue-400" },
-  { name: "ChatGPT", color: "text-green-400" },
-  { name: "Any MCP agent", color: "text-purple-400" },
-];
+type Tab = "curl" | "ai";
 
 const CodeBlock = () => {
-  const [tab, setTab] = useState<Tab>("natural");
-  const [platformIdx, setPlatformIdx] = useState(0);
+  const [tab, setTab] = useState<Tab>("curl");
 
   return (
-    <section id="how-it-works-code" className="mx-auto max-w-3xl px-6 py-32">
+    <section id="for-developers" className="mx-auto max-w-3xl px-6 py-32">
       <FadeIn>
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
-          How You Use It
+          For Developers
         </span>
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Add it once. Then just ask.
+          Simple enough for a curl command.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-3 text-body max-w-xl">
-          No code required. Add UnClick to your AI as a plugin or tool,
-          then describe what you need in plain language. Your agent does the rest.
+          Call it directly or wire it to an AI agent. The API is the same either way.
+          RESTful, JSON, predictable.
         </p>
       </FadeIn>
 
@@ -66,7 +61,7 @@ const CodeBlock = () => {
               <div className="h-3 w-3 rounded-full bg-[hsl(140_50%_40%)]" />
             </div>
             <div className="flex gap-1">
-              {(["natural", "api"] as Tab[]).map((t) => (
+              {(["curl", "ai"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -74,7 +69,7 @@ const CodeBlock = () => {
                     tab === t ? "bg-primary/10 text-primary" : "text-muted-custom hover:text-body"
                   }`}
                 >
-                  {t === "natural" ? "natural language" : "curl / fetch"}
+                  {t === "curl" ? "curl / fetch" : "natural language"}
                 </button>
               ))}
             </div>
@@ -82,55 +77,7 @@ const CodeBlock = () => {
 
           {/* Content */}
           <div className="p-6 sm:p-8">
-            {tab === "natural" ? (
-              <div className="space-y-6">
-                {/* Step 1: Add as tool */}
-                <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 1: Add UnClick to your agent (one click)</div>
-                  <div className="rounded-lg border border-border/40 bg-card/30 p-4 space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {platforms.map((p, i) => (
-                        <button
-                          key={p.name}
-                          onClick={() => setPlatformIdx(i)}
-                          className={`font-mono text-xs px-2 py-1 rounded border transition-colors ${
-                            platformIdx === i
-                              ? "border-primary/40 bg-primary/10 text-primary"
-                              : "border-border/40 text-muted-custom hover:text-body"
-                          }`}
-                        >
-                          {p.name}
-                        </button>
-                      ))}
-                    </div>
-                    <div className={`font-mono text-xs mt-2 ${platforms[platformIdx].color}`}>
-                      {platformIdx === 0 && "Settings > Tools > Add MCP server > unclick.world"}
-                      {platformIdx === 1 && "Tools tab > Connect tool > Search 'UnClick' > Install"}
-                      {platformIdx === 2 && "Plugin store > Search 'UnClick' > Add to ChatGPT"}
-                      {platformIdx === 3 && "mcp install https://mcp.unclick.world"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 2: Just ask */}
-                <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 2: Tell your agent what you need</div>
-                  <div className="rounded-lg border border-border/40 bg-card/40 p-4 font-mono text-sm text-heading leading-relaxed">
-                    "Update my link page with my new book launch. Add a pre-order link at the top."
-                  </div>
-                </div>
-
-                {/* Step 3: Done */}
-                <div>
-                  <div className="mb-2 font-mono text-xs text-muted-custom">Step 3: Done. Your agent handled it.</div>
-                  <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed">{curlResponse}</pre>
-                </div>
-
-                <p className="text-xs text-muted-custom">
-                  Works with any MCP-compatible agent. You describe it, the agent does it.
-                </p>
-              </div>
-            ) : (
+            {tab === "curl" ? (
               <div className="space-y-4">
                 <div>
                   <div className="mb-2 font-mono text-xs text-muted-custom">Request</div>
@@ -140,6 +87,22 @@ const CodeBlock = () => {
                   <div className="mb-2 font-mono text-xs text-muted-custom">Response <span className="text-primary">201 Created · 41ms</span></div>
                   <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed">{curlResponse}</pre>
                 </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-2 font-mono text-xs text-muted-custom">You say to your AI agent</div>
+                  <div className="rounded-lg border border-border/40 bg-card/40 p-4 font-mono text-sm text-heading leading-relaxed">
+                    {aiExample}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 font-mono text-xs text-muted-custom">Your agent calls UnClick</div>
+                  <pre className="overflow-x-auto font-mono text-xs text-primary/80 leading-relaxed">{curlResponse}</pre>
+                </div>
+                <p className="text-xs text-muted-custom">
+                  Your agent handles the translation. You just describe what you want.
+                </p>
               </div>
             )}
 

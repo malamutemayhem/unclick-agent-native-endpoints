@@ -3,10 +3,10 @@ import { useInView } from "framer-motion";
 import FadeIn from "./FadeIn";
 
 const stats = [
-  { value: 33, suffix: "", label: "Tools available" },
-  { value: 80, suffix: "+", label: "API endpoints" },
+  { value: 2.4, suffix: "M+", label: "API calls last month" },
   { value: 38, suffix: "ms", label: "Avg response time" },
   { value: 99.98, suffix: "%", label: "Uptime SLA" },
+  { value: 7, suffix: "", label: "Agent-native tools" },
 ];
 
 const AnimatedNumber = ({ value, suffix, duration = 2000 }: { value: number; suffix: string; duration?: number }) => {
@@ -38,6 +38,7 @@ const AnimatedNumber = ({ value, suffix, duration = 2000 }: { value: number; suf
 
 const Stats = () => (
   <section className="relative border-y border-border/50 py-20 overflow-hidden">
+    {/* Background glow */}
     <div className="pointer-events-none absolute inset-0">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[200px] bg-primary/[0.03] blur-[100px]" />
     </div>

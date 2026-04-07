@@ -66,17 +66,17 @@ const LinkInBioPage = () => (
       </FadeIn>
       <FadeIn delay={0.1}>
         <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
-          Create and manage shareable link pages. Your AI can publish a page, add links, apply themes,
-          and pull analytics without touching a dashboard. Think Linktree, built for machines.
+          Your AI builds link pages, updates them, and reads the analytics. No browser,
+          no dashboard. One API call does what used to need a person clicking around.
         </p>
       </FadeIn>
       <FadeIn delay={0.15}>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
-            href="/#install"
+            href="/docs"
             className="rounded-lg bg-primary px-5 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            Get Started Free
+            Get Started Free: Link-in-Bio
           </a>
           <a
             href="/docs#link-in-bio"

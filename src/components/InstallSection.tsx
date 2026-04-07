@@ -16,8 +16,7 @@ const claudeConfig = `{
   }
 }`;
 
-const cursorConfig = `// .cursor/mcp.json
-{
+const cursorConfig = `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
@@ -46,34 +45,38 @@ const apiConfig = `curl https://api.unclick.world/v1/shorten \\
   -H "Content-Type: application/json" \\
   -d '{"url": "https://example.com/very/long/url"}'`;
 
-const configs: Record<Client, { code: string; label: string; file: string }> = {
+const configs: Record<Client, { code: string; label: string; file: string; instruction: string | null }> = {
   "Claude Desktop": {
     code: claudeConfig,
-    label: "Add to claude_desktop_config.json",
+    label: "claude_desktop_config.json",
     file: "claude_desktop_config.json",
+    instruction: "Open Claude Desktop, go to Settings → Developer → Edit Config. Paste this into your claude_desktop_config.json:",
   },
   Cursor: {
     code: cursorConfig,
-    label: "Add to .cursor/mcp.json",
+    label: ".cursor/mcp.json",
     file: ".cursor/mcp.json",
+    instruction: "Create or edit .cursor/mcp.json in your project root (or globally at ~/.cursor/mcp.json). Paste this:",
   },
   OpenClaw: {
     code: openclawConfig,
-    label: "Add to ~/.openclaw/openclaw.json",
+    label: "~/.openclaw/openclaw.json",
     file: "openclaw.json",
+    instruction: "Create or edit ~/.openclaw/openclaw.json and paste this:",
   },
   "Direct API": {
     code: apiConfig,
-    label: "Call any endpoint directly",
+    label: "curl",
     file: "curl",
+    instruction: null,
   },
 };
 
 const clients: Client[] = ["Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
 
 const steps = [
-  { n: "1", label: "Request your free API key", detail: "Free, no credit card needed. Email hello@unclick.world to get your key." },
-  { n: "2", label: "Copy the config below", detail: "Pick your AI client, copy the snippet, and replace YOUR_API_KEY." },
+  { n: "1", label: "Get your free API key", detail: "Sign up at unclick.world. No credit card. Your key covers all live tools immediately." },
+  { n: "2", label: "Paste the config below", detail: "Pick your AI client, follow the one-line instruction, and replace YOUR_API_KEY." },
   { n: "3", label: "Restart your AI and ask", detail: 'Your AI now has all 33 tools. Try: "shorten this link" or "make a QR code."' },
 ];
 
@@ -139,9 +142,16 @@ const InstallSection = () => {
               </button>
             ))}
             <div className="ml-auto px-4">
-              <span className="font-mono text-[10px] text-muted-foreground">{configs[active].file}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{configs[active].label}</span>
             </div>
           </div>
+
+          {/* Per-tab instruction */}
+          {configs[active].instruction && (
+            <div className="px-5 pt-4 pb-0">
+              <p className="text-xs text-muted-foreground">{configs[active].instruction}</p>
+            </div>
+          )}
 
           {/* Code */}
           <div className="relative p-5">
@@ -161,14 +171,16 @@ const InstallSection = () => {
 
       <FadeIn delay={0.3}>
         <p className="mt-5 text-xs text-muted-foreground">
-          Request your free API key at{" "}
+          Need your API key?{" "}
           <a
-            href="mailto:hello@unclick.world"
+            href="https://tally.so/r/mZdkxe"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
           >
-            hello@unclick.world
+            Sign up free at unclick.world
           </a>
-          . Keys will be issued instantly once self-serve signup is live.
+          . Keys issued instantly once self-serve signup is live.
         </p>
       </FadeIn>
     </section>
