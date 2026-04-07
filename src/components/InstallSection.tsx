@@ -1,91 +1,128 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import FadeIn from "./FadeIn";
+import ApiKeySignup from "./ApiKeySignup";
 import { motion } from "framer-motion";
 
 type Client = "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
 
-const claudeConfig = `{
+function makeClaudeConfig(apiKey: string) {
+  return `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
       "args": ["-y", "@unclick/mcp-server"],
       "env": {
-        "UNCLICK_API_KEY": "YOUR_API_KEY"
+        "UNCLICK_API_KEY": "${apiKey}"
       }
     }
   }
 }`;
+}
 
-const cursorConfig = `{
+function makeCursorConfig(apiKey: string) {
+  return `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
       "args": ["-y", "@unclick/mcp-server"],
       "env": {
-        "UNCLICK_API_KEY": "YOUR_API_KEY"
+        "UNCLICK_API_KEY": "${apiKey}"
       }
     }
   }
 }`;
+}
 
-const openclawConfig = `{
+function makeOpenclawConfig(apiKey: string) {
+  return `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
       "args": ["-y", "@unclick/mcp-server"],
       "env": {
-        "UNCLICK_API_KEY": "YOUR_API_KEY"
+        "UNCLICK_API_KEY": "${apiKey}"
       }
     }
   }
 }`;
+}
 
-const apiConfig = `curl https://api.unclick.world/v1/shorten \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+function makeApiConfig(apiKey: string) {
+  return `curl https://api.unclick.world/v1/shorten \\
+  -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"url": "https://example.com/very/long/url"}'`;
+}
 
-const configs: Record<Client, { code: string; label: string; file: string; instruction: string | null }> = {
-  "Claude Desktop": {
-    code: claudeConfig,
-    label: "claude_desktop_config.json",
-    file: "claude_desktop_config.json",
-    instruction: "Open Claude Desktop, go to Settings → Developer → Edit Config. Paste this into your claude_desktop_config.json:",
-  },
-  Cursor: {
-    code: cursorConfig,
-    label: ".cursor/mcp.json",
-    file: ".cursor/mcp.json",
-    instruction: "Create or edit .cursor/mcp.json in your project root (or globally at ~/.cursor/mcp.json). Paste this:",
-  },
-  OpenClaw: {
-    code: openclawConfig,
-    label: "~/.openclaw/openclaw.json",
-    file: "openclaw.json",
-    instruction: "Create or edit ~/.openclaw/openclaw.json and paste this:",
-  },
-  "Direct API": {
-    code: apiConfig,
-    label: "curl",
-    file: "curl",
-    instruction: null,
-  },
-};
+const PLACEHOLDER = "YOUR_API_KEY";
 
 const clients: Client[] = ["Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
 
+const configs: Record<
+  Client,
+  { label: string; file: string; instruction: string | null; make: (key: string) => string }
+> = {
+  "Claude Desktop": {
+    label: "claude_desktop_config.json",
+    file: "claude_desktop_config.json",
+    instruction:
+      "Open Claude Desktop, go to Settings > Developer > Edit Config. Paste this into claude_desktop_config.json:",
+    make: makeClaudeConfig,
+  },
+  Cursor: {
+    label: ".cursor/mcp.json",
+    file: ".cursor/mcp.json",
+    instruction:
+      "Create or edit .cursor/mcp.json in your project root (or globally at ~/.cursor/mcp.json). Paste this:",
+    make: makeCursorConfig,
+  },
+  OpenClaw: {
+    label: "~/.openclaw/openclaw.json",
+    file: "openclaw.json",
+    instruction: "Create or edit ~/.openclaw/openclaw.json and paste this:",
+    make: makeOpenclawConfig,
+  },
+  "Direct API": {
+    label: "curl",
+    file: "curl",
+    instruction: null,
+    make: makeApiConfig,
+  },
+};
+
 const steps = [
-  { n: "1", label: "Get your free API key", detail: "Sign up at unclick.world. No credit card. Your key covers all live tools immediately." },
-  { n: "2", label: "Paste the config below", detail: "Pick your AI client, follow the one-line instruction, and replace YOUR_API_KEY." },
-  { n: "3", label: "Restart your AI and ask", detail: 'Your AI now has all 33 tools. Try: "shorten this link" or "make a QR code."' },
+  {
+    n: "1",
+    label: "Enter your email",
+    detail: "Free forever. No credit card. Your key unlocks all 33 tools immediately.",
+  },
+  {
+    n: "2",
+    label: "Copy your config",
+    detail: "Pick your AI client below. Your key is already inserted. One click to copy.",
+  },
+  {
+    n: "3",
+    label: "Paste and restart",
+    detail: 'Open your config file, paste, save, restart your AI. Try: "shorten this link."',
+  },
 ];
 
 const InstallSection = () => {
   const [active, setActive] = useState<Client>("Claude Desktop");
   const [copied, setCopied] = useState(false);
+  const [apiKey, setApiKey] = useState<string>("");
+
+  const handleKeyReady = useCallback((key: string) => {
+    setApiKey(key);
+  }, []);
+
+  const displayKey = apiKey || PLACEHOLDER;
+  const code = configs[active].make(displayKey);
+  const hasKey = Boolean(apiKey);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(configs[active].code);
+    navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -123,9 +160,16 @@ const InstallSection = () => {
         </div>
       </FadeIn>
 
-      {/* Code block */}
+      {/* Signup form */}
       <FadeIn delay={0.2}>
-        <div className="mt-8 rounded-xl border border-border/60 bg-card/40 overflow-hidden">
+        <div className="mt-8">
+          <ApiKeySignup onKeyReady={handleKeyReady} />
+        </div>
+      </FadeIn>
+
+      {/* Config code block */}
+      <FadeIn delay={0.25}>
+        <div className={`mt-6 rounded-xl border overflow-hidden transition-all duration-300 ${hasKey ? "border-border/60 bg-card/40" : "border-border/30 bg-card/20"}`}>
           {/* Tab row */}
           <div className="flex items-center border-b border-border/60 bg-card/60 px-1">
             {clients.map((client) => (
@@ -142,7 +186,9 @@ const InstallSection = () => {
               </button>
             ))}
             <div className="ml-auto px-4">
-              <span className="font-mono text-[10px] text-muted-foreground">{configs[active].label}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {configs[active].label}
+              </span>
             </div>
           </div>
 
@@ -155,33 +201,49 @@ const InstallSection = () => {
 
           {/* Code */}
           <div className="relative p-5">
-            <pre className="overflow-x-auto font-mono text-xs text-body leading-relaxed">
-              <code>{configs[active].code}</code>
+            <pre className={`overflow-x-auto font-mono text-xs leading-relaxed transition-all duration-300 ${hasKey ? "text-body" : "text-body/40 select-none"}`}>
+              <code>
+                {hasKey ? (
+                  code
+                ) : (
+                  // Show blurred placeholder preview when no key
+                  code.split(PLACEHOLDER).map((part, i, arr) =>
+                    i < arr.length - 1 ? (
+                      <span key={i}>
+                        {part}
+                        <span className="rounded bg-muted/20 px-1 blur-[3px] text-muted-foreground">
+                          {PLACEHOLDER}
+                        </span>
+                      </span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    )
+                  )
+                )}
+              </code>
             </pre>
             <motion.button
               onClick={handleCopy}
-              className="absolute right-4 top-4 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] text-muted-foreground backdrop-blur-sm transition-all hover:border-primary/30 hover:text-heading"
-              whileTap={{ scale: 0.95 }}
+              disabled={!hasKey}
+              className={`absolute right-4 top-4 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
+                hasKey
+                  ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
+                  : "text-muted-foreground/30 cursor-not-allowed"
+              }`}
+              whileTap={hasKey ? { scale: 0.95 } : {}}
             >
               {copied ? "Copied!" : "Copy"}
             </motion.button>
           </div>
-        </div>
-      </FadeIn>
 
-      <FadeIn delay={0.3}>
-        <p className="mt-5 text-xs text-muted-foreground">
-          Need your API key?{" "}
-          <a
-            href="https://tally.so/r/mZdkxe"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
-          >
-            Sign up free at unclick.world
-          </a>
-          . Keys issued instantly once self-serve signup is live.
-        </p>
+          {!hasKey && (
+            <div className="border-t border-border/30 bg-card/40 px-5 py-3">
+              <p className="text-xs text-muted-foreground text-center">
+                Enter your email above to get your API key and unlock this config.
+              </p>
+            </div>
+          )}
+        </div>
       </FadeIn>
     </section>
   );
