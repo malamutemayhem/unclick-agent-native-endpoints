@@ -64,7 +64,7 @@ const steps = [
   {
     n: "1",
     label: "Enter your email",
-    detail: "Free forever. No credit card. Your key unlocks all 33 tools immediately.",
+    detail: "Free to start. No credit card. Your key unlocks all 33 tools instantly.",
   },
   {
     n: "2",

@@ -23,11 +23,13 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
   const [error, setError] = useState("");
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
+  const [isReturning, setIsReturning] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       setApiKey(stored);
+      setIsReturning(true);
       onKeyReady(stored);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,6 +58,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
       if (existing?.api_key) {
         const key = existing.api_key as string;
         localStorage.setItem(STORAGE_KEY, key);
+        setIsReturning(true);
         setApiKey(key);
         onKeyReady(key);
         return;
@@ -71,6 +74,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
       if (insertError) throw insertError;
 
       localStorage.setItem(STORAGE_KEY, newKey);
+      setIsReturning(false);
       setApiKey(newKey);
       onKeyReady(newKey);
     } catch {
@@ -110,7 +114,9 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <span className="text-sm font-medium text-primary">You're in! Your API key is ready.</span>
+            <span className="text-sm font-medium text-primary">
+              {isReturning ? "Welcome back. Here's your key." : "You're in! Your API key is ready."}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-md bg-card/60 border border-border/40 px-3 py-2 font-mono text-xs text-heading truncate select-all">
