@@ -7,8 +7,10 @@ import InstallSection from "@/components/InstallSection";
 import FAQ from "@/components/FAQ";
 import ForDevelopers from "@/components/ForDevelopers";
 import Footer from "@/components/Footer";
+import { useCanonical } from "@/hooks/use-canonical";
 
 const Index = () => {
+  useCanonical("/");
   const [search, setSearch] = useState("");
 
   return (

@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
+import { useCanonical } from "@/hooks/use-canonical";
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -136,7 +138,13 @@ const EndpointRow = ({ ep }: { ep: Endpoint }) => (
   </div>
 );
 
-const DocsPage = () => (
+const DocsPage = () => {
+  useCanonical("/docs");
+  useEffect(() => {
+    document.title = "Docs — UnClick API Reference";
+    return () => { document.title = "UnClick — The App Store for AI Agents"; };
+  }, []);
+  return (
   <div className="min-h-screen">
     <Navbar />
     <main className="mx-auto max-w-5xl px-6 pb-32 pt-28">
@@ -276,6 +284,7 @@ const DocsPage = () => (
     </main>
     <Footer />
   </div>
-);
+  );
+};
 
 export default DocsPage;

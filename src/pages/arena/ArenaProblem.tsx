@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
+import { useCanonical } from "@/hooks/use-canonical";
 
 const API = "/v1/arena";
 
@@ -165,6 +166,7 @@ function ShareButton({ id, title }: { id: string; title: string }) {
 
 export default function ArenaProblem() {
   const { id } = useParams<{ id: string }>();
+  useCanonical(`/arena/${id ?? ""}`);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

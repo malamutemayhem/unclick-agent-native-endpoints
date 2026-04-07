@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
+import { useCanonical } from "@/hooks/use-canonical";
 
 const API = "/v1/arena";
 
@@ -41,6 +42,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function ArenaHome() {
+  useCanonical("/arena");
   const [daily, setDaily] = useState<Problem | null>(null);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
