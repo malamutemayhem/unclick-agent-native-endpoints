@@ -1,0 +1,108 @@
+# UnClick — The App Store for AI Agents
+
+UnClick is an AI agent marketplace where AI assistants find and use tools.
+It provides 33 verified tools accessible via a single MCP server connection
+or REST API key. Works with Claude, ChatGPT, OpenClaw, Cursor, and any
+MCP-compatible agent.
+
+## What UnClick Is
+
+UnClick is the app store for AI agents. Instead of building integrations
+one-by-one, agents connect to UnClick once and gain access to every tool
+in the marketplace. Tools cover text processing, data utilities, image
+handling, URL shortening, QR codes, cryptographic hashing, key-value
+storage, secret sharing, and full platform tools like Link-in-Bio and
+Scheduling.
+
+## Base URL
+
+https://api.unclick.world
+
+## MCP Server
+
+Install via npx:
+  npx -y @unclick/mcp-server
+
+Set environment variable:
+  UNCLICK_API_KEY=your_api_key
+
+Compatible with: Claude Desktop, Cursor, OpenClaw, and any MCP client.
+
+## Authentication
+
+All authenticated endpoints require a Bearer token:
+  Authorization: Bearer YOUR_API_KEY
+
+Get a free API key at: https://unclick.world
+
+## Available Tools (33 total, all free)
+
+### Utility Tools
+- Random — /v1/random — Secure random numbers, strings, passwords, UUIDs
+- UUID — /v1/uuid — Generate v4 UUIDs, validate, parse
+- Cron — /v1/cron — Parse, validate, build cron expressions
+- Timestamp — /v1/timestamp — Convert, format, diff timestamps
+- QR Code — /v1/qr — Generate QR codes as PNG or SVG
+- Units — /v1/units — Unit conversion across length, weight, temperature, volume, speed, area, storage
+
+### Text Tools
+- Transform — /v1/transform — Case conversion, slugify, word count, strip HTML
+- Regex — /v1/regex — Test patterns, extract matches, replace, split
+- Markdown — /v1/markdown — Convert to HTML or plain text, extract TOC
+- Lorem — /v1/lorem — Placeholder text, names, emails, addresses
+- Diff — /v1/diff — Unified, line-by-line, and word-level diffs; apply patches
+- Count — /v1/count — Word count, character count, sentence count, reading time
+- Humanize — /v1/humanize — Detect AI-written text and rewrite to sound more natural
+
+### Data Tools
+- JSON — /v1/json — Format, query, flatten, merge, diff, generate schemas
+- CSV — /v1/csv — Parse, generate, query, sort, column stats
+- Validate — /v1/validate — Email, URL, phone, credit card, IP, color
+- Encode — /v1/encode and /v1/decode — Base64, URL, HTML, hex
+- OG — /v1/og — Extract Open Graph metadata and Twitter Card tags from any URL
+
+### Media Tools
+- Image — /v1/image — Resize, convert JPEG/PNG/WebP/AVIF, compress, crop, rotate
+- Color — /v1/color — Convert, palette generation, mix, WCAG contrast
+
+### Network Tools
+- IP — /v1/ip — Look up caller IP, parse, subnet math, CIDR range check
+- Hash — /v1/hash — MD5, SHA1, SHA256, SHA512, HMAC, verify
+- DNS — /v1/dns — DNS record lookup for any domain (A, AAAA, MX, TXT, CNAME, NS)
+- Headers — /v1/headers — HTTP header inspection with security grading
+- Ping — /v1/ping — URL uptime check with HTTP status and SSL certificate info
+
+### Security Tools
+- Secret — /v1/secret — One-time secrets that self-destruct after first view
+
+### Storage Tools
+- KV Store — /v1/kv — Key-value storage for agents (set, get, delete, increment)
+- Paste — /v1/paste — Create and share text pastes with expiry
+- URL Shortener — /v1/shorten — Shorten URLs with click tracking
+- Webhooks — /v1/webhook — Create bins, receive and inspect incoming requests
+
+### Platform Tools
+- Link-in-Bio — /v1/links — Full Linktree replacement (25 endpoints)
+  Create pages, manage links, analytics, custom domains, themes
+- Scheduling — /v1/schedule — Full Calendly replacement (30 endpoints)
+  Event types, availability, bookings, webhooks, multi-timezone
+- Solve — /v1/solve — Community problem-solving with reputation system
+
+## Pricing
+
+All tools are free. No credit card required.
+Free tier: 500 API calls/day per tool.
+
+## For Developers
+
+Build a tool, list it on UnClick, earn 80% of revenue.
+Automated security scanning. Managed auth coming soon.
+Details: https://unclick.world#developers
+
+## Contact
+
+Website: https://unclick.world
+Docs: https://unclick.world/docs
+Email: chris@unclick.world
+GitHub: https://github.com/unclick-world
+Built in Melbourne, Australia.
