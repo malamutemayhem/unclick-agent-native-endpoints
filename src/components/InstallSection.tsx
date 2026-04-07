@@ -3,37 +3,12 @@ import FadeIn from "./FadeIn";
 import ApiKeySignup from "./ApiKeySignup";
 import { motion } from "framer-motion";
 
-type Client = "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
+type Tab = "Ask Your Agent" | "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
+type ManualTab = Exclude<Tab, "Ask Your Agent">;
 
-function makeClaudeConfig(apiKey: string) {
-  return `{
-  "mcpServers": {
-    "unclick": {
-      "command": "npx",
-      "args": ["-y", "@unclick/mcp-server"],
-      "env": {
-        "UNCLICK_API_KEY": "${apiKey}"
-      }
-    }
-  }
-}`;
-}
+const PLACEHOLDER = "YOUR_API_KEY";
 
-function makeCursorConfig(apiKey: string) {
-  return `{
-  "mcpServers": {
-    "unclick": {
-      "command": "npx",
-      "args": ["-y", "@unclick/mcp-server"],
-      "env": {
-        "UNCLICK_API_KEY": "${apiKey}"
-      }
-    }
-  }
-}`;
-}
-
-function makeOpenclawConfig(apiKey: string) {
+function makeJsonConfig(apiKey: string) {
   return `{
   "mcpServers": {
     "unclick": {
@@ -54,37 +29,32 @@ function makeApiConfig(apiKey: string) {
   -d '{"url": "https://example.com/very/long/url"}'`;
 }
 
-const PLACEHOLDER = "YOUR_API_KEY";
+function makeAgentPrompt(apiKey: string) {
+  return `Install the UnClick MCP server. Run it via npx with the package @unclick/mcp-server and set UNCLICK_API_KEY to ${apiKey}.`;
+}
 
-const clients: Client[] = ["Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
+const tabs: Tab[] = ["Ask Your Agent", "Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
 
-const configs: Record<
-  Client,
-  { label: string; file: string; instruction: string | null; make: (key: string) => string }
-> = {
+const manualConfigs: Record<ManualTab, { label: string; instruction: string | null; make: (key: string) => string }> = {
   "Claude Desktop": {
     label: "claude_desktop_config.json",
-    file: "claude_desktop_config.json",
     instruction:
       "Open Claude Desktop, go to Settings > Developer > Edit Config. Paste this into claude_desktop_config.json:",
-    make: makeClaudeConfig,
+    make: makeJsonConfig,
   },
   Cursor: {
     label: ".cursor/mcp.json",
-    file: ".cursor/mcp.json",
     instruction:
       "Create or edit .cursor/mcp.json in your project root (or globally at ~/.cursor/mcp.json). Paste this:",
-    make: makeCursorConfig,
+    make: makeJsonConfig,
   },
   OpenClaw: {
     label: "~/.openclaw/openclaw.json",
-    file: "openclaw.json",
     instruction: "Create or edit ~/.openclaw/openclaw.json and paste this:",
-    make: makeOpenclawConfig,
+    make: makeJsonConfig,
   },
   "Direct API": {
     label: "curl",
-    file: "curl",
     instruction: null,
     make: makeApiConfig,
   },
@@ -98,33 +68,71 @@ const steps = [
   },
   {
     n: "2",
-    label: "Copy your config",
-    detail: "Pick your AI client below. Your key is already inserted. One click to copy.",
+    label: "Copy the prompt or config",
+    detail: "Pick your install method below. Your key is already inserted. One click to copy.",
   },
   {
     n: "3",
-    label: "Paste and restart",
-    detail: 'Open your config file, paste, save, restart your AI. Try: "shorten this link."',
+    label: "Paste and go",
+    detail: "Drop the prompt into your agent's chat, or paste the config and restart your AI.",
   },
 ];
 
+function BlurredText({ text, hasKey }: { text: string; hasKey: boolean }) {
+  if (hasKey) return <>{text}</>;
+  return (
+    <>
+      {text.split(PLACEHOLDER).map((part, i, arr) =>
+        i < arr.length - 1 ? (
+          <span key={i}>
+            {part}
+            <span className="rounded bg-muted/20 px-1 blur-[3px] text-muted-foreground">
+              {PLACEHOLDER}
+            </span>
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 const InstallSection = () => {
-  const [active, setActive] = useState<Client>("Claude Desktop");
-  const [copied, setCopied] = useState(false);
+  const [active, setActive] = useState<Tab>("Ask Your Agent");
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [apiKey, setApiKey] = useState<string>("");
+  const [showConfig, setShowConfig] = useState(false);
 
   const handleKeyReady = useCallback((key: string) => {
     setApiKey(key);
   }, []);
 
   const displayKey = apiKey || PLACEHOLDER;
-  const code = configs[active].make(displayKey);
   const hasKey = Boolean(apiKey);
+  const isAgentTab = active === "Ask Your Agent";
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const agentPrompt = makeAgentPrompt(displayKey);
+  const jsonConfig = makeJsonConfig(displayKey);
+  const manualCode = isAgentTab ? "" : manualConfigs[active as ManualTab].make(displayKey);
+
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(agentPrompt);
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(isAgentTab ? jsonConfig : manualCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const handleTabChange = (tab: Tab) => {
+    setActive(tab);
+    setPromptCopied(false);
+    setCodeCopied(false);
   };
 
   return (
@@ -167,81 +175,155 @@ const InstallSection = () => {
         </div>
       </FadeIn>
 
-      {/* Config code block */}
+      {/* Install block */}
       <FadeIn delay={0.25}>
-        <div className={`mt-6 rounded-xl border overflow-hidden transition-all duration-300 ${hasKey ? "border-border/60 bg-card/40" : "border-border/30 bg-card/20"}`}>
+        <div
+          className={`mt-6 rounded-xl border overflow-hidden transition-all duration-300 ${
+            hasKey ? "border-border/60 bg-card/40" : "border-border/30 bg-card/20"
+          }`}
+        >
           {/* Tab row */}
-          <div className="flex items-center border-b border-border/60 bg-card/60 px-1">
-            {clients.map((client) => (
+          <div className="flex items-center border-b border-border/60 bg-card/60 px-1 overflow-x-auto">
+            {tabs.map((tab) => (
               <button
-                key={client}
-                onClick={() => setActive(client)}
-                className={`px-4 py-3 text-xs font-medium transition-colors ${
-                  active === client
+                key={tab}
+                onClick={() => handleTabChange(tab)}
+                className={`px-4 py-3 text-xs font-medium transition-colors whitespace-nowrap ${
+                  active === tab
                     ? "text-heading border-b-2 border-primary -mb-px"
                     : "text-muted-foreground hover:text-body"
                 }`}
               >
-                {client}
+                {tab}
               </button>
             ))}
-            <div className="ml-auto px-4">
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {configs[active].label}
-              </span>
-            </div>
+            {!isAgentTab && (
+              <div className="ml-auto px-4 flex-shrink-0">
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {manualConfigs[active as ManualTab].label}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Per-tab instruction */}
-          {configs[active].instruction && (
-            <div className="px-5 pt-4 pb-0">
-              <p className="text-xs text-muted-foreground">{configs[active].instruction}</p>
+          {/* Ask Your Agent tab */}
+          {isAgentTab && (
+            <div className="p-5">
+              <p className="text-sm font-semibold text-heading mb-1">One prompt. That's it.</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                Works with Claude Code, Cursor, Windsurf, and any agent with file access. Paste this into your agent's chat.
+              </p>
+
+              {/* Copyable prompt box */}
+              <div
+                className={`relative rounded-lg border p-4 transition-all duration-300 ${
+                  hasKey ? "border-primary/30 bg-primary/5" : "border-border/40 bg-card/30"
+                }`}
+              >
+                <p
+                  className={`text-sm leading-relaxed pr-20 transition-all duration-300 ${
+                    hasKey ? "text-body" : "text-body/40 select-none"
+                  }`}
+                >
+                  <BlurredText text={agentPrompt} hasKey={hasKey} />
+                </p>
+                <motion.button
+                  onClick={handleCopyPrompt}
+                  disabled={!hasKey}
+                  className={`absolute right-3 top-3 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
+                    hasKey
+                      ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
+                      : "text-muted-foreground/30 cursor-not-allowed"
+                  }`}
+                  whileTap={hasKey ? { scale: 0.95 } : {}}
+                >
+                  {promptCopied ? "Copied!" : "Copy"}
+                </motion.button>
+              </div>
+
+              {/* Collapsible JSON config for power users */}
+              {hasKey && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowConfig(!showConfig)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-body transition-colors"
+                  >
+                    <span
+                      className="inline-block transition-transform duration-200"
+                      style={{ transform: showConfig ? "rotate(90deg)" : "rotate(0deg)" }}
+                    >
+                      ▶
+                    </span>
+                    {showConfig ? "Hide config" : "Show config"}
+                  </button>
+                  {showConfig && (
+                    <div className="relative mt-2 rounded-lg border border-border/40 bg-card/30 p-4">
+                      <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-body">
+                        <code>{jsonConfig}</code>
+                      </pre>
+                      <motion.button
+                        onClick={handleCopyCode}
+                        className="absolute right-3 top-3 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] text-muted-foreground backdrop-blur-sm hover:border-primary/30 hover:text-heading transition-all cursor-pointer"
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {codeCopied ? "Copied!" : "Copy"}
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!hasKey && (
+                <div className="mt-4 border-t border-border/30 pt-3">
+                  <p className="text-xs text-muted-foreground text-center">
+                    Enter your email above to get your API key and unlock this prompt.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Code */}
-          <div className="relative p-5">
-            <pre className={`overflow-x-auto font-mono text-xs leading-relaxed transition-all duration-300 ${hasKey ? "text-body" : "text-body/40 select-none"}`}>
-              <code>
-                {hasKey ? (
-                  code
-                ) : (
-                  // Show blurred placeholder preview when no key
-                  code.split(PLACEHOLDER).map((part, i, arr) =>
-                    i < arr.length - 1 ? (
-                      <span key={i}>
-                        {part}
-                        <span className="rounded bg-muted/20 px-1 blur-[3px] text-muted-foreground">
-                          {PLACEHOLDER}
-                        </span>
-                      </span>
-                    ) : (
-                      <span key={i}>{part}</span>
-                    )
-                  )
-                )}
-              </code>
-            </pre>
-            <motion.button
-              onClick={handleCopy}
-              disabled={!hasKey}
-              className={`absolute right-4 top-4 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
-                hasKey
-                  ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
-                  : "text-muted-foreground/30 cursor-not-allowed"
-              }`}
-              whileTap={hasKey ? { scale: 0.95 } : {}}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </motion.button>
-          </div>
-
-          {!hasKey && (
-            <div className="border-t border-border/30 bg-card/40 px-5 py-3">
-              <p className="text-xs text-muted-foreground text-center">
-                Enter your email above to get your API key and unlock this config.
-              </p>
-            </div>
+          {/* Manual client tabs */}
+          {!isAgentTab && (
+            <>
+              {manualConfigs[active as ManualTab].instruction && (
+                <div className="px-5 pt-4 pb-0">
+                  <p className="text-xs text-muted-foreground">
+                    {manualConfigs[active as ManualTab].instruction}
+                  </p>
+                </div>
+              )}
+              <div className="relative p-5">
+                <pre
+                  className={`overflow-x-auto font-mono text-xs leading-relaxed transition-all duration-300 ${
+                    hasKey ? "text-body" : "text-body/40 select-none"
+                  }`}
+                >
+                  <code>
+                    <BlurredText text={manualCode} hasKey={hasKey} />
+                  </code>
+                </pre>
+                <motion.button
+                  onClick={handleCopyCode}
+                  disabled={!hasKey}
+                  className={`absolute right-4 top-4 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
+                    hasKey
+                      ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
+                      : "text-muted-foreground/30 cursor-not-allowed"
+                  }`}
+                  whileTap={hasKey ? { scale: 0.95 } : {}}
+                >
+                  {codeCopied ? "Copied!" : "Copy"}
+                </motion.button>
+              </div>
+              {!hasKey && (
+                <div className="border-t border-border/30 bg-card/40 px-5 py-3">
+                  <p className="text-xs text-muted-foreground text-center">
+                    Enter your email above to get your API key and unlock this config.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </FadeIn>
