@@ -8,6 +8,7 @@
     { "source": "/v1/arena",      "destination": "/api/arena" },
     { "source": "/v1/report-bug", "destination": "/api/report-bug" },
     { "source": "/og-image.svg",  "destination": "/og-image.svg" },
+    { "source": "/og-image.png",  "destination": "/og-image.png" },
     { "source": "/(.*)",          "destination": "/index.html" }
   ]
 }
