@@ -19,7 +19,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">60+ tools - all free</span>
+          <span className="font-mono text-xs text-muted-foreground">60+ tools — connect once, then zero friction</span>
         </div>
       </FadeIn>
 
@@ -31,13 +31,13 @@ const Hero = ({ search, onSearch }: HeroProps) => (
 
       <FadeIn delay={0.1}>
         <p className="mt-4 text-2xl font-bold text-primary tracking-tight">
-          60+ tools. One install. Zero friction.
+          Connect once. Zero friction forever.
         </p>
       </FadeIn>
 
       <FadeIn delay={0.15}>
         <p className="mt-3 text-lg text-body max-w-xl mx-auto leading-relaxed">
-          One connection gives your AI access to 60+ tools. Messaging, social, e-commerce, data, media, and more. No per-tool installs.
+          48 tools work instantly — no setup, no keys. 11 platform connectors unlock messaging, social, e-commerce, and finance with a one-time account connection.
         </p>
       </FadeIn>
 

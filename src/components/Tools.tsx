@@ -14,21 +14,25 @@ import {
   BadgeCheck, BookOpen, BellRing, Layers,
   MessageCircle, MessageSquare, Users, Wind, Globe2,
   ShoppingCart, Receipt, Store, ArrowUpCircle,
+  KeyRound, TrendingUp,
 } from "lucide-react";
 
-type Category = "All" | "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce";
+// ToolCategory: the category label stored on each tool (used for card badges and icon colours)
+type ToolCategory = "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce";
+// Category: values available in the filter bar ("Local" / "Platform" are section-level filters)
+type Category = "All" | "Local" | "Platform" | ToolCategory;
 
 interface Tool {
   name: string;
   description: string;
   endpoint: string;
-  category: Exclude<Category, "All">;
+  category: ToolCategory;
   Icon: React.ElementType;
   capabilities: string[];
   examplePrompt: string;
 }
 
-const categoryColors: Record<Exclude<Category, "All">, string> = {
+const categoryColors: Record<ToolCategory, string> = {
   Utility:  "bg-amber-500/10 text-amber-400 border-amber-500/20",
   Text:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
   Data:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
@@ -41,7 +45,7 @@ const categoryColors: Record<Exclude<Category, "All">, string> = {
   Commerce: "bg-teal-500/10 text-teal-400 border-teal-500/20",
 };
 
-const categoryIconBg: Record<Exclude<Category, "All">, string> = {
+const categoryIconBg: Record<ToolCategory, string> = {
   Utility:  "bg-amber-500/10 text-amber-400",
   Text:     "bg-sky-500/10 text-sky-400",
   Data:     "bg-violet-500/10 text-violet-400",
@@ -863,9 +867,58 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to check Shopify inventory levels and flag any products below reorder threshold",
   },
+  // ── Platform Connectors (additional) ──────────────────────────────────────
+  {
+    name: "Vault",
+    description: "Store and retrieve encrypted credentials, API keys, and secrets for use across your AI agent workflows. Vault provides a secure, API-accessible credential store so agents can share secrets between sessions and tools without exposing them in plaintext. Connect once — every workflow that needs those credentials just works.",
+    endpoint: "/v1/vault",
+    category: "Security",
+    Icon: KeyRound,
+    capabilities: [
+      "Store encrypted credentials, API keys, and secrets with scoped access",
+      "Retrieve stored secrets from any workflow step using named keys",
+      "Rotate credentials without updating every tool that depends on them",
+      "Audit access logs: who retrieved what secret and when",
+    ],
+    examplePrompt: "Ask your AI to store a production database URL in Vault and retrieve it across any workflow",
+  },
+  {
+    name: "C-Suite Analyze",
+    description: "Connect your business data sources and get boardroom-ready analysis on demand. C-Suite Analyze pulls revenue, churn, CAC, LTV, pipeline, and operational metrics from your connected accounts and returns structured summaries, trend narratives, and actionable highlights for executive decision-making.",
+    endpoint: "/v1/csuite",
+    category: "Data",
+    Icon: TrendingUp,
+    capabilities: [
+      "Pull and normalise KPIs from connected sources: revenue, MRR, churn, and CAC",
+      "Generate trend narratives comparing current period vs. prior periods",
+      "Identify leading indicators of growth or risk across business units",
+      "Export boardroom-ready summaries as structured JSON or formatted reports",
+    ],
+    examplePrompt: "Ask your AI to generate a monthly business performance summary with key metrics and trends",
+  },
 ];
 
-const categories: Category[] = ["All", "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Platform", "Social", "Commerce"];
+// Platform connectors: tools that require a one-time external account connection
+const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
+  "Telegram":       "telegram",
+  "Slack":          "slack",
+  "Discord":        "discord",
+  "Reddit":         "reddit",
+  "Bluesky":        "bluesky",
+  "Mastodon":       "mastodon",
+  "Shopify":        "shopify",
+  "Amazon":         "amazon",
+  "Xero":           "xero",
+  "Vault":          "vault",
+  "C-Suite Analyze":"csuite",
+};
+
+const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
+
+const categories: Category[] = [
+  "All", "Local", "Platform",
+  "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Social", "Commerce",
+];
 
 interface ToolsProps {
   searchQuery?: string;
@@ -875,24 +928,57 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [hasKey, setHasKey] = useState(false);
+  const [connectorStatus, setConnectorStatus] = useState<Record<string, "connected" | "not-connected">>({});
 
   useEffect(() => {
-    setHasKey(Boolean(localStorage.getItem("unclick_api_key")));
+    const key = localStorage.getItem("unclick_api_key");
+    setHasKey(Boolean(key));
+
     const onStorage = () => setHasKey(Boolean(localStorage.getItem("unclick_api_key")));
     window.addEventListener("storage", onStorage);
+
+    if (key) {
+      const slugs = Object.values(PLATFORM_CONNECTOR_SLUGS);
+      Promise.all(
+        slugs.map(async (slug) => {
+          try {
+            const res = await fetch(`/api/credentials?platform=${slug}`, {
+              headers: { Authorization: `Bearer ${key}` },
+            });
+            return [slug, res.ok ? "connected" : "not-connected"] as const;
+          } catch {
+            return [slug, "not-connected"] as const;
+          }
+        })
+      ).then((results) => {
+        setConnectorStatus(Object.fromEntries(results));
+      });
+    }
+
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const visible = tools.filter((t) => {
-    const matchesCategory = activeCategory === "All" || t.category === activeCategory;
+  const matchesSearch = (t: Tool) => {
     const q = searchQuery.trim().toLowerCase();
-    const matchesQuery =
+    return (
       q === "" ||
       t.name.toLowerCase().includes(q) ||
       t.description.toLowerCase().includes(q) ||
-      t.category.toLowerCase().includes(q);
-    return matchesCategory && matchesQuery;
-  });
+      t.category.toLowerCase().includes(q)
+    );
+  };
+
+  const getVisible = (): Tool[] => {
+    if (activeCategory === "All")      return tools.filter(matchesSearch);
+    if (activeCategory === "Local")    return tools.filter((t) => !PLATFORM_CONNECTOR_NAMES.has(t.name) && matchesSearch(t));
+    if (activeCategory === "Platform") return tools.filter((t) => PLATFORM_CONNECTOR_NAMES.has(t.name) && matchesSearch(t));
+    return tools.filter((t) => t.category === activeCategory && matchesSearch(t));
+  };
+
+  const visible      = getVisible();
+  const visibleLocal = visible.filter((t) => !PLATFORM_CONNECTOR_NAMES.has(t.name));
+  const visiblePlatform = visible.filter((t) => PLATFORM_CONNECTOR_NAMES.has(t.name));
+  const useSections  = activeCategory === "All" || activeCategory === "Local" || activeCategory === "Platform";
 
   const handleGetStarted = () => {
     setSelectedTool(null);
@@ -903,14 +989,9 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
 
   return (
     <section id="tools" className="relative mx-auto max-w-7xl px-6 py-8">
+      {/* ── Filter bar ─────────────────────────────────────────────────────── */}
       <FadeIn>
-        <p className="mb-4 text-sm font-semibold text-primary">
-          One key unlocks everything below.
-        </p>
-      </FadeIn>
-      {/* Category filter bar */}
-      <FadeIn>
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-8">
           {categories.map((cat) => (
             <button
               key={cat}
@@ -930,40 +1011,213 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
         </div>
       </FadeIn>
 
-      {/* Tool grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-        {visible.map((tool, i) => (
-          <FadeIn key={tool.name} delay={Math.min(i * 0.03, 0.3)}>
-            <motion.button
-              onClick={() => setSelectedTool(tool)}
-              className="group relative w-full text-left flex flex-col rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/40 hover:bg-card hover:shadow-[0_0_20px_2px_rgba(226,185,59,0.07)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-              whileHover={{ y: -2 }}
-              transition={{ duration: 0.15 }}
-            >
-              {/* Icon */}
-              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${categoryIconBg[tool.category]}`}>
-                <tool.Icon size={18} strokeWidth={1.75} />
+      {useSections ? (
+        <>
+          {/* ── Section 1: Local Tools ───────────────────────────────────── */}
+          {activeCategory !== "Platform" && visibleLocal.length > 0 && (
+            <div className="mb-12">
+              <FadeIn>
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <h2 className="text-xl font-semibold text-heading">Works out of the box</h2>
+                    <span className="rounded-full border border-border/50 bg-card/50 px-2.5 py-0.5 font-mono text-xs text-muted-foreground">
+                      {visibleLocal.length} tools
+                    </span>
+                  </div>
+                  <p className="text-sm text-body max-w-2xl">
+                    These tools run entirely inside the MCP server. No API keys, no accounts, no external setup — just call and go.
+                  </p>
+                </div>
+              </FadeIn>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                {visibleLocal.map((tool, i) => (
+                  <FadeIn key={tool.name} delay={Math.min(i * 0.03, 0.3)}>
+                    <motion.button
+                      onClick={() => setSelectedTool(tool)}
+                      className="group relative w-full text-left flex flex-col rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/40 hover:bg-card hover:shadow-[0_0_20px_2px_rgba(226,185,59,0.07)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      whileHover={{ y: -2 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${categoryIconBg[tool.category]}`}>
+                        <tool.Icon size={18} strokeWidth={1.75} />
+                      </div>
+                      <span className="text-sm font-semibold text-heading leading-snug">{tool.name}</span>
+                      <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2 flex-1">{tool.description}</p>
+                      <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                          {tool.category}
+                        </span>
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                          No setup
+                        </span>
+                      </div>
+                    </motion.button>
+                  </FadeIn>
+                ))}
               </div>
+            </div>
+          )}
 
-              {/* Name */}
-              <span className="text-sm font-semibold text-heading leading-snug">{tool.name}</span>
+          {/* ── Divider (only in "All" mode with both sections visible) ─── */}
+          {activeCategory === "All" && visibleLocal.length > 0 && visiblePlatform.length > 0 && (
+            <div className="my-10 flex items-center gap-4">
+              <div className="h-px flex-1 bg-border/30" />
+              <span className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground/60">
+                Platform Connectors
+              </span>
+              <div className="h-px flex-1 bg-border/30" />
+            </div>
+          )}
 
-              {/* Description - 2 lines max */}
-              <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2 flex-1">{tool.description}</p>
+          {/* ── Section 2: Platform Connectors ──────────────────────────── */}
+          {activeCategory !== "Local" && visiblePlatform.length > 0 && (
+            <div>
+              <FadeIn>
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <h2 className="text-xl font-semibold text-heading">Connect once. Works forever.</h2>
+                    <span className="rounded-full border border-border/50 bg-card/50 px-2.5 py-0.5 font-mono text-xs text-muted-foreground">
+                      {visiblePlatform.length} connectors
+                    </span>
+                  </div>
+                  <p className="text-sm text-body max-w-2xl">
+                    Connect your accounts one time. Your AI agent handles the rest — no credentials on every call.
+                  </p>
+                </div>
+              </FadeIn>
+              <div className="rounded-2xl border border-border/30 bg-card/20 p-4 sm:p-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                  {visiblePlatform.map((tool, i) => {
+                    const slug = PLATFORM_CONNECTOR_SLUGS[tool.name] ?? tool.name.toLowerCase();
+                    const isConnected = connectorStatus[slug] === "connected";
+                    return (
+                      <FadeIn key={tool.name} delay={Math.min(i * 0.03, 0.3)}>
+                        <motion.div
+                          className="relative flex flex-col rounded-xl border border-border/50 bg-card/60 p-4 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/40 hover:bg-card hover:shadow-[0_0_20px_2px_rgba(226,185,59,0.07)]"
+                          whileHover={{ y: -2 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          {/* Top row: icon + status badge */}
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${categoryIconBg[tool.category]}`}>
+                              <tool.Icon size={18} strokeWidth={1.75} />
+                            </div>
+                            {isConnected ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400 shrink-0">
+                                <CheckCircle2 size={9} />
+                                Connected
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-muted/30 border border-border/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shrink-0">
+                                Setup required
+                              </span>
+                            )}
+                          </div>
 
-              {/* Footer badges */}
-              <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
-                  {tool.category}
-                </span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
-                  Free
-                </span>
+                          {/* Name + description (clickable for modal) */}
+                          <button
+                            onClick={() => setSelectedTool(tool)}
+                            className="text-left flex-1 focus:outline-none"
+                          >
+                            <span className="text-sm font-semibold text-heading leading-snug">{tool.name}</span>
+                            <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2">{tool.description}</p>
+                          </button>
+
+                          {/* Footer: category badge + connect CTA */}
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                              {tool.category}
+                            </span>
+                            <a
+                              href={`/connect/${slug}`}
+                              className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                            >
+                              {isConnected ? "Manage" : "Connect"}
+                            </a>
+                          </div>
+                        </motion.div>
+                      </FadeIn>
+                    );
+                  })}
+                </div>
               </div>
-            </motion.button>
-          </FadeIn>
-        ))}
-      </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── Flat grid for category-specific filters ─────────────────────── */
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+          {visible.map((tool, i) => {
+            const isPlatform = PLATFORM_CONNECTOR_NAMES.has(tool.name);
+            const slug = isPlatform ? (PLATFORM_CONNECTOR_SLUGS[tool.name] ?? tool.name.toLowerCase()) : null;
+            const isConnected = slug ? connectorStatus[slug] === "connected" : false;
+
+            return (
+              <FadeIn key={tool.name} delay={Math.min(i * 0.03, 0.3)}>
+                {isPlatform ? (
+                  <motion.div
+                    className="relative flex flex-col rounded-xl border border-border/50 bg-card/60 p-4 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/40 hover:bg-card hover:shadow-[0_0_20px_2px_rgba(226,185,59,0.07)]"
+                    whileHover={{ y: -2 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${categoryIconBg[tool.category]}`}>
+                        <tool.Icon size={18} strokeWidth={1.75} />
+                      </div>
+                      {isConnected ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400 shrink-0">
+                          <CheckCircle2 size={9} />
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted/30 border border-border/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shrink-0">
+                          Setup required
+                        </span>
+                      )}
+                    </div>
+                    <button onClick={() => setSelectedTool(tool)} className="text-left flex-1 focus:outline-none">
+                      <span className="text-sm font-semibold text-heading leading-snug">{tool.name}</span>
+                      <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2">{tool.description}</p>
+                    </button>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                        {tool.category}
+                      </span>
+                      <a
+                        href={`/connect/${slug}`}
+                        className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        {isConnected ? "Manage" : "Connect"}
+                      </a>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    onClick={() => setSelectedTool(tool)}
+                    className="group relative w-full text-left flex flex-col rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm transition-all overflow-hidden hover:border-primary/40 hover:bg-card hover:shadow-[0_0_20px_2px_rgba(226,185,59,0.07)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    whileHover={{ y: -2 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${categoryIconBg[tool.category]}`}>
+                      <tool.Icon size={18} strokeWidth={1.75} />
+                    </div>
+                    <span className="text-sm font-semibold text-heading leading-snug">{tool.name}</span>
+                    <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2 flex-1">{tool.description}</p>
+                    <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                        {tool.category}
+                      </span>
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                        No setup
+                      </span>
+                    </div>
+                  </motion.button>
+                )}
+              </FadeIn>
+            );
+          })}
+        </div>
+      )}
 
       {visible.length === 0 && (
         <div className="mt-16 text-center text-sm text-muted-foreground">
@@ -971,126 +1225,158 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
         </div>
       )}
 
-      {/* Tool detail modal */}
+      {/* ── Tool detail modal ───────────────────────────────────────────────── */}
       <AnimatePresence>
-        {selectedTool && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedTool(null)}
-            />
-            {/* Modal */}
-            <motion.div
-              className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-card shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {/* Close */}
-              <button
+        {selectedTool && (() => {
+          const isPlatform = PLATFORM_CONNECTOR_NAMES.has(selectedTool.name);
+          const slug = isPlatform ? (PLATFORM_CONNECTOR_SLUGS[selectedTool.name] ?? selectedTool.name.toLowerCase()) : null;
+          const isConnected = slug ? connectorStatus[slug] === "connected" : false;
+
+          return (
+            <>
+              <motion.div
+                className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 onClick={() => setSelectedTool(null)}
-                className="absolute right-4 top-4 rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-heading transition-colors"
-                aria-label="Close"
+              />
+              <motion.div
+                className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-card shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                transition={{ duration: 0.2 }}
               >
-                <X size={16} />
-              </button>
+                <button
+                  onClick={() => setSelectedTool(null)}
+                  className="absolute right-4 top-4 rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-heading transition-colors"
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
 
-              {/* Icon + name + connected badge */}
-              <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${categoryIconBg[selectedTool.category]}`}>
-                  <selectedTool.Icon size={22} strokeWidth={1.75} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-lg font-semibold text-heading">{selectedTool.name}</h3>
-                    {hasKey && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                        <CheckCircle2 size={10} />
-                        Connected
+                <div className="flex items-center gap-4">
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${categoryIconBg[selectedTool.category]}`}>
+                    <selectedTool.Icon size={22} strokeWidth={1.75} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg font-semibold text-heading">{selectedTool.name}</h3>
+                      {isPlatform ? (
+                        isConnected ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                            <CheckCircle2 size={10} />
+                            Connected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-muted/30 border border-border/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            Setup required
+                          </span>
+                        )
+                      ) : hasKey ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                          <CheckCircle2 size={10} />
+                          Connected
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[selectedTool.category]}`}>
+                        {selectedTool.category}
                       </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[selectedTool.category]}`}>
-                      {selectedTool.category}
-                    </span>
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
-                      Free
-                    </span>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
+                        Free
+                      </span>
+                      {isPlatform && (
+                        <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400 border border-blue-500/20">
+                          Platform Connector
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Description */}
-              <p className="mt-4 text-sm text-body leading-relaxed">{selectedTool.description}</p>
+                <p className="mt-4 text-sm text-body leading-relaxed">{selectedTool.description}</p>
 
-              {/* Capabilities */}
-              <div className="mt-4">
-                <p className="text-xs font-medium text-heading mb-2 uppercase tracking-widest font-mono opacity-60">What it can do</p>
-                <ul className="space-y-1.5">
-                  {selectedTool.capabilities.map((cap) => (
-                    <li key={cap} className="flex items-start gap-2 text-xs text-body">
-                      <span className="mt-0.5 shrink-0 text-primary opacity-70">-</span>
-                      {cap}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-heading mb-2 uppercase tracking-widest font-mono opacity-60">What it can do</p>
+                  <ul className="space-y-1.5">
+                    {selectedTool.capabilities.map((cap) => (
+                      <li key={cap} className="flex items-start gap-2 text-xs text-body">
+                        <span className="mt-0.5 shrink-0 text-primary opacity-70">-</span>
+                        {cap}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-              {/* Example prompt */}
-              <div className="mt-4 rounded-lg border border-border/40 bg-background/60 px-4 py-3">
-                <span className="block font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Example</span>
-                <p className="text-xs text-body leading-relaxed italic">"{selectedTool.examplePrompt}"</p>
-              </div>
+                <div className="mt-4 rounded-lg border border-border/40 bg-background/60 px-4 py-3">
+                  <span className="block font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">Example</span>
+                  <p className="text-xs text-body leading-relaxed italic">"{selectedTool.examplePrompt}"</p>
+                </div>
 
-              {/* Endpoint */}
-              <div className="mt-3 rounded-lg border border-border/40 bg-background/40 px-4 py-2.5 flex items-center gap-3">
-                <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Endpoint</span>
-                <code className="font-mono text-xs text-primary">{selectedTool.endpoint}</code>
-              </div>
+                <div className="mt-3 rounded-lg border border-border/40 bg-background/40 px-4 py-2.5 flex items-center gap-3">
+                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Endpoint</span>
+                  <code className="font-mono text-xs text-primary">{selectedTool.endpoint}</code>
+                </div>
 
-              {/* CTA */}
-              <div className="mt-5 flex gap-3">
-                {hasKey ? (
-                  <>
-                    <button
-                      onClick={handleGetStarted}
-                      className="flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 text-center text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-                    >
-                      You're connected
-                    </button>
-                    <a
-                      href="/docs"
-                      className="rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-heading hover:border-border transition-colors"
-                    >
-                      Docs
-                    </a>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={handleGetStarted}
-                      className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-                    >
-                      Get Started - free
-                    </button>
-                    <a
-                      href="/docs"
-                      className="rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-heading hover:border-border transition-colors"
-                    >
-                      Docs
-                    </a>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
+                <div className="mt-5 flex gap-3">
+                  {isPlatform ? (
+                    <>
+                      <a
+                        href={`/connect/${slug}`}
+                        className={`flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-colors ${
+                          isConnected
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                            : "bg-primary text-primary-foreground hover:opacity-90"
+                        }`}
+                      >
+                        {isConnected ? "Manage connection" : "Connect account"}
+                      </a>
+                      <a
+                        href="/docs"
+                        className="rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-heading hover:border-border transition-colors"
+                      >
+                        Docs
+                      </a>
+                    </>
+                  ) : hasKey ? (
+                    <>
+                      <button
+                        onClick={handleGetStarted}
+                        className="flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 text-center text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                      >
+                        You're connected
+                      </button>
+                      <a
+                        href="/docs"
+                        className="rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-heading hover:border-border transition-colors"
+                      >
+                        Docs
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleGetStarted}
+                        className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                      >
+                        Get Started — free
+                      </button>
+                      <a
+                        href="/docs"
+                        className="rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-heading hover:border-border transition-colors"
+                      >
+                        Docs
+                      </a>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          );
+        })()}
       </AnimatePresence>
     </section>
   );
