@@ -6,7 +6,7 @@ const stats = [
   { value: 2.4, suffix: "M+", label: "API calls last month" },
   { value: 38, suffix: "ms", label: "Avg response time" },
   { value: 99.98, suffix: "%", label: "Uptime SLA" },
-  { value: 7, suffix: "", label: "Agent-native tools" },
+  { value: 60, suffix: "+", label: "Free tools" },
 ];
 
 const AnimatedNumber = ({ value, suffix, duration = 2000 }: { value: number; suffix: string; duration?: number }) => {
