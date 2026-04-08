@@ -21,11 +21,20 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.15.1",
+    "csv-parse": "^6.2.1",
+    "csv-stringify": "^6.7.0",
+    "fast-xml-parser": "^5.5.10",
+    "js-yaml": "^4.1.1",
+    "marked": "^17.0.6",
+    "turndown": "^7.2.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
+    "@types/turndown": "^5.0.6",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3"
   },

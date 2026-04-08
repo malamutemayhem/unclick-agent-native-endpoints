@@ -18,6 +18,21 @@ import {
   generateChangelog,
   getFaviconUrls,
 } from "./local-tools.js";
+import {
+  markdownToHtml,
+  htmlToMarkdown,
+  jsonToYaml,
+  yamlToJson,
+  jsonToXml,
+  xmlToJson,
+  jsonToToml,
+  tomlToJson,
+  csvToJson,
+  jsonToCsv,
+  jsonFormat,
+  jsonToJsonl,
+  jsonlToJson,
+} from "./converter-tools.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -242,18 +257,6 @@ const DIRECT_TOOLS = [
         delimiter: { type: "string", default: "," },
       },
       required: ["csv"],
-    },
-  },
-  {
-    name: "unclick_json_format",
-    description: "Format / pretty-print a JSON string.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        json: { type: "string" },
-        indent: { description: "2, 4, or 'tab'", default: 2 },
-      },
-      required: ["json"],
     },
   },
   {
@@ -557,6 +560,163 @@ const DIRECT_TOOLS = [
       required: ["domain"],
     },
   },
+  // ── Converter tools (pure-local, no API call) ─────────────────────────────
+  {
+    name: "unclick_markdown_to_html",
+    description: "Convert Markdown text to HTML.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        markdown: { type: "string", description: "Markdown text to convert" },
+      },
+      required: ["markdown"],
+    },
+  },
+  {
+    name: "unclick_html_to_markdown",
+    description: "Convert HTML to Markdown.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        html: { type: "string", description: "HTML string to convert" },
+      },
+      required: ["html"],
+    },
+  },
+  {
+    name: "unclick_json_to_yaml",
+    description: "Convert a JSON string to YAML.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "Valid JSON string" },
+        indent: { type: "number", default: 2, description: "YAML indent width (default 2)" },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_yaml_to_json",
+    description: "Convert a YAML string to JSON.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        yaml: { type: "string", description: "Valid YAML string" },
+        indent: { type: "number", default: 2, description: "JSON indent width (default 2)" },
+      },
+      required: ["yaml"],
+    },
+  },
+  {
+    name: "unclick_json_to_xml",
+    description: "Convert a JSON string to XML.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "Valid JSON string" },
+        root_key: { type: "string", default: "root", description: "Root element name when input is an array (default: 'root')" },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_xml_to_json",
+    description: "Convert an XML string to JSON.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        xml: { type: "string", description: "Valid XML string" },
+        indent: { type: "number", default: 2, description: "JSON indent width (default 2)" },
+      },
+      required: ["xml"],
+    },
+  },
+  {
+    name: "unclick_json_to_toml",
+    description: "Convert a JSON object to TOML. Input must be a top-level object (not an array).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "Valid JSON object string" },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_toml_to_json",
+    description: "Convert a TOML string to JSON.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        toml: { type: "string", description: "Valid TOML string" },
+        indent: { type: "number", default: 2, description: "JSON indent width (default 2)" },
+      },
+      required: ["toml"],
+    },
+  },
+  {
+    name: "unclick_csv_to_json",
+    description: "Convert CSV text to a JSON array.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        csv: { type: "string", description: "CSV text to convert" },
+        header: { type: "boolean", default: true, description: "First row is a header (default: true)" },
+        delimiter: { type: "string", default: ",", description: "Column delimiter (default: ',')" },
+      },
+      required: ["csv"],
+    },
+  },
+  {
+    name: "unclick_json_to_csv",
+    description: "Convert a JSON array to CSV text.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "JSON array of objects to convert" },
+        delimiter: { type: "string", default: ",", description: "Column delimiter (default: ',')" },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_json_format",
+    description: "Pretty-print or minify a JSON string. Use indent=0 or 'minify' to minify.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "Valid JSON string" },
+        indent: {
+          description: "Indent width: 2, 4, 'tab', or 'minify' (default: 2)",
+          default: 2,
+        },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_json_to_jsonl",
+    description: "Convert a JSON array to newline-delimited JSON (JSONL), one item per line.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        json: { type: "string", description: "JSON array to convert" },
+      },
+      required: ["json"],
+    },
+  },
+  {
+    name: "unclick_jsonl_to_json",
+    description: "Convert newline-delimited JSON (JSONL) to a JSON array.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        jsonl: { type: "string", description: "JSONL text (one JSON value per line)" },
+        indent: { type: "number", default: 2, description: "JSON indent width (default 2)" },
+      },
+      required: ["jsonl"],
+    },
+  },
   {
     name: "report_bug",
     description:
@@ -621,9 +781,6 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 
   unclick_parse_csv: (c, a) =>
     c.call("POST", "/v1/csv/parse", a as Record<string, unknown>),
-
-  unclick_json_format: (c, a) =>
-    c.call("POST", "/v1/json/format", a as Record<string, unknown>),
 
   unclick_encode: async (c, a) => {
     const op = a.operation as string;
@@ -739,6 +896,56 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 
   unclick_favicon_url: async (_c, a) =>
     getFaviconUrls(String(a.domain ?? "")),
+
+  // ── Converter handlers ────────────────────────────────────────────────────
+
+  unclick_markdown_to_html: async (_c, a) =>
+    markdownToHtml(String(a.markdown ?? "")),
+
+  unclick_html_to_markdown: async (_c, a) =>
+    htmlToMarkdown(String(a.html ?? "")),
+
+  unclick_json_to_yaml: async (_c, a) =>
+    jsonToYaml(String(a.json ?? ""), Number(a.indent ?? 2)),
+
+  unclick_yaml_to_json: async (_c, a) =>
+    yamlToJson(String(a.yaml ?? ""), Number(a.indent ?? 2)),
+
+  unclick_json_to_xml: async (_c, a) =>
+    jsonToXml(String(a.json ?? ""), a.root_key ? String(a.root_key) : "root"),
+
+  unclick_xml_to_json: async (_c, a) =>
+    xmlToJson(String(a.xml ?? ""), Number(a.indent ?? 2)),
+
+  unclick_json_to_toml: async (_c, a) =>
+    jsonToToml(String(a.json ?? "")),
+
+  unclick_toml_to_json: async (_c, a) =>
+    tomlToJson(String(a.toml ?? ""), Number(a.indent ?? 2)),
+
+  unclick_csv_to_json: async (_c, a) =>
+    csvToJson(String(a.csv ?? ""), {
+      header: a.header !== false,
+      delimiter: a.delimiter ? String(a.delimiter) : ",",
+    }),
+
+  unclick_json_to_csv: async (_c, a) =>
+    jsonToCsv(String(a.json ?? ""), {
+      delimiter: a.delimiter ? String(a.delimiter) : ",",
+    }),
+
+  unclick_json_format: async (_c, a) => {
+    const indent = a.indent === "tab" || a.indent === "minify"
+      ? a.indent as "tab" | "minify"
+      : Number(a.indent ?? 2);
+    return jsonFormat(String(a.json ?? ""), indent);
+  },
+
+  unclick_json_to_jsonl: async (_c, a) =>
+    jsonToJsonl(String(a.json ?? "")),
+
+  unclick_jsonl_to_json: async (_c, a) =>
+    jsonlToJson(String(a.jsonl ?? ""), Number(a.indent ?? 2)),
 };
 
 // ─── Server factory ─────────────────────────────────────────────────────────
