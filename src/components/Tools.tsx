@@ -15,10 +15,11 @@ import {
   MessageCircle, MessageSquare, Users, Wind, Globe2,
   ShoppingCart, Receipt, Store, ArrowUpCircle,
   KeyRound, TrendingUp,
+  Newspaper, Radio, Film, Telescope, Gauge, Trophy, Crown, Swords,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
-type ToolCategory = "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce";
+type ToolCategory = "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce" | "News & Media" | "Entertainment" | "Space & Science" | "Sports" | "Games";
 // Category: values available in the filter bar ("Local" / "Platform" are section-level filters)
 type Category = "All" | "Local" | "Platform" | ToolCategory;
 
@@ -33,29 +34,39 @@ interface Tool {
 }
 
 const categoryColors: Record<ToolCategory, string> = {
-  Utility:  "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  Text:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  Data:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  Media:    "bg-pink-500/10 text-pink-400 border-pink-500/20",
-  Network:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  Security: "bg-red-500/10 text-red-400 border-red-500/20",
-  Storage:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Platform: "bg-primary/10 text-primary border-primary/20",
-  Social:   "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Commerce: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  Utility:         "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  Text:            "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  Data:            "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  Media:           "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  Network:         "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  Security:        "bg-red-500/10 text-red-400 border-red-500/20",
+  Storage:         "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Platform:        "bg-primary/10 text-primary border-primary/20",
+  Social:          "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  Commerce:        "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  "News & Media":  "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  Entertainment:   "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+  "Space & Science": "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+  Sports:          "bg-lime-500/10 text-lime-400 border-lime-500/20",
+  Games:           "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
 };
 
 const categoryIconBg: Record<ToolCategory, string> = {
-  Utility:  "bg-amber-500/10 text-amber-400",
-  Text:     "bg-sky-500/10 text-sky-400",
-  Data:     "bg-violet-500/10 text-violet-400",
-  Media:    "bg-pink-500/10 text-pink-400",
-  Network:  "bg-orange-500/10 text-orange-400",
-  Security: "bg-red-500/10 text-red-400",
-  Storage:  "bg-emerald-500/10 text-emerald-400",
-  Platform: "bg-primary/10 text-primary",
-  Social:   "bg-blue-500/10 text-blue-400",
-  Commerce: "bg-teal-500/10 text-teal-400",
+  Utility:         "bg-amber-500/10 text-amber-400",
+  Text:            "bg-sky-500/10 text-sky-400",
+  Data:            "bg-violet-500/10 text-violet-400",
+  Media:           "bg-pink-500/10 text-pink-400",
+  Network:         "bg-orange-500/10 text-orange-400",
+  Security:        "bg-red-500/10 text-red-400",
+  Storage:         "bg-emerald-500/10 text-emerald-400",
+  Platform:        "bg-primary/10 text-primary",
+  Social:          "bg-blue-500/10 text-blue-400",
+  Commerce:        "bg-teal-500/10 text-teal-400",
+  "News & Media":  "bg-slate-500/10 text-slate-400",
+  Entertainment:   "bg-fuchsia-500/10 text-fuchsia-400",
+  "Space & Science": "bg-indigo-500/10 text-indigo-400",
+  Sports:          "bg-lime-500/10 text-lime-400",
+  Games:           "bg-cyan-500/10 text-cyan-400",
 };
 
 const tools: Tool[] = [
@@ -896,6 +907,123 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to generate a monthly business performance summary with key metrics and trends",
   },
+  // ── News and Media ─────────────────────────────────────────────────────────
+  {
+    name: "The Guardian",
+    description: "Search The Guardian's full article archive and retrieve complete article text. One of the few news APIs that returns full body content. Supports section filtering, date ranges, and tag search across millions of articles dating back to 1999.",
+    endpoint: "/v1/guardian",
+    category: "News & Media",
+    Icon: Newspaper,
+    capabilities: [
+      "Search millions of articles by keyword with section and date filters",
+      "Fetch full article body text, byline, and word count",
+      "Browse all Guardian sections and search tags by topic",
+      "Returns headline, URL, publication date, and trail text per result",
+    ],
+    examplePrompt: "Ask your AI to search The Guardian for articles about climate policy from the past month",
+  },
+  {
+    name: "NewsAPI",
+    description: "Search 150,000+ news sources worldwide for top headlines and articles. Covers breaking news, niche publications, and blogs across 54 countries in 14 languages. Returns title, source, author, description, and URL.",
+    endpoint: "/v1/newsapi",
+    category: "News & Media",
+    Icon: Radio,
+    capabilities: [
+      "Fetch top headlines filtered by country, category, or keyword",
+      "Search all articles from 150,000+ sources by keyword and date range",
+      "Filter by language, sort by relevancy, popularity, or publication date",
+      "Browse available sources by category, language, and country",
+    ],
+    examplePrompt: "Ask your AI to fetch the top technology headlines from the US right now",
+  },
+  // ── Entertainment ──────────────────────────────────────────────────────────
+  {
+    name: "TMDB",
+    description: "Search movies, TV shows, cast and crew ratings from The Movie Database. Get trending content, now-playing films, upcoming releases, and popular TV shows. Returns full details including runtime, budget, genres, and top cast.",
+    endpoint: "/v1/tmdb",
+    category: "Entertainment",
+    Icon: Film,
+    capabilities: [
+      "Search movies and TV shows by title with optional year filter",
+      "Get full movie details: runtime, cast, budget, revenue, and genres",
+      "Browse trending content, now-playing films, and upcoming releases",
+      "Fetch popular TV shows with ratings, overview, and episode counts",
+    ],
+    examplePrompt: "Ask your AI to find trending movies this week and get full details for the top result",
+  },
+  // ── Space and Science ──────────────────────────────────────────────────────
+  {
+    name: "NASA",
+    description: "Astronomy photos, Mars rover images, asteroid tracking and Earth satellite imagery powered by NASA's open data APIs. Use DEMO_KEY for low-volume access or register for a full key.",
+    endpoint: "/v1/nasa",
+    category: "Space & Science",
+    Icon: Telescope,
+    capabilities: [
+      "Astronomy Picture of the Day with full explanation text and image URL",
+      "Near-Earth asteroid feed with hazard status, size, and miss distance",
+      "Mars rover photos from Curiosity, Opportunity, Spirit, and Perseverance",
+      "Landsat satellite imagery and EPIC full-Earth photos for any date",
+    ],
+    examplePrompt: "Ask your AI to fetch today's NASA Astronomy Picture of the Day and summarise the explanation",
+  },
+  // ── Sports ─────────────────────────────────────────────────────────────────
+  {
+    name: "OpenF1",
+    description: "Real-time and historical Formula 1 data including lap times, car telemetry, pit stops, team radio, and track weather. Covers every session from race weekends. No API key needed.",
+    endpoint: "/v1/openf1",
+    category: "Sports",
+    Icon: Gauge,
+    capabilities: [
+      "Browse sessions by year, country, and session type (race, qualifying, sprint)",
+      "Lap times and sector splits per driver per session",
+      "Car telemetry: speed, throttle, brake, DRS, gear, and RPM",
+      "Team radio messages, pit stop durations, and track weather conditions",
+    ],
+    examplePrompt: "Ask your AI to get the lap times for the top 3 drivers from the last Monaco qualifying session",
+  },
+  {
+    name: "Fantasy PL",
+    description: "Full Fantasy Premier League data for agents managing FPL teams. Player stats, live gameweek scores, fixtures, manager team picks, and classic league standings. No API key needed.",
+    endpoint: "/v1/fpl",
+    category: "Sports",
+    Icon: Trophy,
+    capabilities: [
+      "All players, teams, and gameweek data from the FPL bootstrap endpoint",
+      "Player history, upcoming fixtures, and season stats",
+      "Live gameweek scores and upcoming fixture difficulty ratings",
+      "Manager profiles, team picks, overall rank, and league standings",
+    ],
+    examplePrompt: "Ask your AI to fetch the top 20 FPL players by total points and suggest a starting XI",
+  },
+  // ── Games ──────────────────────────────────────────────────────────────────
+  {
+    name: "Chess.com",
+    description: "Chess.com player profiles, ratings across all time controls, monthly game archives, and daily puzzles. Access global leaderboards for rapid, blitz, bullet, and daily chess. No API key needed.",
+    endpoint: "/v1/chessdotcom",
+    category: "Games",
+    Icon: Crown,
+    capabilities: [
+      "Player profile: title, country, followers, join date, and online status",
+      "Ratings by game type: rapid, blitz, bullet, daily with best and current rating",
+      "Monthly game archives with result, opening, time control, and ratings",
+      "Global leaderboards for all major time controls and variants",
+    ],
+    examplePrompt: "Ask your AI to look up a Chess.com player's blitz and rapid ratings and recent results",
+  },
+  {
+    name: "Lichess",
+    description: "Lichess player profiles, game history, daily puzzles and tournament data. Open source chess platform with free public data for all variants. No API key needed.",
+    endpoint: "/v1/lichess",
+    category: "Games",
+    Icon: Swords,
+    capabilities: [
+      "Player profiles with ratings across all variants and total play time",
+      "Recent game history with opening, result, ratings, and speed",
+      "Today's daily puzzle with solution moves, themes, and rating",
+      "Top 10 players by variant and tournament details by ID",
+    ],
+    examplePrompt: "Ask your AI to get a Lichess player's top ratings and fetch today's daily puzzle",
+  },
 ];
 
 // Platform connectors: tools that require a one-time external account connection
@@ -911,6 +1039,10 @@ const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
   "Xero":           "xero",
   "Vault":          "vault",
   "C-Suite Analyze":"csuite",
+  "The Guardian":   "guardian",
+  "NewsAPI":        "newsapi",
+  "TMDB":           "tmdb",
+  "NASA":           "nasa",
 };
 
 const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
@@ -918,6 +1050,7 @@ const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
 const categories: Category[] = [
   "All", "Local", "Platform",
   "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Social", "Commerce",
+  "News & Media", "Entertainment", "Space & Science", "Sports", "Games",
 ];
 
 interface ToolsProps {

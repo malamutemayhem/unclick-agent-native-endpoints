@@ -89,6 +89,67 @@ import {
   shopifyShop,
   shopifyFulfillments,
 } from "./shopify-tool.js";
+import {
+  guardianSearch,
+  guardianSections,
+  guardianArticle,
+  guardianTags,
+} from "./guardian-tool.js";
+import {
+  newsTopHeadlines,
+  newsSearch,
+  newsSources,
+} from "./newsapi-tool.js";
+import {
+  tmdbSearchMovies,
+  tmdbSearchTv,
+  tmdbMovie,
+  tmdbTv,
+  tmdbTrending,
+  tmdbNowPlaying,
+  tmdbUpcoming,
+  tmdbPopularTv,
+} from "./tmdb-tool.js";
+import {
+  nasaApod,
+  nasaAsteroids,
+  nasaMarsPhotos,
+  nasaEarthImagery,
+  nasaEpic,
+} from "./nasa-tool.js";
+import {
+  f1Sessions,
+  f1Drivers,
+  f1Positions,
+  f1Laps,
+  f1PitStops,
+  f1CarData,
+  f1TeamRadio,
+  f1Weather,
+} from "./openf1-tool.js";
+import {
+  fplBootstrap,
+  fplPlayer,
+  fplGameweek,
+  fplFixtures,
+  fplMyTeam,
+  fplManager,
+  fplLeaguesClassic,
+} from "./fpl-tool.js";
+import {
+  chessPlayer,
+  chessPlayerStats,
+  chessPlayerGames,
+  chessPuzzlesRandom,
+  chessLeaderboards,
+} from "./chessdotcom-tool.js";
+import {
+  lichessUser,
+  lichessUserGames,
+  lichessPuzzleDaily,
+  lichessTopPlayers,
+  lichessTournament,
+} from "./lichess-tool.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -1968,6 +2029,560 @@ const DIRECT_TOOLS = [
       required: ["store", "access_token", "order_id"],
     },
   },
+  // ── The Guardian ─────────────────────────────────────────────────────────────
+  {
+    name: "guardian_search",
+    description: "Search The Guardian's full article archive by keyword. Returns headline, URL, date, section, and trail text. Requires a free Guardian API key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:   { type: "string", description: "Guardian API key. Get one free at https://open-platform.theguardian.com/access/" },
+        query:     { type: "string", description: "Search query." },
+        section:   { type: "string", description: "Filter by section slug, e.g. 'world', 'sport', 'technology'." },
+        from_date: { type: "string", description: "Start date in YYYY-MM-DD format." },
+        page_size: { type: "number", description: "Number of results to return (max 50, default 10).", default: 10 },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  {
+    name: "guardian_sections",
+    description: "List all sections in The Guardian (e.g. world, sport, technology, culture). Use section IDs to filter guardian_search.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Guardian API key." },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "guardian_article",
+    description: "Fetch the full body text of a Guardian article by its path ID. Returns headline, byline, date, section, and complete HTML body.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Guardian API key." },
+        id:      { type: "string", description: "Article path ID from guardian_search, e.g. 'world/2024/jan/01/article-slug'." },
+      },
+      required: ["api_key", "id"],
+    },
+  },
+  {
+    name: "guardian_tags",
+    description: "Search Guardian tags and topics by keyword. Returns tag IDs usable as section filters.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Guardian API key." },
+        query:   { type: "string", description: "Tag search query." },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  // ── NewsAPI ───────────────────────────────────────────────────────────────────
+  {
+    name: "news_top_headlines",
+    description: "Fetch top news headlines from 150,000+ sources worldwide. Filter by country, category, or keyword. Requires a NewsAPI key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:   { type: "string", description: "NewsAPI key. Get one free at https://newsapi.org/register" },
+        country:   { type: "string", description: "2-letter ISO country code, e.g. 'us', 'gb', 'au'." },
+        category:  { type: "string", enum: ["business", "entertainment", "general", "health", "science", "sports", "technology"], description: "News category." },
+        query:     { type: "string", description: "Keywords to filter headlines." },
+        page_size: { type: "number", description: "Number of results (max 100, default 20).", default: 20 },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "news_search",
+    description: "Search across 150,000+ news sources and blogs for any topic. Returns full article metadata including title, source, URL, and publication date.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:   { type: "string", description: "NewsAPI key." },
+        query:     { type: "string", description: "Keywords to search for." },
+        from_date: { type: "string", description: "Start date in ISO 8601 format, e.g. '2024-01-01'." },
+        language:  { type: "string", description: "2-letter language code, e.g. 'en', 'fr', 'de'." },
+        sort_by:   { type: "string", enum: ["relevancy", "popularity", "publishedAt"], default: "publishedAt", description: "Sort order." },
+        page_size: { type: "number", description: "Number of results (max 100, default 20).", default: 20 },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  {
+    name: "news_sources",
+    description: "List available news sources on NewsAPI. Filter by category, country, and language.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:  { type: "string", description: "NewsAPI key." },
+        category: { type: "string", description: "Filter by category." },
+        country:  { type: "string", description: "Filter by 2-letter ISO country code." },
+        language: { type: "string", description: "Filter by 2-letter language code." },
+      },
+      required: ["api_key"],
+    },
+  },
+  // ── TMDB ─────────────────────────────────────────────────────────────────────
+  {
+    name: "tmdb_search_movies",
+    description: "Search The Movie Database for movies by title. Returns title, release date, overview, rating, and poster. Requires a free TMDB API key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key. Get one free at https://www.themoviedb.org/settings/api" },
+        query:   { type: "string", description: "Movie title or keywords." },
+        year:    { type: "number", description: "Filter by release year." },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  {
+    name: "tmdb_search_tv",
+    description: "Search TMDB for TV shows by title. Returns name, first air date, overview, rating, and poster.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+        query:   { type: "string", description: "TV show title or keywords." },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  {
+    name: "tmdb_movie",
+    description: "Get full TMDB movie details including cast (top 10), runtime, budget, revenue, genres, and tagline.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+        id:      { type: "string", description: "TMDB movie ID (from tmdb_search_movies)." },
+      },
+      required: ["api_key", "id"],
+    },
+  },
+  {
+    name: "tmdb_tv",
+    description: "Get full TMDB TV show details including cast, seasons, episodes, and status.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+        id:      { type: "string", description: "TMDB TV show ID (from tmdb_search_tv)." },
+      },
+      required: ["api_key", "id"],
+    },
+  },
+  {
+    name: "tmdb_trending",
+    description: "Get trending movies, TV shows, or both on TMDB for today or this week.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:     { type: "string", description: "TMDB API key." },
+        media_type:  { type: "string", enum: ["movie", "tv", "all"], default: "all", description: "Media type to fetch." },
+        time_window: { type: "string", enum: ["day", "week"], default: "week", description: "Trending window: day or week." },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "tmdb_now_playing",
+    description: "Get movies currently playing in theatres. Returns title, release date, overview, and rating.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "tmdb_upcoming",
+    description: "Get upcoming movies releasing soon. Returns title, release date, overview, and rating.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "tmdb_popular_tv",
+    description: "Get currently popular TV shows on TMDB. Returns name, first air date, overview, and rating.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "TMDB API key." },
+      },
+      required: ["api_key"],
+    },
+  },
+  // ── NASA ──────────────────────────────────────────────────────────────────────
+  {
+    name: "nasa_apod",
+    description: "Fetch NASA's Astronomy Picture of the Day with explanation text and image URL. Use DEMO_KEY for low-volume access or provide a NASA API key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "NASA API key. Use 'DEMO_KEY' for limited free access or get a full key at https://api.nasa.gov/", default: "DEMO_KEY" },
+        date:    { type: "string", description: "Date in YYYY-MM-DD format. Defaults to today." },
+      },
+    },
+  },
+  {
+    name: "nasa_asteroids",
+    description: "Get near-Earth objects (asteroids) for a date range. Returns hazard status, size estimates, and close approach distance.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:    { type: "string", description: "NASA API key.", default: "DEMO_KEY" },
+        start_date: { type: "string", description: "Start date in YYYY-MM-DD format." },
+        end_date:   { type: "string", description: "End date in YYYY-MM-DD format (max 7-day window)." },
+      },
+      required: ["start_date", "end_date"],
+    },
+  },
+  {
+    name: "nasa_mars_photos",
+    description: "Browse Mars rover photos from Curiosity, Opportunity, Spirit, or Perseverance. Filter by sol (Martian day), Earth date, and camera.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:    { type: "string", description: "NASA API key.", default: "DEMO_KEY" },
+        rover:      { type: "string", enum: ["curiosity", "opportunity", "spirit", "perseverance"], default: "curiosity", description: "Rover name." },
+        sol:        { type: "number", description: "Martian sol (day) number. Defaults to sol 1000 if neither sol nor earth_date is provided." },
+        earth_date: { type: "string", description: "Earth date in YYYY-MM-DD format (alternative to sol)." },
+        camera:     { type: "string", description: "Camera abbreviation, e.g. 'FHAZ', 'NAVCAM', 'MAST', 'CHEMCAM'." },
+      },
+      required: ["rover"],
+    },
+  },
+  {
+    name: "nasa_earth_imagery",
+    description: "Retrieve NASA Landsat satellite imagery for any latitude/longitude coordinate and optional date.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "NASA API key.", default: "DEMO_KEY" },
+        lat:     { type: "number", description: "Latitude in decimal degrees." },
+        lon:     { type: "number", description: "Longitude in decimal degrees." },
+        date:    { type: "string", description: "Date in YYYY-MM-DD format. Defaults to most recent available." },
+      },
+      required: ["lat", "lon"],
+    },
+  },
+  {
+    name: "nasa_epic",
+    description: "Get NASA EPIC (Earth Polychromatic Imaging Camera) photos of Earth from the DSCOVR spacecraft. Returns image URLs and centroid coordinates.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "NASA API key.", default: "DEMO_KEY" },
+        date:    { type: "string", description: "Date in YYYY-MM-DD format. Omit for the most recent available set." },
+      },
+    },
+  },
+  // ── OpenF1 ────────────────────────────────────────────────────────────────────
+  {
+    name: "f1_sessions",
+    description: "List Formula 1 sessions (race, qualifying, practice) from the OpenF1 API. Filter by year, country, or session name. No API key required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        year:         { type: "number", description: "Season year, e.g. 2024." },
+        country:      { type: "string", description: "Country name, e.g. 'Monaco', 'Italy'." },
+        session_name: { type: "string", description: "Session name, e.g. 'Race', 'Qualifying', 'Sprint'." },
+      },
+    },
+  },
+  {
+    name: "f1_drivers",
+    description: "Get driver information for an F1 session. Returns full name, team, country, and headshot URL.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key: { type: "number", description: "Session key from f1_sessions." },
+      },
+    },
+  },
+  {
+    name: "f1_positions",
+    description: "Get real-time or historical position data for an F1 session. Returns driver position at each timestamp.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key:   { type: "number", description: "Session key from f1_sessions." },
+        driver_number: { type: "number", description: "Driver number to filter results." },
+      },
+      required: ["session_key"],
+    },
+  },
+  {
+    name: "f1_laps",
+    description: "Get lap times and sector splits for an F1 session. Filter by driver and lap number.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key:   { type: "number", description: "Session key from f1_sessions." },
+        driver_number: { type: "number", description: "Driver number to filter results." },
+        lap_number:    { type: "number", description: "Specific lap number." },
+      },
+      required: ["session_key"],
+    },
+  },
+  {
+    name: "f1_pit_stops",
+    description: "Get pit stop data for an F1 session including lap number and pit stop duration.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key:   { type: "number", description: "Session key from f1_sessions." },
+        driver_number: { type: "number", description: "Driver number to filter results." },
+      },
+      required: ["session_key"],
+    },
+  },
+  {
+    name: "f1_car_data",
+    description: "Get car telemetry data for an F1 session: speed, throttle, brake, DRS status, gear, and RPM.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key:   { type: "number", description: "Session key from f1_sessions." },
+        driver_number: { type: "number", description: "Driver number to filter results. Strongly recommended to avoid huge payloads." },
+      },
+      required: ["session_key"],
+    },
+  },
+  {
+    name: "f1_team_radio",
+    description: "Get team radio messages for an F1 session. Returns timestamps and audio recording URLs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key:   { type: "number", description: "Session key from f1_sessions." },
+        driver_number: { type: "number", description: "Driver number to filter results." },
+      },
+      required: ["session_key"],
+    },
+  },
+  {
+    name: "f1_weather",
+    description: "Get track weather conditions during an F1 session: air temperature, track temperature, humidity, wind, and rainfall.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_key: { type: "number", description: "Session key from f1_sessions." },
+      },
+      required: ["session_key"],
+    },
+  },
+  // ── Fantasy Premier League ────────────────────────────────────────────────────
+  {
+    name: "fpl_bootstrap",
+    description: "Fetch the full FPL static data: all players, teams, gameweek schedule, and top 20 scorers. No API key required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "fpl_player",
+    description: "Get detailed stats and upcoming fixtures for an FPL player by their element ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string", description: "Player element ID from fpl_bootstrap." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "fpl_gameweek",
+    description: "Get live scores for all players in a specific FPL gameweek.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        gw: { type: "number", description: "Gameweek number (1-38)." },
+      },
+      required: ["gw"],
+    },
+  },
+  {
+    name: "fpl_fixtures",
+    description: "Get FPL match fixtures for a specific gameweek or all remaining fixtures.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        gw: { type: "number", description: "Gameweek number. Omit to get all fixtures." },
+      },
+    },
+  },
+  {
+    name: "fpl_my_team",
+    description: "Get a manager's team picks for a specific FPL gameweek (public data).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        team_id: { type: "string", description: "FPL manager team ID." },
+        gw:      { type: "number", description: "Gameweek number." },
+      },
+      required: ["team_id", "gw"],
+    },
+  },
+  {
+    name: "fpl_manager",
+    description: "Get an FPL manager's profile: overall rank, total points, team value, and history.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        team_id: { type: "string", description: "FPL manager team ID." },
+      },
+      required: ["team_id"],
+    },
+  },
+  {
+    name: "fpl_leagues_classic",
+    description: "Get standings for a classic FPL league by league ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        league_id: { type: "string", description: "FPL classic league ID." },
+        page:      { type: "number", description: "Page number for standings (default 1).", default: 1 },
+      },
+      required: ["league_id"],
+    },
+  },
+  // ── Chess.com ─────────────────────────────────────────────────────────────────
+  {
+    name: "chess_player",
+    description: "Get a Chess.com player's public profile: title, country, followers, join date. No API key required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Chess.com username." },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "chess_player_stats",
+    description: "Get a Chess.com player's ratings across game types: rapid, blitz, bullet, and daily.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Chess.com username." },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "chess_player_games",
+    description: "Get a Chess.com player's games for a specific month. Returns last 20 games with result, rating, and time control.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Chess.com username." },
+        year:     { type: "number", description: "Year (e.g. 2024)." },
+        month:    { type: "number", description: "Month (1-12)." },
+      },
+      required: ["username", "year", "month"],
+    },
+  },
+  {
+    name: "chess_puzzles_random",
+    description: "Get a random Chess.com chess puzzle. Returns FEN position, PGN, and puzzle URL.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "chess_leaderboards",
+    description: "Get Chess.com global leaderboards. Returns top players for rapid, blitz, bullet, and daily by default. Pass game_type for a full leaderboard.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        game_type: {
+          type: "string",
+          enum: [
+            "live_rapid", "live_blitz", "live_bullet", "live_bughouse",
+            "live_blitz960", "live_threecheck", "live_crazyhouse",
+            "live_kingofthehill", "tactics", "lessons", "puzzle_rush",
+            "daily", "daily960",
+          ],
+          description: "Game type for full leaderboard. Omit to get top 5 for major formats.",
+        },
+      },
+    },
+  },
+  // ── Lichess ───────────────────────────────────────────────────────────────────
+  {
+    name: "lichess_user",
+    description: "Get a Lichess user's profile: ratings by variant, game count, play time, and online status. No API key required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Lichess username." },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "lichess_user_games",
+    description: "Get recent games for a Lichess user. Returns result, rating, speed, opening, and players.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Lichess username." },
+        max:      { type: "number", description: "Number of games to return (max 50, default 10).", default: 10 },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "lichess_puzzle_daily",
+    description: "Get today's Lichess daily puzzle. Returns FEN, solution moves, themes, rating, and a link.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "lichess_top_players",
+    description: "Get the top 10 Lichess players for a chess variant (bullet, blitz, rapid, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        perfType: {
+          type: "string",
+          enum: [
+            "ultraBullet", "bullet", "blitz", "rapid", "classical",
+            "chess960", "crazyhouse", "antichess", "atomic", "horde",
+            "kingOfTheHill", "racingKings", "threeCheck",
+          ],
+          default: "bullet",
+          description: "Chess variant / time control.",
+        },
+      },
+    },
+  },
+  {
+    name: "lichess_tournament",
+    description: "Get details for a Lichess tournament by ID: name, status, player count, and podium.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string", description: "Lichess tournament ID." },
+      },
+      required: ["id"],
+    },
+  },
 ] as const;
 
 // ─── Handler map for direct tools ───────────────────────────────────────────
@@ -2407,6 +3022,75 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
   shopify_collections:  async (_c, a) => shopifyCollections(a),
   shopify_shop:         async (_c, a) => shopifyShop(a),
   shopify_fulfillments: async (_c, a) => shopifyFulfillments(a),
+
+  // ── Guardian handlers ─────────────────────────────────────────────────────
+
+  guardian_search:   async (_c, a) => guardianSearch(a),
+  guardian_sections: async (_c, a) => guardianSections(a),
+  guardian_article:  async (_c, a) => guardianArticle(a),
+  guardian_tags:     async (_c, a) => guardianTags(a),
+
+  // ── NewsAPI handlers ──────────────────────────────────────────────────────
+
+  news_top_headlines: async (_c, a) => newsTopHeadlines(a),
+  news_search:        async (_c, a) => newsSearch(a),
+  news_sources:       async (_c, a) => newsSources(a),
+
+  // ── TMDB handlers ─────────────────────────────────────────────────────────
+
+  tmdb_search_movies: async (_c, a) => tmdbSearchMovies(a),
+  tmdb_search_tv:     async (_c, a) => tmdbSearchTv(a),
+  tmdb_movie:         async (_c, a) => tmdbMovie(a),
+  tmdb_tv:            async (_c, a) => tmdbTv(a),
+  tmdb_trending:      async (_c, a) => tmdbTrending(a),
+  tmdb_now_playing:   async (_c, a) => tmdbNowPlaying(a),
+  tmdb_upcoming:      async (_c, a) => tmdbUpcoming(a),
+  tmdb_popular_tv:    async (_c, a) => tmdbPopularTv(a),
+
+  // ── NASA handlers ─────────────────────────────────────────────────────────
+
+  nasa_apod:            async (_c, a) => nasaApod(a),
+  nasa_asteroids:       async (_c, a) => nasaAsteroids(a),
+  nasa_mars_photos:     async (_c, a) => nasaMarsPhotos(a),
+  nasa_earth_imagery:   async (_c, a) => nasaEarthImagery(a),
+  nasa_epic:            async (_c, a) => nasaEpic(a),
+
+  // ── OpenF1 handlers ───────────────────────────────────────────────────────
+
+  f1_sessions:   async (_c, a) => f1Sessions(a),
+  f1_drivers:    async (_c, a) => f1Drivers(a),
+  f1_positions:  async (_c, a) => f1Positions(a),
+  f1_laps:       async (_c, a) => f1Laps(a),
+  f1_pit_stops:  async (_c, a) => f1PitStops(a),
+  f1_car_data:   async (_c, a) => f1CarData(a),
+  f1_team_radio: async (_c, a) => f1TeamRadio(a),
+  f1_weather:    async (_c, a) => f1Weather(a),
+
+  // ── Fantasy Premier League handlers ───────────────────────────────────────
+
+  fpl_bootstrap:       async (_c, a) => fplBootstrap(a),
+  fpl_player:          async (_c, a) => fplPlayer(a),
+  fpl_gameweek:        async (_c, a) => fplGameweek(a),
+  fpl_fixtures:        async (_c, a) => fplFixtures(a),
+  fpl_my_team:         async (_c, a) => fplMyTeam(a),
+  fpl_manager:         async (_c, a) => fplManager(a),
+  fpl_leagues_classic: async (_c, a) => fplLeaguesClassic(a),
+
+  // ── Chess.com handlers ────────────────────────────────────────────────────
+
+  chess_player:         async (_c, a) => chessPlayer(a),
+  chess_player_stats:   async (_c, a) => chessPlayerStats(a),
+  chess_player_games:   async (_c, a) => chessPlayerGames(a),
+  chess_puzzles_random: async (_c, a) => chessPuzzlesRandom(a),
+  chess_leaderboards:   async (_c, a) => chessLeaderboards(a),
+
+  // ── Lichess handlers ──────────────────────────────────────────────────────
+
+  lichess_user:          async (_c, a) => lichessUser(a),
+  lichess_user_games:    async (_c, a) => lichessUserGames(a),
+  lichess_puzzle_daily:  async (_c, a) => lichessPuzzleDaily(a),
+  lichess_top_players:   async (_c, a) => lichessTopPlayers(a),
+  lichess_tournament:    async (_c, a) => lichessTournament(a),
 };
 
 // ─── Server factory ─────────────────────────────────────────────────────────
