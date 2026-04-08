@@ -103,7 +103,7 @@ async function sendBugEmail(params: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'UnClick Bugs <bugs@unclick.dev>',
+      from: 'UnClick Bugs <bugs@unclick.world>',
       to: ['creativelead@malamutemayhem.com'],
       subject: `[UnClick Bug] ${severity.toUpperCase()}: ${tool_name}`,
       text: body,
