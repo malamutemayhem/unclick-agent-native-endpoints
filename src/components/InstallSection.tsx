@@ -69,7 +69,7 @@ const steps = [
   {
     n: "2",
     label: "Copy the prompt or config",
-    detail: "Pick your install method below. Your key is already inserted. One copy-paste connects all 48 tools.",
+    detail: "Pick your install method below. Your key is already inserted. One copy-paste connects all 59 tools.",
   },
   {
     n: "3",
