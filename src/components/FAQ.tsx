@@ -46,6 +46,10 @@ const faqData = [
         a: "UnClick tools span several categories: web search and scraping, email and calendar access, file and document handling, code execution, database queries, weather and location data, image generation, scheduling, and more. The goal is to cover everything an AI agent might need to complete real-world tasks.",
       },
       {
+        q: "Why would my AI agent use a tool for something it can already do?",
+        a: "Technically, a capable model can convert 5 miles to km in its head. No tool needed. But at scale, that changes. If you're running 50 unit conversions in a pipeline, you want a guarantee the math is right every time, not a probabilistic guess. You want structured JSON back so the next step in your workflow can parse it without brittle text extraction. And you want the capability to show up in the MCP tool manifest so the agent knows it can do this at all. The trade-off is real: a tool call costs around 200-400 tokens round trip versus maybe 50 tokens for inline math. That's worth it when you need correctness and composability over convenience. These tools aren't replacing what smart models already do. They're giving agents reliable, chainable capabilities that hold up in production workflows, not just in demos.",
+      },
+      {
         q: "Can I request a new tool?",
         a: "Yes. You can submit a tool request via the developer portal on UnClick. If you're a developer, you can also build and submit your own tool to the UnClick marketplace; creators earn 80% of the revenue their tools generate.",
       },
