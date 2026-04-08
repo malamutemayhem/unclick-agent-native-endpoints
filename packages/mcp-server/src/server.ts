@@ -34,6 +34,7 @@ import {
   jsonlToJson,
 } from "./converter-tools.js";
 import { csuitAnalyze } from "./csuite-tool.js";
+import { vaultAction } from "./vault-tool.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -911,6 +912,76 @@ const DIRECT_TOOLS = [
       required: ["scenario"],
     },
   },
+  // ── Encrypted credential vault (pure local, no API call) ─────────────────
+  {
+    name: "vault",
+    description:
+      "Secure encrypted credential vault. Store, retrieve, rotate, and audit API keys, " +
+      "tokens, passwords, and secrets. All data is AES-256-GCM encrypted at rest using a " +
+      "master password you control. Secrets are masked by default (****last4) unless reveal=true. " +
+      "Vault lives at ~/.unclick/vault.enc. " +
+      "Actions: vault_init, vault_store, vault_retrieve, vault_list, vault_delete, vault_rotate, vault_audit.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "vault_init",
+            "vault_store",
+            "vault_retrieve",
+            "vault_list",
+            "vault_delete",
+            "vault_rotate",
+            "vault_audit",
+          ],
+          description:
+            "vault_init: create new vault. " +
+            "vault_store: save a secret. " +
+            "vault_retrieve: get a secret (masked unless reveal=true). " +
+            "vault_list: list key names and metadata (never values). " +
+            "vault_delete: remove a secret. " +
+            "vault_rotate: replace a secret value with a new IV. " +
+            "vault_audit: view access event log.",
+        },
+        master_password: {
+          type: "string",
+          description: "Master password used to encrypt/decrypt the vault.",
+        },
+        key: {
+          type: "string",
+          description: "Secret name/label (required for store, retrieve, delete, rotate).",
+        },
+        value: {
+          type: "string",
+          description: "Secret value to store (required for vault_store).",
+        },
+        new_value: {
+          type: "string",
+          description: "Replacement secret value (required for vault_rotate).",
+        },
+        reveal: {
+          type: "boolean",
+          default: false,
+          description: "If true, returns the full decrypted value. Default false returns ****last4.",
+        },
+        metadata: {
+          type: "object",
+          description:
+            "Optional tags/notes for vault_store: " +
+            "{ service, tags, expires, notes } - any JSON object.",
+        },
+        limit: {
+          type: "number",
+          minimum: 1,
+          maximum: 100,
+          default: 20,
+          description: "Max audit events to return (vault_audit only, default 20).",
+        },
+      },
+      required: ["action", "master_password"],
+    },
+  },
 ] as const;
 
 // ─── Handler map for direct tools ───────────────────────────────────────────
@@ -1188,6 +1259,12 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
     }
     const rounded = Math.round(value * 100) / 100;
     return { bytes, human: `${rounded} ${units[unitIndex]}`, value: rounded, unit: units[unitIndex] };
+  },
+
+  vault: async (_c, a) => {
+    const action = String(a.action ?? "").trim();
+    if (!action) return { error: "action is required." };
+    return vaultAction(action, a);
   },
 
   human_to_bytes: async (_c, a) => {
