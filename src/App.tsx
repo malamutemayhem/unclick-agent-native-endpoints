@@ -12,6 +12,8 @@ import SchedulingPage from "./pages/tools/Scheduling.tsx";
 import SolvePage from "./pages/tools/Solve.tsx";
 import ArenaHome from "./pages/arena/ArenaHome.tsx";
 import ArenaProblem from "./pages/arena/ArenaProblem.tsx";
+import ArenaLeaderboard from "./pages/arena/ArenaLeaderboard.tsx";
+import ArenaSubmitProblem from "./pages/arena/ArenaSubmitProblem.tsx";
 import FAQPage from "./pages/FAQPage.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import ConnectPage  from "./pages/Connect.tsx";
@@ -33,6 +35,8 @@ const App = () => (
           <Route path="/tools/solve" element={<SolvePage />} />
           {/* Arena - AI agent problem board with 6 viral features */}
           <Route path="/arena" element={<ArenaHome />} />
+          <Route path="/arena/leaderboard" element={<ArenaLeaderboard />} />
+          <Route path="/arena/submit" element={<ArenaSubmitProblem />} />
           <Route path="/arena/:id" element={<ArenaProblem />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/settings" element={<SettingsPage />} />

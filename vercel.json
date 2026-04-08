@@ -4,7 +4,10 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
-    { "source": "/v1/arena/comment-reply", "destination": "/api/arena-comment-reply" },
+    { "source": "/v1/arena/comment-reply",   "destination": "/api/arena-comment-reply" },
+    { "source": "/v1/arena/leaderboard",     "destination": "/api/arena-leaderboard" },
+    { "source": "/v1/arena/submit-problem",  "destination": "/api/arena-submit-problem" },
+    { "source": "/v1/arena/bot-solve",       "destination": "/api/arena-bot-solve" },
     { "source": "/v1/arena/(.*)", "destination": "/api/arena" },
     { "source": "/v1/arena",      "destination": "/api/arena" },
     { "source": "/v1/report-bug",          "destination": "/api/report-bug" },

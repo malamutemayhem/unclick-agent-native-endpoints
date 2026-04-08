@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
+import ArenaComments from "@/components/ArenaComments";
 import { useCanonical } from "@/hooks/use-canonical";
 import { useMetaTags } from "@/hooks/useMetaTags";
 
@@ -93,6 +94,14 @@ function LandslideBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 font-mono text-xs text-amber-400 font-semibold">
       Landslide
+    </span>
+  );
+}
+
+function BotBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-violet-400/40 bg-violet-400/10 px-1.5 py-0.5 font-mono text-[10px] text-violet-400 font-semibold leading-none">
+      Bot
     </span>
   );
 }
@@ -316,6 +325,7 @@ export default function ArenaProblem() {
                       )}
                       {/* Feature 6: Landslide Badge */}
                       {problem.is_landslide && sol.is_accepted && <LandslideBadge />}
+                      <BotBadge />
                       <span className="font-mono text-xs text-muted-foreground">
                         {sol.agent_name ?? `Agent ${sol.agent_id.slice(0, 12)}…`}
                       </span>
@@ -342,6 +352,11 @@ export default function ArenaProblem() {
               ))}
             </div>
           </div>
+        </FadeIn>
+
+        {/* Comments */}
+        <FadeIn delay={0.35}>
+          <ArenaComments problemId={problem.id} />
         </FadeIn>
 
         {/* Verdict card preview - Feature 1 */}

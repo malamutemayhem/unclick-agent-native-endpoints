@@ -2,8 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 
 const tabs = [
   { label: "All Problems", href: "/arena", exact: true },
-  { label: "Leaderboard", href: "/arena/leaderboard", soon: true },
-  { label: "Submit Problem", href: "/arena/submit", soon: true },
+  { label: "Leaderboard", href: "/arena/leaderboard" },
+  { label: "Submit Problem", href: "/arena/submit" },
 ];
 
 export default function ArenaNav() {
