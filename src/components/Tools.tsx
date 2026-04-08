@@ -870,7 +870,7 @@ const tools: Tool[] = [
   // ── Platform Connectors (additional) ──────────────────────────────────────
   {
     name: "Vault",
-    description: "Store and retrieve encrypted credentials, API keys, and secrets for use across your AI agent workflows. Vault provides a secure, API-accessible credential store so agents can share secrets between sessions and tools without exposing them in plaintext. Connect once — every workflow that needs those credentials just works.",
+    description: "Store and retrieve encrypted credentials, API keys, and secrets for use across your AI agent workflows. Vault provides a secure, API-accessible credential store so agents can share secrets between sessions and tools without exposing them in plaintext. Connect once. Every workflow that needs those credentials just works.",
     endpoint: "/v1/vault",
     category: "Security",
     Icon: KeyRound,
@@ -1025,7 +1025,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                     </span>
                   </div>
                   <p className="text-sm text-body max-w-2xl">
-                    These tools run entirely inside the MCP server. No API keys, no accounts, no external setup — just call and go.
+                    These tools run entirely inside the MCP server. No API keys, no accounts, no external setup. Just call and go.
                   </p>
                 </div>
               </FadeIn>
@@ -1081,7 +1081,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                     </span>
                   </div>
                   <p className="text-sm text-body max-w-2xl">
-                    Connect your accounts one time. Your AI agent handles the rest — no credentials on every call.
+                    Connect your accounts one time. Your AI agent handles the rest, with no credentials needed on every call.
                   </p>
                 </div>
               </FadeIn>
@@ -1362,7 +1362,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                         onClick={handleGetStarted}
                         className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
                       >
-                        Get Started — free
+                        Get Started, free
                       </button>
                       <a
                         href="/docs"
