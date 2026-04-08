@@ -66,6 +66,54 @@ const ReportBugSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Email notification via Resend
+// ---------------------------------------------------------------------------
+
+async function sendBugEmail(params: {
+  tool_name: string;
+  error_message: string;
+  severity: string;
+  expected_behavior?: string | null;
+  agent_context?: string | null;
+  created_at: string;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('RESEND_API_KEY not set - skipping bug notification email');
+    return;
+  }
+
+  const { tool_name, error_message, severity, expected_behavior, agent_context, created_at } = params;
+
+  const body = [
+    `Tool: ${tool_name}`,
+    `Severity: ${severity.toUpperCase()}`,
+    `Timestamp: ${created_at}`,
+    ``,
+    `Error:`,
+    error_message,
+    expected_behavior ? `\nExpected Behavior:\n${expected_behavior}` : '',
+    agent_context ? `\nAgent Context:\n${agent_context}` : '',
+  ].filter(Boolean).join('\n');
+
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'UnClick Bugs <bugs@unclick.dev>',
+      to: ['creativelead@malamutemayhem.com'],
+      subject: `[UnClick Bug] ${severity.toUpperCase()}: ${tool_name}`,
+      text: body,
+    }),
+  }).catch((err) => {
+    console.error('Failed to send bug notification email:', err);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Router factory
 // ---------------------------------------------------------------------------
 export function createReportBugRouter(db: Db) {
@@ -95,12 +143,24 @@ export function createReportBugRouter(db: Db) {
 
     await db.insert(bugReports).values(report);
 
+    const createdAt = (report.createdAt as Date).toISOString();
+
+    // Fire-and-forget email — don't block the response
+    sendBugEmail({
+      tool_name: report.toolName,
+      error_message: report.errorMessage,
+      severity,
+      expected_behavior: report.expectedBehavior,
+      agent_context: report.agentContext,
+      created_at: createdAt,
+    });
+
     return created(c, {
       report_id: report.id,
       tool_name: report.toolName,
       severity,
       status: 'new',
-      created_at: (report.createdAt as Date).toISOString(),
+      created_at: createdAt,
       message: 'Bug report received. The UnClick team will investigate.',
     });
   });

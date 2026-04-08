@@ -81,6 +81,54 @@ function classifySeverity(errorMessage: string, requestPayload?: unknown): strin
 }
 
 // ---------------------------------------------------------------------------
+// Email notification via Resend
+// ---------------------------------------------------------------------------
+
+async function sendBugEmail(params: {
+  tool_name: string;
+  error_message: string;
+  severity: string;
+  expected_behavior?: string;
+  agent_context?: string;
+  created_at: string;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("RESEND_API_KEY not set - skipping bug notification email");
+    return;
+  }
+
+  const { tool_name, error_message, severity, expected_behavior, agent_context, created_at } = params;
+
+  const body = [
+    `Tool: ${tool_name}`,
+    `Severity: ${severity.toUpperCase()}`,
+    `Timestamp: ${created_at}`,
+    ``,
+    `Error:`,
+    error_message,
+    expected_behavior ? `\nExpected Behavior:\n${expected_behavior}` : "",
+    agent_context ? `\nAgent Context:\n${typeof agent_context === "string" ? agent_context : JSON.stringify(agent_context, null, 2)}` : "",
+  ].filter(Boolean).join("\n");
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "UnClick Bugs <bugs@unclick.dev>",
+      to: ["creativelead@malamutemayhem.com"],
+      subject: `[UnClick Bug] ${severity.toUpperCase()}: ${tool_name}`,
+      text: body,
+    }),
+  }).catch((err) => {
+    console.error("Failed to send bug notification email:", err);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -148,6 +196,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error("Supabase insert error:", error.message);
     return res.status(500).json({ error: "Failed to store bug report", detail: error.message });
   }
+
+  // Fire-and-forget email — don't block the response
+  sendBugEmail({
+    tool_name: String(tool_name),
+    error_message: String(error_message),
+    severity,
+    expected_behavior: expected_behavior ? String(expected_behavior) : undefined,
+    agent_context: agent_context ? String(agent_context) : undefined,
+    created_at: data.created_at ?? new Date().toISOString(),
+  });
 
   return res.status(201).json({
     ...data,
