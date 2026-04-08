@@ -48,7 +48,7 @@
   <rect x="80" y="360" width="1040" height="1" fill="#ffffff12"/>
 
   <!-- Stats row -->
-  <text x="80" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#6366f1" font-weight="600">109 tools</text>
+  <text x="80" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#6366f1" font-weight="600">48 tools</text>
   <text x="220" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
   <text x="245" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">One API key</text>
   <text x="415" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
