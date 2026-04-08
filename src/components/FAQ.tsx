@@ -39,7 +39,7 @@ const faqData = [
     items: [
       {
         q: "How many tools does UnClick have?",
-        a: "UnClick currently offers 59 tools across categories including web, productivity, data, communication, code, and more. New tools are added regularly.",
+        a: "UnClick currently offers 69 tools across categories including web, productivity, data, communication, news, music, events, and more. New tools are added regularly.",
       },
       {
         q: "What kinds of tools are available?",

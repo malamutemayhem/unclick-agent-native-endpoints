@@ -157,7 +157,7 @@ const DocsPage = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
-          Connect your AI agent once and it gets access to 59 tools across eight categories. Here's what each one does.
+          Connect your AI agent once and it gets access to 69 tools across twelve categories. Here's what each one does.
         </p>
       </FadeIn>
 

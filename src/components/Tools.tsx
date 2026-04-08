@@ -15,10 +15,11 @@ import {
   MessageCircle, MessageSquare, Users, Wind, Globe2,
   ShoppingCart, Receipt, Store, ArrowUpCircle,
   KeyRound, TrendingUp,
+  Tv, Music, Ticket, Newspaper, MapPin, Building2,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
-type ToolCategory = "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce";
+type ToolCategory = "Utility" | "Text" | "Data" | "Media" | "Network" | "Security" | "Storage" | "Platform" | "Social" | "Commerce" | "News" | "Entertainment" | "Music" | "Events";
 // Category: values available in the filter bar ("Local" / "Platform" are section-level filters)
 type Category = "All" | "Local" | "Platform" | ToolCategory;
 
@@ -33,29 +34,37 @@ interface Tool {
 }
 
 const categoryColors: Record<ToolCategory, string> = {
-  Utility:  "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  Text:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  Data:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  Media:    "bg-pink-500/10 text-pink-400 border-pink-500/20",
-  Network:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  Security: "bg-red-500/10 text-red-400 border-red-500/20",
-  Storage:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Platform: "bg-primary/10 text-primary border-primary/20",
-  Social:   "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Commerce: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  Utility:       "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  Text:          "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  Data:          "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  Media:         "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  Network:       "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  Security:      "bg-red-500/10 text-red-400 border-red-500/20",
+  Storage:       "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Platform:      "bg-primary/10 text-primary border-primary/20",
+  Social:        "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  Commerce:      "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  News:          "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  Entertainment: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  Music:         "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  Events:        "bg-lime-500/10 text-lime-400 border-lime-500/20",
 };
 
 const categoryIconBg: Record<ToolCategory, string> = {
-  Utility:  "bg-amber-500/10 text-amber-400",
-  Text:     "bg-sky-500/10 text-sky-400",
-  Data:     "bg-violet-500/10 text-violet-400",
-  Media:    "bg-pink-500/10 text-pink-400",
-  Network:  "bg-orange-500/10 text-orange-400",
-  Security: "bg-red-500/10 text-red-400",
-  Storage:  "bg-emerald-500/10 text-emerald-400",
-  Platform: "bg-primary/10 text-primary",
-  Social:   "bg-blue-500/10 text-blue-400",
-  Commerce: "bg-teal-500/10 text-teal-400",
+  Utility:       "bg-amber-500/10 text-amber-400",
+  Text:          "bg-sky-500/10 text-sky-400",
+  Data:          "bg-violet-500/10 text-violet-400",
+  Media:         "bg-pink-500/10 text-pink-400",
+  Network:       "bg-orange-500/10 text-orange-400",
+  Security:      "bg-red-500/10 text-red-400",
+  Storage:       "bg-emerald-500/10 text-emerald-400",
+  Platform:      "bg-primary/10 text-primary",
+  Social:        "bg-blue-500/10 text-blue-400",
+  Commerce:      "bg-teal-500/10 text-teal-400",
+  News:          "bg-cyan-500/10 text-cyan-400",
+  Entertainment: "bg-purple-500/10 text-purple-400",
+  Music:         "bg-rose-500/10 text-rose-400",
+  Events:        "bg-lime-500/10 text-lime-400",
 };
 
 const tools: Tool[] = [
@@ -896,6 +905,147 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to generate a monthly business performance summary with key metrics and trends",
   },
+  // ── New Platform Connectors ───────────────────────────────────────────────
+  {
+    name: "ABN Lookup",
+    description: "Look up any Australian Business Number against the Australian Business Register. Returns entity name, type, ABN status, GST registration, and address. No API key required. Search by business name to get a list of matching ABNs. Built for agents verifying suppliers, automating invoice validation, and checking business credentials in AU workflows.",
+    endpoint: "",
+    category: "Platform",
+    Icon: Building2,
+    capabilities: [
+      "Look up any ABN and return entity name, type, and registration status",
+      "Check GST registration status and the effective date it was registered",
+      "Search businesses by name and retrieve a list of matching ABNs",
+      "Verify whether a supplier ABN is active before processing an invoice",
+    ],
+    examplePrompt: "Ask your AI to verify a supplier ABN and confirm their GST registration status before approving payment",
+  },
+  {
+    name: "Twitch",
+    description: "Search live streams, get channel info, browse game categories, and retrieve clips from Twitch. Track live viewer counts, current game categories, and channel schedules without leaving your workflow. Built for agents monitoring gaming trends, tracking streamers, and building real-time Twitch dashboards.",
+    endpoint: "",
+    category: "Entertainment",
+    Icon: Tv,
+    capabilities: [
+      "Check if a channel is live and get current stream title, game, and viewer count",
+      "Search channels by keyword and browse top game categories",
+      "Retrieve top clips for any channel with title, views, and thumbnail",
+      "Fetch channel schedule and upcoming broadcast times",
+    ],
+    examplePrompt: "Ask your AI to check whether a Twitch channel is currently live and what game they are playing",
+  },
+  {
+    name: "Ticketmaster",
+    description: "Search events, venues, and attractions across Ticketmaster worldwide. Find concert dates, sporting events, and theatre shows by city, keyword, or date range. Retrieve full event details including ticket price ranges, on-sale dates, and venue information. Covers over 50 countries.",
+    endpoint: "",
+    category: "Events",
+    Icon: Ticket,
+    capabilities: [
+      "Search events by keyword, city, country, and date range",
+      "Get full event details: lineup, ticket prices, on-sale dates, and venue info",
+      "Find and look up venues by name, city, and country",
+      "Search attractions (artists, teams, performers) and get upcoming events",
+    ],
+    examplePrompt: "Ask your AI to find upcoming concerts in London this month and return ticket links with pricing",
+  },
+  {
+    name: "The Guardian",
+    description: "Search and read full Guardian articles via the Open Platform API. The free tier returns complete article body text, which most news APIs charge for. Filter by section, date range, and edition. Browse content tags and sections. One of the best open news APIs available for agents that need real journalism.",
+    endpoint: "",
+    category: "News",
+    Icon: Newspaper,
+    capabilities: [
+      "Search articles by keyword with full body text returned on the free tier",
+      "Filter results by section, date range, and sort order (relevance, newest, oldest)",
+      "Retrieve complete article content including byline, word count, and publication date",
+      "Browse all Guardian sections and search for content tags by topic or contributor",
+    ],
+    examplePrompt: "Ask your AI to find and summarise the latest Guardian articles about AI regulation",
+  },
+  {
+    name: "NewsAPI",
+    description: "Search and stream headlines from 80,000+ news sources worldwide via NewsAPI. Get top headlines by country and category, search all articles by keyword and date, and filter by language and domain. Covers major outlets, regional sources, and blogs across 54 countries.",
+    endpoint: "",
+    category: "News",
+    Icon: Rss,
+    capabilities: [
+      "Get breaking top headlines filtered by country and news category",
+      "Search across 80,000+ sources by keyword, date range, and language",
+      "Filter results by specific domains, e.g. 'bbc.co.uk,reuters.com'",
+      "List all available sources by category, language, and country",
+    ],
+    examplePrompt: "Ask your AI to pull the top technology headlines from US sources and summarise the key stories",
+  },
+  {
+    name: "Last.fm",
+    description: "Get music metadata, artist bios, top tracks, similar artists, and global play count charts from Last.fm. Access detailed album tracklists, listener statistics, and tag data. Unlimited free read access with no OAuth required. Built for agents building music recommendation features, playlist tools, and artist research workflows.",
+    endpoint: "",
+    category: "Music",
+    Icon: Music,
+    capabilities: [
+      "Get artist bios, genres, listener counts, and similar artist recommendations",
+      "Retrieve top tracks and albums for any artist ranked by total play count",
+      "Access global charts: top artists and top tracks across all Last.fm listeners",
+      "Get full album info with tracklist, tags, wiki text, and release date",
+    ],
+    examplePrompt: "Ask your AI to find the top 10 most played tracks for an artist and suggest similar artists to explore",
+  },
+  {
+    name: "Discogs",
+    description: "Search the Discogs music database for vinyl, CDs, and physical media releases. Get detailed release info, artist profiles, label catalogs, and real-time marketplace pricing. Covers tens of millions of releases across every genre and format. Built for agents building record store tools, collection trackers, and music research workflows.",
+    endpoint: "",
+    category: "Music",
+    Icon: Database,
+    capabilities: [
+      "Search releases by artist, genre, year, label, and format (Vinyl, CD, Cassette)",
+      "Get full release details including tracklist, personnel credits, and pressing notes",
+      "Look up artist profiles and record label catalogs",
+      "Check marketplace pricing: lowest, median, and most recent sale prices",
+    ],
+    examplePrompt: "Ask your AI to find original pressings of a classic jazz album and return current marketplace prices",
+  },
+  {
+    name: "Yelp",
+    description: "Search local businesses, read reviews, and find events via the Yelp Fusion API. Filter by category, price range, open status, and distance. Get hours, photos, attributes, and customer reviews for any business. Covers restaurants, services, entertainment, and more across the US and major international cities.",
+    endpoint: "",
+    category: "Platform",
+    Icon: MapPin,
+    capabilities: [
+      "Search businesses by location, term, category, price range, and open-now status",
+      "Get full business details: hours, photos, address, phone, and accessibility attributes",
+      "Read customer reviews with sort options by rating, date, or Yelp relevance",
+      "Find local events and use autocomplete to power search typeahead interfaces",
+    ],
+    examplePrompt: "Ask your AI to find the top-rated sushi restaurants near a given address and summarise the reviews",
+  },
+  {
+    name: "SeatGeek",
+    description: "Search events, performers, and venues on SeatGeek. Get ticket listings for concerts, sports, and theatre with per-seat pricing, deal scores, and availability. Look up performer profiles and upcoming show schedules. Built for agents building ticket recommendation tools and event discovery features.",
+    endpoint: "",
+    category: "Events",
+    Icon: Ticket,
+    capabilities: [
+      "Search events by keyword, city, event type, and date",
+      "Get ticket listings with pricing, deal scores, and available seat counts",
+      "Find performers and retrieve their full upcoming event schedule",
+      "Search and look up venues by name, city, or country",
+    ],
+    examplePrompt: "Ask your AI to find upcoming NBA games in New York and return the cheapest available tickets",
+  },
+  {
+    name: "PTV",
+    description: "Live departures, disruptions, and route info for Victoria's public transport network via the PTV Timetable API. Get next train, tram, bus, V/Line, and night bus departures from any stop. Search stops and routes by name, check current service disruptions, and retrieve full timetable data. Licensed from Public Transport Victoria.",
+    endpoint: "",
+    category: "Platform",
+    Icon: MapPin,
+    capabilities: [
+      "Get next departures from any PTV stop for trains, trams, buses, and V/Line",
+      "Search stops, routes, and outlets by name across all transport modes",
+      "Check current and planned service disruptions and maintenance alerts",
+      "Get all stops on a route, available directions, and scheduled run times",
+    ],
+    examplePrompt: "Ask your AI to check the next trains from Highett Station and flag any active disruptions on the line",
+  },
 ];
 
 // Platform connectors: tools that require a one-time external account connection
@@ -911,6 +1061,16 @@ const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
   "Xero":           "xero",
   "Vault":          "vault",
   "C-Suite Analyze":"csuite",
+  "ABN Lookup":     "abn",
+  "Twitch":         "twitch",
+  "Ticketmaster":   "ticketmaster",
+  "The Guardian":   "guardian",
+  "NewsAPI":        "newsapi",
+  "Last.fm":        "lastfm",
+  "Discogs":        "discogs",
+  "Yelp":           "yelp",
+  "SeatGeek":       "seatgeek",
+  "PTV":            "ptv",
 };
 
 const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
@@ -918,6 +1078,7 @@ const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
 const categories: Category[] = [
   "All", "Local", "Platform",
   "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Social", "Commerce",
+  "News", "Entertainment", "Music", "Events",
 ];
 
 interface ToolsProps {

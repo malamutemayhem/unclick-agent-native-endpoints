@@ -37,7 +37,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
 
       <FadeIn delay={0.15}>
         <p className="mt-3 text-lg text-body max-w-xl mx-auto leading-relaxed">
-          48 tools work instantly, no setup, no keys. 11 platform connectors unlock messaging, social, e-commerce, and finance with a one-time account connection.
+          49 tools work instantly, no setup, no keys. 20 platform connectors unlock messaging, social, news, music, events, transport, e-commerce, and finance with a one-time account connection.
         </p>
       </FadeIn>
 
