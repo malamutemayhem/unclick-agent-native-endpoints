@@ -19,7 +19,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">61 tools - all free</span>
+          <span className="font-mono text-xs text-muted-foreground">62 tools - all free</span>
         </div>
       </FadeIn>
 
@@ -37,7 +37,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
 
       <FadeIn delay={0.15}>
         <p className="mt-3 text-lg text-body max-w-xl mx-auto leading-relaxed">
-          One connection gives your AI access to 61 tools. Links, images, data, QR codes, and more. No per-tool installs.
+          One connection gives your AI access to 62 tools. Links, images, data, QR codes, and more. No per-tool installs.
         </p>
       </FadeIn>
 

@@ -33,6 +33,7 @@ import {
   jsonToJsonl,
   jsonlToJson,
 } from "./converter-tools.js";
+import { csuitAnalyze } from "./csuite-tool.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -864,6 +865,52 @@ const DIRECT_TOOLS = [
       required: ["tool_name", "error_message"],
     },
   },
+  // ── C-Suite analysis (pure local, no API call) ────────────────────────────
+  {
+    name: "csuite_analyze",
+    description:
+      "Run a business decision, scenario, or question through multiple C-suite executive perspectives simultaneously. " +
+      "Each 'hat' analyzes the scenario through its unique lens: strategy, operations, finance, technology, people, data, security, product, customer, and AI. " +
+      "Returns structured analysis per perspective plus a consensus synthesis. " +
+      "Use this to make richer, more well-rounded business decisions by surfacing angles that would otherwise be missed.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        scenario: {
+          type: "string",
+          description: "The business decision, scenario, or question to analyze. Be specific for better analysis.",
+        },
+        context: {
+          type: "string",
+          description: "Optional additional context: industry, company stage, size, constraints, current situation.",
+        },
+        perspectives: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["CEO","COO","CTO","CFO","CMO","CIO","CHRO","CDO","CPO","CSO","CCO","CAIO"],
+          },
+          description:
+            "Which C-suite roles to include. Defaults to all 12. " +
+            "CEO=strategy/vision, COO=operations/scalability, CTO=tech/architecture, CFO=finance/ROI, " +
+            "CMO=marketing/brand, CIO=information systems/integration, CHRO=people/culture, " +
+            "CDO=data/governance, CPO=product/UX, CSO=security/compliance, CCO=customer/retention, " +
+            "CAIO=AI/automation/ethics.",
+        },
+        depth: {
+          type: "string",
+          enum: ["quick", "standard", "deep"],
+          default: "standard",
+          description: "Analysis depth. quick=2-3 points per area, standard=4-5, deep=6-7 with sub-considerations.",
+        },
+        focus: {
+          type: "string",
+          description: "Optional aspect to emphasize across all perspectives, e.g. 'risk', 'growth', 'cost', 'speed'.",
+        },
+      },
+      required: ["scenario"],
+    },
+  },
 ] as const;
 
 // ─── Handler map for direct tools ───────────────────────────────────────────
@@ -942,6 +989,17 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 
   report_bug: (c, a) =>
     c.call("POST", "/v1/report-bug", a as Record<string, unknown>),
+
+  csuite_analyze: async (_c, a) => {
+    const scenario = String(a.scenario ?? "");
+    if (!scenario.trim()) return { error: "scenario is required and cannot be empty." };
+    return csuitAnalyze(scenario, {
+      context: a.context ? String(a.context) : undefined,
+      perspectives: Array.isArray(a.perspectives) ? a.perspectives.map(String) : undefined,
+      depth: (a.depth as "quick" | "standard" | "deep") ?? "standard",
+      focus: a.focus ? String(a.focus) : undefined,
+    });
+  },
 
   // ── Local handlers (pure computation, no API call) ────────────────────────
 
