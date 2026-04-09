@@ -70,7 +70,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#install"
-            className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             style={{ scrollBehavior: "smooth" }}
             onClick={(e) => { e.preventDefault(); document.getElementById("install")?.scrollIntoView({ behavior: "smooth" }); }}
           >

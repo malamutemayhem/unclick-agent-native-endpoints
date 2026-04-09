@@ -415,8 +415,8 @@ export default function ConnectPage() {
             )}
 
             {oauthNotConfigured ? (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-                <p className="text-sm text-amber-400/80">
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                <p className="text-sm text-primary/80">
                   OAuth2 setup pending for {connector.name}. Use the manual form below,
                   or enter credentials directly in your MCP config.
                 </p>
