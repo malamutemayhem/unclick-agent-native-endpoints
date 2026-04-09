@@ -13,7 +13,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "logo.png",
+    "public",
+    "server.json"
   ],
   "scripts": {
     "build": "tsc",
