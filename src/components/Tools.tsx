@@ -19,7 +19,7 @@ import {
   Bookmark, Users2, Zap, CloudRain, Building2, Archive,
   Package, Leaf, FlaskConical, Bird, Flame, Ticket,
   MapPin, Clock4, PenSquare, Droplets, Dices,
-  Beer, Music2, Server, NotebookPen,
+  Beer, Music2, Server, NotebookPen, Apple,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
