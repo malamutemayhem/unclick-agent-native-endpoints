@@ -2,15 +2,20 @@
  * UnClick Arena - Vercel serverless function
  *
  * Self-contained handler for all /v1/arena/* routes.
- * Data is seeded inline (same content as apps/api/src/db/index.ts seed).
- * No database dependency - seed data is static, reads are pure JSON.
+ * Data is seeded inline for static routes; Supabase used for live routes.
  *
  * Routes handled (via vercel.json rewrite):
- *   GET /v1/arena/daily
- *   GET /v1/arena/problems
- *   GET /v1/arena/problems/:id
- *   GET /v1/arena/problems/:id/card
+ *   GET  /v1/arena/daily
+ *   GET  /v1/arena/problems
+ *   GET  /v1/arena/problems/:id
+ *   GET  /v1/arena/problems/:id/card
+ *   GET  /v1/arena/leaderboard
+ *   POST /v1/arena/bot-solve
+ *   POST /v1/arena/comment-reply
+ *   POST /v1/arena/submit-problem
  */
+
+import { createClient } from "@supabase/supabase-js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -272,11 +277,43 @@ function solutionsForProblem(problemId: string): Solution[] {
 // Main handler
 // ---------------------------------------------------------------------------
 
-export default function handler(req: any, res: any) {
-  // CORS preflight
+// ---------------------------------------------------------------------------
+// Helpers for live Supabase-backed routes
+// ---------------------------------------------------------------------------
+
+const ARENA_MAX_CONTENT_LENGTH = 2000;
+const ARENA_MAX_NAME_LENGTH = 80;
+const VALID_CATEGORIES = [
+  "cat_automation","cat_business","cat_content","cat_data",
+  "cat_devtools","cat_life","cat_scheduling","cat_security","cat_web",
+];
+
+async function callClaude(prompt: string, model: string, apiKey: string): Promise<string> {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({ model, max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!r.ok) throw new Error(`Anthropic API error ${r.status}: ${await r.text()}`);
+  const data = await r.json() as { content: Array<{ type: string; text: string }> };
+  return data.content.find((b) => b.type === "text")?.text ?? "";
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
+
+export default async function handler(req: any, res: any) {
+  // CORS headers for all responses
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.statusCode = 204;
     res.end();
     return;
@@ -367,6 +404,165 @@ export default function handler(req: any, res: any) {
     }).slice(0, limit);
 
     return json(res, results);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /v1/arena/leaderboard
+  // ---------------------------------------------------------------------------
+  if (req.method === 'GET' && urlPath.endsWith('/leaderboard')) {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return json(res, { data: [], message: "Leaderboard unavailable" });
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const [solutionsRes, botsRes] = await Promise.all([
+      supabase.from("arena_solutions").select("id, problem_id, bot_name, votes, created_at"),
+      supabase.from("arena_bots").select("id, name, description, model, created_at"),
+    ]);
+    if (solutionsRes.error) return res.status(500).json({ error: "Failed to load solutions" });
+
+    const solutions = solutionsRes.data ?? [];
+    const bots = botsRes.data ?? [];
+
+    const botMeta: Record<string, { model: string | null; description: string | null }> = {};
+    for (const bot of bots) botMeta[bot.name] = { model: bot.model ?? null, description: bot.description ?? null };
+
+    type BotStats = { total_votes: number; solution_count: number; problems: Record<string, number> };
+    const stats: Record<string, BotStats> = {};
+    for (const sol of solutions) {
+      if (!stats[sol.bot_name]) stats[sol.bot_name] = { total_votes: 0, solution_count: 0, problems: {} };
+      stats[sol.bot_name].total_votes += sol.votes ?? 0;
+      stats[sol.bot_name].solution_count += 1;
+      stats[sol.bot_name].problems[sol.problem_id] = (stats[sol.bot_name].problems[sol.problem_id] ?? 0) + (sol.votes ?? 0);
+    }
+
+    const maxVotesPerProblem: Record<string, number> = {};
+    for (const sol of solutions) {
+      const cur = maxVotesPerProblem[sol.problem_id] ?? 0;
+      if ((sol.votes ?? 0) > cur) maxVotesPerProblem[sol.problem_id] = sol.votes ?? 0;
+    }
+
+    const entries = Object.entries(stats).map(([bot_name, s], i) => {
+      const problems_entered = Object.keys(s.problems).length;
+      const wins = Object.entries(s.problems).filter(([pid, v]) => maxVotesPerProblem[pid] === v && v > 0).length;
+      const meta = botMeta[bot_name] ?? { model: null, description: null };
+      return { rank: 0, bot_name, model: meta.model, description: meta.description,
+        total_votes: s.total_votes, solution_count: s.solution_count,
+        win_rate: problems_entered > 0 ? Math.round((wins / problems_entered) * 100) / 100 : 0 };
+    }).sort((a, b) => b.total_votes - a.total_votes || b.solution_count - a.solution_count);
+    entries.forEach((e, i) => { e.rank = i + 1; });
+
+    return json(res, { data: entries });
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/arena/bot-solve
+  // ---------------------------------------------------------------------------
+  if (req.method === 'POST' && urlPath.endsWith('/bot-solve')) {
+    const { problem_id, bot_name } = req.body ?? {};
+    if (!problem_id || typeof problem_id !== 'string') return res.status(400).json({ error: "problem_id is required" });
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: "Storage unavailable" });
+    if (!anthropicKey) return res.status(503).json({ error: "AI service unavailable" });
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: problem, error: problemErr } = await supabase
+      .from("arena_problems").select("id, title, body, category_id, status")
+      .eq("id", problem_id).eq("status", "active").single();
+    if (problemErr || !problem) return res.status(404).json({ error: "Problem not found or not active" });
+
+    let bot: { id: string; name: string; description: string; model: string } | null = null;
+    if (bot_name) {
+      const { data } = await supabase.from("arena_bots").select("id, name, description, model").eq("name", bot_name).single();
+      bot = data;
+    } else {
+      const { data } = await supabase.from("arena_bots").select("id, name, description, model").limit(1).single();
+      bot = data;
+    }
+    if (!bot) return res.status(404).json({ error: "No bot found. Add a row to arena_bots first." });
+
+    const prompt = [
+      `You are ${bot.name}, an AI assistant competing in UnClick Arena.`,
+      bot.description ? `Your persona: ${bot.description}` : "",
+      "", "Answer the following problem clearly, practically, and concisely. Focus on actionable advice.",
+      "", `Problem: ${problem.title}`, "", problem.body,
+    ].filter(Boolean).join("\n");
+
+    let solutionText: string;
+    try { solutionText = await callClaude(prompt, bot.model || "claude-haiku-4-5-20251001", anthropicKey); }
+    catch (err) { console.error("Claude API error:", err); return res.status(502).json({ error: "Failed to generate solution" }); }
+    if (!solutionText.trim()) return res.status(502).json({ error: "Empty solution generated" });
+
+    const { data: solution, error: insertErr } = await supabase
+      .from("arena_solutions").insert({ problem_id: problem.id, bot_name: bot.name, solution_text: solutionText.trim(), votes: 0 })
+      .select("id, created_at").single();
+    if (insertErr) return res.status(500).json({ error: "Failed to save solution", detail: insertErr.message });
+
+    return res.status(201).json({ id: solution.id, bot_name: bot.name, problem_id: problem.id, created_at: solution.created_at, message: "Solution submitted" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/arena/comment-reply
+  // ---------------------------------------------------------------------------
+  if (req.method === 'POST' && urlPath.endsWith('/comment-reply')) {
+    const expectedKey = process.env.ARENA_AGENT_API_KEY;
+    if (!expectedKey) return res.status(503).json({ error: "Endpoint not configured" });
+    const authHeader = req.headers["authorization"] ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (token !== expectedKey) return res.status(401).json({ error: "Invalid or missing API key" });
+
+    const { problem_id, parent_id, agent_name, content } = req.body ?? {};
+    if (!problem_id || typeof problem_id !== 'string') return res.status(400).json({ error: "problem_id is required" });
+    if (!parent_id || typeof parent_id !== 'string') return res.status(400).json({ error: "parent_id is required" });
+    if (!agent_name || typeof agent_name !== 'string' || !agent_name.trim()) return res.status(400).json({ error: "agent_name is required" });
+    if (!content || typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: "content is required" });
+    if (content.length > ARENA_MAX_CONTENT_LENGTH) return res.status(400).json({ error: `content must be ${ARENA_MAX_CONTENT_LENGTH} characters or fewer` });
+    if (agent_name.length > ARENA_MAX_NAME_LENGTH) return res.status(400).json({ error: `agent_name must be ${ARENA_MAX_NAME_LENGTH} characters or fewer` });
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: "Storage unavailable" });
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: parentComment, error: parentErr } = await supabase
+      .from("arena_comments").select("id, problem_id").eq("id", parent_id).single();
+    if (parentErr || !parentComment) return res.status(404).json({ error: "Parent comment not found" });
+    if (parentComment.problem_id !== problem_id) return res.status(400).json({ error: "parent_id does not belong to this problem" });
+
+    const { data, error } = await supabase.from("arena_comments")
+      .insert({ problem_id: problem_id.trim(), parent_id, author_name: agent_name.trim(), content: content.trim(), is_agent: true })
+      .select("id, problem_id, parent_id, author_name, content, is_agent, created_at").single();
+    if (error) return res.status(500).json({ error: "Failed to post reply", detail: error.message });
+
+    return res.status(201).json({ ...data, message: "Reply posted" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/arena/submit-problem
+  // ---------------------------------------------------------------------------
+  if (req.method === 'POST' && urlPath.endsWith('/submit-problem')) {
+    const { title, description, category } = req.body ?? {};
+    if (!title || typeof title !== 'string' || title.trim().length < 5) return res.status(400).json({ error: "title is required (min 5 characters)" });
+    if (!description || typeof description !== 'string' || description.trim().length < 10) return res.status(400).json({ error: "description is required (min 10 characters)" });
+    if (!category || !VALID_CATEGORIES.includes(category)) return res.status(400).json({ error: "valid category is required" });
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(201).json({ id: null, persisted: false, message: "Problem submitted. We'll review it and add it to the Arena soon." });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await supabase.from("arena_problems")
+      .insert({ title: title.trim(), body: description.trim(), category_id: category, status: "pending", solution_count: 0, view_count: 0, poster_type: "human", is_daily: false })
+      .select("id, created_at").single();
+    if (error) return res.status(500).json({ error: "Failed to submit problem", detail: error.message });
+
+    return res.status(201).json({ id: data.id, persisted: true, message: "Problem submitted. We'll review it and add it to the Arena soon." });
   }
 
   // Fallback
