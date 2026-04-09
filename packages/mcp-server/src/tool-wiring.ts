@@ -424,6 +424,59 @@ import {
   figmaGetComments, figmaPostComment, figmaGetComponents, figmaGetTeamProjects,
 } from "./figma-tool.js";
 
+// ─── Messaging ────────────────────────────────────────────────────────────────
+import {
+  twilioSendSms, twilioListMessages, twilioGetMessage,
+  twilioMakeCall, twilioListCalls, twilioSendVerify, twilioCheckVerify,
+} from "./twilio-tool.js";
+
+import {
+  pushoverSendNotification, pushoverGetReceipt, pushoverCancelEmergency,
+  pushoverListSounds, pushoverValidateUser,
+} from "./pushover-tool.js";
+
+import {
+  whatsappSendText, whatsappSendTemplate, whatsappSendMedia,
+  whatsappGetMedia, whatsappUploadMedia,
+} from "./whatsapp-tool.js";
+
+// ─── Media / Data ─────────────────────────────────────────────────────────────
+import {
+  youtubeSearch, youtubeGetVideo, youtubeGetChannel,
+  youtubeListPlaylists, youtubeListPlaylistItems, youtubeGetCaptions,
+} from "./youtube-tool.js";
+
+import {
+  spotifySearch, spotifyGetTrack, spotifyGetAlbum,
+  spotifyGetArtist, spotifyGetPlaylist,
+  spotifyGetRecommendations, spotifyGetAudioFeatures,
+} from "./spotify-tool.js";
+
+// ─── AI ───────────────────────────────────────────────────────────────────────
+import {
+  elevenlabsListVoices, elevenlabsGetVoice, elevenlabsTextToSpeech,
+  elevenlabsGetModels, elevenlabsGetHistory,
+} from "./elevenlabs-tool.js";
+
+import {
+  replicateListModels, replicateGetModel, replicateCreatePrediction,
+  replicateGetPrediction, replicateListPredictions, replicateCancelPrediction,
+} from "./replicate-tool.js";
+
+import {
+  stabilityTextToImage, stabilityImageToImage,
+  stabilityUpscale, stabilityListEngines,
+} from "./stability-tool.js";
+
+import {
+  openaiChatCompletion, openaiCreateEmbedding, openaiGenerateImage,
+  openaiCreateTranscription, openaiListModels,
+} from "./openai-tool.js";
+
+import {
+  anthropicCreateMessage, anthropicListModels,
+} from "./anthropic-tool.js";
+
 import {
   amazonSearch, amazonProduct, amazonBrowse, amazonVariations,
 } from "./amazon-tool.js";
@@ -6257,6 +6310,788 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+
+  // ── twilio-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "twilio_send_sms",
+    description: "Send an SMS via Twilio.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        to: { type: "string", description: "Recipient phone number in E.164 format" },
+        from: { type: "string", description: "Your Twilio phone number or messaging service SID" },
+        body: { type: "string", description: "Message text" },
+        status_callback: { type: "string", description: "URL to receive status updates" },
+      },
+      required: ["account_sid", "auth_token", "to", "from", "body"],
+    },
+  },
+  {
+    name: "twilio_list_messages",
+    description: "List SMS messages sent or received on a Twilio account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        to: { type: "string" },
+        from: { type: "string" },
+        date_sent: { type: "string", description: "Filter by date (YYYY-MM-DD)" },
+        page_size: { type: "number" },
+      },
+      required: ["account_sid", "auth_token"],
+    },
+  },
+  {
+    name: "twilio_get_message",
+    description: "Get a single Twilio message by SID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        message_sid: { type: "string" },
+      },
+      required: ["account_sid", "auth_token", "message_sid"],
+    },
+  },
+  {
+    name: "twilio_make_call",
+    description: "Initiate an outbound phone call via Twilio.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        to: { type: "string", description: "E.164 phone number to call" },
+        from: { type: "string", description: "Your Twilio phone number" },
+        twiml: { type: "string", description: "TwiML instructions for the call" },
+        url: { type: "string", description: "URL that returns TwiML for the call" },
+      },
+      required: ["account_sid", "auth_token", "to", "from"],
+    },
+  },
+  {
+    name: "twilio_list_calls",
+    description: "List outbound and inbound calls on a Twilio account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        to: { type: "string" },
+        from: { type: "string" },
+        status: { type: "string", description: "queued, ringing, in-progress, completed, failed, busy, no-answer" },
+        page_size: { type: "number" },
+      },
+      required: ["account_sid", "auth_token"],
+    },
+  },
+  {
+    name: "twilio_send_verify",
+    description: "Send a verification code via Twilio Verify (SMS, call, email, or WhatsApp).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        service_sid: { type: "string", description: "Twilio Verify Service SID" },
+        to: { type: "string", description: "E.164 phone number or email" },
+        channel: { type: "string", description: "sms, call, email, or whatsapp (default: sms)" },
+      },
+      required: ["account_sid", "auth_token", "service_sid", "to"],
+    },
+  },
+  {
+    name: "twilio_check_verify",
+    description: "Check a verification code submitted by a user via Twilio Verify.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account_sid: { type: "string" },
+        auth_token: { type: "string" },
+        service_sid: { type: "string" },
+        to: { type: "string" },
+        code: { type: "string", description: "The OTP code entered by the user" },
+      },
+      required: ["account_sid", "auth_token", "service_sid", "to", "code"],
+    },
+  },
+
+  // ── pushover-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "pushover_send_notification",
+    description: "Send a push notification via Pushover.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string" },
+        user_key: { type: "string" },
+        message: { type: "string" },
+        title: { type: "string" },
+        url: { type: "string" },
+        url_title: { type: "string" },
+        priority: { type: "number", description: "-2 (lowest) to 2 (emergency)" },
+        sound: { type: "string" },
+        device: { type: "string" },
+        html: { type: "boolean" },
+        retry: { type: "number", description: "Emergency only: retry interval in seconds (min 30)" },
+        expire: { type: "number", description: "Emergency only: expiry in seconds (max 10800)" },
+      },
+      required: ["app_token", "user_key", "message"],
+    },
+  },
+  {
+    name: "pushover_get_receipt",
+    description: "Get acknowledgment status for an emergency Pushover notification.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string" },
+        receipt: { type: "string", description: "Receipt token returned from an emergency notification" },
+      },
+      required: ["app_token", "receipt"],
+    },
+  },
+  {
+    name: "pushover_cancel_emergency",
+    description: "Cancel an outstanding emergency Pushover notification before it expires.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string" },
+        user_key: { type: "string" },
+        receipt: { type: "string" },
+      },
+      required: ["app_token", "user_key", "receipt"],
+    },
+  },
+  {
+    name: "pushover_list_sounds",
+    description: "List all available notification sounds in Pushover.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string" },
+      },
+      required: ["app_token"],
+    },
+  },
+  {
+    name: "pushover_validate_user",
+    description: "Validate a Pushover user or group key and list their registered devices.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string" },
+        user_key: { type: "string" },
+        device: { type: "string", description: "Optional: validate only for a specific device name" },
+      },
+      required: ["app_token", "user_key"],
+    },
+  },
+
+  // ── whatsapp-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "whatsapp_send_text",
+    description: "Send a text message via WhatsApp Business Cloud API.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        phone_number_id: { type: "string", description: "Your WhatsApp phone number ID from Meta for Developers" },
+        to: { type: "string", description: "Recipient phone number in E.164 format" },
+        body: { type: "string", description: "Message text" },
+        preview_url: { type: "boolean" },
+      },
+      required: ["bearer_token", "phone_number_id", "to", "body"],
+    },
+  },
+  {
+    name: "whatsapp_send_template",
+    description: "Send a WhatsApp template message (required for first contact or >24h since last message).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        phone_number_id: { type: "string" },
+        to: { type: "string" },
+        template_name: { type: "string" },
+        language: { type: "string", description: "Language code, e.g. en_US (default)" },
+        components: { description: "Array of template component objects for variable substitution" },
+      },
+      required: ["bearer_token", "phone_number_id", "to", "template_name"],
+    },
+  },
+  {
+    name: "whatsapp_send_media",
+    description: "Send a media message (image, video, audio, document, sticker) via WhatsApp.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        phone_number_id: { type: "string" },
+        to: { type: "string" },
+        media_type: { type: "string", description: "image, video, audio, document, or sticker" },
+        media_id: { type: "string", description: "ID of a previously uploaded media object" },
+        media_link: { type: "string", description: "URL of the media to send" },
+        caption: { type: "string" },
+        filename: { type: "string", description: "For documents: the display filename" },
+      },
+      required: ["bearer_token", "phone_number_id", "to", "media_type"],
+    },
+  },
+  {
+    name: "whatsapp_get_media",
+    description: "Get the download URL and metadata for a WhatsApp media object by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        media_id: { type: "string" },
+      },
+      required: ["bearer_token", "media_id"],
+    },
+  },
+  {
+    name: "whatsapp_upload_media",
+    description: "Upload a media file to WhatsApp and get a media ID for use in messages.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        phone_number_id: { type: "string" },
+        media_url: { type: "string", description: "URL to fetch the media from" },
+        mime_type: { type: "string", description: "MIME type, e.g. image/jpeg, video/mp4" },
+        filename: { type: "string" },
+      },
+      required: ["bearer_token", "phone_number_id", "media_url", "mime_type"],
+    },
+  },
+
+  // ── youtube-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "youtube_search",
+    description: "Search YouTube for videos, channels, or playlists.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        query: { type: "string" },
+        type: { type: "string", description: "video, channel, or playlist (default: video)" },
+        max_results: { type: "number" },
+        order: { type: "string", description: "relevance, date, rating, viewCount, title" },
+        channel_id: { type: "string" },
+        published_after: { type: "string", description: "RFC 3339 datetime, e.g. 2024-01-01T00:00:00Z" },
+        region_code: { type: "string" },
+        page_token: { type: "string" },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+  {
+    name: "youtube_get_video",
+    description: "Get metadata, statistics, and content details for a YouTube video.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        video_id: { type: "string" },
+      },
+      required: ["api_key", "video_id"],
+    },
+  },
+  {
+    name: "youtube_get_channel",
+    description: "Get metadata and statistics for a YouTube channel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        channel_id: { type: "string" },
+        handle: { type: "string", description: "Channel handle without @ (alternative to channel_id)" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "youtube_list_playlists",
+    description: "List playlists belonging to a YouTube channel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        channel_id: { type: "string" },
+        max_results: { type: "number" },
+        page_token: { type: "string" },
+      },
+      required: ["api_key", "channel_id"],
+    },
+  },
+  {
+    name: "youtube_list_playlist_items",
+    description: "List videos in a YouTube playlist.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        playlist_id: { type: "string" },
+        max_results: { type: "number" },
+        page_token: { type: "string" },
+      },
+      required: ["api_key", "playlist_id"],
+    },
+  },
+  {
+    name: "youtube_get_captions",
+    description: "List available caption tracks for a YouTube video.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        video_id: { type: "string" },
+      },
+      required: ["api_key", "video_id"],
+    },
+  },
+
+  // ── spotify-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "spotify_search",
+    description: "Search Spotify for tracks, albums, artists, or playlists.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        query: { type: "string" },
+        type: { type: "string", description: "Comma-separated: track, album, artist, playlist (default: track)" },
+        limit: { type: "number" },
+        offset: { type: "number" },
+        market: { type: "string" },
+      },
+      required: ["bearer_token", "query"],
+    },
+  },
+  {
+    name: "spotify_get_track",
+    description: "Get metadata for a Spotify track by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        track_id: { type: "string" },
+        market: { type: "string" },
+      },
+      required: ["bearer_token", "track_id"],
+    },
+  },
+  {
+    name: "spotify_get_album",
+    description: "Get metadata and track listing for a Spotify album.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        album_id: { type: "string" },
+      },
+      required: ["bearer_token", "album_id"],
+    },
+  },
+  {
+    name: "spotify_get_artist",
+    description: "Get metadata and follower count for a Spotify artist.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        artist_id: { type: "string" },
+      },
+      required: ["bearer_token", "artist_id"],
+    },
+  },
+  {
+    name: "spotify_get_playlist",
+    description: "Get metadata and tracks for a Spotify playlist.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        playlist_id: { type: "string" },
+        market: { type: "string" },
+      },
+      required: ["bearer_token", "playlist_id"],
+    },
+  },
+  {
+    name: "spotify_get_recommendations",
+    description: "Get Spotify track recommendations based on seed tracks, artists, or genres.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        seed_tracks: { type: "string", description: "Comma-separated Spotify track IDs (max 5 seeds total)" },
+        seed_artists: { type: "string", description: "Comma-separated Spotify artist IDs" },
+        seed_genres: { type: "string", description: "Comma-separated genre names" },
+        limit: { type: "number" },
+        market: { type: "string" },
+        min_energy: { type: "number" },
+        max_energy: { type: "number" },
+        target_valence: { type: "number" },
+        target_danceability: { type: "number" },
+      },
+      required: ["bearer_token"],
+    },
+  },
+  {
+    name: "spotify_get_audio_features",
+    description: "Get audio analysis features (danceability, energy, tempo, etc.) for a Spotify track.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bearer_token: { type: "string" },
+        track_id: { type: "string" },
+      },
+      required: ["bearer_token", "track_id"],
+    },
+  },
+
+  // ── elevenlabs-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "elevenlabs_list_voices",
+    description: "List all available voices in ElevenLabs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "elevenlabs_get_voice",
+    description: "Get metadata for a specific ElevenLabs voice by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        voice_id: { type: "string" },
+        with_settings: { type: "boolean", description: "Include voice settings (stability, similarity_boost)" },
+      },
+      required: ["api_key", "voice_id"],
+    },
+  },
+  {
+    name: "elevenlabs_text_to_speech",
+    description: "Convert text to speech with a selected ElevenLabs voice. Returns base64-encoded audio.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        voice_id: { type: "string" },
+        text: { type: "string", description: "Text to synthesize (max 5000 characters)" },
+        model_id: { type: "string", description: "ElevenLabs model ID (default: eleven_monolingual_v1)" },
+        output_format: { type: "string", description: "mp3_44100_128, pcm_16000, etc. (default: mp3_44100_128)" },
+        stability: { type: "number", description: "0.0-1.0 (default: 0.5)" },
+        similarity_boost: { type: "number", description: "0.0-1.0 (default: 0.75)" },
+        style: { type: "number", description: "0.0-1.0 style exaggeration" },
+        use_speaker_boost: { type: "boolean" },
+      },
+      required: ["api_key", "voice_id", "text"],
+    },
+  },
+  {
+    name: "elevenlabs_get_models",
+    description: "List available ElevenLabs TTS models and their supported languages.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "elevenlabs_get_history",
+    description: "Get the TTS generation history for an ElevenLabs account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        page_size: { type: "number" },
+        voice_id: { type: "string", description: "Filter history by voice ID" },
+        start_after_history_item_id: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── replicate-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "replicate_list_models",
+    description: "List public models available on Replicate.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        cursor: { type: "string" },
+      },
+      required: ["api_token"],
+    },
+  },
+  {
+    name: "replicate_get_model",
+    description: "Get details and latest version for a Replicate model.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        owner: { type: "string", description: "Model owner username" },
+        model_name: { type: "string" },
+      },
+      required: ["api_token", "owner", "model_name"],
+    },
+  },
+  {
+    name: "replicate_create_prediction",
+    description: "Run a Replicate model by creating a prediction.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        version: { type: "string", description: "Model version ID (use this OR model)" },
+        model: { type: "string", description: "Model as owner/name or owner/name:version (use this OR version)" },
+        input: { description: "Model input parameters as JSON object or string" },
+        webhook: { type: "string" },
+        stream: { type: "boolean" },
+      },
+      required: ["api_token", "input"],
+    },
+  },
+  {
+    name: "replicate_get_prediction",
+    description: "Get the status and output of a Replicate prediction.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        prediction_id: { type: "string" },
+      },
+      required: ["api_token", "prediction_id"],
+    },
+  },
+  {
+    name: "replicate_list_predictions",
+    description: "List recent predictions for a Replicate account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        cursor: { type: "string" },
+      },
+      required: ["api_token"],
+    },
+  },
+  {
+    name: "replicate_cancel_prediction",
+    description: "Cancel a running Replicate prediction.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_token: { type: "string" },
+        prediction_id: { type: "string" },
+      },
+      required: ["api_token", "prediction_id"],
+    },
+  },
+
+  // ── stability-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "stability_text_to_image",
+    description: "Generate images from a text prompt using Stability AI.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        prompt: { type: "string" },
+        engine_id: { type: "string", description: "Stability engine ID (default: stable-diffusion-xl-1024-v1-0)" },
+        negative_prompt: { type: "string" },
+        width: { type: "number" },
+        height: { type: "number" },
+        steps: { type: "number", description: "Diffusion steps 10-150 (default: 30)" },
+        cfg_scale: { type: "number", description: "Guidance scale 0-35 (default: 7)" },
+        samples: { type: "number", description: "Number of images (max 10, default: 1)" },
+        style_preset: { type: "string" },
+        seed: { type: "number" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "stability_image_to_image",
+    description: "Transform an existing image using a text prompt with Stability AI.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        prompt: { type: "string" },
+        image_url: { type: "string", description: "URL of the source image" },
+        engine_id: { type: "string" },
+        negative_prompt: { type: "string" },
+        strength: { type: "number", description: "0.0-1.0: how much to change the image (default: 0.35)" },
+        steps: { type: "number" },
+        cfg_scale: { type: "number" },
+        samples: { type: "number" },
+      },
+      required: ["api_key", "prompt", "image_url"],
+    },
+  },
+  {
+    name: "stability_upscale",
+    description: "Upscale an image using Stability AI ESRGAN.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        image_url: { type: "string", description: "URL of the image to upscale" },
+        width: { type: "number", description: "Target width in pixels (default: 2048)" },
+        engine_id: { type: "string", description: "Upscale engine (default: esrgan-v1-x2plus)" },
+      },
+      required: ["api_key", "image_url"],
+    },
+  },
+  {
+    name: "stability_list_engines",
+    description: "List all available Stability AI generation engines.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── openai-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "openai_chat_completion",
+    description: "Run a chat completion with an OpenAI model (GPT-4o, GPT-4, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        model: { type: "string", description: "Model ID, e.g. gpt-4o, gpt-4o-mini (default: gpt-4o-mini)" },
+        prompt: { type: "string", description: "Convenience: single user message (alternative to messages array)" },
+        system_prompt: { type: "string", description: "System instruction (used with prompt param)" },
+        messages: { description: "Array of {role, content} message objects (alternative to prompt)" },
+        max_tokens: { type: "number" },
+        temperature: { type: "number" },
+        top_p: { type: "number" },
+        n: { type: "number" },
+        response_format: { description: "e.g. {type: 'json_object'}" },
+        seed: { type: "number" },
+        org_id: { type: "string", description: "OpenAI organization ID (optional)" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "openai_create_embedding",
+    description: "Create vector embeddings for text using an OpenAI embedding model.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        input: { description: "String or array of strings to embed" },
+        model: { type: "string", description: "Embedding model (default: text-embedding-3-small)" },
+        dimensions: { type: "number", description: "Number of output dimensions (for text-embedding-3-* models)" },
+        org_id: { type: "string" },
+      },
+      required: ["api_key", "input"],
+    },
+  },
+  {
+    name: "openai_generate_image",
+    description: "Generate images from a text prompt using DALL-E.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        prompt: { type: "string" },
+        model: { type: "string", description: "dall-e-3 or dall-e-2 (default: dall-e-3)" },
+        n: { type: "number", description: "Number of images to generate" },
+        size: { type: "string", description: "1024x1024, 1792x1024, or 1024x1792 for DALL-E 3" },
+        quality: { type: "string", description: "standard or hd (DALL-E 3 only)" },
+        style: { type: "string", description: "natural or vivid (DALL-E 3 only)" },
+        response_format: { type: "string", description: "url or b64_json (default: url)" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "openai_create_transcription",
+    description: "Transcribe audio to text using OpenAI Whisper.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        audio_url: { type: "string", description: "URL of the audio file to transcribe" },
+        model: { type: "string", description: "Transcription model (default: whisper-1)" },
+        language: { type: "string", description: "ISO-639-1 language code (optional)" },
+        response_format: { type: "string", description: "json, text, srt, verbose_json, vtt (default: json)" },
+        prompt: { type: "string" },
+        temperature: { type: "number" },
+        filename: { type: "string" },
+      },
+      required: ["api_key", "audio_url"],
+    },
+  },
+  {
+    name: "openai_list_models",
+    description: "List all OpenAI models available to the account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── anthropic-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "anthropic_create_message",
+    description: "Send a message to the Anthropic Messages API (Claude models). Useful for agents that need to call Claude programmatically or compare model outputs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        model: { type: "string", description: "Claude model ID (default: claude-sonnet-4-6)" },
+        prompt: { type: "string", description: "Convenience: single user message (alternative to messages array)" },
+        messages: { description: "Array of {role, content} message objects" },
+        system: { type: "string", description: "System prompt" },
+        max_tokens: { type: "number", description: "Max tokens to generate (default: 1024)" },
+        temperature: { type: "number" },
+        top_p: { type: "number" },
+        top_k: { type: "number" },
+        stop_sequences: { description: "Array of stop sequences" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "anthropic_list_models",
+    description: "List all Claude models available via the Anthropic API.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6928,4 +7763,76 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
 
   // vault-tool.ts
   vault_action:            (args) => vaultAction(String(args.action ?? ""), args),
+
+  // twilio-tool.ts
+  twilio_send_sms:         (args) => twilioSendSms(args),
+  twilio_list_messages:    (args) => twilioListMessages(args),
+  twilio_get_message:      (args) => twilioGetMessage(args),
+  twilio_make_call:        (args) => twilioMakeCall(args),
+  twilio_list_calls:       (args) => twilioListCalls(args),
+  twilio_send_verify:      (args) => twilioSendVerify(args),
+  twilio_check_verify:     (args) => twilioCheckVerify(args),
+
+  // pushover-tool.ts
+  pushover_send_notification: (args) => pushoverSendNotification(args),
+  pushover_get_receipt:       (args) => pushoverGetReceipt(args),
+  pushover_cancel_emergency:  (args) => pushoverCancelEmergency(args),
+  pushover_list_sounds:       (args) => pushoverListSounds(args),
+  pushover_validate_user:     (args) => pushoverValidateUser(args),
+
+  // whatsapp-tool.ts
+  whatsapp_send_text:      (args) => whatsappSendText(args),
+  whatsapp_send_template:  (args) => whatsappSendTemplate(args),
+  whatsapp_send_media:     (args) => whatsappSendMedia(args),
+  whatsapp_get_media:      (args) => whatsappGetMedia(args),
+  whatsapp_upload_media:   (args) => whatsappUploadMedia(args),
+
+  // youtube-tool.ts
+  youtube_search:              (args) => youtubeSearch(args),
+  youtube_get_video:           (args) => youtubeGetVideo(args),
+  youtube_get_channel:         (args) => youtubeGetChannel(args),
+  youtube_list_playlists:      (args) => youtubeListPlaylists(args),
+  youtube_list_playlist_items: (args) => youtubeListPlaylistItems(args),
+  youtube_get_captions:        (args) => youtubeGetCaptions(args),
+
+  // spotify-tool.ts
+  spotify_search:              (args) => spotifySearch(args),
+  spotify_get_track:           (args) => spotifyGetTrack(args),
+  spotify_get_album:           (args) => spotifyGetAlbum(args),
+  spotify_get_artist:          (args) => spotifyGetArtist(args),
+  spotify_get_playlist:        (args) => spotifyGetPlaylist(args),
+  spotify_get_recommendations: (args) => spotifyGetRecommendations(args),
+  spotify_get_audio_features:  (args) => spotifyGetAudioFeatures(args),
+
+  // elevenlabs-tool.ts
+  elevenlabs_list_voices:      (args) => elevenlabsListVoices(args),
+  elevenlabs_get_voice:        (args) => elevenlabsGetVoice(args),
+  elevenlabs_text_to_speech:   (args) => elevenlabsTextToSpeech(args),
+  elevenlabs_get_models:       (args) => elevenlabsGetModels(args),
+  elevenlabs_get_history:      (args) => elevenlabsGetHistory(args),
+
+  // replicate-tool.ts
+  replicate_list_models:       (args) => replicateListModels(args),
+  replicate_get_model:         (args) => replicateGetModel(args),
+  replicate_create_prediction: (args) => replicateCreatePrediction(args),
+  replicate_get_prediction:    (args) => replicateGetPrediction(args),
+  replicate_list_predictions:  (args) => replicateListPredictions(args),
+  replicate_cancel_prediction: (args) => replicateCancelPrediction(args),
+
+  // stability-tool.ts
+  stability_text_to_image:     (args) => stabilityTextToImage(args),
+  stability_image_to_image:    (args) => stabilityImageToImage(args),
+  stability_upscale:           (args) => stabilityUpscale(args),
+  stability_list_engines:      (args) => stabilityListEngines(args),
+
+  // openai-tool.ts
+  openai_chat_completion:      (args) => openaiChatCompletion(args),
+  openai_create_embedding:     (args) => openaiCreateEmbedding(args),
+  openai_generate_image:       (args) => openaiGenerateImage(args),
+  openai_create_transcription: (args) => openaiCreateTranscription(args),
+  openai_list_models:          (args) => openaiListModels(args),
+
+  // anthropic-tool.ts
+  anthropic_create_message:    (args) => anthropicCreateMessage(args),
+  anthropic_list_models:       (args) => anthropicListModels(args),
 };

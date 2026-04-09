@@ -20,6 +20,7 @@ import {
   Package, Leaf, FlaskConical, Bird, Flame, Ticket,
   MapPin, Clock4, PenSquare, Droplets, Dices,
   Beer, Music2, Server, NotebookPen, Apple, Radio,
+  Phone, Bell, Smartphone, Play, Headphones, Volume2, Cpu, Paintbrush, Bot, Brain,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
@@ -1705,6 +1706,152 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to export all frames on the 'Mobile' page as PNGs and summarise the layout",
   },
+
+  // ── Messaging ──────────────────────────────────────────────────────────────
+  {
+    name: "Twilio",
+    description: "Send SMS and make phone calls via the Twilio REST API. Covers messaging, voice calls, and OTP verification flows using Twilio Verify. Built for agents that need to notify users by text, trigger automated calls, or add phone-based two-factor authentication to workflows without building telephony infrastructure.",
+    endpoint: "/v1/twilio",
+    category: "Social",
+    Icon: Phone,
+    capabilities: [
+      "Send SMS to any E.164 phone number and list message history",
+      "Initiate outbound voice calls with TwiML or webhook instructions",
+      "Send and verify OTP codes via Twilio Verify (SMS, voice, email, WhatsApp)",
+      "Retrieve message and call records with status and delivery details",
+    ],
+    examplePrompt: "Ask your AI to send an SMS alert when a critical job fails and verify delivery status",
+  },
+  {
+    name: "Pushover",
+    description: "Send push notifications to iOS, Android, and desktop devices via Pushover. Supports priorities from silent to emergency (with retry until acknowledged), custom sounds, device targeting, and group broadcasting. Built for agents that need reliable alerting for on-call workflows, monitoring systems, and time-sensitive events.",
+    endpoint: "/v1/pushover",
+    category: "Social",
+    Icon: Bell,
+    capabilities: [
+      "Send notifications with priority levels from silent (-2) to emergency (2)",
+      "Emergency notifications retry until explicitly acknowledged by the recipient",
+      "Target specific devices or broadcast to all registered devices in a group",
+      "Validate user keys and list available notification sounds",
+    ],
+    examplePrompt: "Ask your AI to send an emergency Pushover alert when server disk usage exceeds 90%",
+  },
+  {
+    name: "WhatsApp",
+    description: "Send messages and media via the WhatsApp Business Cloud API. Supports text messages, pre-approved templates for first-contact and re-engagement flows, and rich media attachments (images, video, audio, documents). Built for agents managing customer communications, support automation, and transactional notifications on WhatsApp.",
+    endpoint: "/v1/whatsapp",
+    category: "Social",
+    Icon: Smartphone,
+    capabilities: [
+      "Send text messages and template messages to individual WhatsApp users",
+      "Send images, videos, audio, documents, and stickers by URL or media ID",
+      "Upload media to WhatsApp and retrieve download URLs for received media",
+      "Use template messages to reach customers outside the 24-hour messaging window",
+    ],
+    examplePrompt: "Ask your AI to send a WhatsApp order confirmation with a PDF invoice attached",
+  },
+
+  // ── Video / Music ──────────────────────────────────────────────────────────
+  {
+    name: "YouTube",
+    description: "Search and retrieve data from YouTube via the YouTube Data API v3. Covers video metadata, channel statistics, playlist management, and caption track discovery. Built for agents that need to surface video content, analyse channel performance, build watch lists, or process video transcripts without screen-scraping.",
+    endpoint: "/v1/youtube",
+    category: "Media",
+    Icon: Play,
+    capabilities: [
+      "Search videos, channels, and playlists with filters for date, region, and order",
+      "Get video metadata: title, description, tags, duration, views, likes, and comments",
+      "Retrieve channel subscriber counts, video counts, and custom URL",
+      "List playlists and their items, and discover available caption tracks",
+    ],
+    examplePrompt: "Ask your AI to find the top 5 most viewed tutorials for a topic published in the last month",
+  },
+  {
+    name: "Spotify",
+    description: "Search and retrieve music data from the Spotify Web API. Covers tracks, albums, artists, playlists, audio feature analysis, and personalised recommendations. Built for agents building music discovery tools, playlist generators, mood-based queues, and music data pipelines without requiring Spotify playback control.",
+    endpoint: "/v1/spotify",
+    category: "Media",
+    Icon: Headphones,
+    capabilities: [
+      "Search tracks, albums, artists, and playlists by keyword",
+      "Get detailed metadata: release dates, popularity scores, and track listings",
+      "Retrieve audio features: danceability, energy, valence, tempo, and key",
+      "Generate recommendations from seed tracks, artists, or genres with attribute filters",
+    ],
+    examplePrompt: "Ask your AI to find 10 upbeat tracks similar to a seed artist with high danceability",
+  },
+
+  // ── AI ─────────────────────────────────────────────────────────────────────
+  {
+    name: "ElevenLabs",
+    description: "Convert text to speech and manage voices via the ElevenLabs API. Supports all available voices and models, fine-grained voice settings (stability, similarity boost, style), and multiple audio output formats. Built for agents that need to narrate content, generate voice-overs, or produce audio outputs from text workflows.",
+    endpoint: "/v1/elevenlabs",
+    category: "Media",
+    Icon: Volume2,
+    capabilities: [
+      "Convert text to speech with any voice and model, returning base64-encoded audio",
+      "Browse and search all available ElevenLabs voices by category and labels",
+      "Control voice stability, similarity boost, and style exaggeration",
+      "List TTS models with supported languages and retrieve generation history",
+    ],
+    examplePrompt: "Ask your AI to convert a blog post to an MP3 narration using a selected ElevenLabs voice",
+  },
+  {
+    name: "Replicate",
+    description: "Run any model hosted on Replicate and track predictions via the Replicate API. Supports thousands of open-source models for image generation, video, audio, NLP, and more. Built for agents that need flexible access to community models without managing GPU infrastructure or model serving.",
+    endpoint: "/v1/replicate",
+    category: "Platform",
+    Icon: Cpu,
+    capabilities: [
+      "Create predictions by running any Replicate model with custom input parameters",
+      "Poll prediction status and retrieve outputs when processing is complete",
+      "Browse the public model library and get model schema and version details",
+      "Cancel running predictions and list recent prediction history",
+    ],
+    examplePrompt: "Ask your AI to run a Stable Diffusion model on Replicate and return the generated image URL",
+  },
+  {
+    name: "Stability AI",
+    description: "Generate and transform images using Stability AI's Stable Diffusion models. Supports text-to-image generation, image-to-image transformation with style transfer, and ESRGAN upscaling. Built for agents that need programmatic image creation, creative asset generation, or automated visual content pipelines.",
+    endpoint: "/v1/stability",
+    category: "Media",
+    Icon: Paintbrush,
+    capabilities: [
+      "Generate images from text prompts with configurable steps, guidance scale, and style presets",
+      "Transform existing images with a text prompt using image-to-image diffusion",
+      "Upscale images up to 4x using ESRGAN with no quality loss",
+      "List all available Stability AI generation engines and their readiness state",
+    ],
+    examplePrompt: "Ask your AI to generate a product hero image from a description and upscale it to 2048px",
+  },
+  {
+    name: "OpenAI",
+    description: "Access OpenAI models for chat completions, embeddings, image generation, and audio transcription via the OpenAI REST API. Covers GPT-4o, DALL-E 3, Whisper, and the full embeddings suite. Built for agents orchestrating multi-model pipelines, generating structured outputs, embedding content for vector search, or transcribing audio.",
+    endpoint: "/v1/openai",
+    category: "Platform",
+    Icon: Bot,
+    capabilities: [
+      "Run chat completions with any GPT model using a prompt or full message array",
+      "Generate vector embeddings for semantic search and similarity matching",
+      "Create images from text with DALL-E 3 in standard or HD quality",
+      "Transcribe audio files to text using Whisper with optional language hints",
+    ],
+    examplePrompt: "Ask your AI to embed a list of documents with text-embedding-3-small for vector search indexing",
+  },
+  {
+    name: "Anthropic",
+    description: "Call Claude models directly via the Anthropic Messages API. Supports all Claude models, system prompts, multi-turn conversations, and streaming. Useful for agents that need to compare model outputs, delegate subtasks to a specific Claude version, or build multi-model chains where Claude is one node in a larger pipeline.",
+    endpoint: "/v1/anthropic",
+    category: "Platform",
+    Icon: Brain,
+    capabilities: [
+      "Send messages to any Claude model with a system prompt and conversation history",
+      "Control output length, temperature, top-p, top-k, and stop sequences",
+      "List all available Claude models and their creation dates",
+      "Use in multi-model pipelines where Claude is called by another agent or model",
+    ],
+    examplePrompt: "Ask your AI to call claude-opus-4-6 for a complex reasoning step and claude-haiku for summarisation",
+  },
 ];
 
 // Platform connectors: tools that require a one-time external account connection
@@ -1729,6 +1876,16 @@ const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
   "Monica":         "monica",
   "Clockify":       "clockify",
   "Toggl":          "toggl",
+  "Twilio":         "twilio",
+  "Pushover":       "pushover",
+  "WhatsApp":       "whatsapp",
+  "YouTube":        "youtube",
+  "Spotify":        "spotify",
+  "ElevenLabs":     "elevenlabs",
+  "Replicate":      "replicate",
+  "Stability AI":   "stability",
+  "OpenAI":         "openai",
+  "Anthropic":      "anthropic",
 };
 
 const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
