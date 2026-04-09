@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import FadeIn from "./FadeIn";
 import ToolSubmitForm from "./ToolSubmitForm";
 
@@ -57,6 +58,36 @@ const ForDevelopers = () => (
               </div>
             </FadeIn>
           ))}
+        </div>
+      </FadeIn>
+
+      <FadeIn delay={0.45}>
+        <div className="mt-16 rounded-lg border border-primary/20 bg-primary/[0.03] p-6">
+          <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
+            Building with AI?
+          </span>
+          <h3 className="mt-3 text-base font-semibold text-heading">Start here.</h3>
+          <p className="mt-2 text-sm text-body leading-relaxed max-w-lg">
+            Using Cursor, Claude, Copilot, or Windsurf to build on UnClick? Download{" "}
+            <code className="font-mono text-xs bg-border/30 px-1 py-0.5 rounded">CLAUDE.md</code>{" "}
+            and drop it in your project root. Your AI gets full context on UnClick's tools, API
+            patterns, and quality standards before writing a single line of code.
+          </p>
+          <div className="mt-4 flex flex-col sm:flex-row items-start gap-3">
+            <a
+              href="/vibe-coding/CLAUDE.md"
+              download
+              className="rounded border border-primary/40 px-3.5 py-2 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              Download CLAUDE.md
+            </a>
+            <Link
+              to="/developers/vibe-coding"
+              className="rounded border border-border/50 px-3.5 py-2 text-xs font-medium text-body hover:border-primary/20 hover:text-heading transition-colors"
+            >
+              See the full framework
+            </Link>
+          </div>
         </div>
       </FadeIn>
 

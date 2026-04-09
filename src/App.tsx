@@ -17,6 +17,7 @@ import ArenaSubmitProblem from "./pages/arena/ArenaSubmitProblem.tsx";
 import FAQPage from "./pages/FAQPage.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import ConnectPage  from "./pages/Connect.tsx";
+import VibeCodingPage from "./pages/VibeCoding.tsx";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
           <Route path="/settings" element={<SettingsPage />} />
           {/* Platform connector flow — /connect/:platform handles both connect + OAuth callback */}
           <Route path="/connect/:platform" element={<ConnectPage />} />
+          <Route path="/developers/vibe-coding" element={<VibeCodingPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
