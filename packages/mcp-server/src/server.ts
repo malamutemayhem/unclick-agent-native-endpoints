@@ -526,14 +526,10 @@ export function createServer(): Server {
     }
   );
 
-  // LIST TOOLS
+  // LIST TOOLS — expose only the 4 meta tools; individual tools remain callable
+  // via unclick_call for backwards compat but aren't advertised to reduce noise.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = [
-      ...META_TOOLS,
-      ...DIRECT_TOOLS,
-      ...ADDITIONAL_TOOLS,
-    ];
-    return { tools };
+    return { tools: [...META_TOOLS] };
   });
 
   // CALL TOOL
