@@ -511,6 +511,15 @@ export function createServer(): Server {
     {
       name: "UnClick",
       version: "0.1.0",
+      description: "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
+      websiteUrl: "https://unclick.world",
+      icons: [
+        {
+          src: "https://unclick.world/icon.png",
+          mimeType: "image/png",
+          sizes: ["512x512"],
+        },
+      ],
     },
     {
       capabilities: { tools: {} },

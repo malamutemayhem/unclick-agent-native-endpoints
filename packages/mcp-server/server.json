@@ -1,9 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.malamutemayhem/unclick-mcp-server",
-  "title": "UnClick MCP Server",
+  "title": "UnClick",
   "description": "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
   "version": "0.1.1",
+  "icon": "public/icon.png",
   "packages": [
     {
       "registryType": "npm",

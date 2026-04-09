@@ -14,7 +14,9 @@
   "files": [
     "dist",
     "README.md",
-    "logo.png"
+    "logo.png",
+    "public",
+    "server.json"
   ],
   "scripts": {
     "build": "tsc",
