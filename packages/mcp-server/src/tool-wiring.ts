@@ -447,6 +447,16 @@ import {
 import { csuitAnalyze } from "./csuite-tool.js";
 import { vaultAction } from "./vault-tool.js";
 
+// ─── Developer / Productivity ─────────────────────────────────────────────────
+import { githubAction } from "./github-tool.js";
+import { gitlabAction } from "./gitlab-tool.js";
+import { clickupAction } from "./clickup-tool.js";
+import { linearAction } from "./linear-tool.js";
+import { airtableAction } from "./airtable-tool.js";
+import { trelloAction } from "./trello-tool.js";
+import { sentryAction } from "./sentry-tool.js";
+import { postmanAction } from "./postman-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6257,6 +6267,189 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── github-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "github_action",
+    description: "Interact with the GitHub REST API: search repos, get repo details, list and create issues, list PRs, get user profiles, list gists, and search code.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:       { type: "string", description: "Action: search_repos, get_repo, list_issues, create_issue, list_prs, get_user, list_gists, search_code." },
+        access_token: { type: "string", description: "GitHub personal access token (PAT). Public data works without a token." },
+        query:        { type: "string", description: "Search query string (for search_repos and search_code)." },
+        owner:        { type: "string", description: "Repository owner login." },
+        repo:         { type: "string", description: "Repository name." },
+        title:        { type: "string", description: "Issue title (for create_issue)." },
+        body:         { type: "string", description: "Issue body text (for create_issue)." },
+        state:        { type: "string", description: "Filter by state: open, closed, all." },
+        labels:       { type: "string", description: "Comma-separated label names to filter by." },
+        username:     { type: "string", description: "GitHub username (for get_user and list_gists)." },
+        per_page:     { type: "number", description: "Results per page (max 100)." },
+        page:         { type: "number", description: "Page number." },
+      },
+      required: ["action"],
+    },
+  },
+
+  // ── gitlab-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "gitlab_action",
+    description: "Interact with the GitLab REST API: search projects, get project details, list issues and merge requests, and look up users. Supports self-hosted GitLab instances.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:       { type: "string", description: "Action: search_projects, get_project, list_issues, list_mrs, get_user." },
+        access_token: { type: "string", description: "GitLab personal access token (PAT)." },
+        base_url:     { type: "string", description: "GitLab base URL (default: https://gitlab.com/api/v4). Set for self-hosted instances." },
+        query:        { type: "string", description: "Search query string (for search_projects)." },
+        project_id:   { type: "string", description: "Project ID or URL-encoded namespace/project path." },
+        state:        { type: "string", description: "Filter by state: opened, closed, merged." },
+        labels:       { type: "string", description: "Comma-separated label names to filter by." },
+        username:     { type: "string", description: "GitLab username (for get_user)." },
+        per_page:     { type: "number", description: "Results per page." },
+        page:         { type: "number", description: "Page number." },
+      },
+      required: ["action"],
+    },
+  },
+
+  // ── clickup-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "clickup_action",
+    description: "Interact with the ClickUp API v2: list workspaces and spaces, get lists and tasks, create tasks, and update task properties.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:      { type: "string", description: "Action: get_workspaces, get_spaces, get_lists, get_tasks, create_task, update_task." },
+        api_key:     { type: "string", description: "ClickUp API key." },
+        team_id:     { type: "string", description: "Workspace (team) ID (for get_spaces)." },
+        space_id:    { type: "string", description: "Space ID (for get_lists without a folder)." },
+        folder_id:   { type: "string", description: "Folder ID (for get_lists)." },
+        list_id:     { type: "string", description: "List ID (for get_tasks and create_task)." },
+        task_id:     { type: "string", description: "Task ID (for update_task)." },
+        name:        { type: "string", description: "Task name (for create_task and update_task)." },
+        description: { type: "string", description: "Task description." },
+        status:      { type: "string", description: "Task status name." },
+        priority:    { type: "number", description: "Priority: 1 (urgent), 2 (high), 3 (normal), 4 (low)." },
+        due_date:    { type: "number", description: "Due date as Unix timestamp in milliseconds." },
+        page:        { type: "number", description: "Page number for task pagination." },
+      },
+      required: ["action", "api_key"],
+    },
+  },
+
+  // ── linear-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "linear_action",
+    description: "Interact with the Linear GraphQL API: list and search issues, create issues, get project details, and list teams.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:      { type: "string", description: "Action: list_issues, create_issue, get_project, list_teams, search_issues." },
+        api_key:     { type: "string", description: "Linear API key." },
+        title:       { type: "string", description: "Issue title (for create_issue)." },
+        team_id:     { type: "string", description: "Team ID (required for create_issue, optional filter for list_issues)." },
+        project_id:  { type: "string", description: "Project ID (for get_project)." },
+        description: { type: "string", description: "Issue description." },
+        priority:    { type: "number", description: "Priority: 0 (none), 1 (urgent), 2 (high), 3 (medium), 4 (low)." },
+        assignee_id: { type: "string", description: "Assignee user ID." },
+        state_id:    { type: "string", description: "Workflow state ID." },
+        query:       { type: "string", description: "Search term (for search_issues)." },
+        first:       { type: "number", description: "Number of results to return (default 25)." },
+      },
+      required: ["action", "api_key"],
+    },
+  },
+
+  // ── airtable-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "airtable_action",
+    description: "Interact with the Airtable REST API: list bases, list and search records, get a single record, and create or update records.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:       { type: "string", description: "Action: list_bases, list_records, get_record, create_record, update_record, search_records." },
+        access_token: { type: "string", description: "Airtable personal access token (PAT)." },
+        base_id:      { type: "string", description: "Airtable base ID (starts with 'app')." },
+        table_name:   { type: "string", description: "Table name or ID." },
+        record_id:    { type: "string", description: "Record ID (starts with 'rec')." },
+        fields:       { type: "object", description: "Record fields as key-value pairs (for create_record and update_record)." },
+        formula:      { type: "string", description: "Airtable filter formula string (for search_records)." },
+        view:         { type: "string", description: "View name or ID to use." },
+        max_records:  { type: "number", description: "Maximum number of records to return." },
+        page_size:    { type: "number", description: "Number of records per page (max 100)." },
+        offset:       { type: "string", description: "Pagination offset token." },
+      },
+      required: ["action", "access_token"],
+    },
+  },
+
+  // ── trello-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "trello_action",
+    description: "Interact with the Trello REST API: list boards and lists, get and search cards, create cards, and update card properties.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:    { type: "string", description: "Action: get_boards, get_lists, get_cards, create_card, update_card, search_cards." },
+        api_key:   { type: "string", description: "Trello API key." },
+        token:     { type: "string", description: "Trello user token." },
+        board_id:  { type: "string", description: "Board ID." },
+        list_id:   { type: "string", description: "List ID." },
+        card_id:   { type: "string", description: "Card ID (for update_card)." },
+        name:      { type: "string", description: "Card name (for create_card and update_card)." },
+        desc:      { type: "string", description: "Card description." },
+        due:       { type: "string", description: "Due date as ISO 8601 string." },
+        due_complete: { type: "boolean", description: "Whether the due date is marked complete." },
+        closed:    { type: "boolean", description: "Archive or unarchive the card." },
+        id_list:   { type: "string", description: "Move card to this list ID." },
+        pos:       { type: "string", description: "Card position: top, bottom, or a positive float." },
+        query:     { type: "string", description: "Search query (for search_cards)." },
+        member_id: { type: "string", description: "Member ID for get_boards (default: me)." },
+        filter:    { type: "string", description: "Filter for boards or lists: open, closed, all." },
+        limit:     { type: "number", description: "Max results for search_cards." },
+      },
+      required: ["action", "api_key", "token"],
+    },
+  },
+
+  // ── sentry-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "sentry_action",
+    description: "Interact with the Sentry REST API: list projects and issues, get issue details and events, and resolve issues.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:            { type: "string", description: "Action: list_projects, list_issues, get_issue, list_events, resolve_issue." },
+        auth_token:        { type: "string", description: "Sentry auth token." },
+        organization_slug: { type: "string", description: "Sentry organization slug." },
+        project_slug:      { type: "string", description: "Sentry project slug." },
+        issue_id:          { type: "string", description: "Issue ID (for get_issue, list_events, resolve_issue)." },
+        query:             { type: "string", description: "Search query to filter issues." },
+        stats_period:      { type: "string", description: "Time window for issue stats: 24h, 14d, etc." },
+        limit:             { type: "number", description: "Max number of results." },
+        cursor:            { type: "string", description: "Pagination cursor." },
+      },
+      required: ["action", "auth_token"],
+    },
+  },
+
+  // ── postman-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "postman_action",
+    description: "Interact with the Postman API: list and retrieve collections, list environments, and list monitors.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action:        { type: "string", description: "Action: list_collections, get_collection, list_environments, list_monitors." },
+        api_key:       { type: "string", description: "Postman API key." },
+        collection_id: { type: "string", description: "Collection UID (for get_collection)." },
+        workspace_id:  { type: "string", description: "Workspace ID to filter results." },
+      },
+      required: ["action", "api_key"],
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6928,4 +7121,28 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
 
   // vault-tool.ts
   vault_action:            (args) => vaultAction(String(args.action ?? ""), args),
+
+  // github-tool.ts
+  github_action:           (args) => githubAction(String(args.action ?? ""), args),
+
+  // gitlab-tool.ts
+  gitlab_action:           (args) => gitlabAction(String(args.action ?? ""), args),
+
+  // clickup-tool.ts
+  clickup_action:          (args) => clickupAction(String(args.action ?? ""), args),
+
+  // linear-tool.ts
+  linear_action:           (args) => linearAction(String(args.action ?? ""), args),
+
+  // airtable-tool.ts
+  airtable_action:         (args) => airtableAction(String(args.action ?? ""), args),
+
+  // trello-tool.ts
+  trello_action:           (args) => trelloAction(String(args.action ?? ""), args),
+
+  // sentry-tool.ts
+  sentry_action:           (args) => sentryAction(String(args.action ?? ""), args),
+
+  // postman-tool.ts
+  postman_action:          (args) => postmanAction(String(args.action ?? ""), args),
 };

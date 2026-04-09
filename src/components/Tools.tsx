@@ -20,6 +20,7 @@ import {
   Package, Leaf, FlaskConical, Bird, Flame, Ticket,
   MapPin, Clock4, PenSquare, Droplets, Dices,
   Beer, Music2, Server, NotebookPen, Apple, Radio,
+  Github, GitBranch, CheckSquare, Target, Kanban,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
@@ -1704,6 +1705,120 @@ const tools: Tool[] = [
       "List all projects in a team and published components in a file",
     ],
     examplePrompt: "Ask your AI to export all frames on the 'Mobile' page as PNGs and summarise the layout",
+  },
+
+  // ── Developer / Productivity ──────────────────────────────────────────────
+  {
+    name: "GitHub",
+    description: "Search repos, manage issues and pull requests, look up users, browse gists, and search code across GitHub via the GitHub REST API. Requires a personal access token for write operations; public data is accessible without one.",
+    endpoint: "/v1/github",
+    category: "Platform",
+    Icon: Github,
+    capabilities: [
+      "Search repositories by keyword, language, stars, or topic",
+      "List and create issues on any repo you have access to",
+      "List open and closed pull requests with status and review details",
+      "Look up user profiles, list gists, and search code by pattern",
+    ],
+    examplePrompt: "Ask your AI to search GitHub for TypeScript repos with over 1,000 stars and list their top open issues",
+  },
+  {
+    name: "GitLab",
+    description: "Search projects, list issues and merge requests, and look up users via the GitLab REST API. Supports both GitLab.com and self-hosted instances. Requires a personal access token.",
+    endpoint: "/v1/gitlab",
+    category: "Platform",
+    Icon: GitBranch,
+    capabilities: [
+      "Search projects by keyword with optional visibility filter",
+      "List open and closed issues with label and state filtering",
+      "List merge requests by state: opened, merged, or closed",
+      "Look up any GitLab user by username or retrieve your own profile",
+    ],
+    examplePrompt: "Ask your AI to list all open merge requests in a GitLab project and summarise what is being changed",
+  },
+  {
+    name: "ClickUp",
+    description: "Manage tasks across your ClickUp workspaces: browse spaces, folders, and lists, retrieve and create tasks, and update task status and priority via the ClickUp API v2.",
+    endpoint: "/v1/clickup",
+    category: "Platform",
+    Icon: CheckSquare,
+    capabilities: [
+      "List workspaces, spaces, and lists in your ClickUp account",
+      "Retrieve tasks from any list with status and assignee filters",
+      "Create new tasks with description, priority, due date, and tags",
+      "Update task status, priority, assignees, and due dates",
+    ],
+    examplePrompt: "Ask your AI to list all overdue tasks across a ClickUp space and update their priorities",
+  },
+  {
+    name: "Linear",
+    description: "Manage engineering work in Linear: list and search issues, create new issues, browse team details, and retrieve project status via the Linear GraphQL API.",
+    endpoint: "/v1/linear",
+    category: "Platform",
+    Icon: Target,
+    capabilities: [
+      "List issues with optional team and state filters",
+      "Create issues with title, description, priority, assignee, and state",
+      "Search issues by keyword across your entire Linear workspace",
+      "List teams and retrieve project progress and target dates",
+    ],
+    examplePrompt: "Ask your AI to find all high-priority open issues assigned to your team in Linear and draft a status update",
+  },
+  {
+    name: "Airtable",
+    description: "Read and write Airtable records via the Airtable REST API. List bases, browse and filter table records, create and update records using Airtable formula syntax.",
+    endpoint: "/v1/airtable",
+    category: "Data",
+    Icon: Table,
+    capabilities: [
+      "List all bases your token has access to",
+      "List and paginate records from any table with view and field filters",
+      "Search records using Airtable formula filter syntax",
+      "Create and update records with arbitrary field values",
+    ],
+    examplePrompt: "Ask your AI to search an Airtable CRM base for contacts added this month and export their names and emails",
+  },
+  {
+    name: "Trello",
+    description: "Manage Trello boards, lists, and cards via the Trello REST API. Get board and list contents, create and update cards, and search cards across your account.",
+    endpoint: "/v1/trello",
+    category: "Platform",
+    Icon: Kanban,
+    capabilities: [
+      "List all boards you have access to with open or archived filter",
+      "Get lists on a board and cards within any list",
+      "Create cards with name, description, due date, and label assignment",
+      "Update cards: move between lists, archive, set due date, or mark complete",
+    ],
+    examplePrompt: "Ask your AI to list all overdue Trello cards across your boards and move them to a Review list",
+  },
+  {
+    name: "Sentry",
+    description: "Monitor application errors in Sentry: list projects and issues, inspect individual events, and resolve issues programmatically via the Sentry REST API.",
+    endpoint: "/v1/sentry",
+    category: "Platform",
+    Icon: Bug,
+    capabilities: [
+      "List all projects in a Sentry organization",
+      "List issues with keyword search and time window filters",
+      "Get issue details: error type, first seen, count, and stack trace summary",
+      "List recent events for any issue and mark issues as resolved",
+    ],
+    examplePrompt: "Ask your AI to list the top 10 unresolved Sentry issues by event count and summarise each error",
+  },
+  {
+    name: "Postman",
+    description: "Browse your Postman API collections, environments, and monitors via the Postman API. Retrieve full collection definitions for use in testing and documentation workflows.",
+    endpoint: "/v1/postman",
+    category: "Platform",
+    Icon: Webhook,
+    capabilities: [
+      "List all API collections in your Postman account or workspace",
+      "Retrieve a full collection definition including all requests and folders",
+      "List environments with variable names and current values",
+      "List monitors with schedule, status, and last run details",
+    ],
+    examplePrompt: "Ask your AI to retrieve a Postman collection and generate a markdown API reference from it",
   },
 ];
 
