@@ -509,7 +509,7 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 export function createServer(): Server {
   const server = new Server(
     {
-      name: "@unclick/mcp-server",
+      name: "UnClick",
       version: "0.1.0",
     },
     {
