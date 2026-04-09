@@ -1,18 +1,37 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.malamutemayhem/unclick-mcp-server",
   "title": "UnClick",
   "description": "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
   "version": "0.2.2",
-  "icon": "public/icon.png",
+  "repository": {
+    "url": "https://github.com/malamutemayhem/unclick.git",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://unclick.world/icon.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@unclick/mcp-server",
       "version": "0.2.2",
+      "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "UNCLICK_API_KEY",
+          "description": "Your UnClick API key from https://unclick.world",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }
