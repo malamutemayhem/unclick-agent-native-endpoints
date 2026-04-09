@@ -18,8 +18,8 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
       <div className="container mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-        <Link to="/" className="font-mono text-lg font-semibold text-heading tracking-tight">
-          UnClick
+        <Link to="/">
+          <img src="/logo-wordmark.svg" alt="UnClick" style={{ height: "3.3rem" }} className="w-auto pt-2 pb-[3px]" />
         </Link>
 
         {/* Desktop nav */}

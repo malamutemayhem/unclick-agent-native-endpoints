@@ -13,15 +13,15 @@ const Hero = ({ search, onSearch }: HeroProps) => (
     <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[300px] rounded-full bg-primary/[0.06] blur-[100px]" />
 
     <div className="relative z-10 mx-auto max-w-3xl text-center">
-      <FadeIn>
+      {/* <FadeIn>
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-4 py-1.5 backdrop-blur-sm">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">110 tools. One API key. Every tool works.</span>
+          <span className="font-mono text-xs text-muted-foreground">One connection. Every tool. Always free.</span>
         </div>
-      </FadeIn>
+      </FadeIn> */}
 
       <FadeIn delay={0.05}>
         <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl">
@@ -31,13 +31,13 @@ const Hero = ({ search, onSearch }: HeroProps) => (
 
       <FadeIn delay={0.1}>
         <p className="mt-4 text-2xl font-bold text-primary tracking-tight">
-          One API key. Every tool.
+          One key to rule them all.
         </p>
       </FadeIn>
 
       <FadeIn delay={0.15}>
         <p className="mt-3 text-lg text-body max-w-xl mx-auto leading-relaxed">
-          48 tools work instantly, no setup, no keys. 11 platform connectors unlock messaging, social, e-commerce, and finance with a one-time account connection.
+          Every tool your AI needs to take real action in the world. One connection. Set up in minutes, not days.
         </p>
       </FadeIn>
 
@@ -70,7 +70,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#install"
-            className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             style={{ scrollBehavior: "smooth" }}
             onClick={(e) => { e.preventDefault(); document.getElementById("install")?.scrollIntoView({ behavior: "smooth" }); }}
           >

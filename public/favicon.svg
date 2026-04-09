@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Cursor arrow body -->
+  <path
+    d="M18 10 L18 72 L33 57 L46 84 L54 80 L41 53 L62 53 Z"
+    fill="#61c1c4"
+    stroke="#61c1c4"
+    stroke-width="2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+  <!-- Robot head peeking from top-right of cursor -->
+  <rect x="52" y="6" width="28" height="22" rx="5" ry="5" fill="#61c1c4"/>
+  <!-- Robot eyes -->
+  <circle cx="60" cy="15" r="3.5" fill="#0a0a0a"/>
+  <circle cx="72" cy="15" r="3.5" fill="#0a0a0a"/>
+  <!-- Robot highlight dots -->
+  <circle cx="61" cy="14" r="1" fill="#61c1c4"/>
+  <circle cx="73" cy="14" r="1" fill="#61c1c4"/>
+  <!-- Robot antenna -->
+  <line x1="66" y1="6" x2="66" y2="0" stroke="#61c1c4" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="66" cy="0" r="2.5" fill="#61c1c4"/>
+</svg>

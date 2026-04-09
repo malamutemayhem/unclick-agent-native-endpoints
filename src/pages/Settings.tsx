@@ -65,17 +65,17 @@ function NotificationsSection() {
 
 function AdminSection() {
   return (
-    <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.03] p-8">
+    <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-8">
       <div className="flex items-center gap-2">
         <h2 className="text-base font-semibold text-heading">Admin</h2>
-        <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+        <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
           Restricted
         </span>
       </div>
       <p className="mt-1 text-sm text-body">
         Platform-level controls. Visible to admin accounts only.
       </p>
-      <div className="mt-6 rounded-lg border border-dashed border-amber-400/20 bg-muted/5 p-6 text-center">
+      <div className="mt-6 rounded-lg border border-dashed border-primary/20 bg-muted/5 p-6 text-center">
         <span className="font-mono text-xs text-muted-foreground">Admin panel coming soon</span>
       </div>
     </div>
