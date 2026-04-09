@@ -19,7 +19,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
-          <span className="font-mono text-xs text-muted-foreground">60+ tools. Connect once, then zero friction.</span>
+          <span className="font-mono text-xs text-muted-foreground">110 tools. One API key. Every tool works.</span>
         </div>
       </FadeIn>
 
@@ -31,7 +31,7 @@ const Hero = ({ search, onSearch }: HeroProps) => (
 
       <FadeIn delay={0.1}>
         <p className="mt-4 text-2xl font-bold text-primary tracking-tight">
-          Connect once. Zero friction forever.
+          One API key. Every tool.
         </p>
       </FadeIn>
 

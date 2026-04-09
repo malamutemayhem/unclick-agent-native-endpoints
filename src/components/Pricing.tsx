@@ -29,7 +29,7 @@ const Pricing = () => (
           <p className="mt-2 text-sm text-muted-foreground">Everything you need to build and ship.</p>
           <ul className="mt-6 space-y-3 text-sm text-body">
             <li className="flex items-center gap-2"><span className="text-primary">✓</span> Both tools included (Link-in-Bio + Scheduling)</li>
-            <li className="flex items-center gap-2"><span className="text-primary">✓</span> 500 API calls / day</li>
+            <li className="flex items-center gap-2"><span className="text-primary">✓</span> 60 requests / minute</li>
             <li className="flex items-center gap-2"><span className="text-primary">✓</span> Webhooks</li>
             <li className="flex items-center gap-2"><span className="text-primary">✓</span> Full analytics</li>
             <li className="flex items-center gap-2"><span className="text-primary">✓</span> No credit card required</li>
@@ -45,7 +45,7 @@ const Pricing = () => (
         </motion.div>
         {/* Pro */}
         <motion.div
-          className="relative rounded-xl border border-border/40 bg-card/30 p-8 backdrop-blur-sm overflow-hidden opacity-70"
+          className="relative rounded-xl border border-border/40 bg-card/30 p-8 backdrop-blur-sm overflow-hidden"
           transition={{ duration: 0.3 }}
         >
           <div className="flex items-start justify-between">
@@ -55,7 +55,7 @@ const Pricing = () => (
           <p className="mt-2 text-sm text-muted-foreground">For teams and production workloads.</p>
           <ul className="mt-6 space-y-3 text-sm text-body">
             <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> All free features</li>
-            <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> 50,000 API calls / day</li>
+            <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> 300 requests / minute</li>
             <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> All upcoming tools</li>
             <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> Priority support</li>
             <li className="flex items-center gap-2"><span className="text-muted-foreground">○</span> Custom rate limits</li>

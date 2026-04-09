@@ -1,23 +1,19 @@
 import { Link } from "react-router-dom";
 
 const PRODUCT_LINKS = [
-  { label: "Tools", href: "/tools" },
+  { label: "Tools", href: "/#tools" },
   { label: "Arena", href: "/arena" },
   { label: "Docs", href: "/docs" },
   { label: "FAQ", href: "/faq" },
 ];
 
 const COMPANY_LINKS = [
-  { label: "About", href: "/about" },
   { label: "Contact", href: "mailto:chris@unclick.world" },
   { label: "GitHub", href: "https://github.com/unclick-world", external: true },
   { label: "Status", href: "https://status.unclick.world", external: true },
 ];
 
-const LEGAL_LINKS = [
-  { label: "Privacy", href: "/privacy" },
-  { label: "Terms", href: "/terms" },
-];
+const LEGAL_LINKS: { label: string; href: string }[] = [];
 
 function FooterLinkGroup({ title, links }: { title: string; links: typeof PRODUCT_LINKS }) {
   return (

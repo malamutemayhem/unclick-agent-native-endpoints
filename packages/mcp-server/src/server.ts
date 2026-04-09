@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { CATALOG, TOOL_MAP, ENDPOINT_MAP, type ToolDef } from "./catalog.js";
 import { createClient, type UnClickClient } from "./client.js";
+import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -521,6 +522,7 @@ export function createServer(): Server {
     const tools = [
       ...META_TOOLS,
       ...DIRECT_TOOLS,
+      ...ADDITIONAL_TOOLS,
     ];
     return { tools };
   });
@@ -666,6 +668,20 @@ export function createServer(): Server {
       if (handler) {
         const client = createClient();
         const result = await handler(client, args);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ── Additional tools (third-party integrations) ───────────────
+      const additionalHandler = ADDITIONAL_HANDLERS[name];
+      if (additionalHandler) {
+        const result = await additionalHandler(args);
         return {
           content: [
             {

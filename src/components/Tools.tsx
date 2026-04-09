@@ -15,6 +15,11 @@ import {
   MessageCircle, MessageSquare, Users, Wind, Globe2,
   ShoppingCart, Receipt, Store, ArrowUpCircle,
   KeyRound, TrendingUp,
+  Calculator, Gamepad2, Utensils, ShieldAlert, Mail,
+  Bookmark, Users2, Zap, CloudRain, Building2, Archive,
+  Package, Leaf, FlaskConical, Bird, Flame, Ticket,
+  MapPin, Clock4, PenSquare, Droplets, Dices,
+  Beer, Music2, Server, NotebookPen,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
@@ -896,6 +901,752 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to generate a monthly business performance summary with key metrics and trends",
   },
+
+  // ── Zero-Config Utilities ──────────────────────────────────────────────────
+  {
+    name: "Calculator",
+    description: "Perform math calculations including tip splitting, mortgage payments, BMI, compound interest, and general arithmetic. Returns step-by-step results with intermediate values. No API key required.",
+    endpoint: "/v1/calculator",
+    category: "Utility",
+    Icon: Calculator,
+    capabilities: [
+      "General arithmetic: add, subtract, multiply, divide, powers, and roots",
+      "Tip calculator: split bills across any number of people with custom tip %",
+      "Mortgage calculator: monthly payment, amortization schedule, total interest",
+      "BMI and compound interest calculations with formula breakdowns",
+    ],
+    examplePrompt: "Ask your AI to calculate monthly mortgage payments for a $500k loan at 6.5% over 30 years",
+  },
+  {
+    name: "Unit Converter",
+    description: "Convert values between units across length, weight, temperature, volume, speed, area, pressure, and digital storage. Handles edge cases like temperature offset math and returns multiple target units in one call. No API key required.",
+    endpoint: "/v1/convert",
+    category: "Utility",
+    Icon: Ruler,
+    capabilities: [
+      "Length: mm, cm, m, km, inch, foot, yard, mile, nautical mile",
+      "Weight: mg, g, kg, tonne, oz, lb, stone",
+      "Temperature: Celsius, Fahrenheit, Kelvin, Rankine (offset math, not multiply)",
+      "Volume, speed, area, pressure, and digital storage conversions",
+    ],
+    examplePrompt: "Ask your AI to convert 5 miles to kilometers and 72°F to Celsius",
+  },
+  {
+    name: "Datetime",
+    description: "Parse dates in any format, perform date arithmetic, format output to any locale or timezone, and calculate the difference between two dates. No API key required.",
+    endpoint: "/v1/datetime",
+    category: "Utility",
+    Icon: Clock4,
+    capabilities: [
+      "Parse natural language dates and ISO 8601, RFC 2822, and custom formats",
+      "Add or subtract days, weeks, months, and years from any date",
+      "Convert between any IANA timezone with DST handling",
+      "Calculate the exact difference between two dates in any unit",
+    ],
+    examplePrompt: "Ask your AI to find the number of days between two dates and convert the result to weeks",
+  },
+  {
+    name: "Text Tool",
+    description: "Count words and characters, calculate readability scores (Flesch-Kincaid, Gunning Fog), extract all emails and URLs, and slugify strings. A single endpoint for common text analysis tasks. No API key required.",
+    endpoint: "/v1/text",
+    category: "Text",
+    Icon: FileText,
+    capabilities: [
+      "Word count, character count (with/without spaces), sentence and paragraph count",
+      "Flesch-Kincaid and Gunning Fog readability scores with grade level",
+      "Extract all email addresses and URLs from any block of text",
+      "Slugify text for URLs: strip diacritics, punctuation, and special characters",
+    ],
+    examplePrompt: "Ask your AI to analyze a document and report its readability grade level",
+  },
+  {
+    name: "Color Convert",
+    description: "Convert color values between hex, RGB, HSL, HSV, LAB, and CMYK. Generate accessible color palettes and check WCAG contrast ratios. No API key required.",
+    endpoint: "/v1/colorconvert",
+    category: "Media",
+    Icon: Palette,
+    capabilities: [
+      "Convert between hex, RGB, HSL, HSV, LAB, and CMYK color formats",
+      "Generate complementary, analogous, triadic, and split-complementary palettes",
+      "Check WCAG 2.1 AA and AAA contrast ratios between two colors",
+      "Mix two colors and return the blended result in any format",
+    ],
+    examplePrompt: "Ask your AI to check if two brand colors meet WCAG AA contrast requirements",
+  },
+  {
+    name: "Random Generator",
+    description: "Generate secure random numbers, roll dice, flip coins, and shuffle lists. Uses cryptographic entropy for all outputs. No API key required.",
+    endpoint: "/v1/randomgen",
+    category: "Utility",
+    Icon: Dices,
+    capabilities: [
+      "Secure random integers within any range",
+      "Dice rolls: any number of any-sided dice (e.g. 3d6, 2d20)",
+      "Coin flip with configurable number of flips and tally of results",
+      "Shuffle any list of items and pick random elements without replacement",
+    ],
+    examplePrompt: "Ask your AI to roll 4d6 and drop the lowest die for a D&D character stat",
+  },
+  {
+    name: "Meal Planner",
+    description: "Get random meal suggestions, find recipe ideas based on available ingredients, and generate weekly meal plans. No API key required.",
+    endpoint: "/v1/meals",
+    category: "Utility",
+    Icon: Utensils,
+    capabilities: [
+      "Random meal suggestions by cuisine type or dietary preference",
+      "Recipe ideas based on a list of ingredients you have on hand",
+      "Generate a 7-day meal plan with breakfast, lunch, and dinner",
+      "Return basic nutritional estimates per meal",
+    ],
+    examplePrompt: "Ask your AI to suggest three dinner ideas using chicken, spinach, and tomatoes",
+  },
+
+  // ── Sports & Gaming ────────────────────────────────────────────────────────
+  {
+    name: "RAWG",
+    description: "Search the RAWG video game database for game details, screenshots, ratings, and upcoming releases. Returns genre, platform, Metacritic score, and release dates.",
+    endpoint: "/v1/rawg",
+    category: "Data",
+    Icon: Gamepad2,
+    capabilities: [
+      "Search games by title, genre, platform, or release year",
+      "Get game details: description, ratings, Metacritic score, screenshots",
+      "Browse upcoming releases and top-rated games by platform",
+      "Retrieve game developer, publisher, and ESRB rating information",
+    ],
+    examplePrompt: "Ask your AI to find the top-rated RPGs released in the last 12 months on PC",
+  },
+  {
+    name: "BoardGameGeek",
+    description: "Search the BoardGameGeek database for board game details, user ratings, play counts, and designer credits. No API key required.",
+    endpoint: "/v1/bgg",
+    category: "Data",
+    Icon: Dices,
+    capabilities: [
+      "Search board games by title and return BGG ID, rank, and average rating",
+      "Get game details: min/max players, play time, complexity weight, categories",
+      "Retrieve top-rated games by category or mechanic",
+      "Look up user collections and ratings by BGG username",
+    ],
+    examplePrompt: "Ask your AI to find highly-rated cooperative board games for 2-4 players",
+  },
+  {
+    name: "Riot Games",
+    description: "Retrieve League of Legends and Valorant summoner profiles, ranked stats, and recent match history via the Riot Games API.",
+    endpoint: "/v1/riot",
+    category: "Data",
+    Icon: Gamepad2,
+    capabilities: [
+      "Look up summoner profiles by name and region",
+      "Get ranked tier, LP, wins, losses, and win rate for any player",
+      "Retrieve recent match history with champion picks and KDA",
+      "Valorant agent stats, ranks, and competitive match results",
+    ],
+    examplePrompt: "Ask your AI to look up a League of Legends player's ranked stats and recent performance",
+  },
+  {
+    name: "Bungie",
+    description: "Access Destiny 2 player profiles, character stats, vault inventory, and activity history via the Bungie API.",
+    endpoint: "/v1/bungie",
+    category: "Data",
+    Icon: Gamepad2,
+    capabilities: [
+      "Look up Destiny 2 player profiles by platform and display name",
+      "Get character stats: power level, subclass, equipped gear",
+      "Retrieve vault inventory and postmaster items",
+      "Activity history: recent raids, strikes, Crucible matches, and completion rates",
+    ],
+    examplePrompt: "Ask your AI to check a Destiny 2 player's current power level and vault contents",
+  },
+  {
+    name: "Supercell",
+    description: "Get Clash of Clans and Clash Royale player profiles, clan details, and stats via the Supercell API.",
+    endpoint: "/v1/supercell",
+    category: "Data",
+    Icon: Gamepad2,
+    capabilities: [
+      "Clash of Clans: player trophies, town hall level, troops, heroes, and donations",
+      "Clash of Clans: clan details, war log, and clan war league standings",
+      "Clash Royale: player cards, arena level, and recent battle log",
+      "Clash Royale: clan info, top players, and current river race standings",
+    ],
+    examplePrompt: "Ask your AI to look up a Clash of Clans player tag and report their current stats",
+  },
+  {
+    name: "LEGO",
+    description: "Search LEGO sets, get set details including part counts and themes, and look up individual parts by element ID via the Rebrickable API.",
+    endpoint: "/v1/lego",
+    category: "Data",
+    Icon: Package,
+    capabilities: [
+      "Search LEGO sets by name, theme, or year of release",
+      "Get set details: part count, minifigures, retail price, and availability",
+      "Look up individual LEGO parts by element ID or color",
+      "List all sets in a theme or by a specific designer",
+    ],
+    examplePrompt: "Ask your AI to find all LEGO Technic sets released in 2024 and their part counts",
+  },
+  {
+    name: "ESPN",
+    description: "Get live scores, standings, team rosters, and recent game results across major sports. No API key required.",
+    endpoint: "/v1/espn",
+    category: "Data",
+    Icon: Flame,
+    capabilities: [
+      "Live and recent scores for NFL, NBA, MLB, NHL, and soccer leagues",
+      "League standings with wins, losses, and points differential",
+      "Team rosters with player positions, numbers, and status",
+      "Schedule upcoming games and return recent game results",
+    ],
+    examplePrompt: "Ask your AI to get the current NFL standings and the scores from last weekend's games",
+  },
+  {
+    name: "Sleeper",
+    description: "Access Sleeper fantasy sports leagues, rosters, matchups, and NFL player data. No API key required.",
+    endpoint: "/v1/sleeper",
+    category: "Data",
+    Icon: Flame,
+    capabilities: [
+      "Get fantasy league details: settings, scoring format, and rosters",
+      "Retrieve weekly matchups and current standings",
+      "Look up NFL player stats and fantasy point projections",
+      "Check waiver wire claims, transactions, and trade history",
+    ],
+    examplePrompt: "Ask your AI to check my Sleeper fantasy league standings and this week's matchups",
+  },
+  {
+    name: "PandaScore",
+    description: "Get esports match results, tournament brackets, team stats, and live odds across major titles via the PandaScore API.",
+    endpoint: "/v1/pandascore",
+    category: "Data",
+    Icon: Gamepad2,
+    capabilities: [
+      "Live and recent match results for LoL, CS2, Dota 2, Valorant, and more",
+      "Tournament brackets, schedules, and team rosters",
+      "Player stats: K/D, win rate, and tournament performance history",
+      "Betting odds and match predictions from esports bookmakers",
+    ],
+    examplePrompt: "Ask your AI to get upcoming CS2 tournament matches and current team odds",
+  },
+
+  // ── Food & Drink ────────────────────────────────────────────────────────────
+  {
+    name: "Untappd",
+    description: "Search beers and breweries, retrieve check-in data, and look up beer ratings and style details via the Untappd API.",
+    endpoint: "/v1/untappd",
+    category: "Data",
+    Icon: Beer,
+    capabilities: [
+      "Search beers by name, style, or brewery",
+      "Get beer details: ABV, IBU, style, description, and average rating",
+      "Look up brewery info: location, established year, and flagship beers",
+      "Retrieve recent check-ins for any beer or venue",
+    ],
+    examplePrompt: "Ask your AI to find highly-rated IPAs from Australian craft breweries",
+  },
+  {
+    name: "Open Food Facts",
+    description: "Look up nutritional information, ingredients, allergens, and additives for food products by barcode or name. No API key required.",
+    endpoint: "/v1/openfoodfacts",
+    category: "Data",
+    Icon: Apple,
+    capabilities: [
+      "Look up products by barcode (EAN, UPC) or product name",
+      "Return nutritional info: calories, protein, fat, carbs, sugar, sodium per 100g",
+      "List allergens and additives with risk level classifications",
+      "Nutri-Score grade and NOVA processing group for each product",
+    ],
+    examplePrompt: "Ask your AI to look up the nutritional info and allergens for a product barcode",
+  },
+  {
+    name: "Deezer",
+    description: "Search Deezer's music catalog, get track and album details, browse charts, and look up playlists. No API key required.",
+    endpoint: "/v1/deezer",
+    category: "Media",
+    Icon: Music2,
+    capabilities: [
+      "Search tracks, albums, artists, and playlists by keyword",
+      "Get track details: title, duration, BPM, explicit flag, and preview URL",
+      "Browse top charts by country for tracks, albums, and playlists",
+      "Retrieve full album tracklists and artist discographies",
+    ],
+    examplePrompt: "Ask your AI to find the top 10 tracks on the Australian Deezer chart this week",
+  },
+
+  // ── Security & Privacy (third-party) ───────────────────────────────────────
+  {
+    name: "VirusTotal",
+    description: "Scan URLs, IP addresses, domains, and file hashes against 70+ antivirus engines and threat intelligence feeds via VirusTotal.",
+    endpoint: "/v1/virustotal",
+    category: "Security",
+    Icon: ShieldAlert,
+    capabilities: [
+      "Submit URLs for malware and phishing analysis across 70+ scanners",
+      "Check IP and domain reputation against threat intelligence databases",
+      "Look up file hashes (MD5, SHA1, SHA256) for known malware matches",
+      "Retrieve scan history and detection ratios for any indicator",
+    ],
+    examplePrompt: "Ask your AI to scan a suspicious URL through VirusTotal and report any detections",
+  },
+  {
+    name: "AbuseIPDB",
+    description: "Check IP address reputation and abuse reports from the AbuseIPDB community database. Returns confidence score, abuse categories, and recent report history.",
+    endpoint: "/v1/abuseipdb",
+    category: "Security",
+    Icon: ShieldAlert,
+    capabilities: [
+      "Check any IPv4 or IPv6 for abuse reports and confidence score (0-100%)",
+      "View abuse categories: SSH brute force, port scan, web spam, DDoS, etc.",
+      "Get recent report count, last report date, and country of origin",
+      "Bulk check up to 10,000 IPs against the abuse database",
+    ],
+    examplePrompt: "Ask your AI to check if a list of IP addresses have been reported for abuse",
+  },
+  {
+    name: "URLScan",
+    description: "Submit URLs to URLScan.io for analysis and receive page screenshots, DOM snapshots, network requests, and malicious content indicators.",
+    endpoint: "/v1/urlscan",
+    category: "Security",
+    Icon: ShieldAlert,
+    capabilities: [
+      "Submit a URL for scanning and receive a full analysis report",
+      "Get a screenshot of the rendered page at scan time",
+      "View all network requests, redirects, and external resources loaded",
+      "Malicious content score, phishing indicators, and certificate details",
+    ],
+    examplePrompt: "Ask your AI to scan a suspicious link and return a screenshot and risk assessment",
+  },
+  {
+    name: "Shodan",
+    description: "Search Shodan for internet-connected devices, retrieve host information including open ports and services, and explore exposure data.",
+    endpoint: "/v1/shodan",
+    category: "Security",
+    Icon: Server,
+    capabilities: [
+      "Search for devices by keyword, IP range, port, or technology",
+      "Get host info: open ports, running services, banners, and OS",
+      "Retrieve SSL certificate details and vulnerability CVEs for any host",
+      "Monitor your own infrastructure for unexpected exposure",
+    ],
+    examplePrompt: "Ask your AI to look up a server IP in Shodan and report all open ports and services",
+  },
+  {
+    name: "Have I Been Pwned",
+    description: "Check if an email address or username appears in known data breaches using the Have I Been Pwned API. No API key required for basic lookups.",
+    endpoint: "/v1/hibp",
+    category: "Security",
+    Icon: ShieldCheck,
+    capabilities: [
+      "Check if an email was exposed in any known data breach",
+      "List all breaches where the email appeared with breach date and data types",
+      "Check if a password appears in the Pwned Passwords dataset (k-anonymity model)",
+      "Look up a username across breached databases",
+    ],
+    examplePrompt: "Ask your AI to check if an email address has been exposed in any data breaches",
+  },
+  {
+    name: "NVD",
+    description: "Search the NIST National Vulnerability Database for CVEs by keyword, CVE ID, or severity level. No API key required.",
+    endpoint: "/v1/nvd",
+    category: "Security",
+    Icon: ShieldAlert,
+    capabilities: [
+      "Search CVEs by keyword, product name, or vendor",
+      "Look up a specific CVE by ID and get CVSS score, severity, and description",
+      "Filter by severity: critical, high, medium, low",
+      "Get recently published and recently modified CVEs",
+    ],
+    examplePrompt: "Ask your AI to search for critical CVEs affecting Apache HTTP Server from the last 30 days",
+  },
+
+  // ── Developer Tools (third-party) ──────────────────────────────────────────
+  {
+    name: "Vercel",
+    description: "Manage Vercel deployments, projects, domains, and environment variables via the Vercel API. Requires a Vercel account connection.",
+    endpoint: "/v1/vercel",
+    category: "Platform",
+    Icon: Zap,
+    capabilities: [
+      "List and inspect deployments with build logs and status",
+      "Trigger new deployments and roll back to previous versions",
+      "Manage domains: add, remove, verify, and check DNS configuration",
+      "Create, update, and delete environment variables per project and environment",
+    ],
+    examplePrompt: "Ask your AI to list your recent Vercel deployments and flag any that failed",
+  },
+  {
+    name: "Resend",
+    description: "Send transactional emails with full HTML and plain text support via the Resend API. Requires a Resend account connection.",
+    endpoint: "/v1/resend",
+    category: "Platform",
+    Icon: Mail,
+    capabilities: [
+      "Send transactional emails with HTML and plain text bodies",
+      "Add CC, BCC, reply-to, and custom headers to outgoing messages",
+      "Attach files and embed images inline",
+      "Retrieve delivery status, open events, and bounce records",
+    ],
+    examplePrompt: "Ask your AI to send a welcome email to a new user with HTML formatting via Resend",
+  },
+  {
+    name: "Hunter",
+    description: "Find professional email addresses by company domain and verify email deliverability via the Hunter.io API.",
+    endpoint: "/v1/hunter",
+    category: "Data",
+    Icon: Mail,
+    capabilities: [
+      "Find email addresses associated with any company domain",
+      "Email verification: format check, MX lookup, SMTP validation",
+      "Person search: find the most likely email for a named person at a company",
+      "Domain search: return all known email addresses and patterns for a domain",
+    ],
+    examplePrompt: "Ask your AI to find the email address for a specific person at a company domain",
+  },
+  {
+    name: "Toggl",
+    description: "Track time entries, manage projects and clients, and retrieve time reports via the Toggl Track API. Requires a Toggl account connection.",
+    endpoint: "/v1/toggl",
+    category: "Data",
+    Icon: Clock4,
+    capabilities: [
+      "Start, stop, and create time entries with project and tag assignments",
+      "List running and recent time entries with duration and description",
+      "Manage projects, clients, and workspaces",
+      "Generate summary and detailed time reports by date range",
+    ],
+    examplePrompt: "Ask your AI to summarize how many hours were tracked per project this week in Toggl",
+  },
+  {
+    name: "Clockify",
+    description: "Track time entries, manage projects and workspaces, and pull time reports via the Clockify API. Requires a Clockify account connection.",
+    endpoint: "/v1/clockify",
+    category: "Data",
+    Icon: Clock4,
+    capabilities: [
+      "Start, stop, and log time entries with project, task, and tag metadata",
+      "List workspaces, projects, clients, and team members",
+      "Retrieve detailed and summary time reports by user, project, or date range",
+      "Manage tasks within projects and set billable hourly rates",
+    ],
+    examplePrompt: "Ask your AI to pull a weekly time report from Clockify and group hours by project",
+  },
+
+  // ── Productivity & Reading ─────────────────────────────────────────────────
+  {
+    name: "Notion",
+    description: "Create, read, and update Notion pages and databases via the Notion API. Query databases, append content to pages, and manage workspace structure. Requires a Notion connection.",
+    endpoint: "/v1/notion",
+    category: "Platform",
+    Icon: NotebookPen,
+    capabilities: [
+      "Query Notion databases with filter and sort parameters",
+      "Create new pages with rich content: headings, bullets, code, and embeds",
+      "Update existing page properties and append blocks to pages",
+      "Search across your entire Notion workspace by keyword",
+    ],
+    examplePrompt: "Ask your AI to query a Notion database and create a summary page of this week's tasks",
+  },
+  {
+    name: "Readwise",
+    description: "Retrieve book and article highlights synced to Readwise. Access your full highlight library, filter by source, and get daily review highlights.",
+    endpoint: "/v1/readwise",
+    category: "Data",
+    Icon: Bookmark,
+    capabilities: [
+      "List all highlights with book title, author, location, and highlighted text",
+      "Filter highlights by book, article, tag, or date range",
+      "Get daily review highlights as served by Readwise",
+      "Retrieve all books and articles with their metadata and highlight counts",
+    ],
+    examplePrompt: "Ask your AI to fetch all your Readwise highlights from a specific book and summarize themes",
+  },
+  {
+    name: "Raindrop",
+    description: "Manage bookmarks and collections in Raindrop.io. Search saved links, create new bookmarks, and organize by collection or tag.",
+    endpoint: "/v1/raindrop",
+    category: "Data",
+    Icon: Bookmark,
+    capabilities: [
+      "Search bookmarks by keyword, tag, collection, or domain",
+      "Create new bookmarks with title, tags, and collection assignment",
+      "List all collections and their bookmark counts",
+      "Update and delete bookmarks programmatically",
+    ],
+    examplePrompt: "Ask your AI to search your Raindrop bookmarks for articles about machine learning",
+  },
+  {
+    name: "Splitwise",
+    description: "Track shared expenses, split bills, and check friend balances via the Splitwise API.",
+    endpoint: "/v1/splitwise",
+    category: "Data",
+    Icon: Users2,
+    capabilities: [
+      "List all expenses in a group with amounts, payer, and split breakdown",
+      "Create new expenses and assign shares to group members",
+      "Check outstanding balances with each friend",
+      "Settle debts and mark expenses as paid",
+    ],
+    examplePrompt: "Ask your AI to list unpaid expenses in a Splitwise group and calculate who owes what",
+  },
+  {
+    name: "Instapaper",
+    description: "Save articles to Instapaper, manage your reading list, and retrieve highlights and annotations.",
+    endpoint: "/v1/instapaper",
+    category: "Data",
+    Icon: Bookmark,
+    capabilities: [
+      "Save any URL to your Instapaper reading list",
+      "List unread, archived, and liked articles with titles and URLs",
+      "Retrieve highlights and notes made on saved articles",
+      "Archive, delete, and move articles between folders",
+    ],
+    examplePrompt: "Ask your AI to save a list of articles to Instapaper and retrieve all highlights from last week",
+  },
+  {
+    name: "Monica",
+    description: "Manage contacts, notes, reminders, and activities in your Monica personal CRM. Requires a Monica account connection.",
+    endpoint: "/v1/monica",
+    category: "Platform",
+    Icon: Users2,
+    capabilities: [
+      "Create and update contacts with personal details, birthdays, and relationships",
+      "Log activities and interactions with contacts",
+      "Set and retrieve reminders for important dates and follow-ups",
+      "Search contacts and retrieve full relationship history",
+    ],
+    examplePrompt: "Ask your AI to log a meeting with a contact in Monica and set a follow-up reminder",
+  },
+  {
+    name: "Feedly",
+    description: "Read and manage RSS feeds in Feedly, search for articles by topic, and retrieve unread items from subscribed feeds.",
+    endpoint: "/v1/feedly",
+    category: "Data",
+    Icon: Rss,
+    capabilities: [
+      "List all feed subscriptions and their unread counts",
+      "Retrieve unread articles from any feed or board",
+      "Search for articles by keyword across all subscribed feeds",
+      "Mark articles as read and save items to boards",
+    ],
+    examplePrompt: "Ask your AI to fetch the latest unread articles from a Feedly board and summarize them",
+  },
+
+  // ── Email ─────────────────────────────────────────────────────────────────
+  {
+    name: "Email",
+    description: "Send email via SMTP and read your inbox via IMAP using your own mail account credentials. Supports attachments, HTML formatting, and folder management. Requires account connection.",
+    endpoint: "/v1/email",
+    category: "Platform",
+    Icon: Mail,
+    capabilities: [
+      "Send emails via SMTP with HTML or plain text body and file attachments",
+      "Read inbox messages via IMAP with subject, sender, date, and body",
+      "Search messages by sender, subject, date range, or keyword",
+      "Manage folders: list, move messages, and mark as read or unread",
+    ],
+    examplePrompt: "Ask your AI to read your inbox and summarize unread messages from the last 24 hours",
+  },
+
+  // ── Australia & NZ ────────────────────────────────────────────────────────
+  {
+    name: "Amber Electric",
+    description: "Get current and forecast electricity spot prices for the Australian market via the Amber Electric API. Useful for smart energy automation.",
+    endpoint: "/v1/amber",
+    category: "Data",
+    Icon: Zap,
+    capabilities: [
+      "Current spot price per kWh for any Australian network zone",
+      "30-minute and 24-hour price forecasts with spike alerts",
+      "Feed-in tariff prices for solar export",
+      "Price history and usage data for connected sites",
+    ],
+    examplePrompt: "Ask your AI to check if electricity prices are low enough to run the dishwasher now",
+  },
+  {
+    name: "WillyWeather",
+    description: "Get hyper-local weather forecasts, swell data, UV index, tides, and wind forecasts for Australian locations via WillyWeather.",
+    endpoint: "/v1/willyweather",
+    category: "Utility",
+    Icon: CloudRain,
+    capabilities: [
+      "Hyper-local forecasts: rain, temperature, wind speed and direction",
+      "Surf and swell data: wave height, period, and direction",
+      "Tide times: high and low tide predictions for coastal locations",
+      "UV index and pollen count forecasts by suburb",
+    ],
+    examplePrompt: "Ask your AI to get tomorrow's surf forecast and tide times for Bondi Beach",
+  },
+  {
+    name: "Domain.com.au",
+    description: "Search Australian property listings, retrieve suburb data, and get property details via the Domain API.",
+    endpoint: "/v1/domain",
+    category: "Data",
+    Icon: Building2,
+    capabilities: [
+      "Search for sale and for rent listings by suburb, postcode, or region",
+      "Get property details: bedrooms, bathrooms, land size, and listing price",
+      "Suburb insights: median house and unit prices, days on market",
+      "Recent sales data for any Australian address or suburb",
+    ],
+    examplePrompt: "Ask your AI to find 3-bedroom houses for sale in a Sydney suburb under $1.5M",
+  },
+  {
+    name: "Trove",
+    description: "Search Australia's national digital archive via the Trove API. Find digitised newspapers, books, maps, photos, and government records. No API key required.",
+    endpoint: "/v1/trove",
+    category: "Data",
+    Icon: Archive,
+    capabilities: [
+      "Search digitised Australian newspapers by keyword and date range",
+      "Find books, journals, maps, photos, and archives in Trove collections",
+      "Retrieve full text of digitised newspaper articles",
+      "Browse by contributor institution or Trove category",
+    ],
+    examplePrompt: "Ask your AI to search Trove for newspaper articles about a historical Australian event",
+  },
+  {
+    name: "Australia Post",
+    description: "Track parcels and calculate postage rates using the Australia Post API.",
+    endpoint: "/v1/auspost",
+    category: "Commerce",
+    Icon: Package,
+    capabilities: [
+      "Track parcels by consignment number and return delivery status",
+      "Calculate domestic and international postage rates by weight and dimensions",
+      "Find nearby post offices by suburb or postcode",
+      "Get estimated delivery dates for domestic parcel services",
+    ],
+    examplePrompt: "Ask your AI to track a parcel and estimate the delivery date",
+  },
+  {
+    name: "Sendle",
+    description: "Get shipping quotes, create parcel orders, and track deliveries via the Sendle Australian parcel delivery API.",
+    endpoint: "/v1/sendle",
+    category: "Commerce",
+    Icon: Package,
+    capabilities: [
+      "Get domestic shipping quotes by weight and pickup/delivery suburb",
+      "Create new parcel orders and receive a tracking number",
+      "Track orders and get real-time delivery status updates",
+      "Cancel orders and manage pickups for scheduled collections",
+    ],
+    examplePrompt: "Ask your AI to get a Sendle quote for a 2kg parcel from Melbourne to Brisbane",
+  },
+  {
+    name: "IP Australia",
+    description: "Search Australian patents and trademarks via the IP Australia API.",
+    endpoint: "/v1/ipaustralia",
+    category: "Data",
+    Icon: Archive,
+    capabilities: [
+      "Search trade marks by keyword, class, applicant, or registration number",
+      "Get trade mark status: registered, pending, opposed, or lapsed",
+      "Search patents by keyword, inventor, applicant, or patent number",
+      "Retrieve full patent and trade mark records with filing dates",
+    ],
+    examplePrompt: "Ask your AI to search for trade marks containing a specific word and check their status",
+  },
+  {
+    name: "TAB",
+    description: "Get Australian racing odds, race fields, and results from TAB. No API key required.",
+    endpoint: "/v1/tab",
+    category: "Data",
+    Icon: Ticket,
+    capabilities: [
+      "Get today's race meetings with venues, times, and field sizes",
+      "Retrieve race fields with horse names, jockeys, barriers, and weights",
+      "Win, place, and exotic odds for any runner in any race",
+      "Race results and dividends for completed races",
+    ],
+    examplePrompt: "Ask your AI to get the fields and odds for today's Melbourne Cup race",
+  },
+  {
+    name: "The Lott",
+    description: "Get Australian lottery results and jackpot amounts for Oz Lotto, Powerball, Set for Life, and Saturday Lotto. No API key required.",
+    endpoint: "/v1/thelott",
+    category: "Data",
+    Icon: Ticket,
+    capabilities: [
+      "Latest draw results for Oz Lotto, Powerball, and Saturday Lotto",
+      "Current jackpot amounts and estimated next draw prize",
+      "Historical draw results by game and draw number",
+      "Division prize amounts and number of winners per division",
+    ],
+    examplePrompt: "Ask your AI to check the latest Powerball results and current jackpot amount",
+  },
+  {
+    name: "Toilets",
+    description: "Find public toilets near any Australian location using the Australian Government's National Public Toilet Map data. No API key required.",
+    endpoint: "/v1/toilets",
+    category: "Utility",
+    Icon: MapPin,
+    capabilities: [
+      "Find the nearest public toilets to any suburb, address, or lat/lon",
+      "Filter by facilities: accessible, baby change, sharps disposal",
+      "Return opening hours and whether facilities are 24-hour",
+      "Sort results by distance and return walking directions",
+    ],
+    examplePrompt: "Ask your AI to find the nearest accessible public toilet to a given address",
+  },
+
+  // ── Science & Environment ──────────────────────────────────────────────────
+  {
+    name: "USGS",
+    description: "Access USGS real-time earthquake data, water level gauges, and water quality readings. No API key required.",
+    endpoint: "/v1/usgs",
+    category: "Data",
+    Icon: FlaskConical,
+    capabilities: [
+      "Recent earthquakes: magnitude, location, depth, and time",
+      "Filter earthquakes by magnitude range, region, and time window",
+      "Real-time water level readings from USGS stream gauges",
+      "Water quality data: temperature, pH, dissolved oxygen by site",
+    ],
+    examplePrompt: "Ask your AI to list all earthquakes above magnitude 5 in the last 7 days",
+  },
+  {
+    name: "OpenAQ",
+    description: "Get global air quality measurements including PM2.5, PM10, NO2, CO, and O3 from monitoring stations worldwide. No API key required.",
+    endpoint: "/v1/openaq",
+    category: "Data",
+    Icon: Leaf,
+    capabilities: [
+      "Get current air quality readings for any city or coordinates",
+      "PM2.5, PM10, NO2, CO, SO2, and O3 measurements with AQI calculation",
+      "List nearby monitoring stations and their measurement history",
+      "Historical data by location, parameter, and date range",
+    ],
+    examplePrompt: "Ask your AI to check the current PM2.5 levels in a city and classify the air quality",
+  },
+  {
+    name: "eBird",
+    description: "Get bird sightings, species checklists, and birding hotspots from the Cornell Lab eBird database. No API key required.",
+    endpoint: "/v1/ebird",
+    category: "Data",
+    Icon: Bird,
+    capabilities: [
+      "Recent bird sightings near any location by species or all species",
+      "Notable and rare bird sightings with observer details",
+      "Top birding hotspots ranked by species diversity near a location",
+      "Species checklists: range maps, seasonal occurrence, and taxonomy",
+    ],
+    examplePrompt: "Ask your AI to find the most recently spotted rare birds within 50km of a location",
+  },
+  {
+    name: "Carbon Interface",
+    description: "Calculate carbon emissions for flights, car trips, electricity usage, and shipping via the Carbon Interface API.",
+    endpoint: "/v1/carbon",
+    category: "Data",
+    Icon: Leaf,
+    capabilities: [
+      "Flight emissions: carbon kg for any origin-destination pair and class",
+      "Vehicle emissions: kg CO2 per trip by make, model, and distance",
+      "Electricity consumption emissions by region or country grid factor",
+      "Shipping emissions by weight, distance, and transport method",
+    ],
+    examplePrompt: "Ask your AI to calculate the carbon footprint of a return flight from Sydney to London",
+  },
 ];
 
 // Platform connectors: tools that require a one-time external account connection
@@ -911,6 +1662,13 @@ const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
   "Xero":           "xero",
   "Vault":          "vault",
   "C-Suite Analyze":"csuite",
+  "Notion":         "notion",
+  "Vercel":         "vercel",
+  "Resend":         "resend",
+  "Email":          "email",
+  "Monica":         "monica",
+  "Clockify":       "clockify",
+  "Toggl":          "toggl",
 };
 
 const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));
@@ -920,12 +1678,34 @@ const categories: Category[] = [
   "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Social", "Commerce",
 ];
 
+// Tools that require no API key — shown with a "No API key" badge
+const NO_API_KEY_TOOLS = new Set([
+  "Random", "UUID", "Cron", "Timestamp", "QR Code", "Units", "Weather", "Currency", "Notify",
+  "Transform", "Regex", "Diff", "Encode", "Readability", "Markdown",
+  "Hash", "DNS", "Headers", "Ping", "Whois", "Sitemap", "RSS",
+  "Calculator", "Unit Converter", "Datetime", "Text Tool", "Color Convert", "Random Generator", "Meal Planner",
+  "BoardGameGeek", "ESPN", "Sleeper", "Have I Been Pwned", "NVD",
+  "Open Food Facts", "Deezer",
+  "USGS", "OpenAQ", "eBird",
+  "Trove", "TAB", "The Lott", "Toilets",
+]);
+
+// Intent-first quick-jump categories
+const QUICK_LINKS: { label: string; category: Category }[] = [
+  { label: "Weather", category: "Utility" },
+  { label: "Security", category: "Security" },
+  { label: "Gaming", category: "Data" },
+  { label: "Social", category: "Social" },
+  { label: "Australia", category: "Data" },
+];
+
 interface ToolsProps {
   searchQuery?: string;
 }
 
 const Tools = ({ searchQuery = "" }: ToolsProps) => {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
+  const [localSearch, setLocalSearch] = useState("");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [hasKey, setHasKey] = useState(false);
   const [connectorStatus, setConnectorStatus] = useState<Record<string, "connected" | "not-connected">>({});
@@ -959,7 +1739,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
   }, []);
 
   const matchesSearch = (t: Tool) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = (localSearch || searchQuery).trim().toLowerCase();
     return (
       q === "" ||
       t.name.toLowerCase().includes(q) ||
@@ -989,6 +1769,36 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
 
   return (
     <section id="tools" className="relative mx-auto max-w-7xl px-6 py-8">
+      {/* ── Search + intent quick-links ────────────────────────────────────── */}
+      <FadeIn>
+        <div className="mb-6 space-y-3">
+          <div className="relative max-w-md">
+            <input
+              type="text"
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              placeholder="Search 110+ tools..."
+              className="w-full rounded-xl border border-border/60 bg-card/50 px-4 py-2.5 pl-9 text-sm text-heading placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20 backdrop-blur-sm"
+            />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            </svg>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+            <span>Jump to:</span>
+            {QUICK_LINKS.map(({ label, category }) => (
+              <button
+                key={label}
+                onClick={() => { setActiveCategory(category); setLocalSearch(label === "Australia" ? "" : ""); }}
+                className="rounded-full border border-border/50 px-3 py-0.5 text-xs text-body hover:border-primary/40 hover:text-heading transition-colors"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </FadeIn>
+
       {/* ── Filter bar ─────────────────────────────────────────────────────── */}
       <FadeIn>
         <div className="flex flex-wrap gap-2 mb-8">
@@ -1047,9 +1857,15 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
                           {tool.category}
                         </span>
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
-                          No setup
-                        </span>
+                        {NO_API_KEY_TOOLS.has(tool.name) ? (
+                          <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-400 border border-sky-500/20">
+                            No API key
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                            No setup
+                          </span>
+                        )}
                       </div>
                     </motion.button>
                   </FadeIn>

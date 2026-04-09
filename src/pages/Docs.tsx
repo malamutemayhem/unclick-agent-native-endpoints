@@ -144,7 +144,7 @@ const DocsPage = () => {
   useMetaTags({
     title: "Docs - UnClick",
     ogTitle: "Docs - UnClick",
-    ogDescription: "API reference for all 61 UnClick tools. One key, instant access for Claude, ChatGPT, and any MCP-compatible agent.",
+    ogDescription: "API reference for all 110 UnClick tools. One key, instant access for Claude, ChatGPT, and any MCP-compatible agent.",
     ogUrl: "https://unclick.world/docs",
   });
   return (
@@ -157,7 +157,7 @@ const DocsPage = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <p className="mt-4 max-w-2xl text-body text-lg leading-relaxed">
-          Connect your AI agent once and it gets access to 59 tools across eight categories. Here's what each one does.
+          Connect your AI agent once and it gets access to 110 tools across eight categories. Here's what each one does.
         </p>
       </FadeIn>
 
@@ -255,7 +255,7 @@ const DocsPage = () => {
         <div className="mt-16 rounded-lg border border-border/40 bg-card/30 p-6">
           <h2 className="text-lg font-semibold text-heading">Rate limits</h2>
           <p className="mt-2 text-sm text-body">
-            Free tier: 500 requests/day per API key. Rate limit headers are included in every response.
+            Free: 60 req/min. Pro: 300 req/min. Team: 1,000 req/min. Rate limit headers are included in every response.
             Exceeded limits return <code className="font-mono text-xs bg-card/50 px-1.5 py-0.5 rounded">429 Too Many Requests</code>.
           </p>
         </div>

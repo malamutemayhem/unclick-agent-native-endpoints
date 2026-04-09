@@ -17,6 +17,9 @@ import ArenaSubmitProblem from "./pages/arena/ArenaSubmitProblem.tsx";
 import FAQPage from "./pages/FAQPage.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import ConnectPage  from "./pages/Connect.tsx";
+import DevelopersPage from "./pages/Developers.tsx";
+import DeveloperDocsPage from "./pages/DeveloperDocs.tsx";
+import DeveloperSubmitPage from "./pages/DeveloperSubmit.tsx";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +41,9 @@ const App = () => (
           <Route path="/arena/leaderboard" element={<ArenaLeaderboard />} />
           <Route path="/arena/submit" element={<ArenaSubmitProblem />} />
           <Route path="/arena/:id" element={<ArenaProblem />} />
+          <Route path="/developers" element={<DevelopersPage />} />
+          <Route path="/developers/docs" element={<DeveloperDocsPage />} />
+          <Route path="/developers/submit" element={<DeveloperSubmitPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           {/* Platform connector flow — /connect/:platform handles both connect + OAuth callback */}
