@@ -452,6 +452,29 @@ import {
   spotifyGetRecommendations, spotifyGetAudioFeatures,
 } from "./spotify-tool.js";
 
+// ─── AI Video ─────────────────────────────────────────────────────────────────
+import {
+  higgsfield_generate_video, higgsfield_generate_image,
+  higgsfield_get_styles, higgsfield_get_status,
+} from "./higgsfield-tool.js";
+
+import {
+  heygen_create_avatar_video, heygen_list_avatars,
+  heygen_get_video_status, heygen_list_voices,
+} from "./heygen-tool.js";
+
+import {
+  runway_generate_video, runway_get_task, runway_list_models,
+} from "./runway-tool.js";
+
+import {
+  pika_generate_video, pika_get_generation, pika_list_styles,
+} from "./pika-tool.js";
+
+import {
+  kling_generate_video, kling_get_task,
+} from "./kling-tool.js";
+
 // ─── AI ───────────────────────────────────────────────────────────────────────
 import {
   elevenlabsListVoices, elevenlabsGetVoice, elevenlabsTextToSpeech,
@@ -7704,6 +7727,240 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── higgsfield-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "higgsfield_generate_video",
+    description: "Generate a video from a text prompt using Higgsfield AI. Supports Soul Styles for cinematic looks. Returns a generation_id to poll for completion.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Higgsfield API key" },
+        prompt: { type: "string", description: "Text description of the video to generate" },
+        style: { type: "string", description: "Soul Style name (use higgsfield_get_styles to list available styles)" },
+        duration: { type: "number", description: "Video duration in seconds" },
+        aspect_ratio: { type: "string", description: "e.g. 16:9, 9:16, 1:1" },
+        negative_prompt: { type: "string", description: "What to avoid in the video" },
+        seed: { type: "number", description: "Random seed for reproducibility" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "higgsfield_generate_image",
+    description: "Generate an image from a text prompt using Higgsfield AI.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Higgsfield API key" },
+        prompt: { type: "string", description: "Text description of the image to generate" },
+        style: { type: "string", description: "Style name (use higgsfield_get_styles to list available styles)" },
+        width: { type: "number", description: "Image width in pixels" },
+        height: { type: "number", description: "Image height in pixels" },
+        negative_prompt: { type: "string", description: "What to avoid in the image" },
+        seed: { type: "number", description: "Random seed for reproducibility" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "higgsfield_get_styles",
+    description: "List all available Soul Styles for Higgsfield AI video and image generation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Higgsfield API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "higgsfield_get_status",
+    description: "Check the status of a Higgsfield AI generation by ID. Returns status, video URL when complete.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Higgsfield API key" },
+        generation_id: { type: "string", description: "Generation ID returned by higgsfield_generate_video or higgsfield_generate_image" },
+      },
+      required: ["api_key", "generation_id"],
+    },
+  },
+
+  // ── heygen-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "heygen_create_avatar_video",
+    description: "Create an AI avatar video with HeyGen. The avatar speaks a script using a selected voice. Returns a video_id to poll for completion.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "HeyGen API key" },
+        avatar_id: { type: "string", description: "Avatar ID (use heygen_list_avatars to find available avatars)" },
+        script: { type: "string", description: "The text the avatar will speak" },
+        voice_id: { type: "string", description: "Voice ID (use heygen_list_voices to find available voices)" },
+        background_url: { type: "string", description: "URL of background image" },
+        avatar_style: { type: "string", description: "Avatar style: normal, circle, closeUp (default: normal)" },
+        width: { type: "number", description: "Video width in pixels (default: 1280)" },
+        height: { type: "number", description: "Video height in pixels (default: 720)" },
+        title: { type: "string", description: "Video title for reference" },
+        test: { type: "boolean", description: "Set true to generate a watermarked test video (does not use quota)" },
+      },
+      required: ["api_key", "avatar_id", "script"],
+    },
+  },
+  {
+    name: "heygen_list_avatars",
+    description: "List all available AI avatars in your HeyGen account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "HeyGen API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "heygen_get_video_status",
+    description: "Check the generation status of a HeyGen video by video ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "HeyGen API key" },
+        video_id: { type: "string", description: "Video ID returned by heygen_create_avatar_video" },
+      },
+      required: ["api_key", "video_id"],
+    },
+  },
+  {
+    name: "heygen_list_voices",
+    description: "List all available voices for HeyGen avatar videos.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "HeyGen API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── runway-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "runway_generate_video",
+    description: "Generate a video from text or an image using Runway ML. Supports text-to-video and image-to-video. Returns a task_id to poll for completion.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Runway API key" },
+        prompt: { type: "string", description: "Text description of the video to generate" },
+        image_url: { type: "string", description: "URL of an image to animate (image-to-video mode)" },
+        model: { type: "string", description: "Model name: gen3a_turbo (fast) or gen3a (quality). Default: gen3a_turbo" },
+        duration: { type: "number", description: "Video duration in seconds (default: 5)" },
+        ratio: { type: "string", description: "Aspect ratio e.g. 1280:768 or 768:1280 (default: 1280:768)" },
+        seed: { type: "number", description: "Random seed for reproducibility" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "runway_get_task",
+    description: "Check the status of a Runway ML generation task. Returns status, progress, and video URL when complete.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Runway API key" },
+        task_id: { type: "string", description: "Task ID returned by runway_generate_video" },
+      },
+      required: ["api_key", "task_id"],
+    },
+  },
+  {
+    name: "runway_list_models",
+    description: "List available Runway ML video generation models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Runway API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── pika-tool.ts ──────────────────────────────────────────────────────────────
+  {
+    name: "pika_generate_video",
+    description: "Generate a creative AI video from a text prompt using Pika. Optionally animate an input image. Returns a generation_id to poll for completion.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pika API key" },
+        prompt: { type: "string", description: "Text description of the video to generate" },
+        image_url: { type: "string", description: "URL of an image to animate" },
+        style: { type: "string", description: "Style name or ID (use pika_list_styles to browse options)" },
+        duration: { type: "number", description: "Video duration in seconds" },
+        aspect_ratio: { type: "string", description: "e.g. 16:9, 9:16, 1:1" },
+        negative_prompt: { type: "string", description: "What to avoid in the video" },
+        motion: { type: "number", description: "Motion intensity 1-4 (default: 2)" },
+        seed: { type: "number", description: "Random seed for reproducibility" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "pika_get_generation",
+    description: "Check the status of a Pika video generation by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pika API key" },
+        generation_id: { type: "string", description: "Generation ID returned by pika_generate_video" },
+      },
+      required: ["api_key", "generation_id"],
+    },
+  },
+  {
+    name: "pika_list_styles",
+    description: "List available visual styles for Pika video generation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pika API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── kling-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "kling_generate_video",
+    description: "Generate a high-quality video from text using Kling AI (Kuaishou). Supports standard and professional modes. Returns a task_id to poll for completion.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Kling AI API key" },
+        prompt: { type: "string", description: "Text description of the video to generate" },
+        model: { type: "string", description: "Model name: kling-v1 or kling-v1-5 (default: kling-v1)" },
+        mode: { type: "string", description: "Generation mode: std (standard) or pro (professional, slower). Default: std" },
+        duration: { type: "string", description: "Video duration: 5 or 10 (seconds). Default: 5" },
+        image_url: { type: "string", description: "Optional reference image URL for image-to-video" },
+        negative_prompt: { type: "string", description: "What to avoid in the video" },
+        aspect_ratio: { type: "string", description: "e.g. 16:9, 9:16, 1:1. Default: 16:9" },
+        cfg_scale: { type: "number", description: "Guidance scale 0-1 (default: 0.5)" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "kling_get_task",
+    description: "Check the status of a Kling AI video generation task.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Kling AI API key" },
+        task_id: { type: "string", description: "Task ID returned by kling_generate_video" },
+      },
+      required: ["api_key", "task_id"],
+    },
+  },
+
   // ── elevenlabs-tool.ts ────────────────────────────────────────────────────────
   {
     name: "elevenlabs_list_voices",
@@ -9455,6 +9712,32 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   spotify_get_playlist:        (args) => spotifyGetPlaylist(args),
   spotify_get_recommendations: (args) => spotifyGetRecommendations(args),
   spotify_get_audio_features:  (args) => spotifyGetAudioFeatures(args),
+
+  // higgsfield-tool.ts
+  higgsfield_generate_video:   (args) => higgsfield_generate_video(args),
+  higgsfield_generate_image:   (args) => higgsfield_generate_image(args),
+  higgsfield_get_styles:       (args) => higgsfield_get_styles(args),
+  higgsfield_get_status:       (args) => higgsfield_get_status(args),
+
+  // heygen-tool.ts
+  heygen_create_avatar_video:  (args) => heygen_create_avatar_video(args),
+  heygen_list_avatars:         (args) => heygen_list_avatars(args),
+  heygen_get_video_status:     (args) => heygen_get_video_status(args),
+  heygen_list_voices:          (args) => heygen_list_voices(args),
+
+  // runway-tool.ts
+  runway_generate_video:       (args) => runway_generate_video(args),
+  runway_get_task:             (args) => runway_get_task(args),
+  runway_list_models:          (args) => runway_list_models(args),
+
+  // pika-tool.ts
+  pika_generate_video:         (args) => pika_generate_video(args),
+  pika_get_generation:         (args) => pika_get_generation(args),
+  pika_list_styles:            (args) => pika_list_styles(args),
+
+  // kling-tool.ts
+  kling_generate_video:        (args) => kling_generate_video(args),
+  kling_get_task:              (args) => kling_get_task(args),
 
   // elevenlabs-tool.ts
   elevenlabs_list_voices:      (args) => elevenlabsListVoices(args),
