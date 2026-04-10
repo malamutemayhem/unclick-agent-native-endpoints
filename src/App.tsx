@@ -21,6 +21,8 @@ import DevelopersPage from "./pages/Developers.tsx";
 import DeveloperDocsPage from "./pages/DeveloperDocs.tsx";
 import DeveloperSubmitPage from "./pages/DeveloperSubmit.tsx";
 import VibeCodingPage from "./pages/VibeCoding.tsx";
+import TermsPage from "./pages/Terms.tsx";
+import PrivacyPage from "./pages/Privacy.tsx";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +52,8 @@ const App = () => (
           {/* Platform connector flow — /connect/:platform handles both connect + OAuth callback */}
           <Route path="/connect/:platform" element={<ConnectPage />} />
           <Route path="/developers/vibe-coding" element={<VibeCodingPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
