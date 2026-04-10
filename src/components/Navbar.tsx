@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { Key } from "lucide-react";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -10,6 +11,7 @@ const Navbar = () => {
 
   const navLinks = [
     { label: "Tools", href: isHome ? "#tools" : "/#tools", anchor: true },
+    { label: "BackstagePass", href: "/backstagepass", icon: Key },
     { label: "Arena", href: "/arena" },
     { label: "Docs", href: "/docs" },
     { label: "FAQ", href: "/faq" },
@@ -37,12 +39,13 @@ const Navbar = () => {
               <Link
                 key={link.label}
                 to={link.href}
-                className={`text-sm transition-colors hover:text-heading ${
+                className={`flex items-center gap-1.5 text-sm transition-colors hover:text-heading ${
                   pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href))
                     ? "text-heading"
                     : "text-body"
                 }`}
               >
+                {link.icon && <link.icon className="h-3.5 w-3.5 shrink-0" />}
                 {link.label}
               </Link>
             )

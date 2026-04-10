@@ -23,6 +23,7 @@ import DeveloperSubmitPage from "./pages/DeveloperSubmit.tsx";
 import VibeCodingPage from "./pages/VibeCoding.tsx";
 import TermsPage from "./pages/Terms.tsx";
 import PrivacyPage from "./pages/Privacy.tsx";
+import BackstagePassPage from "./pages/BackstagePass.tsx";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
           <Route path="/developers/vibe-coding" element={<VibeCodingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/backstagepass" element={<BackstagePassPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
