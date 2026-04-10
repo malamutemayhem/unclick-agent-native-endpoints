@@ -13,7 +13,10 @@ const COMPANY_LINKS = [
   { label: "Status", href: "https://status.unclick.world", external: true },
 ];
 
-const LEGAL_LINKS: { label: string; href: string }[] = [];
+const LEGAL_LINKS = [
+  { label: "Terms", href: "/terms" },
+  { label: "Privacy", href: "/privacy" },
+];
 
 function FooterLinkGroup({ title, links }: { title: string; links: typeof PRODUCT_LINKS }) {
   return (
