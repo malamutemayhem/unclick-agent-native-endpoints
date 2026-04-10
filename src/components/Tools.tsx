@@ -1018,6 +1018,20 @@ const tools: Tool[] = [
     examplePrompt: "Ask your AI to store a production database URL in Vault and retrieve it across any workflow",
   },
   {
+    name: "Keychain",
+    description: "Connect your platform accounts once and let any agent use them automatically. Keychain is an encrypted credential vault for GitHub, Supabase, Vercel, Stripe, Cloudflare, and more. Credentials are AES-256-GCM encrypted using your UnClick API key - only you can decrypt them. Test-before-save validates every credential against the live platform API before storing.",
+    endpoint: "/v1/keychain",
+    category: "Security",
+    Icon: KeyRound,
+    capabilities: [
+      "Connect GitHub, Supabase, Vercel, Stripe, and Cloudflare with a single command",
+      "AES-256-GCM encryption: credentials are encrypted with your API key and never stored in plaintext",
+      "Test-before-save: every credential is validated against the live platform before storage",
+      "Per-tenant isolation: key hashing ensures no credential is accessible by another user",
+    ],
+    examplePrompt: "Ask your AI to connect your GitHub token to Keychain so all workflows can use it automatically",
+  },
+  {
     name: "C-Suite Analyze",
     description: "Connect your business data sources and get boardroom-ready analysis on demand. C-Suite Analyze pulls revenue, churn, CAC, LTV, pipeline, and operational metrics from your connected accounts and returns structured summaries, trend narratives, and actionable highlights for executive decision-making.",
     endpoint: "/v1/csuite",

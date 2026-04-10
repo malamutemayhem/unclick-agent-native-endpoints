@@ -535,6 +535,7 @@ import {
 import { csuitAnalyze } from "./csuite-tool.js";
 import { vaultAction } from "./vault-tool.js";
 import { qcRunChecklist, qcCheckApi, qcCopyAudit } from "./qc-tool.js";
+import { keychainAction } from "./keychain-tool.js";
 
 // ─── Developer / Productivity ─────────────────────────────────────────────────
 import { githubAction } from "./github-tool.js";
@@ -7027,6 +7028,53 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── keychain-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "keychain_connect",
+    description: "Store an encrypted platform credential in the UnClick Keychain. Tests the credential against the platform API before saving. Scoped to the caller's UNCLICK_API_KEY.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        platform:   { type: "string", description: "Platform ID: github, supabase, vercel, stripe, cloudflare." },
+        credential: { type: "string", description: "API key or token for the platform." },
+        label:      { type: "string", description: "Optional label to distinguish multiple credentials for the same platform (default: 'default')." },
+      },
+      required: ["platform", "credential"],
+    },
+  },
+  {
+    name: "keychain_status",
+    description: "Check the connection status of one or all platform credentials stored in the UnClick Keychain for the current UNCLICK_API_KEY.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "Platform ID to check. Omit to return all connected platforms." },
+      },
+    },
+  },
+  {
+    name: "keychain_disconnect",
+    description: "Remove a platform credential from the UnClick Keychain. Scoped to the caller's UNCLICK_API_KEY.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "Platform ID to disconnect: github, supabase, vercel, stripe, cloudflare." },
+        label:    { type: "string", description: "Label of the credential to remove. Omit to remove all labels for the platform." },
+      },
+      required: ["platform"],
+    },
+  },
+  {
+    name: "keychain_list_platforms",
+    description: "List all available platform connectors in the UnClick Keychain catalog, with connection status for the current UNCLICK_API_KEY.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        category: { type: "string", description: "Filter by category (e.g. 'Developer Tools', 'Business')." },
+      },
+    },
+  },
+
   // ── github-tool.ts ───────────────────────────────────────────────────────────
   {
     name: "github_action",
@@ -9337,6 +9385,12 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
 
   // vault-tool.ts
   vault_action:            (args) => vaultAction(String(args.action ?? ""), args),
+
+  // keychain-tool.ts
+  keychain_connect:        (args) => keychainAction("keychain_connect",        args),
+  keychain_status:         (args) => keychainAction("keychain_status",         args),
+  keychain_disconnect:     (args) => keychainAction("keychain_disconnect",     args),
+  keychain_list_platforms: (args) => keychainAction("keychain_list_platforms", args),
 
   // github-tool.ts
   github_action:           (args) => githubAction(String(args.action ?? ""), args),
