@@ -444,6 +444,41 @@ import {
   xeroBankTransactions, xeroReports, xeroQuotes, xeroOrganisation,
 } from "./xero-tool.js";
 
+import {
+  ebaySearch, ebayGetItem, ebayGetItemByLegacyId, ebayGetCategories,
+} from "./ebay-tool.js";
+
+import {
+  etsySearchListings, etsyGetListing, etsyGetShop,
+  etsyGetShopListings, etsySearchShops,
+} from "./etsy-tool.js";
+
+import {
+  stripeCustomers, stripeCharges, stripeSubscriptions,
+  stripeInvoices, stripeProducts, stripePrices,
+} from "./stripe-tool.js";
+
+import {
+  paypalOrders, paypalInvoices,
+} from "./paypal-tool.js";
+
+import {
+  squarePayments, squareCustomers, squareCatalogList, squareCatalogSearch,
+} from "./square-tool.js";
+
+import {
+  quickbooksCustomers, quickbooksInvoices, quickbooksItems, quickbooksPayments,
+} from "./quickbooks-tool.js";
+
+import {
+  plaidAccounts, plaidTransactions, plaidBalances,
+  plaidIdentity, plaidLinkTokenCreate,
+} from "./plaid-tool.js";
+
+import {
+  wooProducts, wooOrders, wooCustomers,
+} from "./woocommerce-tool.js";
+
 import { csuitAnalyze } from "./csuite-tool.js";
 import { vaultAction } from "./vault-tool.js";
 
@@ -6233,6 +6268,574 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── ebay-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "ebay_search",
+    description: "Search eBay listings via the Browse API.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:     { type: "string", description: "eBay application Client ID" },
+        client_secret: { type: "string", description: "eBay application Client Secret" },
+        q:             { type: "string", description: "Search query" },
+        limit:         { type: "number", description: "Results per page (max 200, default 20)" },
+        offset:        { type: "number" },
+        filter:        { type: "string", description: "eBay filter string (e.g. price:[10..50])" },
+        sort:          { type: "string", description: "Sort order (e.g. price, -price, newlyListed)" },
+        category_ids:  { type: "string", description: "Comma-separated category IDs" },
+        marketplace:   { type: "string", description: "Marketplace ID (default: EBAY_US)" },
+      },
+      required: ["client_id", "client_secret", "q"],
+    },
+  },
+  {
+    name: "ebay_get_item",
+    description: "Get full details for an eBay item by item ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:     { type: "string" },
+        client_secret: { type: "string" },
+        item_id:       { type: "string", description: "eBay item ID (e.g. v1|123456789|0)" },
+        fieldgroups:   { type: "string" },
+        marketplace:   { type: "string" },
+      },
+      required: ["client_id", "client_secret", "item_id"],
+    },
+  },
+  {
+    name: "ebay_get_item_by_legacy_id",
+    description: "Get an eBay item by its legacy item ID (classic numeric ID).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:            { type: "string" },
+        client_secret:        { type: "string" },
+        legacy_item_id:       { type: "string", description: "Legacy eBay item ID (numeric)" },
+        legacy_variation_id:  { type: "string" },
+        legacy_variation_sku: { type: "string" },
+        marketplace:          { type: "string" },
+      },
+      required: ["client_id", "client_secret", "legacy_item_id"],
+    },
+  },
+  {
+    name: "ebay_get_categories",
+    description: "Get the eBay category tree for a marketplace.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:        { type: "string" },
+        client_secret:    { type: "string" },
+        category_tree_id: { type: "string", description: "Category tree ID (0 = US default)" },
+        marketplace:      { type: "string" },
+      },
+      required: ["client_id", "client_secret"],
+    },
+  },
+
+  // ── etsy-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "etsy_search_listings",
+    description: "Search active Etsy listings by keyword.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:     { type: "string", description: "Etsy API key" },
+        keywords:    { type: "string", description: "Search keywords" },
+        limit:       { type: "number", description: "Results per page (max 100, default 25)" },
+        offset:      { type: "number" },
+        sort_on:     { type: "string", description: "Sort field (created, price, score, updated)" },
+        sort_order:  { type: "string", description: "asc or desc" },
+        min_price:   { type: "number" },
+        max_price:   { type: "number" },
+        taxonomy_id: { type: "number" },
+        location:    { type: "string" },
+      },
+      required: ["api_key", "keywords"],
+    },
+  },
+  {
+    name: "etsy_get_listing",
+    description: "Get details for a single Etsy listing by listing ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:    { type: "string" },
+        listing_id: { type: "string" },
+        includes:   { type: "string", description: "Comma-separated includes (Images, Shop, etc.)" },
+      },
+      required: ["api_key", "listing_id"],
+    },
+  },
+  {
+    name: "etsy_get_shop",
+    description: "Get details for an Etsy shop by shop ID or numeric ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        shop_id: { type: "string", description: "Shop ID or shop name" },
+      },
+      required: ["api_key", "shop_id"],
+    },
+  },
+  {
+    name: "etsy_get_shop_listings",
+    description: "Get active listings for an Etsy shop.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:    { type: "string" },
+        shop_id:    { type: "string" },
+        limit:      { type: "number" },
+        offset:     { type: "number" },
+        sort_on:    { type: "string" },
+        sort_order: { type: "string" },
+      },
+      required: ["api_key", "shop_id"],
+    },
+  },
+  {
+    name: "etsy_search_shops",
+    description: "Search for Etsy shops by name.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key:   { type: "string" },
+        shop_name: { type: "string", description: "Shop name to search for" },
+        limit:     { type: "number" },
+        offset:    { type: "number" },
+      },
+      required: ["api_key", "shop_name"],
+    },
+  },
+
+  // ── stripe-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "stripe_customers",
+    description: "List or create Stripe customers.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string", description: "Stripe secret key (sk_live_* or sk_test_*)" },
+        action:         { type: "string", description: "list or create (default: list)" },
+        limit:          { type: "number" },
+        starting_after: { type: "string", description: "Pagination cursor (customer ID)" },
+        email:          { type: "string" },
+        name:           { type: "string" },
+        phone:          { type: "string" },
+        description:    { type: "string" },
+      },
+      required: ["secret_key"],
+    },
+  },
+  {
+    name: "stripe_charges",
+    description: "List or create Stripe charges.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string" },
+        action:         { type: "string", description: "list or create (default: list)" },
+        limit:          { type: "number" },
+        starting_after: { type: "string" },
+        customer:       { type: "string" },
+        amount:         { type: "number", description: "Amount in smallest currency unit (e.g. cents)" },
+        currency:       { type: "string", description: "ISO currency code (e.g. usd)" },
+        source:         { type: "string", description: "Payment source or token" },
+        description:    { type: "string" },
+      },
+      required: ["secret_key"],
+    },
+  },
+  {
+    name: "stripe_subscriptions",
+    description: "List Stripe subscriptions.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string" },
+        limit:          { type: "number" },
+        starting_after: { type: "string" },
+        customer:       { type: "string" },
+        status:         { type: "string", description: "active, past_due, canceled, etc." },
+        price:          { type: "string" },
+      },
+      required: ["secret_key"],
+    },
+  },
+  {
+    name: "stripe_invoices",
+    description: "List Stripe invoices.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string" },
+        limit:          { type: "number" },
+        starting_after: { type: "string" },
+        customer:       { type: "string" },
+        status:         { type: "string", description: "draft, open, paid, uncollectible, void" },
+        subscription:   { type: "string" },
+      },
+      required: ["secret_key"],
+    },
+  },
+  {
+    name: "stripe_products",
+    description: "List Stripe products.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string" },
+        limit:          { type: "number" },
+        starting_after: { type: "string" },
+        active:         { type: "boolean" },
+      },
+      required: ["secret_key"],
+    },
+  },
+  {
+    name: "stripe_prices",
+    description: "List Stripe prices.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        secret_key:     { type: "string" },
+        limit:          { type: "number" },
+        starting_after: { type: "string" },
+        product:        { type: "string" },
+        active:         { type: "boolean" },
+        type:           { type: "string", description: "one_time or recurring" },
+      },
+      required: ["secret_key"],
+    },
+  },
+
+  // ── paypal-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "paypal_orders",
+    description: "Create or retrieve a PayPal order.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:      { type: "string", description: "PayPal application Client ID" },
+        client_secret:  { type: "string", description: "PayPal application Client Secret" },
+        action:         { type: "string", description: "create or get (default: get)" },
+        order_id:       { type: "string", description: "Required for action='get'" },
+        intent:         { type: "string", description: "CAPTURE or AUTHORIZE (default: CAPTURE)" },
+        purchase_units: { type: "array", description: "Required for action='create'" },
+        sandbox:        { type: "boolean", description: "Use PayPal sandbox (default: false)" },
+      },
+      required: ["client_id", "client_secret"],
+    },
+  },
+  {
+    name: "paypal_invoices",
+    description: "List, create, or send PayPal invoices.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:      { type: "string" },
+        client_secret:  { type: "string" },
+        action:         { type: "string", description: "list, create, or send (default: list)" },
+        invoice_id:     { type: "string", description: "Required for action='send'" },
+        invoice:        { type: "object", description: "Invoice object for action='create'" },
+        page:           { type: "number" },
+        page_size:      { type: "number" },
+        sandbox:        { type: "boolean" },
+      },
+      required: ["client_id", "client_secret"],
+    },
+  },
+
+  // ── square-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "square_payments",
+    description: "List or create Square payments.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token:  { type: "string", description: "Square access token" },
+        action:        { type: "string", description: "list or create (default: list)" },
+        begin_time:    { type: "string", description: "RFC 3339 timestamp" },
+        end_time:      { type: "string" },
+        cursor:        { type: "string" },
+        limit:         { type: "number" },
+        source_id:     { type: "string", description: "Required for action='create'" },
+        amount_money:  { type: "object", description: "{amount: number, currency: string}" },
+        idempotency_key: { type: "string" },
+        customer_id:   { type: "string" },
+        note:          { type: "string" },
+      },
+      required: ["access_token"],
+    },
+  },
+  {
+    name: "square_customers",
+    description: "List Square customers.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        cursor:       { type: "string" },
+        limit:        { type: "number" },
+        sort_field:   { type: "string" },
+        sort_order:   { type: "string" },
+      },
+      required: ["access_token"],
+    },
+  },
+  {
+    name: "square_catalog_list",
+    description: "List Square catalog objects (items, categories, taxes, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        cursor:       { type: "string" },
+        types:        { type: "string", description: "Comma-separated types (ITEM, CATEGORY, etc.)" },
+        limit:        { type: "number" },
+      },
+      required: ["access_token"],
+    },
+  },
+  {
+    name: "square_catalog_search",
+    description: "Search Square catalog objects by text.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        text_filter:  { type: "string", description: "Text to search for" },
+        object_types: { type: "array", description: "Types to search (default: ['ITEM'])" },
+        limit:        { type: "number" },
+        cursor:       { type: "string" },
+      },
+      required: ["access_token", "text_filter"],
+    },
+  },
+
+  // ── quickbooks-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "quickbooks_customers",
+    description: "Query QuickBooks Online customers.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "QuickBooks OAuth2 access token" },
+        realm_id:     { type: "string", description: "QuickBooks company realm ID" },
+        where:        { type: "string", description: "SQL-style WHERE clause (e.g. Active = true)" },
+        limit:        { type: "number" },
+        offset:       { type: "number" },
+        sandbox:      { type: "boolean" },
+      },
+      required: ["access_token", "realm_id"],
+    },
+  },
+  {
+    name: "quickbooks_invoices",
+    description: "List, get, or create QuickBooks Online invoices.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        realm_id:     { type: "string" },
+        action:       { type: "string", description: "list, get, or create (default: list)" },
+        invoice_id:   { type: "string", description: "Required for action='get'" },
+        invoice:      { type: "object", description: "Invoice object for action='create'" },
+        where:        { type: "string" },
+        limit:        { type: "number" },
+        offset:       { type: "number" },
+        sandbox:      { type: "boolean" },
+      },
+      required: ["access_token", "realm_id"],
+    },
+  },
+  {
+    name: "quickbooks_items",
+    description: "Query QuickBooks Online items (products and services).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        realm_id:     { type: "string" },
+        where:        { type: "string" },
+        limit:        { type: "number" },
+        offset:       { type: "number" },
+        sandbox:      { type: "boolean" },
+      },
+      required: ["access_token", "realm_id"],
+    },
+  },
+  {
+    name: "quickbooks_payments",
+    description: "Query QuickBooks Online payments.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+        realm_id:     { type: "string" },
+        where:        { type: "string" },
+        limit:        { type: "number" },
+        offset:       { type: "number" },
+        sandbox:      { type: "boolean" },
+      },
+      required: ["access_token", "realm_id"],
+    },
+  },
+
+  // ── plaid-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "plaid_accounts",
+    description: "Get accounts for a Plaid-linked item.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:    { type: "string", description: "Plaid client ID" },
+        secret:       { type: "string", description: "Plaid secret key" },
+        access_token: { type: "string", description: "Plaid item access token" },
+        account_ids:  { type: "array", description: "Filter to specific account IDs" },
+        environment:  { type: "string", description: "sandbox, development, or production (default: sandbox)" },
+      },
+      required: ["client_id", "secret", "access_token"],
+    },
+  },
+  {
+    name: "plaid_transactions",
+    description: "Get transactions for a Plaid-linked item within a date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:    { type: "string" },
+        secret:       { type: "string" },
+        access_token: { type: "string" },
+        start_date:   { type: "string", description: "Start date (YYYY-MM-DD)" },
+        end_date:     { type: "string", description: "End date (YYYY-MM-DD)" },
+        count:        { type: "number", description: "Number of transactions (max 500, default 100)" },
+        offset:       { type: "number" },
+        account_ids:  { type: "array" },
+        environment:  { type: "string" },
+      },
+      required: ["client_id", "secret", "access_token", "start_date", "end_date"],
+    },
+  },
+  {
+    name: "plaid_balances",
+    description: "Get real-time account balances for a Plaid-linked item.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:    { type: "string" },
+        secret:       { type: "string" },
+        access_token: { type: "string" },
+        account_ids:  { type: "array" },
+        environment:  { type: "string" },
+      },
+      required: ["client_id", "secret", "access_token"],
+    },
+  },
+  {
+    name: "plaid_identity",
+    description: "Get identity information for accounts linked via Plaid.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:    { type: "string" },
+        secret:       { type: "string" },
+        access_token: { type: "string" },
+        environment:  { type: "string" },
+      },
+      required: ["client_id", "secret", "access_token"],
+    },
+  },
+  {
+    name: "plaid_link_token_create",
+    description: "Create a Plaid Link token to initialise the Plaid Link flow.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id:             { type: "string" },
+        secret:                { type: "string" },
+        user_client_user_id:   { type: "string", description: "Unique identifier for the end user" },
+        client_name:           { type: "string", description: "App name shown in Plaid Link UI" },
+        products:              { type: "array", description: "Plaid products (default: ['transactions'])" },
+        country_codes:         { type: "array", description: "ISO country codes (default: ['US'])" },
+        language:              { type: "string", description: "Language code (default: en)" },
+        webhook:               { type: "string" },
+        access_token:          { type: "string", description: "For update mode: existing access token" },
+        environment:           { type: "string" },
+      },
+      required: ["client_id", "secret", "user_client_user_id"],
+    },
+  },
+
+  // ── woocommerce-tool.ts ───────────────────────────────────────────────────────
+  {
+    name: "woo_products",
+    description: "List or get WooCommerce products.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        store_url:       { type: "string", description: "WooCommerce store URL (e.g. https://mystore.com)" },
+        consumer_key:    { type: "string", description: "WooCommerce consumer key (ck_...)" },
+        consumer_secret: { type: "string", description: "WooCommerce consumer secret (cs_...)" },
+        action:          { type: "string", description: "list or get (default: list)" },
+        id:              { type: "string", description: "Product ID for action='get'" },
+        per_page:        { type: "number" },
+        page:            { type: "number" },
+        status:          { type: "string", description: "publish, draft, pending, private" },
+        category:        { type: "string" },
+        search:          { type: "string" },
+        orderby:         { type: "string" },
+        order:           { type: "string" },
+      },
+      required: ["store_url", "consumer_key", "consumer_secret"],
+    },
+  },
+  {
+    name: "woo_orders",
+    description: "List, get, or create WooCommerce orders.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        store_url:       { type: "string" },
+        consumer_key:    { type: "string" },
+        consumer_secret: { type: "string" },
+        action:          { type: "string", description: "list, get, or create (default: list)" },
+        id:              { type: "string", description: "Order ID for action='get'" },
+        order:           { type: "object", description: "Order object for action='create'" },
+        per_page:        { type: "number" },
+        page:            { type: "number" },
+        status:          { type: "string", description: "pending, processing, completed, refunded, etc." },
+        customer:        { type: "number", description: "Filter by customer ID" },
+        after:           { type: "string", description: "ISO 8601 date for orders after this date" },
+        before:          { type: "string" },
+      },
+      required: ["store_url", "consumer_key", "consumer_secret"],
+    },
+  },
+  {
+    name: "woo_customers",
+    description: "List WooCommerce customers.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        store_url:       { type: "string" },
+        consumer_key:    { type: "string" },
+        consumer_secret: { type: "string" },
+        per_page:        { type: "number" },
+        page:            { type: "number" },
+        search:          { type: "string" },
+        email:           { type: "string" },
+        role:            { type: "string" },
+        orderby:         { type: "string" },
+        order:           { type: "string" },
+      },
+      required: ["store_url", "consumer_key", "consumer_secret"],
+    },
+  },
+
   // ── csuite-tool.ts ───────────────────────────────────────────────────────────
   {
     name: "csuite_analyze",
@@ -7107,6 +7710,55 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   xero_reports:            (args) => xeroReports(args),
   xero_quotes:             (args) => xeroQuotes(args),
   xero_organisation:       (args) => xeroOrganisation(args),
+
+  // ebay-tool.ts
+  ebay_search:               (args) => ebaySearch(args),
+  ebay_get_item:             (args) => ebayGetItem(args),
+  ebay_get_item_by_legacy_id: (args) => ebayGetItemByLegacyId(args),
+  ebay_get_categories:       (args) => ebayGetCategories(args),
+
+  // etsy-tool.ts
+  etsy_search_listings:      (args) => etsySearchListings(args),
+  etsy_get_listing:          (args) => etsyGetListing(args),
+  etsy_get_shop:             (args) => etsyGetShop(args),
+  etsy_get_shop_listings:    (args) => etsyGetShopListings(args),
+  etsy_search_shops:         (args) => etsySearchShops(args),
+
+  // stripe-tool.ts
+  stripe_customers:          (args) => stripeCustomers(args),
+  stripe_charges:            (args) => stripeCharges(args),
+  stripe_subscriptions:      (args) => stripeSubscriptions(args),
+  stripe_invoices:           (args) => stripeInvoices(args),
+  stripe_products:           (args) => stripeProducts(args),
+  stripe_prices:             (args) => stripePrices(args),
+
+  // paypal-tool.ts
+  paypal_orders:             (args) => paypalOrders(args),
+  paypal_invoices:           (args) => paypalInvoices(args),
+
+  // square-tool.ts
+  square_payments:           (args) => squarePayments(args),
+  square_customers:          (args) => squareCustomers(args),
+  square_catalog_list:       (args) => squareCatalogList(args),
+  square_catalog_search:     (args) => squareCatalogSearch(args),
+
+  // quickbooks-tool.ts
+  quickbooks_customers:      (args) => quickbooksCustomers(args),
+  quickbooks_invoices:       (args) => quickbooksInvoices(args),
+  quickbooks_items:          (args) => quickbooksItems(args),
+  quickbooks_payments:       (args) => quickbooksPayments(args),
+
+  // plaid-tool.ts
+  plaid_accounts:            (args) => plaidAccounts(args),
+  plaid_transactions:        (args) => plaidTransactions(args),
+  plaid_balances:            (args) => plaidBalances(args),
+  plaid_identity:            (args) => plaidIdentity(args),
+  plaid_link_token_create:   (args) => plaidLinkTokenCreate(args),
+
+  // woocommerce-tool.ts
+  woo_products:              (args) => wooProducts(args),
+  woo_orders:                (args) => wooOrders(args),
+  woo_customers:             (args) => wooCustomers(args),
 
   // csuite-tool.ts
   csuite_analyze: (args) => Promise.resolve(csuitAnalyze(
