@@ -2471,6 +2471,152 @@ const tools: Tool[] = [
     ],
     examplePrompt: "Ask your AI to use Groq's Llama 3 to classify 100 customer support tickets by intent",
   },
+
+  // ── Dev / Cloud ────────────────────────────────────────────────────────────
+  {
+    name: "Neon",
+    description: "Manage Neon Serverless Postgres projects, branches, databases, and execute SQL via the Neon Console API. Neon's branching model lets agents create isolated database branches for testing or feature work without touching production data. Built for agents that need to query, migrate, or inspect Postgres infrastructure programmatically.",
+    endpoint: "/v1/neon",
+    category: "Platform",
+    Icon: Database,
+    capabilities: [
+      "List and inspect Neon projects and their connection details",
+      "List and create database branches for isolated dev or test environments",
+      "List databases on any branch",
+      "Execute SQL queries directly against any endpoint via the Neon API",
+    ],
+    examplePrompt: "Ask your AI to create a new branch from main, run a migration SQL script, and report the results",
+  },
+  {
+    name: "Upstash",
+    description: "Interact with Upstash serverless Redis databases and Kafka clusters. Read, write, and manage Redis keys and Kafka topics without running persistent infrastructure. Built for agents that need fast, ephemeral storage, pub/sub messaging, rate limiting counters, or event streaming.",
+    endpoint: "/v1/upstash",
+    category: "Platform",
+    Icon: Server,
+    capabilities: [
+      "Get, set, delete, and list keys in any Upstash Redis database",
+      "Increment counters for rate limiting or analytics",
+      "Produce messages to Upstash Kafka topics",
+      "List Kafka topics in a cluster",
+    ],
+    examplePrompt: "Ask your AI to check a rate limit counter in Redis and reset it if it exceeds a threshold",
+  },
+  {
+    name: "Turso",
+    description: "Manage Turso SQLite edge databases and execute SQL queries. Turso replicates SQLite to edge locations globally for ultra-low latency reads. Built for agents that need to inspect schema, run queries, or create new databases in a Turso organization.",
+    endpoint: "/v1/turso",
+    category: "Platform",
+    Icon: Database,
+    capabilities: [
+      "List all databases and groups in a Turso organization",
+      "Create new edge databases attached to a placement group",
+      "Get database details including regions and hostname",
+      "Execute SQL statements against any Turso database via the pipeline API",
+    ],
+    examplePrompt: "Ask your AI to create a new Turso database, run a CREATE TABLE statement, and insert seed data",
+  },
+  {
+    name: "Render",
+    description: "Manage Render hosting services, trigger deploys, and configure environment variables via the Render API. Covers web services, static sites, background workers, and cron jobs. Built for agents that automate deployments, sync env vars from secrets managers, or monitor deploy status.",
+    endpoint: "/v1/render",
+    category: "Platform",
+    Icon: Server,
+    capabilities: [
+      "List all services with type, status, and last deploy info",
+      "Trigger new deploys with optional cache clearing",
+      "List and set environment variables on any service",
+      "Retrieve recent deploy history and status",
+    ],
+    examplePrompt: "Ask your AI to trigger a deploy for a Render service and poll until it shows as live",
+  },
+  {
+    name: "Fly.io",
+    description: "Manage Fly.io apps, machines, and volumes via the Fly Machines API. Launch and inspect VMs anywhere in the world with a single call. Built for agents that need to orchestrate compute, inspect running machines, or automate infrastructure for globally distributed apps.",
+    endpoint: "/v1/flyio",
+    category: "Platform",
+    Icon: Server,
+    capabilities: [
+      "List all apps in your Fly.io organization",
+      "Get app details including hostname and network config",
+      "List and create Machines (VMs) running a given Docker image",
+      "List volumes attached to an app",
+    ],
+    examplePrompt: "Ask your AI to spin up a Fly.io machine running a Docker image and return its public URL",
+  },
+
+  // ── AI Models ──────────────────────────────────────────────────────────────
+  {
+    name: "Mistral",
+    description: "Access Mistral AI models for chat completions and vector embeddings via the Mistral API. Covers the full model range from Mistral Small (fast and cheap) to Mistral Large (frontier reasoning). A strong European alternative to OpenAI with competitive performance and pricing.",
+    endpoint: "/v1/mistral",
+    category: "Platform",
+    Icon: Brain,
+    capabilities: [
+      "Run chat completions with any Mistral model using a prompt or message array",
+      "Choose from mistral-small-latest, mistral-medium-latest, mistral-large-latest, and codestral",
+      "Create vector embeddings with mistral-embed for semantic search",
+      "List all available models and their capabilities",
+    ],
+    examplePrompt: "Ask your AI to call Mistral Large for a complex legal document analysis and return a structured summary",
+  },
+  {
+    name: "Cohere",
+    description: "Access Cohere's NLP platform for chat, text generation, embeddings, reranking, and classification. Cohere's rerank and embed models are widely used in enterprise RAG pipelines. Built for agents building search, retrieval, and classification workflows on top of custom corpora.",
+    endpoint: "/v1/cohere",
+    category: "Platform",
+    Icon: Brain,
+    capabilities: [
+      "Chat with Command R+ for retrieval-augmented generation",
+      "Generate text completions with fine-grained control over outputs",
+      "Embed documents and queries for vector search with embed-english-v3.0",
+      "Rerank search results by semantic relevance to a query",
+    ],
+    examplePrompt: "Ask your AI to embed a set of documents and rerank them by relevance to a user query using Cohere",
+  },
+  {
+    name: "Perplexity",
+    description: "Run search-augmented chat completions with Perplexity AI's Sonar models. Every response is grounded in live web search with citations. Built for agents that need up-to-date factual answers, current events, product comparisons, or any query where training data alone is insufficient.",
+    endpoint: "/v1/perplexity",
+    category: "Platform",
+    Icon: Brain,
+    capabilities: [
+      "Get grounded answers to any question with real-time web search",
+      "Receive structured citation URLs alongside every response",
+      "Filter search to specific domains or recency windows (day, week, month)",
+      "Use sonar-pro or sonar-reasoning for deeper research and multi-step reasoning",
+    ],
+    examplePrompt: "Ask your AI to find the current pricing for three competing SaaS products using Perplexity and return a comparison table",
+  },
+
+  // ── Commerce / Creator ─────────────────────────────────────────────────────
+  {
+    name: "Lemon Squeezy",
+    description: "Access your Lemon Squeezy digital commerce data: stores, products, orders, subscriptions, and customers. Lemon Squeezy is a popular merchant-of-record platform for indie developers and creators selling digital products and SaaS subscriptions. Built for agents that report on revenue, manage subscriptions, or sync order data to other systems.",
+    endpoint: "/v1/lemonsqueezy",
+    category: "Commerce",
+    Icon: Receipt,
+    capabilities: [
+      "List stores, products, and pricing variants",
+      "Browse orders with customer email, total, and status",
+      "List and filter subscriptions by status (active, cancelled, past_due, trial)",
+      "Look up individual orders and list customers with contact details",
+    ],
+    examplePrompt: "Ask your AI to list all active subscriptions and email a weekly revenue summary",
+  },
+  {
+    name: "ConvertKit",
+    description: "Manage your ConvertKit email list: subscribers, forms, sequences, and tags. ConvertKit is the leading email platform for creators and indie developers. Built for agents that automate subscriber onboarding, segment audiences by tag, and trigger sequences based on external events.",
+    endpoint: "/v1/convertkit",
+    category: "Platform",
+    Icon: Mail,
+    capabilities: [
+      "List all subscribers with filtering by date range and sort order",
+      "Add new subscribers to any form",
+      "List all forms, sequences, and tags in your account",
+      "Apply tags to subscribers for segmentation and automation triggers",
+    ],
+    examplePrompt: "Ask your AI to tag all subscribers who signed up in the last 7 days with an onboarding tag and add them to a welcome sequence",
+  },
 ];
 
 // Platform connectors: tools that require a one-time external account connection

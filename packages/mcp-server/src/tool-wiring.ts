@@ -663,6 +663,56 @@ import {
   exchangerateHistorical, exchangerateCodes,
 } from "./exchangerate-tool.js";
 
+// ─── Dev / Cloud ──────────────────────────────────────────────────────────────
+import {
+  neonListProjects, neonGetProject, neonListBranches,
+  neonCreateBranch, neonListDatabases, neonExecuteSql,
+} from "./neon-tool.js";
+
+import {
+  upstashRedisGet, upstashRedisSet, upstashRedisDel,
+  upstashRedisListKeys, upstashRedisIncr,
+  upstashKafkaProduce, upstashKafkaListTopics,
+} from "./upstash-tool.js";
+
+import {
+  tursoListDatabases, tursoCreateDatabase, tursoListGroups,
+  tursoGetDatabase, tursoExecuteSql,
+} from "./turso-tool.js";
+
+import {
+  renderListServices, renderGetService, renderListDeploys,
+  renderTriggerDeploy, renderListEnvVars, renderSetEnvVar,
+} from "./render-tool.js";
+
+import {
+  flyListApps, flyGetApp, flyListMachines,
+  flyCreateMachine, flyListVolumes,
+} from "./flyio-tool.js";
+
+// ─── AI Models ────────────────────────────────────────────────────────────────
+import {
+  mistralChatCompletion, mistralListModels, mistralCreateEmbedding,
+} from "./mistral-tool.js";
+
+import {
+  cohereChat, cohereGenerate, cohereEmbed,
+  cohereRerank, cohereClassify, cohereListModels,
+} from "./cohere-tool.js";
+
+import { perplexityChatCompletion } from "./perplexity-tool.js";
+
+// ─── Commerce / Creator ───────────────────────────────────────────────────────
+import {
+  lsListStores, lsListProducts, lsListOrders,
+  lsListSubscriptions, lsGetOrder, lsListCustomers,
+} from "./lemonsqueezy-tool.js";
+
+import {
+  ckListSubscribers, ckAddSubscriber, ckListForms,
+  ckListSequences, ckListTags, ckTagSubscriber,
+} from "./convertkit-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -9733,6 +9783,712 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── neon-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "neon_list_projects",
+    description: "List all Neon Serverless Postgres projects in your account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Neon API key" },
+        limit: { type: "number", description: "Max projects to return (default 10)" },
+        cursor: { type: "string", description: "Pagination cursor" },
+      },
+    },
+  },
+  {
+    name: "neon_get_project",
+    description: "Get details for a specific Neon project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        project_id: { type: "string", description: "Neon project ID" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "neon_list_branches",
+    description: "List all branches in a Neon project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        project_id: { type: "string" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "neon_create_branch",
+    description: "Create a new branch in a Neon project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        project_id: { type: "string" },
+        branch_name: { type: "string", description: "Name for the new branch" },
+      },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "neon_list_databases",
+    description: "List all databases on a Neon branch.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        project_id: { type: "string" },
+        branch_id: { type: "string" },
+      },
+      required: ["project_id", "branch_id"],
+    },
+  },
+  {
+    name: "neon_execute_sql",
+    description: "Execute a SQL query against a Neon database endpoint.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        project_id: { type: "string" },
+        branch_id: { type: "string" },
+        endpoint_id: { type: "string" },
+        query: { type: "string", description: "SQL query to execute" },
+        database_name: { type: "string", description: "Target database name" },
+      },
+      required: ["project_id", "branch_id", "endpoint_id", "query", "database_name"],
+    },
+  },
+
+  // ── upstash-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "upstash_redis_get",
+    description: "Get the value of a key from an Upstash Redis database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Upstash API key" },
+        email: { type: "string", description: "Upstash account email" },
+        db_id: { type: "string", description: "Redis database ID" },
+        key: { type: "string", description: "Key to retrieve" },
+      },
+      required: ["api_key", "email", "db_id", "key"],
+    },
+  },
+  {
+    name: "upstash_redis_set",
+    description: "Set a key-value pair in an Upstash Redis database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        db_id: { type: "string" },
+        key: { type: "string" },
+        value: { type: "string", description: "Value to store" },
+        ex: { type: "number", description: "Expiry in seconds (optional)" },
+      },
+      required: ["api_key", "email", "db_id", "key", "value"],
+    },
+  },
+  {
+    name: "upstash_redis_del",
+    description: "Delete a key from an Upstash Redis database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        db_id: { type: "string" },
+        key: { type: "string" },
+      },
+      required: ["api_key", "email", "db_id", "key"],
+    },
+  },
+  {
+    name: "upstash_redis_list_keys",
+    description: "List keys in an Upstash Redis database matching a pattern.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        db_id: { type: "string" },
+        pattern: { type: "string", description: "Key pattern (default *)" },
+      },
+      required: ["api_key", "email", "db_id"],
+    },
+  },
+  {
+    name: "upstash_redis_incr",
+    description: "Increment a numeric key in an Upstash Redis database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        db_id: { type: "string" },
+        key: { type: "string" },
+      },
+      required: ["api_key", "email", "db_id", "key"],
+    },
+  },
+  {
+    name: "upstash_kafka_produce",
+    description: "Produce messages to an Upstash Kafka topic.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        cluster_id: { type: "string" },
+        topic: { type: "string" },
+        messages: { type: "string", description: "JSON array of message objects [{value: '...'}]" },
+      },
+      required: ["api_key", "email", "cluster_id", "topic", "messages"],
+    },
+  },
+  {
+    name: "upstash_kafka_list_topics",
+    description: "List all topics in an Upstash Kafka cluster.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        email: { type: "string" },
+        cluster_id: { type: "string" },
+      },
+      required: ["api_key", "email", "cluster_id"],
+    },
+  },
+
+  // ── turso-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "turso_list_databases",
+    description: "List all databases in a Turso organization.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Turso API token" },
+        org: { type: "string", description: "Organization name or slug" },
+      },
+      required: ["api_key", "org"],
+    },
+  },
+  {
+    name: "turso_create_database",
+    description: "Create a new Turso SQLite edge database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        org: { type: "string" },
+        name: { type: "string", description: "Database name" },
+        group: { type: "string", description: "Group to attach to (e.g. default)" },
+      },
+      required: ["api_key", "org", "name", "group"],
+    },
+  },
+  {
+    name: "turso_list_groups",
+    description: "List all groups in a Turso organization.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        org: { type: "string" },
+      },
+      required: ["api_key", "org"],
+    },
+  },
+  {
+    name: "turso_get_database",
+    description: "Get details for a specific Turso database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        org: { type: "string" },
+        name: { type: "string", description: "Database name" },
+      },
+      required: ["api_key", "org", "name"],
+    },
+  },
+  {
+    name: "turso_execute_sql",
+    description: "Execute a SQL query against a Turso edge database.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        org: { type: "string" },
+        db_name: { type: "string", description: "Database name" },
+        sql: { type: "string", description: "SQL statement to execute" },
+      },
+      required: ["api_key", "org", "db_name", "sql"],
+    },
+  },
+
+  // ── render-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "render_list_services",
+    description: "List all Render services (web services, static sites, cron jobs, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Render API key" },
+        limit: { type: "number", description: "Max results (default 20)" },
+        cursor: { type: "string" },
+        type: { type: "string", description: "Filter by type: web_service, static_site, background_worker, cron_job, private_service" },
+      },
+    },
+  },
+  {
+    name: "render_get_service",
+    description: "Get details for a specific Render service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        service_id: { type: "string", description: "Render service ID (srv-...)" },
+      },
+      required: ["service_id"],
+    },
+  },
+  {
+    name: "render_list_deploys",
+    description: "List deploys for a Render service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        service_id: { type: "string" },
+        limit: { type: "number" },
+      },
+      required: ["service_id"],
+    },
+  },
+  {
+    name: "render_trigger_deploy",
+    description: "Trigger a new deploy for a Render service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        service_id: { type: "string" },
+        clear_cache: { type: "boolean", description: "Clear build cache before deploying" },
+      },
+      required: ["service_id"],
+    },
+  },
+  {
+    name: "render_list_env_vars",
+    description: "List environment variables for a Render service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        service_id: { type: "string" },
+      },
+      required: ["service_id"],
+    },
+  },
+  {
+    name: "render_set_env_var",
+    description: "Set an environment variable on a Render service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        service_id: { type: "string" },
+        key: { type: "string", description: "Environment variable name" },
+        value: { type: "string", description: "Environment variable value" },
+      },
+      required: ["service_id", "key", "value"],
+    },
+  },
+
+  // ── flyio-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "fly_list_apps",
+    description: "List all Fly.io apps in your organization.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Fly.io API token" },
+        org_slug: { type: "string", description: "Organization slug (optional)" },
+      },
+    },
+  },
+  {
+    name: "fly_get_app",
+    description: "Get details for a specific Fly.io app.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        app_name: { type: "string", description: "Fly.io app name" },
+      },
+      required: ["app_name"],
+    },
+  },
+  {
+    name: "fly_list_machines",
+    description: "List all machines in a Fly.io app.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        app_name: { type: "string" },
+        include_deleted: { type: "boolean" },
+      },
+      required: ["app_name"],
+    },
+  },
+  {
+    name: "fly_create_machine",
+    description: "Create a new machine in a Fly.io app.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        app_name: { type: "string" },
+        image: { type: "string", description: "Docker image to run (e.g. nginx:latest)" },
+        machine_name: { type: "string", description: "Optional machine name" },
+        env: { type: "string", description: "JSON object of environment variables" },
+      },
+      required: ["app_name", "image"],
+    },
+  },
+  {
+    name: "fly_list_volumes",
+    description: "List all volumes attached to a Fly.io app.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        app_name: { type: "string" },
+      },
+      required: ["app_name"],
+    },
+  },
+
+  // ── mistral-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "mistral_chat_completion",
+    description: "Run a chat completion with a Mistral AI model (mistral-small, mistral-medium, mistral-large, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mistral API key" },
+        model: { type: "string", description: "Model ID (default: mistral-small-latest)" },
+        prompt: { type: "string", description: "Single user message (alternative to messages)" },
+        system_prompt: { type: "string" },
+        messages: { type: "string", description: "JSON array of {role, content} messages" },
+        max_tokens: { type: "number" },
+        temperature: { type: "number" },
+        top_p: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "mistral_list_models",
+    description: "List all available Mistral AI models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "mistral_create_embedding",
+    description: "Create vector embeddings for text using Mistral's embedding model.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        input: { type: "string", description: "Text or JSON array of strings to embed" },
+        model: { type: "string", description: "Embedding model (default: mistral-embed)" },
+      },
+      required: ["input"],
+    },
+  },
+
+  // ── cohere-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "cohere_chat",
+    description: "Chat with a Cohere Command model. Supports system preamble and conversation history.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Cohere API key" },
+        message: { type: "string", description: "User message" },
+        model: { type: "string", description: "Model ID (default: command-r-plus)" },
+        preamble: { type: "string", description: "System prompt / preamble" },
+        chat_history: { type: "string", description: "JSON array of prior messages [{role, message}]" },
+        max_tokens: { type: "number" },
+        temperature: { type: "number" },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "cohere_generate",
+    description: "Generate text completions using Cohere Command models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        prompt: { type: "string" },
+        model: { type: "string", description: "Model ID (default: command)" },
+        max_tokens: { type: "number" },
+        temperature: { type: "number" },
+        stop_sequences: { type: "string", description: "JSON array of stop strings" },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "cohere_embed",
+    description: "Create vector embeddings for text using Cohere's embed models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        texts: { type: "string", description: "JSON array of strings to embed" },
+        model: { type: "string", description: "Embed model (default: embed-english-v3.0)" },
+        input_type: { type: "string", description: "search_document, search_query, classification, clustering" },
+      },
+      required: ["texts"],
+    },
+  },
+  {
+    name: "cohere_rerank",
+    description: "Rerank a list of documents by relevance to a query using Cohere Rerank.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        query: { type: "string" },
+        documents: { type: "string", description: "JSON array of strings or {text} objects" },
+        model: { type: "string", description: "Rerank model (default: rerank-english-v3.0)" },
+        top_n: { type: "number", description: "Return top N results" },
+      },
+      required: ["query", "documents"],
+    },
+  },
+  {
+    name: "cohere_classify",
+    description: "Classify texts into categories using Cohere Classify with few-shot examples.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        inputs: { type: "string", description: "JSON array of strings to classify" },
+        examples: { type: "string", description: "JSON array of {text, label} few-shot examples" },
+        model: { type: "string" },
+      },
+      required: ["inputs", "examples"],
+    },
+  },
+  {
+    name: "cohere_list_models",
+    description: "List all available Cohere models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+    },
+  },
+
+  // ── perplexity-tool.ts ───────────────────────────────────────────────────────
+  {
+    name: "perplexity_chat_completion",
+    description: "Run a search-augmented chat completion with Perplexity AI. Returns grounded answers with citations from the web.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Perplexity API key" },
+        model: { type: "string", description: "Model (default: sonar). Options: sonar, sonar-pro, sonar-reasoning" },
+        prompt: { type: "string", description: "User message (alternative to messages)" },
+        system_prompt: { type: "string" },
+        messages: { type: "string", description: "JSON array of {role, content} messages" },
+        max_tokens: { type: "number" },
+        temperature: { type: "number" },
+        search_recency_filter: { type: "string", description: "Limit sources by time: month, week, day, hour" },
+        search_domain_filter: { type: "string", description: "JSON array of domains to restrict search to" },
+        return_citations: { type: "boolean", description: "Include citation URLs in response (default true)" },
+        return_related_questions: { type: "boolean" },
+      },
+    },
+  },
+
+  // ── lemonsqueezy-tool.ts ─────────────────────────────────────────────────────
+  {
+    name: "ls_list_stores",
+    description: "List all Lemon Squeezy stores on your account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Lemon Squeezy API key" },
+        page: { type: "number" },
+        per_page: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "ls_list_products",
+    description: "List products in a Lemon Squeezy store.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        store_id: { type: "string" },
+        page: { type: "number" },
+        per_page: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "ls_list_orders",
+    description: "List orders in a Lemon Squeezy store.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        store_id: { type: "string" },
+        user_email: { type: "string" },
+        page: { type: "number" },
+        per_page: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "ls_list_subscriptions",
+    description: "List subscriptions for a Lemon Squeezy store.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        store_id: { type: "string" },
+        order_id: { type: "string" },
+        status: { type: "string", description: "Filter by status: active, cancelled, expired, past_due, unpaid, trial, paused" },
+        page: { type: "number" },
+        per_page: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "ls_get_order",
+    description: "Get a specific Lemon Squeezy order by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        order_id: { type: "string" },
+      },
+      required: ["order_id"],
+    },
+  },
+  {
+    name: "ls_list_customers",
+    description: "List customers for a Lemon Squeezy store.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        store_id: { type: "string" },
+        email: { type: "string" },
+        page: { type: "number" },
+        per_page: { type: "number" },
+      },
+    },
+  },
+
+  // ── convertkit-tool.ts ───────────────────────────────────────────────────────
+  {
+    name: "ck_list_subscribers",
+    description: "List all subscribers in a ConvertKit account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_secret: { type: "string", description: "ConvertKit API secret" },
+        page: { type: "number" },
+        from: { type: "string", description: "Filter by created date (ISO 8601)" },
+        to: { type: "string" },
+        sort_field: { type: "string" },
+        sort_order: { type: "string", description: "asc or desc" },
+      },
+      required: ["api_secret"],
+    },
+  },
+  {
+    name: "ck_add_subscriber",
+    description: "Subscribe an email address to a ConvertKit form.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "ConvertKit API key" },
+        form_id: { type: "string" },
+        email: { type: "string" },
+        first_name: { type: "string" },
+      },
+      required: ["api_key", "form_id", "email"],
+    },
+  },
+  {
+    name: "ck_list_forms",
+    description: "List all forms in a ConvertKit account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "ck_list_sequences",
+    description: "List all email sequences in a ConvertKit account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "ck_list_tags",
+    description: "List all tags in a ConvertKit account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "ck_tag_subscriber",
+    description: "Apply a tag to a subscriber in ConvertKit.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string" },
+        tag_id: { type: "string" },
+        email: { type: "string" },
+        first_name: { type: "string" },
+      },
+      required: ["api_key", "tag_id", "email"],
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10720,4 +11476,75 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   // groq-tool.ts
   groq_chat_completion:    (args) => groqChatCompletion(args),
   groq_list_models:        (args) => groqListModels(args),
+
+  // neon-tool.ts
+  neon_list_projects:      (args) => neonListProjects(args),
+  neon_get_project:        (args) => neonGetProject(args),
+  neon_list_branches:      (args) => neonListBranches(args),
+  neon_create_branch:      (args) => neonCreateBranch(args),
+  neon_list_databases:     (args) => neonListDatabases(args),
+  neon_execute_sql:        (args) => neonExecuteSql(args),
+
+  // upstash-tool.ts
+  upstash_redis_get:       (args) => upstashRedisGet(args),
+  upstash_redis_set:       (args) => upstashRedisSet(args),
+  upstash_redis_del:       (args) => upstashRedisDel(args),
+  upstash_redis_list_keys: (args) => upstashRedisListKeys(args),
+  upstash_redis_incr:      (args) => upstashRedisIncr(args),
+  upstash_kafka_produce:   (args) => upstashKafkaProduce(args),
+  upstash_kafka_list_topics:(args) => upstashKafkaListTopics(args),
+
+  // turso-tool.ts
+  turso_list_databases:    (args) => tursoListDatabases(args),
+  turso_create_database:   (args) => tursoCreateDatabase(args),
+  turso_list_groups:       (args) => tursoListGroups(args),
+  turso_get_database:      (args) => tursoGetDatabase(args),
+  turso_execute_sql:       (args) => tursoExecuteSql(args),
+
+  // render-tool.ts
+  render_list_services:    (args) => renderListServices(args),
+  render_get_service:      (args) => renderGetService(args),
+  render_list_deploys:     (args) => renderListDeploys(args),
+  render_trigger_deploy:   (args) => renderTriggerDeploy(args),
+  render_list_env_vars:    (args) => renderListEnvVars(args),
+  render_set_env_var:      (args) => renderSetEnvVar(args),
+
+  // flyio-tool.ts
+  fly_list_apps:           (args) => flyListApps(args),
+  fly_get_app:             (args) => flyGetApp(args),
+  fly_list_machines:       (args) => flyListMachines(args),
+  fly_create_machine:      (args) => flyCreateMachine(args),
+  fly_list_volumes:        (args) => flyListVolumes(args),
+
+  // mistral-tool.ts
+  mistral_chat_completion: (args) => mistralChatCompletion(args),
+  mistral_list_models:     (args) => mistralListModels(args),
+  mistral_create_embedding:(args) => mistralCreateEmbedding(args),
+
+  // cohere-tool.ts
+  cohere_chat:             (args) => cohereChat(args),
+  cohere_generate:         (args) => cohereGenerate(args),
+  cohere_embed:            (args) => cohereEmbed(args),
+  cohere_rerank:           (args) => cohereRerank(args),
+  cohere_classify:         (args) => cohereClassify(args),
+  cohere_list_models:      (args) => cohereListModels(args),
+
+  // perplexity-tool.ts
+  perplexity_chat_completion:(args) => perplexityChatCompletion(args),
+
+  // lemonsqueezy-tool.ts
+  ls_list_stores:          (args) => lsListStores(args),
+  ls_list_products:        (args) => lsListProducts(args),
+  ls_list_orders:          (args) => lsListOrders(args),
+  ls_list_subscriptions:   (args) => lsListSubscriptions(args),
+  ls_get_order:            (args) => lsGetOrder(args),
+  ls_list_customers:       (args) => lsListCustomers(args),
+
+  // convertkit-tool.ts
+  ck_list_subscribers:     (args) => ckListSubscribers(args),
+  ck_add_subscriber:       (args) => ckAddSubscriber(args),
+  ck_list_forms:           (args) => ckListForms(args),
+  ck_list_sequences:       (args) => ckListSequences(args),
+  ck_list_tags:            (args) => ckListTags(args),
+  ck_tag_subscriber:       (args) => ckTagSubscriber(args),
 };
