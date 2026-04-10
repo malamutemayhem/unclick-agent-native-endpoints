@@ -475,6 +475,39 @@ import {
   kling_generate_video, kling_get_task,
 } from "./kling-tool.js";
 
+// ─── Monitoring / CI / CDP / Email / Commerce / Inference ─────────────────────
+import {
+  pagerduty_list_incidents, pagerduty_get_incident, pagerduty_create_incident,
+  pagerduty_acknowledge_incident, pagerduty_resolve_incident,
+  pagerduty_list_services, pagerduty_list_oncalls,
+} from "./pagerduty-tool.js";
+
+import {
+  circleci_list_pipelines, circleci_get_pipeline,
+  circleci_list_workflows, circleci_get_workflow,
+  circleci_list_jobs, circleci_trigger_pipeline,
+} from "./circleci-tool.js";
+
+import {
+  segment_track_event, segment_identify_user,
+  segment_list_sources, segment_list_destinations, segment_get_source,
+} from "./segment-tool.js";
+
+import {
+  postmark_send_email, postmark_send_batch, postmark_get_delivery_stats,
+  postmark_list_templates, postmark_get_template, postmark_search_messages,
+} from "./postmark-tool.js";
+
+import {
+  gumroad_list_products, gumroad_get_product,
+  gumroad_list_sales, gumroad_get_sale, gumroad_list_subscribers,
+} from "./gumroad-tool.js";
+
+import {
+  togetherai_chat_completion, togetherai_completion,
+  togetherai_create_embedding, togetherai_list_models,
+} from "./togetherai-tool.js";
+
 // ─── AI ───────────────────────────────────────────────────────────────────────
 import {
   elevenlabsListVoices, elevenlabsGetVoice, elevenlabsTextToSpeech,
@@ -7961,6 +7994,466 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── pagerduty-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "pagerduty_list_incidents",
+    description: "List PagerDuty incidents. Filter by status (triggered, acknowledged, resolved), service, or date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        status: { type: "string", description: "Filter by status: triggered, acknowledged, or resolved" },
+        limit: { type: "number", description: "Max results (default 25, max 100)" },
+        offset: { type: "number", description: "Pagination offset" },
+        service_ids: { type: "string", description: "Filter by service ID" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "pagerduty_get_incident",
+    description: "Get details for a single PagerDuty incident by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        incident_id: { type: "string", description: "Incident ID" },
+      },
+      required: ["api_key", "incident_id"],
+    },
+  },
+  {
+    name: "pagerduty_create_incident",
+    description: "Create a new PagerDuty incident on a service.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        title: { type: "string", description: "Incident title/summary" },
+        service_id: { type: "string", description: "ID of the service to create the incident on" },
+        urgency: { type: "string", description: "Urgency: high or low" },
+        body_details: { type: "string", description: "Detailed description of the incident" },
+        from: { type: "string", description: "Email address of the user creating the incident (required by some accounts)" },
+      },
+      required: ["api_key", "title", "service_id"],
+    },
+  },
+  {
+    name: "pagerduty_acknowledge_incident",
+    description: "Acknowledge a PagerDuty incident by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        incident_id: { type: "string", description: "Incident ID to acknowledge" },
+      },
+      required: ["api_key", "incident_id"],
+    },
+  },
+  {
+    name: "pagerduty_resolve_incident",
+    description: "Resolve a PagerDuty incident by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        incident_id: { type: "string", description: "Incident ID to resolve" },
+      },
+      required: ["api_key", "incident_id"],
+    },
+  },
+  {
+    name: "pagerduty_list_services",
+    description: "List all services in a PagerDuty account. Optionally filter by name.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        query: { type: "string", description: "Filter services by name" },
+        limit: { type: "number", description: "Max results" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "pagerduty_list_oncalls",
+    description: "List who is currently on-call in PagerDuty, optionally filtered by schedule or user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "PagerDuty API key" },
+        schedule_ids: { type: "string", description: "Filter by schedule ID" },
+        user_ids: { type: "string", description: "Filter by user ID" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── circleci-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "circleci_list_pipelines",
+    description: "List CircleCI pipelines for a project or organization. Optionally filter by branch.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        project_slug: { type: "string", description: "Project slug e.g. gh/MyOrg/my-repo. Omit to list all org pipelines." },
+        branch: { type: "string", description: "Filter by branch name" },
+        org_slug: { type: "string", description: "Org slug when listing all pipelines (e.g. gh/MyOrg)" },
+        page_token: { type: "string", description: "Pagination token" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "circleci_get_pipeline",
+    description: "Get details for a single CircleCI pipeline by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        pipeline_id: { type: "string", description: "Pipeline ID" },
+      },
+      required: ["api_key", "pipeline_id"],
+    },
+  },
+  {
+    name: "circleci_list_workflows",
+    description: "List workflows for a CircleCI pipeline.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        pipeline_id: { type: "string", description: "Pipeline ID" },
+      },
+      required: ["api_key", "pipeline_id"],
+    },
+  },
+  {
+    name: "circleci_get_workflow",
+    description: "Get details for a single CircleCI workflow by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        workflow_id: { type: "string", description: "Workflow ID" },
+      },
+      required: ["api_key", "workflow_id"],
+    },
+  },
+  {
+    name: "circleci_list_jobs",
+    description: "List jobs in a CircleCI workflow.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        workflow_id: { type: "string", description: "Workflow ID" },
+      },
+      required: ["api_key", "workflow_id"],
+    },
+  },
+  {
+    name: "circleci_trigger_pipeline",
+    description: "Trigger a new CircleCI pipeline for a project. Optionally specify branch, tag, or parameters.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "CircleCI personal API token" },
+        project_slug: { type: "string", description: "Project slug e.g. gh/MyOrg/my-repo" },
+        branch: { type: "string", description: "Branch to build (default: main/master)" },
+        tag: { type: "string", description: "Tag to build" },
+        parameters: { type: "object", description: "Pipeline parameters as key-value pairs" },
+      },
+      required: ["api_key", "project_slug"],
+    },
+  },
+
+  // ── segment-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "segment_track_event",
+    description: "Track a custom event in Segment. Use for recording user actions like 'Signed Up', 'Item Purchased', etc.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        write_key: { type: "string", description: "Segment source write key" },
+        event: { type: "string", description: "Event name (e.g. 'Item Purchased')" },
+        user_id: { type: "string", description: "Unique user identifier" },
+        anonymous_id: { type: "string", description: "Anonymous ID if user is not logged in" },
+        properties: { type: "object", description: "Event properties as key-value pairs" },
+        timestamp: { type: "string", description: "ISO 8601 timestamp (defaults to now)" },
+      },
+      required: ["write_key", "event"],
+    },
+  },
+  {
+    name: "segment_identify_user",
+    description: "Identify a user in Segment with traits. Links an anonymous ID to a known user ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        write_key: { type: "string", description: "Segment source write key" },
+        user_id: { type: "string", description: "Unique user identifier" },
+        anonymous_id: { type: "string", description: "Anonymous ID to link to the user" },
+        traits: { type: "object", description: "User traits as key-value pairs (e.g. name, email, plan)" },
+        timestamp: { type: "string", description: "ISO 8601 timestamp (defaults to now)" },
+      },
+      required: ["write_key"],
+    },
+  },
+  {
+    name: "segment_list_sources",
+    description: "List all Segment sources in a workspace using the Segment Public API.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Segment Public API token" },
+        workspace_id: { type: "string", description: "Segment workspace ID" },
+      },
+      required: ["api_key", "workspace_id"],
+    },
+  },
+  {
+    name: "segment_list_destinations",
+    description: "List all destinations connected to a Segment source.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Segment Public API token" },
+        source_id: { type: "string", description: "Segment source ID" },
+      },
+      required: ["api_key", "source_id"],
+    },
+  },
+  {
+    name: "segment_get_source",
+    description: "Get details for a single Segment source including settings and enabled state.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Segment Public API token" },
+        source_id: { type: "string", description: "Segment source ID" },
+      },
+      required: ["api_key", "source_id"],
+    },
+  },
+
+  // ── postmark-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "postmark_send_email",
+    description: "Send a transactional email via Postmark. Supports HTML and plain text.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+        from: { type: "string", description: "Sender email address (must be verified in Postmark)" },
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        html_body: { type: "string", description: "HTML email body" },
+        text_body: { type: "string", description: "Plain text email body" },
+        reply_to: { type: "string", description: "Reply-to email address" },
+        cc: { type: "string", description: "CC email address(es)" },
+        bcc: { type: "string", description: "BCC email address(es)" },
+        tag: { type: "string", description: "Tag for categorizing messages" },
+        message_stream: { type: "string", description: "Message stream ID (default: outbound)" },
+      },
+      required: ["api_key", "from", "to", "subject"],
+    },
+  },
+  {
+    name: "postmark_send_batch",
+    description: "Send multiple emails in a single Postmark API call (up to 500 messages).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+        messages: { type: "array", description: "Array of email message objects (same fields as send_email)" },
+      },
+      required: ["api_key", "messages"],
+    },
+  },
+  {
+    name: "postmark_get_delivery_stats",
+    description: "Get delivery statistics from Postmark including bounces, spam complaints, and open rates.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "postmark_list_templates",
+    description: "List email templates stored in Postmark.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+        count: { type: "number", description: "Number of templates to return (default 100)" },
+        offset: { type: "number", description: "Pagination offset" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "postmark_get_template",
+    description: "Get a single Postmark email template by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+        template_id: { type: "string", description: "Template ID or alias" },
+      },
+      required: ["api_key", "template_id"],
+    },
+  },
+  {
+    name: "postmark_search_messages",
+    description: "Search sent messages in Postmark by recipient, sender, tag, or status.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Postmark server token" },
+        count: { type: "number", description: "Number of messages to return (default 25)" },
+        offset: { type: "number", description: "Pagination offset" },
+        recipient: { type: "string", description: "Filter by recipient email" },
+        from_email: { type: "string", description: "Filter by sender email" },
+        tag: { type: "string", description: "Filter by tag" },
+        status: { type: "string", description: "Filter by status: queued, sent, bounced, etc." },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── gumroad-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "gumroad_list_products",
+    description: "List all products in a Gumroad account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Gumroad access token" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "gumroad_get_product",
+    description: "Get details for a single Gumroad product by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Gumroad access token" },
+        product_id: { type: "string", description: "Product ID (permalink)" },
+      },
+      required: ["api_key", "product_id"],
+    },
+  },
+  {
+    name: "gumroad_list_sales",
+    description: "List sales from a Gumroad account. Filter by product, email, or date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Gumroad access token" },
+        product_id: { type: "string", description: "Filter by product ID" },
+        email: { type: "string", description: "Filter by buyer email" },
+        after: { type: "string", description: "Sales after this date (YYYY-MM-DD)" },
+        before: { type: "string", description: "Sales before this date (YYYY-MM-DD)" },
+        page: { type: "number", description: "Page number for pagination" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "gumroad_get_sale",
+    description: "Get details for a single Gumroad sale by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Gumroad access token" },
+        sale_id: { type: "string", description: "Sale ID" },
+      },
+      required: ["api_key", "sale_id"],
+    },
+  },
+  {
+    name: "gumroad_list_subscribers",
+    description: "List subscribers for a Gumroad membership/subscription product.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Gumroad access token" },
+        product_id: { type: "string", description: "Product ID of the subscription product" },
+        email: { type: "string", description: "Filter by subscriber email" },
+      },
+      required: ["api_key", "product_id"],
+    },
+  },
+
+  // ── togetherai-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "togetherai_chat_completion",
+    description: "Run a chat completion with any Together AI model. Supports Llama, Mistral, Qwen, and 100+ open-source models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Together AI API key" },
+        model: { type: "string", description: "Model ID (e.g. meta-llama/Llama-3-8b-chat-hf). Use togetherai_list_models to browse." },
+        messages: { type: "array", description: "Array of {role, content} message objects" },
+        max_tokens: { type: "number", description: "Maximum tokens to generate" },
+        temperature: { type: "number", description: "Sampling temperature 0-2 (default 0.7)" },
+        top_p: { type: "number", description: "Top-p nucleus sampling" },
+        top_k: { type: "number", description: "Top-k sampling" },
+        stop: { type: "array", description: "Stop sequences" },
+      },
+      required: ["api_key", "model", "messages"],
+    },
+  },
+  {
+    name: "togetherai_completion",
+    description: "Run a text completion with any Together AI model.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Together AI API key" },
+        model: { type: "string", description: "Model ID (e.g. mistralai/Mistral-7B-v0.1)" },
+        prompt: { type: "string", description: "Text prompt to complete" },
+        max_tokens: { type: "number", description: "Maximum tokens to generate" },
+        temperature: { type: "number", description: "Sampling temperature 0-2" },
+        top_p: { type: "number", description: "Top-p nucleus sampling" },
+        top_k: { type: "number", description: "Top-k sampling" },
+        stop: { type: "array", description: "Stop sequences" },
+      },
+      required: ["api_key", "prompt"],
+    },
+  },
+  {
+    name: "togetherai_create_embedding",
+    description: "Create text embeddings using a Together AI embedding model.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Together AI API key" },
+        model: { type: "string", description: "Embedding model ID (e.g. togethercomputer/m2-bert-80M-8k-retrieval)" },
+        input: { description: "Text string or array of strings to embed" },
+      },
+      required: ["api_key", "input"],
+    },
+  },
+  {
+    name: "togetherai_list_models",
+    description: "List all available models on Together AI including chat, completion, embedding, and image models.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Together AI API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+
   // ── elevenlabs-tool.ts ────────────────────────────────────────────────────────
   {
     name: "elevenlabs_list_voices",
@@ -9834,4 +10327,49 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   exchangerate_convert:    (args) => exchangerateConvert(args),
   exchangerate_historical: (args) => exchangerateHistorical(args),
   exchangerate_codes:      (args) => exchangerateCodes(args),
+
+  // pagerduty-tool.ts
+  pagerduty_list_incidents:       (args) => pagerduty_list_incidents(args),
+  pagerduty_get_incident:         (args) => pagerduty_get_incident(args),
+  pagerduty_create_incident:      (args) => pagerduty_create_incident(args),
+  pagerduty_acknowledge_incident: (args) => pagerduty_acknowledge_incident(args),
+  pagerduty_resolve_incident:     (args) => pagerduty_resolve_incident(args),
+  pagerduty_list_services:        (args) => pagerduty_list_services(args),
+  pagerduty_list_oncalls:         (args) => pagerduty_list_oncalls(args),
+
+  // circleci-tool.ts
+  circleci_list_pipelines:  (args) => circleci_list_pipelines(args),
+  circleci_get_pipeline:    (args) => circleci_get_pipeline(args),
+  circleci_list_workflows:  (args) => circleci_list_workflows(args),
+  circleci_get_workflow:    (args) => circleci_get_workflow(args),
+  circleci_list_jobs:       (args) => circleci_list_jobs(args),
+  circleci_trigger_pipeline:(args) => circleci_trigger_pipeline(args),
+
+  // segment-tool.ts
+  segment_track_event:      (args) => segment_track_event(args),
+  segment_identify_user:    (args) => segment_identify_user(args),
+  segment_list_sources:     (args) => segment_list_sources(args),
+  segment_list_destinations:(args) => segment_list_destinations(args),
+  segment_get_source:       (args) => segment_get_source(args),
+
+  // postmark-tool.ts
+  postmark_send_email:       (args) => postmark_send_email(args),
+  postmark_send_batch:       (args) => postmark_send_batch(args),
+  postmark_get_delivery_stats:(args) => postmark_get_delivery_stats(args),
+  postmark_list_templates:   (args) => postmark_list_templates(args),
+  postmark_get_template:     (args) => postmark_get_template(args),
+  postmark_search_messages:  (args) => postmark_search_messages(args),
+
+  // gumroad-tool.ts
+  gumroad_list_products:    (args) => gumroad_list_products(args),
+  gumroad_get_product:      (args) => gumroad_get_product(args),
+  gumroad_list_sales:       (args) => gumroad_list_sales(args),
+  gumroad_get_sale:         (args) => gumroad_get_sale(args),
+  gumroad_list_subscribers: (args) => gumroad_list_subscribers(args),
+
+  // togetherai-tool.ts
+  togetherai_chat_completion: (args) => togetherai_chat_completion(args),
+  togetherai_completion:      (args) => togetherai_completion(args),
+  togetherai_create_embedding:(args) => togetherai_create_embedding(args),
+  togetherai_list_models:     (args) => togetherai_list_models(args),
 };
