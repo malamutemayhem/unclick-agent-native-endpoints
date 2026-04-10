@@ -66,6 +66,85 @@ async function logMeter(
   }
 }
 
+// ─── Platform test configuration ─────────────────────────────────────────────
+// Describes how to authenticate against each platform's test endpoint.
+// Platforms not listed here default to: GET with Authorization: Bearer <cred>.
+
+interface PlatformTestConfig {
+  method?:      "GET" | "POST";
+  buildHeaders: (credential: string) => Record<string, string>;
+  body?:        unknown;
+  skip?:        boolean;  // true for OAuth platforms or those with no testable endpoint
+}
+
+const PLATFORM_TEST_CONFIG: Record<string, PlatformTestConfig> = {
+  // Stripe: Basic auth with key as username, empty password
+  stripe: {
+    buildHeaders: (cred) => ({
+      Authorization: `Basic ${Buffer.from(`${cred}:`).toString("base64")}`,
+    }),
+  },
+  // Twilio: Basic auth with AccountSID:AuthToken as a single credential string
+  twilio: {
+    buildHeaders: (cred) => ({
+      Authorization: `Basic ${Buffer.from(cred).toString("base64")}`,
+    }),
+  },
+  // Anthropic: x-api-key header + version header, POST with minimal body
+  anthropic: {
+    method: "POST",
+    buildHeaders: (cred) => ({
+      "x-api-key":          cred,
+      "anthropic-version":  "2023-06-01",
+      "Content-Type":       "application/json",
+    }),
+    body: {
+      model:      "claude-haiku-4-5-20251001",
+      max_tokens: 1,
+      messages:   [{ role: "user", content: "hi" }],
+    },
+  },
+  // Notion: Bearer + required Notion-Version header
+  notion: {
+    buildHeaders: (cred) => ({
+      Authorization:    `Bearer ${cred}`,
+      "Notion-Version": "2022-06-28",
+    }),
+  },
+  // Linear: Bearer + POST GraphQL
+  linear: {
+    method: "POST",
+    buildHeaders: (cred) => ({
+      Authorization:  `Bearer ${cred}`,
+      "Content-Type": "application/json",
+    }),
+    body: { query: "{ viewer { id } }" },
+  },
+  // Shopify: custom header - but test URL has {store} placeholder so test is skipped
+  shopify: {
+    skip: true,
+    buildHeaders: (cred) => ({ "X-Shopify-Access-Token": cred }),
+  },
+  // Xero: OAuth2 - cannot test with a bare API key
+  xero: {
+    skip: true,
+    buildHeaders: () => ({}),
+  },
+  // Railway: Bearer + POST GraphQL
+  railway: {
+    method: "POST",
+    buildHeaders: (cred) => ({
+      Authorization:  `Bearer ${cred}`,
+      "Content-Type": "application/json",
+    }),
+    body: { query: "{ me { id } }" },
+  },
+};
+
+function defaultBuildHeaders(cred: string): Record<string, string> {
+  return { Authorization: `Bearer ${cred}` };
+}
+
 // ─── Credential test ──────────────────────────────────────────────────────────
 
 interface TestResult {
@@ -83,8 +162,8 @@ async function testCredential(
     return { passed: false, skipped: true, message: "No test endpoint configured." };
   }
 
-  // Supabase test endpoint has a {project_ref} placeholder - skip live test
-  if (testEndpoint.includes("{project_ref}")) {
+  // Skip endpoints with dynamic placeholders (e.g. {project_ref}, {store})
+  if (/\{[^}]+\}/.test(testEndpoint)) {
     return {
       passed:  true,
       skipped: true,
@@ -92,14 +171,29 @@ async function testCredential(
     };
   }
 
-  const start = Date.now();
-  try {
-    // Stripe uses Basic auth with the key as username
-    const headers: Record<string, string> = platform === "stripe"
-      ? { Authorization: `Basic ${Buffer.from(`${credential}:`).toString("base64")}` }
-      : { Authorization: `Bearer ${credential}` };
+  const config = PLATFORM_TEST_CONFIG[platform];
 
-    const res = await fetch(testEndpoint, { method: "GET", headers });
+  // Skip OAuth or explicitly skipped platforms
+  if (config?.skip) {
+    return {
+      passed:  true,
+      skipped: true,
+      message: `${platform} credential stored (live test not available for this platform type).`,
+    };
+  }
+
+  const start        = Date.now();
+  const buildHeaders = config?.buildHeaders ?? defaultBuildHeaders;
+  const method       = config?.method ?? "GET";
+  const body         = config?.body;
+
+  try {
+    const fetchOptions: RequestInit = { method, headers: buildHeaders(credential) };
+    if (body !== undefined) {
+      fetchOptions.body = JSON.stringify(body);
+    }
+
+    const res = await fetch(testEndpoint, fetchOptions);
     const ms  = Date.now() - start;
 
     if (res.ok || res.status === 200) {
@@ -107,11 +201,19 @@ async function testCredential(
     }
 
     if (res.status === 401 || res.status === 403) {
-      return { passed: false, skipped: false, message: `Credential rejected by ${platform} (HTTP ${res.status}). Check your token.` };
+      return {
+        passed:  false,
+        skipped: false,
+        message: `Credential rejected by ${platform} (HTTP ${res.status}). Check your token.`,
+      };
     }
 
-    // Treat other non-200s as passing (e.g. rate limits, partial responses)
-    return { passed: true, skipped: false, message: `${platform} responded with HTTP ${res.status} - credential appears valid.` };
+    // Other non-200s (rate limits, partial responses) - treat as passing
+    return {
+      passed:  true,
+      skipped: false,
+      message: `${platform} responded with HTTP ${res.status} - credential appears valid.`,
+    };
   } catch (err) {
     return {
       passed:  false,
