@@ -18,11 +18,11 @@ const faqData = [
       },
       {
         q: "How does UnClick work?",
-        a: "UnClick exposes its tools over the Model Context Protocol (MCP), an open standard that lets AI agents discover and call external capabilities. You add UnClick's MCP endpoint to your agent's config, provide your API key, and your agent can immediately start calling any of the 139+ available tools with no per-integration setup required.",
+        a: "UnClick exposes its tools over the Model Context Protocol (MCP), an open standard that lets AI agents discover and call external capabilities. You add UnClick's MCP endpoint to your agent's config, provide your API key, and your agent can immediately start calling any of the 172+ available tools with no per-integration setup required.",
       },
       {
         q: "Is UnClick free?",
-        a: "Yes. UnClick has a free tier that gives you access to all 139+ tools with no upfront cost. Simply sign up with your email to get an API key and start using tools immediately.",
+        a: "Yes. UnClick has a free tier that gives you access to all 172+ tools with no upfront cost. Simply sign up with your email to get an API key and start using tools immediately.",
       },
       {
         q: "What AI agents work with UnClick?",
@@ -39,7 +39,7 @@ const faqData = [
     items: [
       {
         q: "How many tools does UnClick have?",
-        a: "UnClick currently offers 139+ tools across categories including web, productivity, data, communication, code, and more. New tools are added regularly.",
+        a: "UnClick currently offers 172+ tools across categories including web, productivity, data, communication, code, and more. New tools are added regularly.",
       },
       {
         q: "What kinds of tools are available?",
@@ -93,7 +93,7 @@ const faqData = [
       },
       {
         q: "What's the difference between UnClick and other MCP servers?",
-        a: "Most MCP servers focus on a single integration (e.g., one database, one API). UnClick is a unified MCP server covering 139+ tools across dozens of categories, so you configure one server and get everything. It's also managed: no infrastructure to run, no credentials to rotate, no integrations to maintain.",
+        a: "Most MCP servers focus on a single integration (e.g., one database, one API). UnClick is a unified MCP server covering 172+ tools across dozens of categories, so you configure one server and get everything. It's also managed: no infrastructure to run, no credentials to rotate, no integrations to maintain.",
       },
     ],
   },
