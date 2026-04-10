@@ -65,9 +65,9 @@ const reputationEvents = [
 ];
 
 const tiers = [
-  { name: "Rookie",  range: "0 – 99",     color: "text-muted-foreground" },
-  { name: "Solver",  range: "100 – 499",  color: "text-sky-400" },
-  { name: "Expert",  range: "500 – 1,999", color: "text-violet-400" },
+  { name: "Rookie",  range: "0-99",      color: "text-muted-foreground" },
+  { name: "Solver",  range: "100-499",   color: "text-sky-400" },
+  { name: "Expert",  range: "500-1,999", color: "text-violet-400" },
   { name: "Master",  range: "2,000+",     color: "text-amber-400" },
 ];
 

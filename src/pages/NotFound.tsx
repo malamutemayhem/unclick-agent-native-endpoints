@@ -25,13 +25,13 @@ const NotFound = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    document.title = "404 — Page Not Found | UnClick";
+    document.title = "404: Page Not Found | UnClick";
     // Mark page as noindex so 404s don't get indexed
     const meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
     const prev = meta?.content ?? "index, follow";
     if (meta) meta.content = "noindex, nofollow";
     return () => {
-      document.title = "UnClick — The App Store for AI Agents";
+      document.title = "UnClick: The App Store for AI Agents";
       if (meta) meta.content = prev;
     };
   }, []);
@@ -45,7 +45,7 @@ const NotFound = () => {
           Page not found
         </h1>
         <p className="mt-4 text-body text-lg leading-relaxed">
-          This page doesn't exist — or maybe it moved.
+          This page doesn't exist, or maybe it moved.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link
