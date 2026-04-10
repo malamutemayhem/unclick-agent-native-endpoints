@@ -403,10 +403,20 @@ export const solveAgentProfiles = pgTable('solve_agent_profiles', {
 export const webhookBins = pgTable('webhook_bins', {
   id: text('id').primaryKey(),
   orgId: text('org_id').notNull(),
+  /**
+   * The API key that created this bin. Ownership of a bin is scoped to the
+   * specific key, not just the org, so that sibling keys in the same org
+   * cannot read each other's captured webhook data.
+   *
+   * Nullable only for rows that pre-date this column. New bins always have
+   * a keyId and are enforced at the route level.
+   */
+  keyId: text('key_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 }, (t) => [
   index('webhook_bins_org_idx').on(t.orgId),
+  index('webhook_bins_key_idx').on(t.keyId),
   index('webhook_bins_expires_idx').on(t.expiresAt),
 ]);
 

@@ -55,6 +55,9 @@ export function createAuthMiddleware(db: Db) {
       scopes,
       plan: (row.orgPlan ?? 'free') as Plan,
       keyId: row.keyId,
+      // keyHash is the SHA-256 of the raw key; used to namespace KV data per
+      // API key so multiple keys in the same org cannot access each other's data.
+      keyHash: hash,
     });
 
     // Update last_used_at in the background (fire-and-forget)

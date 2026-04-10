@@ -406,10 +406,15 @@ export async function initDb(): Promise<void> {
     CREATE TABLE IF NOT EXISTS webhook_bins (
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL,
+      -- key_id scopes each bin to the specific API key that created it so that
+      -- sibling keys in the same org cannot read each other's captured data.
+      -- Nullable for backward compat with rows that pre-date this column.
+      key_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL
     );
     CREATE INDEX IF NOT EXISTS webhook_bins_org_idx ON webhook_bins(org_id);
+    CREATE INDEX IF NOT EXISTS webhook_bins_key_idx ON webhook_bins(key_id);
     CREATE INDEX IF NOT EXISTS webhook_bins_expires_idx ON webhook_bins(expires_at);
 
     CREATE TABLE IF NOT EXISTS webhook_bin_requests (

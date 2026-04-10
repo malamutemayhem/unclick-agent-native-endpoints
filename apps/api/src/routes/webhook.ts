@@ -34,12 +34,14 @@ export function createWebhookBinRouter(db: Db, auth: MiddlewareHandler) {
   // ── POST /webhook/create ─────────────────────────────────────────────────
 
   router.post('/create', auth, requireScope('webhook:write'), async (c) => {
-    const { orgId } = c.get('org');
+    const { orgId, keyId } = c.get('org');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + BIN_TTL_MS);
     const id = `wbh_${newId()}`;
 
-    await db.insert(webhookBins).values({ id, orgId, createdAt: now, expiresAt });
+    // Bin is tied to the specific API key that created it. Only that key can
+    // read the captured request data (tenant isolation within an org).
+    await db.insert(webhookBins).values({ id, orgId, keyId, createdAt: now, expiresAt });
 
     const proto = c.req.header('X-Forwarded-Proto') ?? 'https';
     const host = c.req.header('X-Forwarded-Host') ?? c.req.header('Host') ?? 'api.unclick.world';
@@ -116,18 +118,23 @@ export function createWebhookBinRouter(db: Db, auth: MiddlewareHandler) {
   // ── POST /webhook/:id/requests ───────────────────────────────────────────
 
   router.post('/:id/requests', auth, requireScope('webhook:read'), zv('json', ListRequestsSchema), async (c) => {
-    const { orgId } = c.get('org');
+    const { orgId, keyId } = c.get('org');
     const { id } = c.req.param();
     const { limit: perPage, page } = c.req.valid('json');
 
-    // Verify the bin belongs to this org
+    // Ownership check: the bin must belong to this API key specifically.
+    // For legacy bins that pre-date keyId (keyId is null), fall back to
+    // org-level ownership as a backward-compat measure.
     const [bin] = await db
       .select()
       .from(webhookBins)
-      .where(and(eq(webhookBins.id, id), eq(webhookBins.orgId, orgId)))
+      .where(eq(webhookBins.id, id))
       .limit(1);
 
     if (!bin) throw Errors.notFound('Webhook bin not found');
+
+    const ownedByKey = bin.keyId ? bin.keyId === keyId : bin.orgId === orgId;
+    if (!ownedByKey) throw Errors.notFound('Webhook bin not found');
 
     const offset = (page - 1) * perPage;
 
@@ -168,16 +175,20 @@ export function createWebhookBinRouter(db: Db, auth: MiddlewareHandler) {
   // ── DELETE /webhook/:id ──────────────────────────────────────────────────
 
   router.delete('/:id', auth, requireScope('webhook:write'), async (c) => {
-    const { orgId } = c.get('org');
+    const { orgId, keyId } = c.get('org');
     const { id } = c.req.param();
 
+    // Ownership check: same key-first logic as the requests endpoint.
     const [bin] = await db
-      .select({ id: webhookBins.id })
+      .select({ id: webhookBins.id, orgId: webhookBins.orgId, keyId: webhookBins.keyId })
       .from(webhookBins)
-      .where(and(eq(webhookBins.id, id), eq(webhookBins.orgId, orgId)))
+      .where(eq(webhookBins.id, id))
       .limit(1);
 
     if (!bin) throw Errors.notFound('Webhook bin not found');
+
+    const ownedByKey = bin.keyId ? bin.keyId === keyId : bin.orgId === orgId;
+    if (!ownedByKey) throw Errors.notFound('Webhook bin not found');
 
     // Cascade delete requests first (PGlite doesn't enforce FK cascade in all cases)
     await db.delete(webhookBinRequests).where(eq(webhookBinRequests.binId, id));

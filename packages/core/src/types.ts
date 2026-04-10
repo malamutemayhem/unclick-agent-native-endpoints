@@ -5,6 +5,8 @@ export interface OrgContext {
   scopes: string[];
   plan: Plan;
   keyId: string;
+  /** SHA-256 hex of the raw API key, used for tenant-level namespacing within an org */
+  keyHash: string;
 }
 
 export interface PaginationMeta {
