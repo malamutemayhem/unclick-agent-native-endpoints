@@ -7,7 +7,7 @@ const files = [
   {
     name: "CLAUDE.md",
     description:
-      "Drop this in your project root. Teaches your AI assistant everything about UnClick — tool names, API patterns, error handling, mobile standards, and when to stop and plan before coding.",
+      "Drop this in your project root. Teaches your AI assistant everything about UnClick: tool names, API patterns, error handling, mobile standards, and when to stop and plan before coding.",
     href: "/vibe-coding/CLAUDE.md",
     note: "Also works as .cursorrules",
   },
@@ -16,12 +16,12 @@ const files = [
     description:
       "Fill this in with your AI before writing any code. Five questions, five minutes. Prevents hours of building the wrong thing.",
     href: "/vibe-coding/PLANNING.md",
-    note: "Template — copy and rename per project",
+    note: "Template, copy and rename per project",
   },
   {
     name: "CHECKLIST.md",
     description:
-      "Run through this before submitting. Your AI can check most items automatically — just paste the list and ask.",
+      "Run through this before submitting. Your AI can check most items automatically. Just paste the list and ask.",
     href: "/vibe-coding/CHECKLIST.md",
     note: "Pre-submission quality gate",
   },
@@ -30,7 +30,7 @@ const files = [
     description:
       "The exact criteria our automated review uses. Read it once and you'll know what we're looking for before we look.",
     href: "/vibe-coding/REVIEW-RUBRIC.md",
-    note: "Public — no surprises at review time",
+    note: "Public, no surprises at review time",
   },
 ];
 
@@ -77,7 +77,7 @@ const VibeCoding = () => (
       <FadeIn delay={0.1}>
         <p className="mt-4 text-body max-w-2xl leading-relaxed">
           AI coding tools move fast. The apps they produce vary a lot. This framework gives your AI
-          assistant the right context upfront — so the gap between "vibe coded in an afternoon" and
+          assistant the right context upfront, so the gap between "vibe coded in an afternoon" and
           "actually good" disappears.
         </p>
         <p className="mt-3 text-body max-w-2xl leading-relaxed">
@@ -153,14 +153,14 @@ const VibeCoding = () => (
         <div className="mt-20 rounded-lg border border-border/40 bg-card/20 p-8">
           <h2 className="text-lg font-semibold text-heading">What happens at review</h2>
           <p className="mt-3 text-sm text-body leading-relaxed max-w-2xl">
-            Every submission goes through automated checks first — build errors, exposed secrets,
+            Every submission goes through automated checks first: build errors, exposed secrets,
             missing metadata, Lighthouse scores, mobile layout. If those pass, an AI scan checks
             whether the app does what it claims, handles errors, and uses UnClick tools correctly.
             Certified apps get a human review on top.
           </p>
           <p className="mt-3 text-sm text-body leading-relaxed max-w-2xl">
             The rubric is public. If your app fails, you get a specific report with what failed and
-            how to fix it. Resubmit as many times as you need — no penalty, no waiting period.
+            how to fix it. Resubmit as many times as you need. No penalty, no waiting period.
           </p>
           <a
             href="/vibe-coding/REVIEW-RUBRIC.md"

@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SQL MIGRATIONS — run in Supabase dashboard (SQL Editor)
+// SQL MIGRATIONS: run in Supabase dashboard (SQL Editor)
 //
 // ── Table 1: api_keys (existing) ─────────────────────────────────────────────
 // Run this SQL in your Supabase dashboard (SQL Editor) to set up the table:
@@ -29,10 +29,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // CREATE POLICY "Allow select by email" ON api_keys
 //   FOR SELECT USING (true);
 //
-// ── Table 2: user_credentials (new — OAuth credential broker) ────────────────
+// ── Table 2: user_credentials (new, OAuth credential broker) ─────────────────
 // Stores platform OAuth tokens and API keys encrypted with AES-256-GCM.
 // The user's UnClick API key is the encryption key (PBKDF2 derived).
-// Only the SHA-256 hash of the API key is stored — the key itself is never stored.
+// Only the SHA-256 hash of the API key is stored; the key itself is never stored.
 // Read/write is done server-side via SUPABASE_SERVICE_ROLE_KEY (not anon key).
 //
 // CREATE TABLE user_credentials (

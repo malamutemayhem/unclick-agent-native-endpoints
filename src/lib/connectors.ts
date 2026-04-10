@@ -1,6 +1,6 @@
 // ─── Frontend Connector Registry ──────────────────────────────────────────────
 // Mirrors packages/mcp-server/src/connectors/ for use in the React frontend.
-// Pure data — no Node.js dependencies. Safe to import in browser code.
+// Pure data, no Node.js dependencies. Safe to import in browser code.
 
 export type AuthType = "oauth2" | "api_key" | "bot_token";
 

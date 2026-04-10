@@ -42,7 +42,7 @@ function ApiKeysSection() {
         </p>
         <div className="mt-6 rounded-lg border border-dashed border-border/50 bg-muted/5 p-6 text-center">
           <span className="font-mono text-xs text-muted-foreground">
-            Key management coming soon — see{" "}
+            Key management coming soon. See{" "}
             <a href="/docs" className="text-primary hover:underline">
               /docs
             </a>{" "}

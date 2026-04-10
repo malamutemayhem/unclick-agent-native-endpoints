@@ -1793,7 +1793,7 @@ const tools: Tool[] = [
   },
   {
     name: "GDELT",
-    description: "Tap into the GDELT Project — real-time global news intelligence updated every 15 minutes. Search news from every country and language, analyse sentiment trends, and map where stories are breaking. No API key required.",
+    description: "Tap into the GDELT Project: real-time global news intelligence updated every 15 minutes. Search news from every country and language, analyse sentiment trends, and map where stories are breaking. No API key required.",
     endpoint: "/v1/gdelt",
     category: "Data",
     Icon: Globe2,
@@ -2281,7 +2281,7 @@ const categories: Category[] = [
   "Utility", "Text", "Data", "Media", "Network", "Security", "Storage", "Social", "Commerce",
 ];
 
-// Tools that require no API key — shown with a "No API key" badge
+// Tools that require no API key, shown with a "No API key" badge
 const NO_API_KEY_TOOLS = new Set([
   "Random", "UUID", "Cron", "Timestamp", "QR Code", "Units", "Weather", "Currency", "Notify",
   "Transform", "Regex", "Diff", "Encode", "Readability", "Markdown",

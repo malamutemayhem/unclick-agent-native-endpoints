@@ -47,7 +47,7 @@ const App = () => (
           <Route path="/developers/submit" element={<DeveloperSubmitPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          {/* Platform connector flow — /connect/:platform handles both connect + OAuth callback */}
+          {/* Platform connector flow: /connect/:platform handles both connect + OAuth callback */}
           <Route path="/connect/:platform" element={<ConnectPage />} />
           <Route path="/developers/vibe-coding" element={<VibeCodingPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
