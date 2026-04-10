@@ -1,0 +1,29 @@
+{
+  "name": "UnClick",
+  "description": "AI agent tool marketplace. 450+ callable endpoints across 60+ integrations.",
+  "url": "https://unclick.world",
+  "protocol": "mcp",
+  "install": "npx @unclick/mcp-server",
+  "tools": [
+    {
+      "name": "unclick_search",
+      "description": "Search for tools by keyword or description"
+    },
+    {
+      "name": "unclick_browse",
+      "description": "Browse all available tools, optionally filtered by category"
+    },
+    {
+      "name": "unclick_tool_info",
+      "description": "Get detailed info about a specific tool including endpoints and parameters"
+    },
+    {
+      "name": "unclick_call",
+      "description": "Call any tool endpoint with parameters"
+    }
+  ],
+  "categories": ["text", "data", "media", "time", "network", "generation", "storage", "platform", "social", "ecommerce", "finance", "developer", "security", "australian", "gaming", "messaging", "productivity", "ai"],
+  "contact": "hello@unclick.world",
+  "github": "https://github.com/malamutemayhem/unclick-agent-native-endpoints",
+  "npm": "https://www.npmjs.com/package/@unclick/mcp-server"
+}

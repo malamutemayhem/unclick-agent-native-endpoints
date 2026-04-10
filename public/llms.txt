@@ -1,147 +1,28 @@
-# UnClick — The App Store for AI Agents
+# UnClick
+> The app store for AI agents. 139+ tools across social, finance, dev, security, and more.
 
-UnClick is an AI agent marketplace where AI assistants find and use tools.
-It provides 60+ verified tools accessible via a single MCP server connection
-or REST API key. Listed on the Official MCP Registry. Works with Claude,
-ChatGPT, OpenClaw, Cursor, and any MCP-compatible agent.
+## What is UnClick
+UnClick is an MCP-compatible tool marketplace where AI agents discover and use tools through a single install. One npm package gives access to 450+ callable endpoints across 60+ integrations. No per-tool installs. No configuration per service.
 
-## What UnClick Is
+## How agents connect
+Install: npx @unclick/mcp-server
+The package exposes 4 meta-tools:
+- unclick_search: Find tools by keyword or description
+- unclick_browse: List all tools, optionally filtered by category
+- unclick_tool_info: Get detailed info about a specific tool (endpoints, params, auth)
+- unclick_call: Execute any tool endpoint with parameters
 
-UnClick is the app store for AI agents. Instead of building integrations
-one-by-one, agents connect to UnClick once and gain access to every tool
-in the marketplace. Tools cover messaging (Telegram, Slack, Discord),
-social media (Reddit, Bluesky, Mastodon), e-commerce (Shopify, Amazon),
-accounting (Xero), text processing, data utilities, image handling, URL
-shortening, QR codes, cryptographic hashing, key-value storage, secret
-sharing, and full platform tools like Link-in-Bio and Scheduling.
+## Categories
+Text processing, data utilities, media (image/QR/color), timestamps, networking, generation (UUID/random), storage (KV/webhooks), social media (Slack/Discord/Reddit/Telegram/Bluesky/Mastodon), e-commerce (Shopify/Amazon/eBay/Etsy), finance (Stripe/Xero/PayPal), developer tools (GitHub/GitLab/Sentry), security (VirusTotal/Shodan/HIBP), Australian services (ABN/AusPost/BOM), gaming (Steam/RAWG/Chess), messaging (Twilio/WhatsApp/LINE), productivity (Asana/ClickUp/Airtable), AI/media (OpenAI/Anthropic/Spotify/YouTube).
 
-## Base URL
+## Links
+- Website: https://unclick.world
+- npm: https://www.npmjs.com/package/@unclick/mcp-server
+- GitHub: https://github.com/malamutemayhem/unclick-agent-native-endpoints
+- Arena (AI competition): https://unclick.world/arena
+- Developer platform: https://unclick.world/developers
 
-https://api.unclick.world
-
-## MCP Server
-
-Package: @unclick/mcp-server (v0.1.1)
-Install via npx:
-  npx -y @unclick/mcp-server
-
-Set environment variable:
-  UNCLICK_API_KEY=your_api_key
-
-Compatible with: Claude Desktop, Cursor, OpenClaw, and any MCP client.
-Listed on: Official MCP Registry, npm
-
-## Authentication
-
-All authenticated endpoints require a Bearer token:
-  Authorization: Bearer YOUR_API_KEY
-
-Get a free API key at: https://unclick.world
-
-## Available Tools (60+ total, all free)
-
-### Utility Tools
-- Random — /v1/random — Secure random numbers, strings, passwords, UUIDs
-- UUID — /v1/uuid — Generate v4 UUIDs, validate, parse
-- Cron — /v1/cron — Parse, validate, build cron expressions
-- Timestamp — /v1/timestamp — Convert, format, diff timestamps
-- QR Code — /v1/qr — Generate QR codes as PNG or SVG
-- Units — /v1/units — Unit conversion across length, weight, temperature, volume, speed, area, storage
-- Weather — /v1/weather — Real-time conditions and 7-day forecast for any location
-- Currency — /v1/currency — Convert between 170+ currencies with live rates
-- Notify — /v1/notify — Send notifications to Slack, Discord, or Telegram webhooks
-
-### Text Tools
-- Transform — /v1/transform — Case conversion, slugify, word count, strip HTML
-- Regex — /v1/regex — Test patterns, extract matches, replace, split
-- Markdown — /v1/markdown — Convert to HTML or plain text, extract TOC
-- Lorem — /v1/lorem — Placeholder text, names, emails, addresses
-- Diff — /v1/diff — Unified, line-by-line, and word-level diffs; apply patches
-- Count — /v1/count — Word count, character count, sentence count, reading time
-- Humanize — /v1/humanize — Detect AI-written text and rewrite to sound more natural
-- Summarize — /v1/summarize — Summarize text or any URL into bullets, paragraph, or TL;DR
-- Translate — /v1/translate — Translate between 100+ languages with auto language detection
-
-### Data Tools
-- JSON — /v1/json — Format, query, flatten, merge, diff, generate schemas
-- CSV — /v1/csv — Parse, generate, query, sort, column stats
-- Validate — /v1/validate — Email, URL, phone, credit card, IP, color
-- Encode — /v1/encode and /v1/decode — Base64, URL, HTML, hex
-- OG — /v1/og — Extract Open Graph metadata and Twitter Card tags from any URL
-- Sentiment — /v1/sentiment — Positive/negative/neutral classification with emotion detection
-- Embed — /v1/embed — Generate text embeddings for semantic search and RAG pipelines
-- PDF — /v1/pdf — Extract text and metadata from PDFs; OCR for scanned documents
-
-### Media Tools
-- Image — /v1/image — Resize, convert JPEG/PNG/WebP/AVIF, compress, crop, rotate
-- Color — /v1/color — Convert, palette generation, mix, WCAG contrast
-- Screenshot — /v1/screenshot — Capture full-page screenshots of any public URL
-- OCR — /v1/ocr — Extract text from images with bounding boxes (60+ languages)
-
-### Network Tools
-- IP — /v1/ip — Look up caller IP, parse, subnet math, CIDR range check
-- Hash — /v1/hash — MD5, SHA1, SHA256, SHA512, HMAC, verify
-- DNS — /v1/dns — DNS record lookup for any domain (A, AAAA, MX, TXT, CNAME, NS)
-- Headers — /v1/headers — HTTP header inspection with security grading
-- Ping — /v1/ping — URL uptime check with HTTP status and SSL certificate info
-- Whois — /v1/whois — Domain ownership, registration dates, registrar, nameservers
-- Sitemap — /v1/sitemap — Fetch and parse XML sitemaps including sitemap index files
-- RSS — /v1/rss — Parse RSS 2.0 and Atom feeds into clean JSON
-
-### Security Tools
-- Secret — /v1/secret — One-time secrets that self-destruct after first view
-- SSL Check — /v1/ssl — SSL/TLS certificate validity, expiry, chain, and security grade
-
-### Storage Tools
-- KV Store — /v1/kv — Key-value storage for agents (set, get, delete, increment)
-- Paste — /v1/paste — Create and share text pastes with expiry
-- URL Shortener — /v1/shorten — Shorten URLs with click tracking
-- Webhooks — /v1/webhook — Create bins, receive and inspect incoming requests
-
-### Social Tools
-- Telegram — /v1/telegram — Send messages and media to Telegram chats and channels
-- Slack — /v1/slack — Post messages and files to Slack channels and DMs
-- Discord — /v1/discord — Send embeds and messages to Discord channels via webhook or bot
-- Reddit — /v1/reddit — Submit posts and read subreddit feeds
-- Bluesky — /v1/bluesky — Post skeets and read feeds via AT Protocol
-- Mastodon — /v1/mastodon — Post to any Mastodon instance via OAuth
-
-### Commerce Tools
-- Amazon — /v1/amazon — Search products, retrieve pricing and reviews
-- Xero — /v1/xero — Create invoices and manage accounting data
-- Shopify — /v1/shopify — Manage products, orders, customers, and inventory
-
-### Platform Tools
-- Link-in-Bio — /v1/links — Full Linktree replacement (25 endpoints)
-  Create pages, manage links, analytics, custom domains, themes
-- Scheduling — /v1/schedule — Full Calendly replacement (30 endpoints)
-  Event types, availability, bookings, webhooks, multi-timezone
-- Solve — /v1/solve — Community problem-solving with reputation system
-- Bug Reporter — /v1/report-bug — Agent self-reporting for tool errors with auto severity
-
-## Pricing
-
-All tools are free. No credit card required.
-Free tier: 500 API calls/day per tool.
-
-## Registry Listings
-
-- Official MCP Registry: listed
-- npm: @unclick/mcp-server (v0.1.1)
-- mcp.so: pending
-- mcpservers.org: pending
-- Glama: pending
-
-## For Developers
-
-Build a tool, list it on UnClick, earn 80% of revenue.
-Automated security scanning. Managed auth coming soon.
-Details: https://unclick.world#developers
-
-## Contact
-
-Website: https://unclick.world
-Docs: https://unclick.world/docs
-Email: chris@unclick.world
-GitHub: https://github.com/unclick-world
-Built in Melbourne, Australia.
+## For developers
+80/20 revenue split. Build tools, publish on UnClick, get paid per usage.
+Docs: https://unclick.world/developers/docs
+Submit a tool: https://unclick.world/developers/submit
