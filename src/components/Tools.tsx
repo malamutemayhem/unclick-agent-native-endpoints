@@ -22,6 +22,8 @@ import {
   Beer, Music2, Server, NotebookPen, Apple, Radio,
   Github, GitBranch, CheckSquare, Target, Kanban,
   Phone, Bell, Smartphone, Play, Headphones, Volume2, Cpu, Paintbrush, Bot, Brain,
+  CheckSquare2, CalendarRange, Pin, Video,
+  Swords, Newspaper, ArrowLeftRight,
 } from "lucide-react";
 
 // ToolCategory: the category label stored on each tool (used for card badges and icon colours)
@@ -1804,6 +1806,149 @@ const tools: Tool[] = [
     examplePrompt: "Ask your AI to analyse the tone of global news coverage about a company over the last week",
   },
 
+  // ── Productivity ───────────────────────────────────────────────────────────
+  {
+    name: "Asana",
+    description: "Read and write Asana tasks, projects, and workspaces via the Asana REST API. List workspaces, browse projects, create and update tasks, and search across a workspace by keyword. Built for agents managing to-do pipelines, syncing project status, or auto-creating tasks from external triggers.",
+    endpoint: "/v1/asana",
+    category: "Platform",
+    Icon: CheckSquare2,
+    capabilities: [
+      "List all workspaces and projects accessible to your Asana account",
+      "Fetch, create, and update tasks with name, notes, due date, and assignee",
+      "Search tasks by keyword within a workspace",
+      "Mark tasks complete and reassign them programmatically",
+    ],
+    examplePrompt: "Ask your AI to create an Asana task for each item in a meeting notes doc",
+  },
+  {
+    name: "Monday",
+    description: "Interact with Monday.com boards, groups, and items via the Monday.com GraphQL API. List boards, read item column values, create rows, and update column data. Built for agents syncing project state, auto-populating boards from other data sources, or reporting on sprint status.",
+    endpoint: "/v1/monday",
+    category: "Platform",
+    Icon: Kanban,
+    capabilities: [
+      "List boards and inspect their column structure and groups",
+      "Read all items on a board with their full column values",
+      "Create new items and set column values in one call",
+      "Update individual column values on existing items",
+    ],
+    examplePrompt: "Ask your AI to create a Monday board item for each new support ticket",
+  },
+  {
+    name: "Calendly",
+    description: "Read Calendly scheduling data via the Calendly v2 API. Fetch event types, list scheduled events, and retrieve invitee details. Built for agents that report on booking volume, sync Calendly events to other systems, or send personalised follow-ups based on meeting type.",
+    endpoint: "/v1/calendly",
+    category: "Platform",
+    Icon: CalendarRange,
+    capabilities: [
+      "Get your Calendly user profile and scheduling URL",
+      "List all event types with duration, slug, and booking link",
+      "Fetch upcoming and past scheduled events with start/end times",
+      "List invitees for any event with email, name, and cancel/reschedule URLs",
+    ],
+    examplePrompt: "Ask your AI to list all meetings scheduled this week and email a prep brief before each one",
+  },
+  // ── Social ─────────────────────────────────────────────────────────────────
+  {
+    name: "Pinterest",
+    description: "Read and write Pinterest boards and pins via the Pinterest API v5. List boards, browse pins, create new pins from image URLs, and search across your saved content. Built for agents managing content calendars, auto-pinning product images, and surfacing visual inspiration.",
+    endpoint: "/v1/pinterest",
+    category: "Social",
+    Icon: Pin,
+    capabilities: [
+      "List boards and get follower and pin counts",
+      "Browse pins on any board with image and link metadata",
+      "Create new pins from any public image URL with title, description, and destination link",
+      "Search saved pins by keyword",
+    ],
+    examplePrompt: "Ask your AI to pin all new blog post hero images to your content board automatically",
+  },
+  {
+    name: "TikTok",
+    description: "Read TikTok account data and video stats via the TikTok for Developers API. Fetch your profile, list your videos with view and like counts, and pull details on individual videos. Built for agents tracking content performance, reporting on reach, and identifying top-performing clips.",
+    endpoint: "/v1/tiktok",
+    category: "Social",
+    Icon: Video,
+    capabilities: [
+      "Get profile stats: follower count, following, likes, and video count",
+      "List your videos with view, like, comment, and share counts",
+      "Fetch details of a specific video by ID",
+      "Identify top-performing content to inform future posting strategy",
+    ],
+    examplePrompt: "Ask your AI to pull last month's TikTok videos and rank them by view count",
+  },
+  // ── Gaming ─────────────────────────────────────────────────────────────────
+  {
+    name: "Steam",
+    description: "Fetch Steam player profiles, owned games, achievements, and store details via the Steam Web API. Look up any public Steam profile, check what games someone owns, see achievement progress, and query the Steam store for pricing and metadata.",
+    endpoint: "/v1/steam",
+    category: "Platform",
+    Icon: Gamepad2,
+    capabilities: [
+      "Look up Steam profiles by Steam64 ID (persona name, country, current game)",
+      "List all owned games with playtime and last played date",
+      "Get achievement completion for any game in a user's library",
+      "Search the Steam store and fetch app details including Metacritic score and price",
+    ],
+    examplePrompt: "Ask your AI to find your most played Steam games and check achievement completion for each",
+  },
+  {
+    name: "IGDB",
+    description: "Query the IGDB games database (powered by Twitch) for comprehensive metadata on games, platforms, genres, and companies. Search by name, pull full game records with cover art and ratings, and browse platform and genre lists. No per-request rate limits on standard plans.",
+    endpoint: "/v1/igdb",
+    category: "Data",
+    Icon: Swords,
+    capabilities: [
+      "Search games by name with genre, platform, and release date data",
+      "Get full game records: summary, ratings, screenshots, developer, and publisher",
+      "List all gaming platforms with generation and abbreviation info",
+      "Look up game companies by name or ID with their developed and published titles",
+    ],
+    examplePrompt: "Ask your AI to find all RPGs released on PS5 in 2024 using the IGDB database",
+  },
+  {
+    name: "Speedrun.com",
+    description: "Browse games, leaderboards, and speedrun records via the Speedrun.com public API. No API key required. Search any game, fetch its category leaderboard with top times, list recent verified runs, and look up runner profiles. Built for agents building speedrunning tools or tracking personal bests.",
+    endpoint: "/v1/speedrun",
+    category: "Data",
+    Icon: Timer,
+    capabilities: [
+      "Search any game on Speedrun.com and get its category and level structure",
+      "Fetch category leaderboards with world record times and runner info",
+      "List recent runs filtered by game, category, user, or verification status",
+      "Look up runner profiles with signup date, location, and role",
+    ],
+    examplePrompt: "Ask your AI to fetch the current any% world record for a game and who holds it",
+  },
+  {
+    name: "NewsAPI",
+    description: "Fetch live news headlines and search archived articles via NewsAPI. Pull top headlines by country or category, run full-text searches across 80,000+ sources, and list available publishers by topic and region. Built for agents building news briefings, monitoring brand mentions, and tracking industry coverage.",
+    endpoint: "/v1/newsapi",
+    category: "Data",
+    Icon: Newspaper,
+    capabilities: [
+      "Get top headlines by country (us, au, gb) or category (technology, business, sports)",
+      "Search all articles by keyword with date range, language, and sort options",
+      "List news sources filtered by category, language, and country",
+      "Monitor brand or keyword coverage across global news publishers",
+    ],
+    examplePrompt: "Ask your AI to pull the top 5 technology headlines from the US this morning",
+  },
+  {
+    name: "ExchangeRate",
+    description: "Get live and historical currency exchange rates via ExchangeRate-API. Convert between 160+ currencies, fetch a full rate table for any base currency, and look up rates for a specific past date. The free tier returns live rates without an API key.",
+    endpoint: "/v1/exchangerate",
+    category: "Data",
+    Icon: ArrowLeftRight,
+    capabilities: [
+      "Get live exchange rates for 160+ currencies against any base currency",
+      "Convert an amount between any two currencies in one call",
+      "Fetch historical rates for any past date (API key required)",
+      "List all supported currency codes and their full names",
+    ],
+    examplePrompt: "Ask your AI to convert 500 USD to AUD, EUR, and JPY using today's rates",
+  },
   // ── Design ─────────────────────────────────────────────────────────────────
   {
     name: "Figma",
@@ -2121,6 +2266,12 @@ const PLATFORM_CONNECTOR_SLUGS: Record<string, string> = {
   "Stability AI":   "stability",
   "OpenAI":         "openai",
   "Anthropic":      "anthropic",
+  "Asana":          "asana",
+  "Monday":         "monday",
+  "Calendly":       "calendly",
+  "Pinterest":      "pinterest",
+  "TikTok":         "tiktok",
+  "Steam":          "steam",
 };
 
 const PLATFORM_CONNECTOR_NAMES = new Set(Object.keys(PLATFORM_CONNECTOR_SLUGS));

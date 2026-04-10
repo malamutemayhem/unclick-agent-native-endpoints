@@ -545,6 +545,51 @@ import { trelloAction } from "./trello-tool.js";
 import { sentryAction } from "./sentry-tool.js";
 import { postmanAction } from "./postman-tool.js";
 
+// ─── Productivity / Social / Misc ─────────────────────────────────────────────
+import {
+  listAsanaWorkspaces, listAsanaProjects, listAsanaTasks,
+  createAsanaTask, updateAsanaTask, getAsanaTask, searchAsanaTasks,
+} from "./asana-tool.js";
+
+import {
+  listMondayBoards, getMondayBoard, listMondayItems,
+  createMondayItem, updateMondayItem, searchMondayItems,
+} from "./monday-tool.js";
+
+import {
+  getCalendlyUser, listCalendlyEventTypes, listCalendlyEvents,
+  getCalendlyEvent, listCalendlyInvitees,
+} from "./calendly-tool.js";
+
+import {
+  listPinterestBoards, getPinterestBoard, listPinterestPins,
+  createPinterestPin, searchPinterestPins, getPinterestUser,
+} from "./pinterest-tool.js";
+
+import {
+  getTiktokUser, listTiktokVideos, getTiktokVideo,
+} from "./tiktok-tool.js";
+
+import {
+  getSteamPlayerSummaries, getSteamOwnedGames, getSteamAchievements,
+  getSteamAppDetails, searchSteamStore,
+} from "./steam-tool.js";
+
+import {
+  igdbSearchGames, igdbGetGame, igdbListPlatforms,
+  igdbListGenres, igdbGetCompany,
+} from "./igdb-tool.js";
+
+import {
+  speedrunSearchGames, speedrunGetGame, speedrunGetLeaderboard,
+  speedrunListRuns, speedrunGetUser,
+} from "./speedrun-tool.js";
+
+import {
+  exchangerateLatest, exchangerateConvert,
+  exchangerateHistorical, exchangerateCodes,
+} from "./exchangerate-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7887,6 +7932,627 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── asana-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "list_asana_workspaces",
+    description: "List all Asana workspaces accessible by the authenticated user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Asana Personal Access Token (or set ASANA_API_KEY)" },
+      },
+    },
+  },
+  {
+    name: "list_asana_projects",
+    description: "List projects in an Asana workspace.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        workspace_gid: { type: "string", description: "Workspace GID" },
+        archived: { type: "boolean", description: "Include archived projects (default false)" },
+        limit: { type: "number", description: "Max results (default 100)" },
+        api_key: { type: "string" },
+      },
+      required: ["workspace_gid"],
+    },
+  },
+  {
+    name: "list_asana_tasks",
+    description: "List tasks in an Asana project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project_gid: { type: "string", description: "Project GID" },
+        completed: { type: "boolean", description: "Filter to completed tasks only" },
+        limit: { type: "number" },
+        api_key: { type: "string" },
+      },
+      required: ["project_gid"],
+    },
+  },
+  {
+    name: "create_asana_task",
+    description: "Create a new task in Asana.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Task name" },
+        workspace_gid: { type: "string", description: "Workspace GID" },
+        notes: { type: "string", description: "Task description" },
+        due_on: { type: "string", description: "Due date (YYYY-MM-DD)" },
+        assignee: { type: "string", description: "Assignee GID or 'me'" },
+        projects: { type: "array", items: { type: "string" }, description: "Project GIDs to add the task to" },
+        api_key: { type: "string" },
+      },
+      required: ["name", "workspace_gid"],
+    },
+  },
+  {
+    name: "update_asana_task",
+    description: "Update an existing Asana task.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        task_gid: { type: "string", description: "Task GID" },
+        name: { type: "string" },
+        notes: { type: "string" },
+        completed: { type: "boolean" },
+        due_on: { type: "string", description: "YYYY-MM-DD or null to clear" },
+        assignee: { type: "string", description: "Assignee GID or null to unassign" },
+        api_key: { type: "string" },
+      },
+      required: ["task_gid"],
+    },
+  },
+  {
+    name: "get_asana_task",
+    description: "Get full details of a single Asana task.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        task_gid: { type: "string", description: "Task GID" },
+        api_key: { type: "string" },
+      },
+      required: ["task_gid"],
+    },
+  },
+  {
+    name: "search_asana_tasks",
+    description: "Search tasks by text within an Asana workspace.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        workspace_gid: { type: "string", description: "Workspace GID" },
+        text: { type: "string", description: "Search query" },
+        completed: { type: "boolean" },
+        limit: { type: "number" },
+        api_key: { type: "string" },
+      },
+      required: ["workspace_gid", "text"],
+    },
+  },
+
+  // ── monday-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "list_monday_boards",
+    description: "List boards in a Monday.com account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Max boards to return (default 25)" },
+        api_key: { type: "string", description: "Monday.com API token (or set MONDAY_API_KEY)" },
+      },
+    },
+  },
+  {
+    name: "get_monday_board",
+    description: "Get details of a specific Monday.com board including columns and groups.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID" },
+        api_key: { type: "string" },
+      },
+      required: ["board_id"],
+    },
+  },
+  {
+    name: "list_monday_items",
+    description: "List items (rows) in a Monday.com board.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID" },
+        limit: { type: "number", description: "Max items (default 50)" },
+        api_key: { type: "string" },
+      },
+      required: ["board_id"],
+    },
+  },
+  {
+    name: "create_monday_item",
+    description: "Create a new item in a Monday.com board.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID" },
+        item_name: { type: "string", description: "Item name" },
+        group_id: { type: "string", description: "Group ID to add the item to" },
+        column_values: { type: "object", description: "Column values as JSON object" },
+        api_key: { type: "string" },
+      },
+      required: ["board_id", "item_name"],
+    },
+  },
+  {
+    name: "update_monday_item",
+    description: "Update a column value on a Monday.com item.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string" },
+        item_id: { type: "string" },
+        column_id: { type: "string", description: "Column ID to update" },
+        value: { description: "New value (string or JSON)" },
+        api_key: { type: "string" },
+      },
+      required: ["board_id", "item_id", "column_id", "value"],
+    },
+  },
+  {
+    name: "search_monday_items",
+    description: "Search items by name in a Monday.com board.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string" },
+        query: { type: "string", description: "Search text" },
+        limit: { type: "number" },
+        api_key: { type: "string" },
+      },
+      required: ["board_id", "query"],
+    },
+  },
+
+  // ── calendly-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "get_calendly_user",
+    description: "Get the authenticated Calendly user profile.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Calendly Personal Access Token (or set CALENDLY_API_KEY)" },
+      },
+    },
+  },
+  {
+    name: "list_calendly_event_types",
+    description: "List event types for the authenticated Calendly user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        user_uri: { type: "string", description: "User URI (auto-resolved if omitted)" },
+        active: { type: "boolean", description: "Filter to active event types only" },
+        count: { type: "number" },
+        api_key: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "list_calendly_events",
+    description: "List scheduled events for the authenticated Calendly user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        user_uri: { type: "string", description: "User URI (auto-resolved if omitted)" },
+        status: { type: "string", description: "active or canceled" },
+        min_start_time: { type: "string", description: "ISO 8601 datetime" },
+        max_start_time: { type: "string", description: "ISO 8601 datetime" },
+        count: { type: "number" },
+        sort: { type: "string", description: "e.g. start_time:asc" },
+        api_key: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "get_calendly_event",
+    description: "Get details of a single Calendly scheduled event.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        event_uuid: { type: "string", description: "Event UUID" },
+        api_key: { type: "string" },
+      },
+      required: ["event_uuid"],
+    },
+  },
+  {
+    name: "list_calendly_invitees",
+    description: "List invitees for a Calendly scheduled event.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        event_uuid: { type: "string", description: "Event UUID" },
+        status: { type: "string", description: "active or canceled" },
+        count: { type: "number" },
+        api_key: { type: "string" },
+      },
+      required: ["event_uuid"],
+    },
+  },
+
+  // ── pinterest-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "list_pinterest_boards",
+    description: "List Pinterest boards for the authenticated user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        page_size: { type: "number" },
+        bookmark: { type: "string", description: "Pagination cursor" },
+        privacy: { type: "string", description: "PUBLIC, PROTECTED, or SECRET" },
+        access_token: { type: "string", description: "Pinterest access token (or set PINTEREST_ACCESS_TOKEN)" },
+      },
+    },
+  },
+  {
+    name: "get_pinterest_board",
+    description: "Get details of a specific Pinterest board.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID" },
+        access_token: { type: "string" },
+      },
+      required: ["board_id"],
+    },
+  },
+  {
+    name: "list_pinterest_pins",
+    description: "List pins on a Pinterest board.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID" },
+        page_size: { type: "number" },
+        bookmark: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["board_id"],
+    },
+  },
+  {
+    name: "create_pinterest_pin",
+    description: "Create a new Pinterest pin from an image URL.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        board_id: { type: "string", description: "Board ID to pin to" },
+        media_source_url: { type: "string", description: "Public image URL" },
+        title: { type: "string" },
+        description: { type: "string" },
+        link: { type: "string", description: "Destination URL when pin is clicked" },
+        board_section_id: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["board_id", "media_source_url"],
+    },
+  },
+  {
+    name: "search_pinterest_pins",
+    description: "Search Pinterest pins by keyword.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query" },
+        page_size: { type: "number" },
+        bookmark: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_pinterest_user",
+    description: "Get the authenticated Pinterest user account info.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string" },
+      },
+    },
+  },
+
+  // ── tiktok-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "get_tiktok_user",
+    description: "Get the authenticated TikTok user profile (follower count, video count, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "TikTok OAuth access token (or set TIKTOK_ACCESS_TOKEN)" },
+      },
+    },
+  },
+  {
+    name: "list_tiktok_videos",
+    description: "List videos for the authenticated TikTok user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        max_count: { type: "number", description: "Max videos to return (default 20, max 20)" },
+        cursor: { type: "number", description: "Pagination cursor" },
+        access_token: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "get_tiktok_video",
+    description: "Get details of a specific TikTok video by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        video_id: { type: "string", description: "TikTok video ID" },
+        access_token: { type: "string" },
+      },
+      required: ["video_id"],
+    },
+  },
+
+  // ── steam-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "get_steam_player_summaries",
+    description: "Get Steam player profile summaries for one or more Steam IDs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        steamids: { type: "string", description: "Comma-separated Steam64 IDs (up to 100)" },
+        api_key: { type: "string", description: "Steam Web API key (or set STEAM_API_KEY)" },
+      },
+      required: ["steamids"],
+    },
+  },
+  {
+    name: "get_steam_owned_games",
+    description: "Get games owned by a Steam user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        steamid: { type: "string", description: "Steam64 ID" },
+        include_appinfo: { type: "boolean", description: "Include game names (default true)" },
+        include_played_free_games: { type: "boolean" },
+        api_key: { type: "string" },
+      },
+      required: ["steamid"],
+    },
+  },
+  {
+    name: "get_steam_achievements",
+    description: "Get achievements for a Steam user in a specific game.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        steamid: { type: "string", description: "Steam64 ID" },
+        appid: { type: "string", description: "Steam App ID of the game" },
+        api_key: { type: "string" },
+      },
+      required: ["steamid", "appid"],
+    },
+  },
+  {
+    name: "get_steam_app_details",
+    description: "Get store details for a Steam app (game info, price, platforms, Metacritic score).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        appid: { type: "string", description: "Steam App ID" },
+        cc: { type: "string", description: "Country code for pricing (e.g. us, au)" },
+        l: { type: "string", description: "Language code (e.g. english)" },
+      },
+      required: ["appid"],
+    },
+  },
+  {
+    name: "search_steam_store",
+    description: "Search the Steam store for games by name.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        term: { type: "string", description: "Search term" },
+        cc: { type: "string", description: "Country code for pricing" },
+        l: { type: "string", description: "Language code" },
+      },
+      required: ["term"],
+    },
+  },
+
+  // ── igdb-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "igdb_search_games",
+    description: "Search the IGDB games database by name.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Game name to search for" },
+        limit: { type: "number", description: "Max results (default 10, max 50)" },
+        client_id: { type: "string", description: "Twitch/IGDB Client ID (or set IGDB_CLIENT_ID)" },
+        client_secret: { type: "string", description: "Twitch/IGDB Client Secret (or set IGDB_CLIENT_SECRET)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "igdb_get_game",
+    description: "Get full details of a game from IGDB by game ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        game_id: { type: "string", description: "IGDB game ID" },
+        client_id: { type: "string" },
+        client_secret: { type: "string" },
+      },
+      required: ["game_id"],
+    },
+  },
+  {
+    name: "igdb_list_platforms",
+    description: "List gaming platforms from IGDB.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Max results (default 30)" },
+        offset: { type: "number" },
+        client_id: { type: "string" },
+        client_secret: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "igdb_list_genres",
+    description: "List all game genres from IGDB.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        client_id: { type: "string" },
+        client_secret: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "igdb_get_company",
+    description: "Get a game company from IGDB by name or ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Company name to search for" },
+        company_id: { type: "string", description: "IGDB company ID (takes precedence over name)" },
+        client_id: { type: "string" },
+        client_secret: { type: "string" },
+      },
+    },
+  },
+
+  // ── speedrun-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "speedrun_search_games",
+    description: "Search for games on Speedrun.com by name. No API key required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Game name to search" },
+        max: { type: "number", description: "Max results" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "speedrun_get_game",
+    description: "Get details of a game on Speedrun.com including categories and levels.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        game_id: { type: "string", description: "Speedrun.com game ID or abbreviation" },
+      },
+      required: ["game_id"],
+    },
+  },
+  {
+    name: "speedrun_get_leaderboard",
+    description: "Get the leaderboard for a Speedrun.com game category.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        game_id: { type: "string", description: "Game ID" },
+        category_id: { type: "string", description: "Category ID" },
+        top: { type: "number", description: "Only return top N places" },
+        platform: { type: "string" },
+        emulators: { type: "boolean" },
+        video_only: { type: "boolean" },
+      },
+      required: ["game_id", "category_id"],
+    },
+  },
+  {
+    name: "speedrun_list_runs",
+    description: "List speedruns with optional filters for game, category, user, or status.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        game: { type: "string", description: "Game ID" },
+        category: { type: "string" },
+        user: { type: "string", description: "User ID" },
+        status: { type: "string", description: "new, verified, or rejected" },
+        orderby: { type: "string", description: "date, submitted, status, game, category, level, platform, region, emulated, or weblink" },
+        direction: { type: "string", description: "asc or desc" },
+        max: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "speedrun_get_user",
+    description: "Get a Speedrun.com user profile by ID or username.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        user_id: { type: "string", description: "User ID or username" },
+      },
+      required: ["user_id"],
+    },
+  },
+
+  // ── exchangerate-tool.ts ─────────────────────────────────────────────────────
+  {
+    name: "exchangerate_latest",
+    description: "Get latest currency exchange rates for a base currency. Works without API key using the free tier.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        base: { type: "string", description: "Base currency code (default USD)" },
+        api_key: { type: "string", description: "ExchangeRate-API key (or set EXCHANGERATE_API_KEY). Optional for latest rates." },
+      },
+    },
+  },
+  {
+    name: "exchangerate_convert",
+    description: "Convert an amount from one currency to another.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        from: { type: "string", description: "Source currency code (e.g. USD)" },
+        to: { type: "string", description: "Target currency code (e.g. EUR)" },
+        amount: { type: "number", description: "Amount to convert (default 1)" },
+        api_key: { type: "string", description: "Optional for conversion (uses latest rates if omitted)" },
+      },
+      required: ["from", "to"],
+    },
+  },
+  {
+    name: "exchangerate_historical",
+    description: "Get historical exchange rates for a specific date. Requires an API key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        base: { type: "string", description: "Base currency code (default USD)" },
+        year: { type: "string", description: "4-digit year" },
+        month: { type: "string", description: "Month number (1-12)" },
+        day: { type: "string", description: "Day number (1-31)" },
+        api_key: { type: "string", description: "ExchangeRate-API key (required)" },
+      },
+      required: ["year", "month", "day"],
+    },
+  },
+  {
+    name: "exchangerate_codes",
+    description: "List all supported currency codes and their names. Requires an API key.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "ExchangeRate-API key (required)" },
+      },
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8703,4 +9369,68 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   // anthropic-tool.ts
   anthropic_create_message:    (args) => anthropicCreateMessage(args),
   anthropic_list_models:       (args) => anthropicListModels(args),
+
+  // asana-tool.ts
+  list_asana_workspaces:   (args) => listAsanaWorkspaces(args),
+  list_asana_projects:     (args) => listAsanaProjects(args),
+  list_asana_tasks:        (args) => listAsanaTasks(args),
+  create_asana_task:       (args) => createAsanaTask(args),
+  update_asana_task:       (args) => updateAsanaTask(args),
+  get_asana_task:          (args) => getAsanaTask(args),
+  search_asana_tasks:      (args) => searchAsanaTasks(args),
+
+  // monday-tool.ts
+  list_monday_boards:      (args) => listMondayBoards(args),
+  get_monday_board:        (args) => getMondayBoard(args),
+  list_monday_items:       (args) => listMondayItems(args),
+  create_monday_item:      (args) => createMondayItem(args),
+  update_monday_item:      (args) => updateMondayItem(args),
+  search_monday_items:     (args) => searchMondayItems(args),
+
+  // calendly-tool.ts
+  get_calendly_user:       (args) => getCalendlyUser(args),
+  list_calendly_event_types:(args) => listCalendlyEventTypes(args),
+  list_calendly_events:    (args) => listCalendlyEvents(args),
+  get_calendly_event:      (args) => getCalendlyEvent(args),
+  list_calendly_invitees:  (args) => listCalendlyInvitees(args),
+
+  // pinterest-tool.ts
+  list_pinterest_boards:   (args) => listPinterestBoards(args),
+  get_pinterest_board:     (args) => getPinterestBoard(args),
+  list_pinterest_pins:     (args) => listPinterestPins(args),
+  create_pinterest_pin:    (args) => createPinterestPin(args),
+  search_pinterest_pins:   (args) => searchPinterestPins(args),
+  get_pinterest_user:      (args) => getPinterestUser(args),
+
+  // tiktok-tool.ts
+  get_tiktok_user:         (args) => getTiktokUser(args),
+  list_tiktok_videos:      (args) => listTiktokVideos(args),
+  get_tiktok_video:        (args) => getTiktokVideo(args),
+
+  // steam-tool.ts
+  get_steam_player_summaries:(args) => getSteamPlayerSummaries(args),
+  get_steam_owned_games:   (args) => getSteamOwnedGames(args),
+  get_steam_achievements:  (args) => getSteamAchievements(args),
+  get_steam_app_details:   (args) => getSteamAppDetails(args),
+  search_steam_store:      (args) => searchSteamStore(args),
+
+  // igdb-tool.ts
+  igdb_search_games:       (args) => igdbSearchGames(args),
+  igdb_get_game:           (args) => igdbGetGame(args),
+  igdb_list_platforms:     (args) => igdbListPlatforms(args),
+  igdb_list_genres:        (args) => igdbListGenres(args),
+  igdb_get_company:        (args) => igdbGetCompany(args),
+
+  // speedrun-tool.ts
+  speedrun_search_games:   (args) => speedrunSearchGames(args),
+  speedrun_get_game:       (args) => speedrunGetGame(args),
+  speedrun_get_leaderboard:(args) => speedrunGetLeaderboard(args),
+  speedrun_list_runs:      (args) => speedrunListRuns(args),
+  speedrun_get_user:       (args) => speedrunGetUser(args),
+
+  // exchangerate-tool.ts
+  exchangerate_latest:     (args) => exchangerateLatest(args),
+  exchangerate_convert:    (args) => exchangerateConvert(args),
+  exchangerate_historical: (args) => exchangerateHistorical(args),
+  exchangerate_codes:      (args) => exchangerateCodes(args),
 };
