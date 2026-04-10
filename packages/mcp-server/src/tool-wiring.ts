@@ -560,6 +560,54 @@ import { vaultAction } from "./vault-tool.js";
 import { qcRunChecklist, qcCheckApi, qcCopyAudit } from "./qc-tool.js";
 import { keychainAction } from "./keychain-tool.js";
 
+// ─── Marketing / Communication / Data ─────────────────────────────────────────
+import {
+  mailchimpListAudiences, mailchimpListCampaigns, mailchimpGetCampaign,
+  mailchimpCreateCampaign, mailchimpListMembers, mailchimpAddMember, mailchimpSearchMembers,
+} from "./mailchimp-tool.js";
+
+import {
+  sendgridSendEmail, sendgridListTemplates, sendgridGetTemplate,
+  sendgridListContacts, sendgridAddContact, sendgridGetStats,
+} from "./sendgrid-tool.js";
+
+import {
+  mapboxGeocodeForward, mapboxGeocodeReverse, mapboxGetDirections,
+  mapboxGetStaticMap, mapboxListTilesets,
+} from "./mapbox-tool.js";
+
+import {
+  algoliaSearch, algoliaGetObject, algoliaListIndices, algoliaBrowseIndex,
+} from "./algolia-tool.js";
+
+import {
+  pineconeListIndexes, pineconeDescribeIndex, pineconeQueryVectors,
+  pineconeUpsertVectors, pineconeDeleteVectors,
+} from "./pinecone-tool.js";
+
+import {
+  mixpanelTrackEvent, mixpanelGetEvents, mixpanelGetFunnels,
+  mixpanelGetRetention, mixpanelExportData,
+} from "./mixpanel-tool.js";
+
+import {
+  datadogListMonitors, datadogGetMonitor, datadogCreateMonitor,
+  datadogListDashboards, datadogQueryMetrics, datadogListEvents,
+} from "./datadog-tool.js";
+
+import {
+  deeplTranslateText, deeplGetUsage, deeplListLanguages, deeplTranslateDocument,
+} from "./deepl-tool.js";
+
+import {
+  assemblyaiTranscribe, assemblyaiGetTranscript, assemblyaiListTranscripts,
+  assemblyaiGetSentences, assemblyaiGetParagraphs, assemblyaiSummarize,
+} from "./assemblyai-tool.js";
+
+import {
+  groqChatCompletion, groqListModels,
+} from "./groq-tool.js";
+
 // ─── Developer / Productivity ─────────────────────────────────────────────────
 import { githubAction } from "./github-tool.js";
 import { gitlabAction } from "./gitlab-tool.js";
@@ -7928,6 +7976,774 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── mailchimp-tool.ts ─────────────────────────────────────────────────────────
+  {
+    name: "mailchimp_list_audiences",
+    description: "List all Mailchimp audiences (lists) in the account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key (format: key-dc e.g. abc123-us21)" },
+        count: { type: "number", description: "Number of audiences to return (default: 10, max: 1000)" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "mailchimp_list_campaigns",
+    description: "List Mailchimp email campaigns, optionally filtered by status or audience.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        count: { type: "number", description: "Number of campaigns (default: 10)" },
+        status: { type: "string", enum: ["save", "paused", "schedule", "sending", "sent"], description: "Filter by campaign status" },
+        list_id: { type: "string", description: "Filter by audience ID" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "mailchimp_get_campaign",
+    description: "Get details for a specific Mailchimp campaign by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        campaign_id: { type: "string", description: "Campaign ID" },
+      },
+      required: ["api_key", "campaign_id"],
+    },
+  },
+  {
+    name: "mailchimp_create_campaign",
+    description: "Create a new Mailchimp email campaign.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        list_id: { type: "string", description: "Audience (list) ID to send to" },
+        subject_line: { type: "string", description: "Email subject line" },
+        type: { type: "string", enum: ["regular", "plaintext", "absplit", "rss", "variate"], description: "Campaign type (default: regular)" },
+        from_name: { type: "string", description: "Sender display name" },
+        reply_to: { type: "string", description: "Reply-to email address" },
+      },
+      required: ["api_key", "list_id", "subject_line"],
+    },
+  },
+  {
+    name: "mailchimp_list_members",
+    description: "List members (subscribers) in a Mailchimp audience.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        list_id: { type: "string", description: "Audience ID" },
+        count: { type: "number", description: "Number of members to return (default: 10)" },
+        status: { type: "string", enum: ["subscribed", "unsubscribed", "cleaned", "pending", "transactional"], description: "Filter by subscription status" },
+      },
+      required: ["api_key", "list_id"],
+    },
+  },
+  {
+    name: "mailchimp_add_member",
+    description: "Add or update a subscriber in a Mailchimp audience.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        list_id: { type: "string", description: "Audience ID" },
+        email: { type: "string", description: "Subscriber email address" },
+        status: { type: "string", enum: ["subscribed", "unsubscribed", "cleaned", "pending"], description: "Subscription status (default: subscribed)" },
+        first_name: { type: "string", description: "Subscriber first name" },
+        last_name: { type: "string", description: "Subscriber last name" },
+      },
+      required: ["api_key", "list_id", "email"],
+    },
+  },
+  {
+    name: "mailchimp_search_members",
+    description: "Search for subscribers across all or a specific Mailchimp audience.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Mailchimp API key" },
+        query: { type: "string", description: "Search query (email address, name, etc.)" },
+        list_id: { type: "string", description: "Limit search to a specific audience ID" },
+      },
+      required: ["api_key", "query"],
+    },
+  },
+
+  // ── sendgrid-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "sendgrid_send_email",
+    description: "Send a transactional email via SendGrid.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key from app.sendgrid.com" },
+        to: { type: "string", description: "Recipient email address" },
+        from: { type: "string", description: "Sender email address (must be verified in SendGrid)" },
+        subject: { type: "string", description: "Email subject line" },
+        text: { type: "string", description: "Plain text content" },
+        html: { type: "string", description: "HTML content" },
+        to_name: { type: "string", description: "Recipient display name" },
+        from_name: { type: "string", description: "Sender display name" },
+        reply_to: { type: "string", description: "Reply-to email address" },
+        template_id: { type: "string", description: "SendGrid dynamic template ID" },
+      },
+      required: ["api_key", "to", "from", "subject"],
+    },
+  },
+  {
+    name: "sendgrid_list_templates",
+    description: "List dynamic email templates in SendGrid.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key" },
+        page_size: { type: "number", description: "Number of templates (default: 10, max: 200)" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "sendgrid_get_template",
+    description: "Get a specific SendGrid email template by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key" },
+        template_id: { type: "string", description: "Template ID" },
+      },
+      required: ["api_key", "template_id"],
+    },
+  },
+  {
+    name: "sendgrid_list_contacts",
+    description: "List all marketing contacts in SendGrid.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "sendgrid_add_contact",
+    description: "Add or update a marketing contact in SendGrid.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key" },
+        email: { type: "string", description: "Contact email address" },
+        first_name: { type: "string", description: "First name" },
+        last_name: { type: "string", description: "Last name" },
+        phone_number: { type: "string", description: "Phone number" },
+        list_ids: { type: "array", items: { type: "string" }, description: "List IDs to add the contact to" },
+      },
+      required: ["api_key", "email"],
+    },
+  },
+  {
+    name: "sendgrid_get_stats",
+    description: "Get SendGrid email sending statistics for a date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "SendGrid API key" },
+        start_date: { type: "string", description: "Start date (YYYY-MM-DD). Defaults to 7 days ago." },
+        end_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+        aggregated_by: { type: "string", enum: ["day", "week", "month"], description: "Aggregation period (default: day)" },
+      },
+      required: ["api_key"],
+    },
+  },
+
+  // ── mapbox-tool.ts ────────────────────────────────────────────────────────────
+  {
+    name: "mapbox_geocode_forward",
+    description: "Convert an address or place name to coordinates using Mapbox.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "Mapbox access token from account.mapbox.com" },
+        query: { type: "string", description: "Address or place name to geocode" },
+        country: { type: "string", description: "Limit results to a country (ISO 3166 alpha-2, e.g. US)" },
+        language: { type: "string", description: "Language for results (e.g. en, fr)" },
+        limit: { type: "number", description: "Max results (1-10, default: 5)" },
+        proximity: { type: "string", description: "Bias results near coordinates (lng,lat)" },
+        types: { type: "string", description: "Filter by feature types (e.g. address,place,poi)" },
+      },
+      required: ["access_token", "query"],
+    },
+  },
+  {
+    name: "mapbox_geocode_reverse",
+    description: "Convert coordinates to a place name or address using Mapbox reverse geocoding.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "Mapbox access token" },
+        longitude: { type: "number", description: "Longitude" },
+        latitude: { type: "number", description: "Latitude" },
+        language: { type: "string", description: "Language for results" },
+        types: { type: "string", description: "Filter by feature types" },
+      },
+      required: ["access_token", "longitude", "latitude"],
+    },
+  },
+  {
+    name: "mapbox_get_directions",
+    description: "Get turn-by-turn directions between two or more locations using Mapbox.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "Mapbox access token" },
+        coordinates: { type: "string", description: "Semicolon-separated lng,lat pairs (e.g. -122.4194,37.7749;-118.2437,34.0522)" },
+        profile: { type: "string", enum: ["mapbox/driving", "mapbox/walking", "mapbox/cycling", "mapbox/driving-traffic"], description: "Routing profile (default: mapbox/driving)" },
+        alternatives: { type: "boolean", description: "Return alternative routes" },
+        steps: { type: "boolean", description: "Include turn-by-turn steps" },
+        overview: { type: "string", enum: ["full", "simplified", "false"], description: "Route overview geometry detail" },
+        language: { type: "string", description: "Language for instructions" },
+      },
+      required: ["access_token", "coordinates"],
+    },
+  },
+  {
+    name: "mapbox_get_static_map",
+    description: "Generate a static map image URL for a given location using Mapbox.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "Mapbox access token" },
+        longitude: { type: "number", description: "Center longitude" },
+        latitude: { type: "number", description: "Center latitude" },
+        zoom: { type: "number", description: "Zoom level (0-22, default: 12)" },
+        width: { type: "number", description: "Image width in px (max: 1280, default: 600)" },
+        height: { type: "number", description: "Image height in px (max: 1280, default: 400)" },
+        style: { type: "string", description: "Map style (default: mapbox/streets-v11)" },
+        retina: { type: "boolean", description: "Return @2x high-DPI image" },
+      },
+      required: ["access_token", "longitude", "latitude"],
+    },
+  },
+  {
+    name: "mapbox_list_tilesets",
+    description: "List Mapbox tilesets owned by a user.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        access_token: { type: "string", description: "Mapbox access token" },
+        username: { type: "string", description: "Mapbox username" },
+        limit: { type: "number", description: "Max tilesets to return (max: 500)" },
+        type: { type: "string", enum: ["raster", "vector"], description: "Filter by tileset type" },
+      },
+      required: ["access_token", "username"],
+    },
+  },
+
+  // ── algolia-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "algolia_search",
+    description: "Search an Algolia index for records matching a query.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_id: { type: "string", description: "Algolia Application ID" },
+        api_key: { type: "string", description: "Algolia API Key (Search or Admin)" },
+        index: { type: "string", description: "Index name to search" },
+        query: { type: "string", description: "Search query text" },
+        filters: { type: "string", description: "Algolia filter expression (e.g. category:electronics)" },
+        hits_per_page: { type: "number", description: "Results per page (default: 20)" },
+        page: { type: "number", description: "Page number (0-indexed)" },
+        attributes_to_retrieve: { type: "array", items: { type: "string" }, description: "Attributes to include in results" },
+      },
+      required: ["app_id", "api_key", "index"],
+    },
+  },
+  {
+    name: "algolia_get_object",
+    description: "Retrieve a single record from an Algolia index by its objectID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_id: { type: "string", description: "Algolia Application ID" },
+        api_key: { type: "string", description: "Algolia API Key" },
+        index: { type: "string", description: "Index name" },
+        object_id: { type: "string", description: "Record objectID" },
+      },
+      required: ["app_id", "api_key", "index", "object_id"],
+    },
+  },
+  {
+    name: "algolia_list_indices",
+    description: "List all Algolia indices in the application.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_id: { type: "string", description: "Algolia Application ID" },
+        api_key: { type: "string", description: "Algolia Admin API Key" },
+      },
+      required: ["app_id", "api_key"],
+    },
+  },
+  {
+    name: "algolia_browse_index",
+    description: "Browse all records in an Algolia index (paginated cursor-based).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_id: { type: "string", description: "Algolia Application ID" },
+        api_key: { type: "string", description: "Algolia Admin API Key" },
+        index: { type: "string", description: "Index name" },
+        filters: { type: "string", description: "Filter expression" },
+        hits_per_page: { type: "number", description: "Records per page" },
+        cursor: { type: "string", description: "Pagination cursor from previous response" },
+        attributes_to_retrieve: { type: "array", items: { type: "string" }, description: "Attributes to include" },
+      },
+      required: ["app_id", "api_key", "index"],
+    },
+  },
+
+  // ── pinecone-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "pinecone_list_indexes",
+    description: "List all Pinecone vector indexes in the project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pinecone API key from app.pinecone.io" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "pinecone_describe_index",
+    description: "Get details (dimension, metric, status, host) for a Pinecone index.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pinecone API key" },
+        index_name: { type: "string", description: "Index name" },
+      },
+      required: ["api_key", "index_name"],
+    },
+  },
+  {
+    name: "pinecone_query_vectors",
+    description: "Query a Pinecone index for nearest-neighbor vectors.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pinecone API key" },
+        index_host: { type: "string", description: "Index host URL from describe_index (e.g. https://my-index-xxx.svc.pinecone.io)" },
+        vector: { type: "array", items: { type: "number" }, description: "Query vector (array of floats matching index dimension)" },
+        top_k: { type: "number", description: "Number of nearest neighbors to return (default: 10)" },
+        namespace: { type: "string", description: "Namespace to query" },
+        include_metadata: { type: "boolean", description: "Include metadata in results (default: true)" },
+        include_values: { type: "boolean", description: "Include vector values in results" },
+        filter: { type: "object", description: "Metadata filter object" },
+      },
+      required: ["api_key", "index_host", "vector"],
+    },
+  },
+  {
+    name: "pinecone_upsert_vectors",
+    description: "Upsert (insert or update) vectors into a Pinecone index.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pinecone API key" },
+        index_host: { type: "string", description: "Index host URL from describe_index" },
+        vectors: { type: "array", description: "Array of {id, values, metadata?} objects to upsert", items: { type: "object" } },
+        namespace: { type: "string", description: "Namespace to write to" },
+      },
+      required: ["api_key", "index_host", "vectors"],
+    },
+  },
+  {
+    name: "pinecone_delete_vectors",
+    description: "Delete vectors from a Pinecone index by ID or filter.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Pinecone API key" },
+        index_host: { type: "string", description: "Index host URL from describe_index" },
+        ids: { type: "array", items: { type: "string" }, description: "Array of vector IDs to delete" },
+        delete_all: { type: "boolean", description: "Delete all vectors in the namespace" },
+        namespace: { type: "string", description: "Namespace to delete from" },
+        filter: { type: "object", description: "Metadata filter - delete matching vectors" },
+      },
+      required: ["api_key", "index_host"],
+    },
+  },
+
+  // ── mixpanel-tool.ts ──────────────────────────────────────────────────────────
+  {
+    name: "mixpanel_track_event",
+    description: "Track a custom event in Mixpanel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        service_account_username: { type: "string", description: "Mixpanel Service Account username" },
+        service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
+        project_id: { type: "string", description: "Mixpanel project ID" },
+        token: { type: "string", description: "Mixpanel project token (for ingestion)" },
+        event: { type: "string", description: "Event name" },
+        distinct_id: { type: "string", description: "User distinct ID (default: anonymous)" },
+        properties: { type: "object", description: "Additional event properties" },
+      },
+      required: ["service_account_username", "service_account_secret", "project_id", "token", "event"],
+    },
+  },
+  {
+    name: "mixpanel_get_events",
+    description: "Get Mixpanel event analytics data for a date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        service_account_username: { type: "string", description: "Mixpanel Service Account username" },
+        service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
+        project_id: { type: "string", description: "Mixpanel project ID" },
+        from_date: { type: "string", description: "Start date (YYYY-MM-DD, default: 7 days ago)" },
+        to_date: { type: "string", description: "End date (YYYY-MM-DD, default: today)" },
+        event: { type: "array", items: { type: "string" }, description: "Event names to filter by" },
+        unit: { type: "string", enum: ["minute", "hour", "day", "week", "month"], description: "Time unit (default: day)" },
+        type: { type: "string", enum: ["general", "unique", "average"], description: "Aggregation type (default: general)" },
+      },
+      required: ["service_account_username", "service_account_secret", "project_id"],
+    },
+  },
+  {
+    name: "mixpanel_get_funnels",
+    description: "Get funnel conversion data from Mixpanel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        service_account_username: { type: "string", description: "Mixpanel Service Account username" },
+        service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
+        project_id: { type: "string", description: "Mixpanel project ID" },
+        funnel_id: { type: "string", description: "Funnel ID (find in Mixpanel UI)" },
+        from_date: { type: "string", description: "Start date (YYYY-MM-DD, default: 30 days ago)" },
+        to_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+        unit: { type: "string", enum: ["day", "week", "month"], description: "Time unit" },
+      },
+      required: ["service_account_username", "service_account_secret", "project_id", "funnel_id"],
+    },
+  },
+  {
+    name: "mixpanel_get_retention",
+    description: "Get user retention analytics from Mixpanel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        service_account_username: { type: "string", description: "Mixpanel Service Account username" },
+        service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
+        project_id: { type: "string", description: "Mixpanel project ID" },
+        from_date: { type: "string", description: "Start date (YYYY-MM-DD, default: 30 days ago)" },
+        to_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+        born_event: { type: "string", description: "Event that defines user acquisition" },
+        event: { type: "string", description: "Retention event to measure" },
+        retention_type: { type: "string", enum: ["birth", "compactness"], description: "Retention type (default: birth)" },
+        unit: { type: "string", enum: ["day", "week", "month"], description: "Time unit (default: day)" },
+      },
+      required: ["service_account_username", "service_account_secret", "project_id"],
+    },
+  },
+  {
+    name: "mixpanel_export_data",
+    description: "Export raw Mixpanel event data for a date range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        service_account_username: { type: "string", description: "Mixpanel Service Account username" },
+        service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
+        project_id: { type: "string", description: "Mixpanel project ID" },
+        from_date: { type: "string", description: "Start date (YYYY-MM-DD, default: yesterday)" },
+        to_date: { type: "string", description: "End date (YYYY-MM-DD, default: today)" },
+        event: { type: "array", items: { type: "string" }, description: "Filter by event names" },
+        where: { type: "string", description: "Filter expression" },
+        limit: { type: "number", description: "Max events to return" },
+      },
+      required: ["service_account_username", "service_account_secret", "project_id"],
+    },
+  },
+
+  // ── datadog-tool.ts ───────────────────────────────────────────────────────────
+  {
+    name: "datadog_list_monitors",
+    description: "List Datadog monitors (alerts) with optional name or tag filters.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key (DD-API-KEY)" },
+        app_key: { type: "string", description: "Datadog Application key (DD-APPLICATION-KEY)" },
+        name: { type: "string", description: "Filter monitors by name" },
+        tags: { type: "string", description: "Comma-separated monitor tags to filter by" },
+        page: { type: "number", description: "Page number (0-indexed)" },
+        page_size: { type: "number", description: "Monitors per page (max: 1000)" },
+      },
+      required: ["api_key", "app_key"],
+    },
+  },
+  {
+    name: "datadog_get_monitor",
+    description: "Get details for a specific Datadog monitor.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key" },
+        app_key: { type: "string", description: "Datadog Application key" },
+        monitor_id: { type: "string", description: "Monitor ID" },
+      },
+      required: ["api_key", "app_key", "monitor_id"],
+    },
+  },
+  {
+    name: "datadog_create_monitor",
+    description: "Create a new Datadog monitor (alert).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key" },
+        app_key: { type: "string", description: "Datadog Application key" },
+        name: { type: "string", description: "Monitor name" },
+        type: { type: "string", description: "Monitor type (e.g. metric alert, service check, event alert)" },
+        query: { type: "string", description: "Monitor query expression" },
+        message: { type: "string", description: "Notification message" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags to attach to the monitor" },
+        priority: { type: "number", minimum: 1, maximum: 5, description: "Monitor priority (1-5)" },
+      },
+      required: ["api_key", "app_key", "name", "query"],
+    },
+  },
+  {
+    name: "datadog_list_dashboards",
+    description: "List Datadog dashboards.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key" },
+        app_key: { type: "string", description: "Datadog Application key" },
+        filter_shared: { type: "boolean", description: "Filter to shared dashboards only" },
+      },
+      required: ["api_key", "app_key"],
+    },
+  },
+  {
+    name: "datadog_query_metrics",
+    description: "Query Datadog metrics time-series data.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key" },
+        app_key: { type: "string", description: "Datadog Application key" },
+        query: { type: "string", description: "Datadog metric query (e.g. avg:system.cpu.user{*})" },
+        from: { type: "number", description: "Start time as Unix timestamp (default: 1 hour ago)" },
+        to: { type: "number", description: "End time as Unix timestamp (default: now)" },
+      },
+      required: ["api_key", "app_key", "query"],
+    },
+  },
+  {
+    name: "datadog_list_events",
+    description: "List Datadog events stream for a time range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Datadog API key" },
+        app_key: { type: "string", description: "Datadog Application key" },
+        start: { type: "number", description: "Start time as Unix timestamp (default: 1 hour ago)" },
+        end: { type: "number", description: "End time as Unix timestamp (default: now)" },
+        priority: { type: "string", enum: ["normal", "low"], description: "Filter by event priority" },
+        sources: { type: "string", description: "Comma-separated event sources" },
+        tags: { type: "string", description: "Comma-separated tags to filter events" },
+      },
+      required: ["api_key", "app_key"],
+    },
+  },
+
+  // ── deepl-tool.ts ─────────────────────────────────────────────────────────────
+  {
+    name: "deepl_translate_text",
+    description: "Translate text into another language using DeepL's neural translation engine.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        auth_key: { type: "string", description: "DeepL Auth Key from deepl.com. Free tier keys end with :fx." },
+        text: { description: "Text or array of texts to translate (max 50 texts per call)", oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
+        target_lang: { type: "string", description: "Target language code (e.g. EN-US, EN-GB, DE, FR, JA, ZH, ES)" },
+        source_lang: { type: "string", description: "Source language code (auto-detected if omitted)" },
+        formality: { type: "string", enum: ["default", "more", "less", "prefer_more", "prefer_less"], description: "Formality level (supported in some languages)" },
+        preserve_formatting: { type: "boolean", description: "Preserve original formatting" },
+        tag_handling: { type: "string", enum: ["xml", "html"], description: "Enable tag handling" },
+      },
+      required: ["auth_key", "text", "target_lang"],
+    },
+  },
+  {
+    name: "deepl_get_usage",
+    description: "Get DeepL API usage and quota information for the current billing period.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        auth_key: { type: "string", description: "DeepL Auth Key" },
+      },
+      required: ["auth_key"],
+    },
+  },
+  {
+    name: "deepl_list_languages",
+    description: "List all languages supported by DeepL for translation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        auth_key: { type: "string", description: "DeepL Auth Key" },
+        type: { type: "string", enum: ["source", "target"], description: "Language direction (default: target)" },
+      },
+      required: ["auth_key"],
+    },
+  },
+  {
+    name: "deepl_translate_document",
+    description: "Submit a document (PDF, Word, PowerPoint) for translation via DeepL.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        auth_key: { type: "string", description: "DeepL Auth Key" },
+        document_url: { type: "string", description: "Publicly accessible URL of the document to translate" },
+        target_lang: { type: "string", description: "Target language code (e.g. DE, FR, JA)" },
+        source_lang: { type: "string", description: "Source language code (auto-detected if omitted)" },
+        filename: { type: "string", description: "Filename with extension (e.g. report.pdf)" },
+        formality: { type: "string", enum: ["default", "more", "less"], description: "Formality level" },
+      },
+      required: ["auth_key", "document_url", "target_lang"],
+    },
+  },
+
+  // ── assemblyai-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "assemblyai_transcribe",
+    description: "Submit an audio or video file for transcription with AssemblyAI.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key from assemblyai.com/dashboard" },
+        audio_url: { type: "string", description: "Publicly accessible URL of the audio/video file" },
+        language_code: { type: "string", description: "Language code (e.g. en, es, fr, de). Omit for auto-detection." },
+        language_detection: { type: "boolean", description: "Enable automatic language detection" },
+        speaker_labels: { type: "boolean", description: "Enable speaker diarization" },
+        auto_chapters: { type: "boolean", description: "Generate auto chapters" },
+        summarization: { type: "boolean", description: "Generate a summary (also set summary_type)" },
+        summary_type: { type: "string", enum: ["bullets", "bullets_verbose", "gist", "headline", "paragraph"], description: "Summary format" },
+        sentiment_analysis: { type: "boolean", description: "Enable sentiment analysis per sentence" },
+        entity_detection: { type: "boolean", description: "Enable named entity detection" },
+        punctuate: { type: "boolean", description: "Add punctuation (default: true)" },
+        format_text: { type: "boolean", description: "Format text with capitalisation" },
+        webhook_url: { type: "string", description: "URL to POST transcript results to when complete" },
+      },
+      required: ["api_key", "audio_url"],
+    },
+  },
+  {
+    name: "assemblyai_get_transcript",
+    description: "Get the status and results of an AssemblyAI transcription job.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key" },
+        transcript_id: { type: "string", description: "Transcript ID returned by assemblyai_transcribe" },
+      },
+      required: ["api_key", "transcript_id"],
+    },
+  },
+  {
+    name: "assemblyai_list_transcripts",
+    description: "List recent AssemblyAI transcripts for the account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key" },
+        limit: { type: "number", description: "Number of transcripts to return (default: 10, max: 200)" },
+        status: { type: "string", enum: ["queued", "processing", "completed", "error"], description: "Filter by status" },
+        after_id: { type: "string", description: "Cursor: return transcripts after this ID" },
+        before_id: { type: "string", description: "Cursor: return transcripts before this ID" },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "assemblyai_get_sentences",
+    description: "Get a completed transcript split into individual sentences.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key" },
+        transcript_id: { type: "string", description: "Completed transcript ID" },
+      },
+      required: ["api_key", "transcript_id"],
+    },
+  },
+  {
+    name: "assemblyai_get_paragraphs",
+    description: "Get a completed transcript split into paragraphs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key" },
+        transcript_id: { type: "string", description: "Completed transcript ID" },
+      },
+      required: ["api_key", "transcript_id"],
+    },
+  },
+  {
+    name: "assemblyai_summarize",
+    description: "Get the AI-generated summary for a completed AssemblyAI transcript (must have been submitted with summarization enabled).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "AssemblyAI API key" },
+        transcript_id: { type: "string", description: "Completed transcript ID" },
+      },
+      required: ["api_key", "transcript_id"],
+    },
+  },
+
+  // ── groq-tool.ts ──────────────────────────────────────────────────────────────
+  {
+    name: "groq_chat_completion",
+    description: "Run a fast LLM inference with Groq. Supports Llama 3, Mixtral, Gemma, and other open models at high speed.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Groq API key from console.groq.com/keys" },
+        model: { type: "string", description: "Model ID (e.g. llama-3.3-70b-versatile, mixtral-8x7b-32768, gemma2-9b-it). Default: llama-3.3-70b-versatile" },
+        messages: { type: "array", items: { type: "object" }, description: "Array of {role, content} messages" },
+        prompt: { type: "string", description: "Single user message (alternative to messages)" },
+        system_prompt: { type: "string", description: "System prompt (used with prompt shorthand)" },
+        max_tokens: { type: "number", description: "Maximum tokens to generate" },
+        temperature: { type: "number", minimum: 0, maximum: 2, description: "Sampling temperature (0-2)" },
+        top_p: { type: "number", description: "Top-p sampling (0-1)" },
+        stop: { description: "Stop sequence(s)", oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
+      },
+      required: ["api_key"],
+    },
+  },
+  {
+    name: "groq_list_models",
+    description: "List all models available on Groq.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        api_key: { type: "string", description: "Groq API key" },
+      },
+      required: ["api_key"],
+    },
+  },
+
   // ── kling-tool.ts ─────────────────────────────────────────────────────────────
   {
     name: "kling_generate_video",
@@ -9834,4 +10650,74 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   exchangerate_convert:    (args) => exchangerateConvert(args),
   exchangerate_historical: (args) => exchangerateHistorical(args),
   exchangerate_codes:      (args) => exchangerateCodes(args),
+
+  // mailchimp-tool.ts
+  mailchimp_list_audiences:  (args) => mailchimpListAudiences(args),
+  mailchimp_list_campaigns:  (args) => mailchimpListCampaigns(args),
+  mailchimp_get_campaign:    (args) => mailchimpGetCampaign(args),
+  mailchimp_create_campaign: (args) => mailchimpCreateCampaign(args),
+  mailchimp_list_members:    (args) => mailchimpListMembers(args),
+  mailchimp_add_member:      (args) => mailchimpAddMember(args),
+  mailchimp_search_members:  (args) => mailchimpSearchMembers(args),
+
+  // sendgrid-tool.ts
+  sendgrid_send_email:     (args) => sendgridSendEmail(args),
+  sendgrid_list_templates: (args) => sendgridListTemplates(args),
+  sendgrid_get_template:   (args) => sendgridGetTemplate(args),
+  sendgrid_list_contacts:  (args) => sendgridListContacts(args),
+  sendgrid_add_contact:    (args) => sendgridAddContact(args),
+  sendgrid_get_stats:      (args) => sendgridGetStats(args),
+
+  // mapbox-tool.ts
+  mapbox_geocode_forward:  (args) => mapboxGeocodeForward(args),
+  mapbox_geocode_reverse:  (args) => mapboxGeocodeReverse(args),
+  mapbox_get_directions:   (args) => mapboxGetDirections(args),
+  mapbox_get_static_map:   (args) => mapboxGetStaticMap(args),
+  mapbox_list_tilesets:    (args) => mapboxListTilesets(args),
+
+  // algolia-tool.ts
+  algolia_search:          (args) => algoliaSearch(args),
+  algolia_get_object:      (args) => algoliaGetObject(args),
+  algolia_list_indices:    (args) => algoliaListIndices(args),
+  algolia_browse_index:    (args) => algoliaBrowseIndex(args),
+
+  // pinecone-tool.ts
+  pinecone_list_indexes:   (args) => pineconeListIndexes(args),
+  pinecone_describe_index: (args) => pineconeDescribeIndex(args),
+  pinecone_query_vectors:  (args) => pineconeQueryVectors(args),
+  pinecone_upsert_vectors: (args) => pineconeUpsertVectors(args),
+  pinecone_delete_vectors: (args) => pineconeDeleteVectors(args),
+
+  // mixpanel-tool.ts
+  mixpanel_track_event:    (args) => mixpanelTrackEvent(args),
+  mixpanel_get_events:     (args) => mixpanelGetEvents(args),
+  mixpanel_get_funnels:    (args) => mixpanelGetFunnels(args),
+  mixpanel_get_retention:  (args) => mixpanelGetRetention(args),
+  mixpanel_export_data:    (args) => mixpanelExportData(args),
+
+  // datadog-tool.ts
+  datadog_list_monitors:   (args) => datadogListMonitors(args),
+  datadog_get_monitor:     (args) => datadogGetMonitor(args),
+  datadog_create_monitor:  (args) => datadogCreateMonitor(args),
+  datadog_list_dashboards: (args) => datadogListDashboards(args),
+  datadog_query_metrics:   (args) => datadogQueryMetrics(args),
+  datadog_list_events:     (args) => datadogListEvents(args),
+
+  // deepl-tool.ts
+  deepl_translate_text:      (args) => deeplTranslateText(args),
+  deepl_get_usage:           (args) => deeplGetUsage(args),
+  deepl_list_languages:      (args) => deeplListLanguages(args),
+  deepl_translate_document:  (args) => deeplTranslateDocument(args),
+
+  // assemblyai-tool.ts
+  assemblyai_transcribe:       (args) => assemblyaiTranscribe(args),
+  assemblyai_get_transcript:   (args) => assemblyaiGetTranscript(args),
+  assemblyai_list_transcripts: (args) => assemblyaiListTranscripts(args),
+  assemblyai_get_sentences:    (args) => assemblyaiGetSentences(args),
+  assemblyai_get_paragraphs:   (args) => assemblyaiGetParagraphs(args),
+  assemblyai_summarize:        (args) => assemblyaiSummarize(args),
+
+  // groq-tool.ts
+  groq_chat_completion:    (args) => groqChatCompletion(args),
+  groq_list_models:        (args) => groqListModels(args),
 };
