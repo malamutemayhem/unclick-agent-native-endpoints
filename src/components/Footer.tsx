@@ -5,12 +5,13 @@ const PRODUCT_LINKS = [
   { label: "Arena", href: "/arena" },
   { label: "Docs", href: "/docs" },
   { label: "FAQ", href: "/faq" },
+  { label: "BackstagePass", href: "/backstagepass" },
 ];
 
 const COMPANY_LINKS = [
-  { label: "Contact", href: "mailto:chris@unclick.world" },
-  { label: "GitHub", href: "https://github.com/unclick-world", external: true },
-  { label: "Status", href: "https://status.unclick.world", external: true },
+  { label: "Contact", href: "mailto:hello@unclick.world" },
+  { label: "GitHub", href: "https://github.com/malamutemayhem/unclick-agent-native-endpoints", external: true },
+  { label: "npm", href: "https://www.npmjs.com/package/@unclick/mcp-server", external: true },
 ];
 
 const LEGAL_LINKS = [
