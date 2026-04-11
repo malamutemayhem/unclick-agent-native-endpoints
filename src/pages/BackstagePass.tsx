@@ -25,11 +25,14 @@ import {
   Mic,
   Video,
   Eye,
+  Copy,
+  Check,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
 import { useMetaTags } from "@/hooks/useMetaTags";
+import { SITE_STATS } from "@/config/site-stats";
 
 // ---- Platform data ----
 
@@ -124,6 +127,28 @@ function CopyButton({ code }: { code: string }) {
       className="font-mono text-xs text-muted-foreground transition-colors hover:text-heading"
     >
       {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+function InlineCopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      aria-label="Copy to clipboard"
+      className="flex items-center gap-1.5 rounded border border-border/40 bg-card/40 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-primary" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+      <span>{copied ? "Copied!" : "Copy"}</span>
     </button>
   );
 }
@@ -228,10 +253,10 @@ export default function BackstagePassPage() {
   useMetaTags({
     title: "BackstagePass - Your AI's Backstage Pass | UnClick",
     description:
-      "Connect your platforms once. Your AI agent handles the rest. BackstagePass is UnClick's encrypted credential vault for AI agents - supporting 20+ platforms.",
+      "Connect your platforms once. Your AI agent handles the rest. BackstagePass is UnClick's encrypted credential vault for AI agents - supporting 53 platforms.",
     ogTitle: "BackstagePass - Your AI's Backstage Pass | UnClick",
     ogDescription:
-      "Connect once. Your agent handles the rest. No more hunting for API keys. 20+ platforms, AES-256-GCM encryption.",
+      "Connect once. Your agent handles the rest. No more hunting for API keys. 53 platforms, AES-256-GCM encryption.",
     ogUrl: "https://unclick.world/backstagepass",
   });
 
@@ -301,7 +326,54 @@ export default function BackstagePassPage() {
         </FadeIn>
         <FadeIn delay={0.2}>
           <p className="mt-6 text-xs text-muted-foreground">
-            20+ platforms supported. More every week.
+            {SITE_STATS.BACKSTAGEPASS_PLATFORMS} platforms supported. More every week.
+          </p>
+        </FadeIn>
+      </section>
+
+      {/* ---- Pain Point: Old Way vs New Way ---- */}
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <FadeIn>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Old Way */}
+            <div className="rounded-xl border border-border/30 bg-card/10 p-6">
+              <p className="mb-4 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground/50">
+                The old way
+              </p>
+              <ul className="space-y-1.5 text-xs text-muted-foreground/60 leading-relaxed">
+                <li>Open GitHub.</li>
+                <li>Navigate to Settings.</li>
+                <li>Click Developer Settings.</li>
+                <li>Click Personal Access Tokens.</li>
+                <li>Click Generate new token.</li>
+                <li>Read the scope descriptions.</li>
+                <li>Select the scopes you think you need.</li>
+                <li>Click Generate token.</li>
+                <li>Copy it before it disappears.</li>
+                <li>Paste it somewhere safe.</li>
+                <li>Repeat for Stripe.</li>
+                <li>Repeat for Slack.</li>
+                <li>Repeat for every platform.</li>
+                <li className="pt-1 text-muted-foreground/40 italic">Hope you remember where you saved them.</li>
+              </ul>
+            </div>
+
+            {/* New Way */}
+            <div className="flex flex-col justify-center rounded-xl border border-primary/30 bg-primary/[0.04] p-6">
+              <p className="mb-4 font-mono text-[10px] font-medium uppercase tracking-widest text-primary/60">
+                The new way
+              </p>
+              <p className="font-mono text-xl font-semibold text-primary sm:text-2xl">
+                "connect my GitHub"
+              </p>
+              <p className="mt-3 text-sm text-body">
+                Tell your AI. Done.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Every platform has a settings page buried three clicks deep. Your AI shouldn't need you to navigate it.
           </p>
         </FadeIn>
       </section>
@@ -326,7 +398,11 @@ export default function BackstagePassPage() {
                 <div className="mt-4 overflow-hidden rounded-lg border border-border/30 bg-[#0d0d0d]">
                   <div className="flex items-center justify-between border-b border-border/20 px-3 py-1.5">
                     <span className="font-mono text-[10px] text-muted-foreground">terminal</span>
-                    <CopyButton code={step.code} />
+                    {step.number === "01" ? (
+                      <InlineCopyButton code={step.code} />
+                    ) : (
+                      <CopyButton code={step.code} />
+                    )}
                   </div>
                   <pre className="overflow-x-auto px-3 py-2.5">
                     <code className="font-mono text-[11px] leading-relaxed text-body">{step.code}</code>
