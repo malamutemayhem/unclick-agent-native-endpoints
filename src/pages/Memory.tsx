@@ -45,14 +45,14 @@ const MEMORY_LAYERS = [
 ];
 
 const COMPARISON = [
-  { feature: "Where data lives", unclick: "YOUR database", mem0: "Their cloud", letta: "Their runtime", zep: "Their cloud" },
-  { feature: "Memory layers", unclick: "6 tiers", mem0: "Flat store", letta: "3 tiers", zep: "3 subgraphs" },
-  { feature: "Code-aware", unclick: "Yes", mem0: "No", letta: "Partial", zep: "No" },
-  { feature: "Version history", unclick: "Yes", mem0: "No", letta: "No", zep: "No" },
-  { feature: "Memory decay", unclick: "Yes", mem0: "Yes", letta: "No", zep: "No" },
-  { feature: "Cross-platform", unclick: "Yes", mem0: "Yes", letta: "Limited", zep: "Yes" },
-  { feature: "Price", unclick: "Free / $29 Pro", mem0: "$249/mo", letta: "Free self-host", zep: "Pay-per-credit" },
-  { feature: "Lock-in", unclick: "Zero", mem0: "High", letta: "Medium", zep: "Medium" },
+  { feature: "Where data lives", tip: "Who controls your memory data", unclick: "YOUR database", mem0: "Their cloud", letta: "Their runtime", zep: "Their cloud" },
+  { feature: "Memory layers", tip: "How memory is structured and organized", unclick: "6 tiers", mem0: "Flat store", letta: "3 tiers", zep: "3 subgraphs" },
+  { feature: "Code-aware", tip: "Can store and search code blocks separately", unclick: "Yes", mem0: "No", letta: "Partial", zep: "No" },
+  { feature: "Version history", tip: "Previous versions of documents are preserved", unclick: "Yes", mem0: "No", letta: "No", zep: "No" },
+  { feature: "Smart prioritization", tip: "Frequently used memories surface first; stale ones fade to save context", unclick: "Yes", mem0: "Yes", letta: "No", zep: "No" },
+  { feature: "Cross-platform", tip: "Works across Claude Code, Cowork, Cursor, and other MCP clients", unclick: "Yes", mem0: "Yes", letta: "Limited", zep: "Yes" },
+  { feature: "Price", tip: "Starting cost for production use", unclick: "Free / $29 Pro", mem0: "$249/mo", letta: "Free self-host", zep: "Pay-per-credit" },
+  { feature: "Lock-in", tip: "How hard it is to leave and take your data with you", unclick: "Zero", mem0: "High", letta: "Medium", zep: "Medium" },
 ];
 
 const Memory = () => {
@@ -190,7 +190,7 @@ const Memory = () => {
             <div className="mt-8 rounded-xl border border-border/60 bg-card/60 p-6 backdrop-blur-sm">
               <p className="font-mono text-xs text-muted-foreground mb-2">The dispatch problem, solved.</p>
               <p className="text-sm text-body leading-relaxed">
-                Claude Code sessions don't talk to each other. Cowork sessions don't persist.
+                Claude Code sessions don’t talk to each other. Cowork sessions don’t persist.
                 We fix that. Every session reads from and writes to the same memory layer.
                 Context is never lost.
               </p>
@@ -213,7 +213,7 @@ const Memory = () => {
           <FadeIn delay={0.1}>
             <p className="mt-4 text-body max-w-xl mx-auto leading-relaxed">
               UnClick Memory stores everything in YOUR Supabase instance. We never see your data.
-              If you leave, your data stays — it's already yours.
+              If you leave, your data stays—it’s already yours.
             </p>
           </FadeIn>
           <FadeIn delay={0.15}>
@@ -238,7 +238,7 @@ const Memory = () => {
             {[
               { step: 1, title: "Connect your database", desc: "Supabase free tier, or any PostgreSQL." },
               { step: 2, title: "Run one migration", desc: "We do it for you. One click." },
-              { step: 3, title: "Add one line to your MCP config", desc: "That's it. Every session now has memory." },
+              { step: 3, title: "Add one line to your MCP config", desc: "That’s it. Every session now has memory." },
             ].map((s, i) => (
               <FadeIn key={s.step} delay={0.05 * i}>
                 <div className="flex items-start gap-4">
@@ -303,7 +303,12 @@ const Memory = () => {
                 <tbody>
                   {COMPARISON.map((row, i) => (
                     <tr key={row.feature} className={i % 2 === 0 ? "bg-card/40" : ""}>
-                      <td className="p-3 font-medium text-heading">{row.feature}</td>
+                      <td className="p-3 font-medium text-heading group relative cursor-help">
+                        <span className="border-b border-dotted border-muted-foreground/40">{row.feature}</span>
+                        <span className="pointer-events-none absolute left-3 -top-8 z-10 hidden w-56 rounded-lg bg-[#1e1e2e] px-3 py-2 text-[10px] text-muted-foreground shadow-lg group-hover:block">
+                          {row.tip}
+                        </span>
+                      </td>
                       <td className="p-3 font-medium text-primary">{row.unclick}</td>
                       <td className="p-3 text-body">{row.mem0}</td>
                       <td className="p-3 text-body">{row.letta}</td>
