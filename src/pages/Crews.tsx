@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import FadeIn from "../components/FadeIn";
-import { useCanonical } from "../hooks/useCanonical";
+import { useCanonical } from "../hooks/use-canonical";
 import {
   Code,
   Search,
