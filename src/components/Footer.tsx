@@ -69,8 +69,8 @@ const Footer = () => (
       <div className="grid grid-cols-2 gap-8 sm:grid-cols-5">
         {/* Brand */}
         <div className="col-span-2 sm:col-span-1">
-          <Link to="/" className="font-mono text-sm font-semibold text-heading">
-            UnClick
+          <Link to="/">
+            <img src="/logo-wordmark.svg" alt="UnClick" style={{ height: "2.4rem" }} className="w-auto" />
           </Link>
           <p className="mt-2 text-xs text-muted-custom leading-relaxed">
             The operating system for AI agents.<br />Built in Melbourne, Australia.
@@ -93,3 +93,4 @@ const Footer = () => (
 );
 
 export default Footer;
+
