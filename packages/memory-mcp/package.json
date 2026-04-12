@@ -1,6 +1,39 @@
 {
   "name": "@unclick/memory-mcp",
   "version": "0.1.0",
+  "description": "Persistent cloud memory for AI agents â 6-layer memory architecture backed by Supabase",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "unclick-memory-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["mcp", "memory", "ai-agent", "supabase", "unclick"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "schema.sql",
+    "README.md"
+  ]
+}
+{
+  "name": "@unclick/memory-mcp",
+  "version": "0.1.0",
   "description": "Persistent cross-session memory for AI agents. MCP server with 6-layer architecture backed by your own Supabase.",
   "type": "module",
   "bin": {
