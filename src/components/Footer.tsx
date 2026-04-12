@@ -2,10 +2,15 @@ import { Link } from "react-router-dom";
 
 const PRODUCT_LINKS = [
   { label: "Tools", href: "/#tools" },
+  { label: "Memory", href: "/memory" },
+  { label: "BackstagePass", href: "/backstagepass" },
   { label: "Arena", href: "/arena" },
+];
+
+const RESOURCES_LINKS = [
   { label: "Docs", href: "/docs" },
   { label: "FAQ", href: "/faq" },
-  { label: "BackstagePass", href: "/backstagepass" },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 const COMPANY_LINKS = [
@@ -61,18 +66,19 @@ function FooterLinkGroup({ title, links }: { title: string; links: typeof PRODUC
 const Footer = () => (
   <footer className="border-t border-border px-6 py-12">
     <div className="container mx-auto max-w-5xl">
-      <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-8 sm:grid-cols-5">
         {/* Brand */}
         <div className="col-span-2 sm:col-span-1">
           <Link to="/" className="font-mono text-sm font-semibold text-heading">
             UnClick
           </Link>
           <p className="mt-2 text-xs text-muted-custom leading-relaxed">
-            Agent-native APIs.<br />Built in Melbourne, Australia.
+            The operating system for AI agents.<br />Built in Melbourne, Australia.
           </p>
         </div>
 
         <FooterLinkGroup title="Product" links={PRODUCT_LINKS} />
+        <FooterLinkGroup title="Resources" links={RESOURCES_LINKS} />
         <FooterLinkGroup title="Company" links={COMPANY_LINKS} />
         <FooterLinkGroup title="Legal" links={LEGAL_LINKS} />
       </div>
