@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Key } from "lucide-react";
+import { Key, Brain } from "lucide-react";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -11,10 +11,11 @@ const Navbar = () => {
 
   const navLinks = [
     { label: "Tools", href: isHome ? "#tools" : "/#tools", anchor: true },
+    { label: "Memory", href: "/memory", icon: Brain },
     { label: "BackstagePass", href: "/backstagepass", icon: Key },
     { label: "Arena", href: "/arena" },
+    { label: "Pricing", href: "/pricing" },
     { label: "Docs", href: "/docs" },
-    { label: "FAQ", href: "/faq" },
   ];
 
   return (
