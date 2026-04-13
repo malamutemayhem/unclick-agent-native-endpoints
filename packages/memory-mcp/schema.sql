@@ -603,6 +603,6 @@ INSERT INTO extracted_facts (fact, category, confidence, source_type) VALUES
   ('Session bridge is a key feature - sessions read startup context and write summaries', 'technical', 1.0, 'manual');
 
 -- ============================================================
--- DONE. Schema ready for Memory.
+-- DONE. Schema ready for UnClick Memory.
 -- Run manage_decay() on a nightly cron for tier management.
 -- ============================================================
