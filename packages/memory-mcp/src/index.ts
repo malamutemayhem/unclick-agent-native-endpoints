@@ -4,7 +4,10 @@
  * @unclick/memory-mcp
  *
  * Persistent cross-session memory for AI agents.
- * MCP server exposing a 6-layer memory architecture backed by your own Supabase.
+ * MCP server exposing a 6-layer memory architecture.
+ *
+ * Zero-config: works locally out of the box (no database needed).
+ * Cloud mode:  set SUPABASE_URL + key for cross-machine sync.
  *
  * Layers:
  *   1. Business Context   - standing rules, always loaded
@@ -18,26 +21,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getSupabase, rpc } from "./supabase.js";
-
-// --- Helpers ---
-
-function truncate(s: string, max = 8000): string {
-  return s.length > max ? s.slice(0, max) + "\n...[truncated]" : s;
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-// --- Server Setup ---
+import { getBackend } from "./db.js";
 
 const server = new McpServer({
   name: "unclick-memory",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
-// Tool: get_startup_context
+// --- Tools ---
+
 server.tool(
   "get_startup_context",
   "Load persistent memory at session start. Returns business context (standing rules), recent session summaries, and hot extracted facts. Call this FIRST in every new session.",
@@ -46,7 +38,8 @@ server.tool(
   },
   async ({ num_sessions }) => {
     try {
-      const data = await rpc<Record<string, unknown>>("get_startup_context", { num_sessions: num_sessions ?? 5 });
+      const db = await getBackend();
+      const data = await db.getStartupContext(num_sessions ?? 5);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error loading startup context: ${(err as Error).message}` }], isError: true };
@@ -54,7 +47,6 @@ server.tool(
   }
 );
 
-// Tool: search_memory
 server.tool(
   "search_memory",
   "Full-text search across conversation logs. Returns matching results ranked by relevance.",
@@ -64,7 +56,8 @@ server.tool(
   },
   async ({ query, max_results }) => {
     try {
-      const data = await rpc("search_memory", { search_query: query, max_results: max_results ?? 10 });
+      const db = await getBackend();
+      const data = await db.searchMemory(query, max_results ?? 10);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -72,14 +65,14 @@ server.tool(
   }
 );
 
-// Tool: search_facts
 server.tool(
   "search_facts",
   "Search extracted facts (Layer 4). Only returns active (non-superseded) facts.",
   { query: z.string().min(1).describe("Search query") },
   async ({ query }) => {
     try {
-      const data = await rpc("search_facts", { search_query: query });
+      const db = await getBackend();
+      const data = await db.searchFacts(query);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -87,14 +80,14 @@ server.tool(
   }
 );
 
-// Tool: search_library
 server.tool(
   "search_library",
   "Search the Knowledge Library (Layer 2) for versioned reference documents.",
   { query: z.string().min(1).describe("Search query") },
   async ({ query }) => {
     try {
-      const data = await rpc("search_library", { search_query: query });
+      const db = await getBackend();
+      const data = await db.searchLibrary(query);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -102,14 +95,14 @@ server.tool(
   }
 );
 
-// Tool: get_library_doc
 server.tool(
   "get_library_doc",
   "Get the full content of a Knowledge Library document by its slug. Returns the latest version.",
   { slug: z.string().min(1).describe("Document slug (e.g. 'vendor-acme-profile')") },
   async ({ slug }) => {
     try {
-      const data = await rpc("get_library_doc", { doc_slug: slug });
+      const db = await getBackend();
+      const data = await db.getLibraryDoc(slug);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -117,14 +110,14 @@ server.tool(
   }
 );
 
-// Tool: list_library
 server.tool(
   "list_library",
   "List all documents in the Knowledge Library. Returns slug, title, category, and last updated date for each.",
   {},
   async () => {
     try {
-      const data = await rpc("list_library");
+      const db = await getBackend();
+      const data = await db.listLibrary();
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -132,7 +125,6 @@ server.tool(
   }
 );
 
-// Tool: write_session_summary
 server.tool(
   "write_session_summary",
   "Write a session summary at the end of a session. Critical for cross-session continuity. Include key decisions, open loops, and topics discussed.",
@@ -147,25 +139,20 @@ server.tool(
   },
   async ({ session_id, summary, topics, open_loops, decisions, platform, duration_minutes }) => {
     try {
-      const sb = getSupabase();
-      const { data, error } = await sb.from("session_summaries").insert({
-        session_id,
-        summary,
-        topics: topics ?? [],
-        open_loops: open_loops ?? [],
-        decisions: decisions ?? [],
-        platform: platform ?? "claude-code",
+      const db = await getBackend();
+      const result = await db.writeSessionSummary({
+        session_id, summary,
+        topics: topics ?? [], open_loops: open_loops ?? [],
+        decisions: decisions ?? [], platform: platform ?? "claude-code",
         duration_minutes,
-      }).select().single();
-      if (error) throw error;
-      return { content: [{ type: "text" as const, text: `Session summary saved. ID: ${data.id}` }] };
+      });
+      return { content: [{ type: "text" as const, text: `Session summary saved. ID: ${result.id}` }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error saving session summary: ${(err as Error).message}` }], isError: true };
     }
   }
 );
 
-// Tool: add_fact
 server.tool(
   "add_fact",
   "Add a new extracted fact to memory. Facts are atomic, searchable pieces of knowledge. Examples: 'Chris prefers Tailwind over CSS modules', 'The Supabase project ref is xmooqsylqlknuksiddca'.",
@@ -177,26 +164,18 @@ server.tool(
   },
   async ({ fact, category, confidence, source_session_id }) => {
     try {
-      const sb = getSupabase();
-      const { data, error } = await sb.from("extracted_facts").insert({
-        fact,
-        category: category ?? "general",
-        confidence: confidence ?? 0.9,
-        source_session_id: source_session_id ?? null,
-        source_type: "manual",
-        status: "active",
-        decay_tier: "hot",
-        last_accessed: now(),
-      }).select().single();
-      if (error) throw error;
-      return { content: [{ type: "text" as const, text: `Fact saved. ID: ${data.id}` }] };
+      const db = await getBackend();
+      const result = await db.addFact({
+        fact, category: category ?? "general",
+        confidence: confidence ?? 0.9, source_session_id,
+      });
+      return { content: [{ type: "text" as const, text: `Fact saved. ID: ${result.id}` }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
     }
   }
 );
 
-// Tool: supersede_fact
 server.tool(
   "supersede_fact",
   "Replace an outdated fact with a new version. The old fact is marked 'superseded' (never deleted). Use when information changes.",
@@ -208,18 +187,15 @@ server.tool(
   },
   async ({ old_fact_id, new_fact_text, new_category, new_confidence }) => {
     try {
-      const params: Record<string, unknown> = { old_fact_id, new_fact_text };
-      if (new_category !== undefined) params.new_category = new_category;
-      if (new_confidence !== undefined) params.new_confidence = new_confidence;
-      const data = await rpc("supersede_fact", params);
-      return { content: [{ type: "text" as const, text: `Fact superseded. New fact ID: ${data}` }] };
+      const db = await getBackend();
+      const newId = await db.supersedeFact(old_fact_id, new_fact_text, new_category, new_confidence);
+      return { content: [{ type: "text" as const, text: `Fact superseded. New fact ID: ${newId}` }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
     }
   }
 );
 
-// Tool: log_conversation
 server.tool(
   "log_conversation",
   "Log a conversation exchange to the persistent conversation log (Layer 5). Use for important exchanges you want to be able to search later.",
@@ -229,16 +205,10 @@ server.tool(
     content: z.string().min(1).describe("The message content"),
     has_code: z.boolean().default(false).describe("Whether this message contains code blocks"),
   },
-  async ({ session_id, role, content: msgContent, has_code }) => {
+  async ({ session_id, role, content, has_code }) => {
     try {
-      const sb = getSupabase();
-      const { error } = await sb.from("conversation_log").insert({
-        session_id,
-        role,
-        content: truncate(msgContent),
-        has_code: has_code ?? false,
-      });
-      if (error) throw error;
+      const db = await getBackend();
+      await db.logConversation({ session_id, role, content, has_code: has_code ?? false });
       return { content: [{ type: "text" as const, text: "Conversation logged." }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -246,7 +216,6 @@ server.tool(
   }
 );
 
-// Tool: store_code
 server.tool(
   "store_code",
   "Store a code block in the code dump layer (Layer 6). Code is stored separately from conversations to keep search fast. Only loaded on demand.",
@@ -259,32 +228,26 @@ server.tool(
   },
   async ({ session_id, language, filename, code, description }) => {
     try {
-      const sb = getSupabase();
-      const { data, error } = await sb.from("code_dumps").insert({
-        session_id,
-        language: language ?? "typescript",
-        filename: filename ?? null,
-        content: truncate(code, 50000),
-        description: description ?? null,
-      }).select().single();
-      if (error) throw error;
-      return { content: [{ type: "text" as const, text: `Code stored. ID: ${data.id}` }] };
+      const db = await getBackend();
+      const result = await db.storeCode({
+        session_id, language: language ?? "typescript",
+        filename, content: code, description,
+      });
+      return { content: [{ type: "text" as const, text: `Code stored. ID: ${result.id}` }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
     }
   }
 );
 
-// Tool: get_business_context
 server.tool(
   "get_business_context",
   "Get all business context entries (Layer 1). These are standing rules, client info, and preferences that are always relevant.",
   {},
   async () => {
     try {
-      const sb = getSupabase();
-      const { data, error } = await sb.from("business_context").select("*").order("category").order("key");
-      if (error) throw error;
+      const db = await getBackend();
+      const data = await db.getBusinessContext();
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -292,7 +255,6 @@ server.tool(
   }
 );
 
-// Tool: set_business_context
 server.tool(
   "set_business_context",
   "Add or update a business context entry (Layer 1). Business context is always loaded at session start. Use for standing rules, preferences, and important reference info.",
@@ -304,26 +266,8 @@ server.tool(
   },
   async ({ category, key, value, priority }) => {
     try {
-      const sb = getSupabase();
-      // business_context.value is JSONB - parse if valid JSON, otherwise wrap as JSON string
-      let jsonValue: unknown;
-      try {
-        jsonValue = JSON.parse(value);
-      } catch {
-        jsonValue = value;
-      }
-      const row: Record<string, unknown> = {
-        category,
-        key,
-        value: jsonValue,
-        last_accessed: now(),
-        decay_tier: "hot",
-      };
-      if (priority !== undefined) row.priority = priority;
-      const { data, error } = await sb.from("business_context")
-        .upsert(row, { onConflict: "category,key" })
-        .select().single();
-      if (error) throw error;
+      const db = await getBackend();
+      await db.setBusinessContext(category, key, value, priority);
       return { content: [{ type: "text" as const, text: `Business context set: ${category}/${key}` }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -331,7 +275,6 @@ server.tool(
   }
 );
 
-// Tool: upsert_library_doc
 server.tool(
   "upsert_library_doc",
   "Create or update a Knowledge Library document (Layer 2). Documents are auto-versioned on update. Use for vendor profiles, client briefs, specs, CVs, etc.",
@@ -342,52 +285,28 @@ server.tool(
     content: z.string().min(1).describe("Full document content (Markdown recommended)"),
     tags: z.array(z.string()).default([]).describe("Searchable tags"),
   },
-  async ({ slug, title, category, content: docContent, tags }) => {
+  async ({ slug, title, category, content, tags }) => {
     try {
-      const sb = getSupabase();
-      const { data: existing } = await sb.from("knowledge_library")
-        .select("id, version").eq("slug", slug).single();
-
-      if (existing) {
-        // The DB trigger auto-archives old content and bumps version
-        const { error } = await sb.from("knowledge_library").update({
-          title,
-          category: category ?? "reference",
-          content: docContent,
-          tags: tags ?? [],
-          last_accessed: now(),
-          decay_tier: "hot",
-        }).eq("id", existing.id);
-        if (error) throw error;
-        return { content: [{ type: "text" as const, text: `Library doc updated: "${title}" (v${existing.version + 1})` }] };
-      } else {
-        const { error } = await sb.from("knowledge_library").insert({
-          slug,
-          title,
-          category: category ?? "reference",
-          content: docContent,
-          tags: tags ?? [],
-          version: 1,
-          decay_tier: "hot",
-          last_accessed: now(),
-        });
-        if (error) throw error;
-        return { content: [{ type: "text" as const, text: `Library doc created: "${title}" (v1)` }] };
-      }
+      const db = await getBackend();
+      const msg = await db.upsertLibraryDoc({
+        slug, title, category: category ?? "reference",
+        content, tags: tags ?? [],
+      });
+      return { content: [{ type: "text" as const, text: msg }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
     }
   }
 );
 
-// Tool: manage_decay
 server.tool(
   "manage_decay",
   "Run the memory decay manager. Promotes/demotes items between hot/warm/cold tiers based on access patterns. Run nightly or on-demand.",
   {},
   async () => {
     try {
-      const data = await rpc("manage_decay");
+      const db = await getBackend();
+      const data = await db.manageDecay();
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -395,14 +314,14 @@ server.tool(
   }
 );
 
-// Tool: get_conversation_detail
 server.tool(
   "get_conversation_detail",
   "Retrieve the full conversation log for a specific session. Includes all messages in chronological order.",
   { session_id: z.string().describe("Session ID to retrieve") },
   async ({ session_id }) => {
     try {
-      const data = await rpc("get_conversation_detail", { sid: session_id });
+      const db = await getBackend();
+      const data = await db.getConversationDetail(session_id);
       return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
@@ -410,26 +329,15 @@ server.tool(
   }
 );
 
-// Tool: memory_status
 server.tool(
   "memory_status",
-  "Get a quick overview of memory usage: counts per layer, decay tier distribution, and storage stats.",
+  "Get a quick overview of memory usage: storage mode (local/supabase), counts per layer, decay tier distribution.",
   {},
   async () => {
     try {
-      const sb = getSupabase();
-      const tables = ["business_context", "knowledge_library", "session_summaries", "extracted_facts", "conversation_log", "code_dumps"];
-      const counts: Record<string, unknown> = {};
-      for (const table of tables) {
-        const { count } = await sb.from(table).select("*", { count: "exact", head: true });
-        counts[table] = count;
-      }
-      const { data: factTiers } = await sb.from("extracted_facts").select("decay_tier").eq("status", "active");
-      const tiers = { hot: 0, warm: 0, cold: 0 };
-      for (const row of factTiers ?? []) {
-        tiers[row.decay_tier as keyof typeof tiers]++;
-      }
-      return { content: [{ type: "text" as const, text: JSON.stringify({ table_counts: counts, fact_decay_tiers: tiers }, null, 2) }] };
+      const db = await getBackend();
+      const data = await db.getMemoryStatus();
+      return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
     } catch (err: unknown) {
       return { content: [{ type: "text" as const, text: `Error: ${(err as Error).message}` }], isError: true };
     }
@@ -439,6 +347,9 @@ server.tool(
 // --- Start ---
 
 async function main() {
+  // Initialize backend early to show mode in logs
+  await getBackend();
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("UnClick Memory MCP server running on stdio");
