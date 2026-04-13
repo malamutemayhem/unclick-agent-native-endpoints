@@ -3,7 +3,7 @@
 // No auth required. Identifies with a User-Agent header as required by MusicBrainz policy.
 
 const MB_BASE = "https://musicbrainz.org/ws/2";
-const MB_USER_AGENT = "UnClick/1.0 (creativelead@malamutemayhem.com)";
+const MB_USER_AGENT = "UnClick/1.0 (support@unclick.world)";
 
 // ─── API helper ───────────────────────────────────────────────────────────────
 

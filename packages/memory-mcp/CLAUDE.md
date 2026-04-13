@@ -21,8 +21,8 @@ Use memory tools as needed:
 - **`search_library`** — when looking for reference documents (vendor profiles, specs, etc.)
 - **`add_fact`** — when the user states a preference, makes a decision, or shares important info
   - Facts should be atomic: one fact = one statement
-  - Good: "Chris prefers Tailwind CSS over CSS modules"
-  - Bad: "Chris talked about styling and mentioned several frameworks"
+  - Good: "Team prefers Tailwind CSS over CSS modules"
+  - Bad: "We talked about styling and mentioned several frameworks"
 - **`supersede_fact`** — when information changes (old fact → new fact, never delete)
 - **`set_business_context`** — for standing rules that should ALWAYS be loaded
 - **`upsert_library_doc`** — for longer reference material (briefs, specs, profiles)
