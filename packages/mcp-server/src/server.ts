@@ -8,6 +8,7 @@ import { CATALOG, TOOL_MAP, ENDPOINT_MAP, type ToolDef } from "./catalog.js";
 import { createClient, type UnClickClient } from "./client.js";
 import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
+import { MEMORY_HANDLERS } from "./memory/handlers.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -119,6 +120,102 @@ const META_TOOLS = [
         },
       },
       required: ["endpoint_id", "params"],
+    },
+  },
+  // ── UnClick Memory (persistent cross-session memory) ─────────────────────
+  // These 5 tools implement the session-start / session-end protocol agents
+  // should follow. The other 12 memory operations are available via unclick_call
+  // with endpoint_id like "memory.add_fact", "memory.search_memory", etc.
+  {
+    name: "get_startup_context",
+    description:
+      "Load persistent UnClick Memory at session start. Returns business context (standing rules), " +
+      "recent session summaries, and hot facts. Call this FIRST in every new session to understand " +
+      "the user's ongoing projects, preferences, and open loops. Works zero-config locally, or with " +
+      "Supabase for cross-machine sync.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        num_sessions: {
+          type: "number",
+          description: "Number of recent session summaries to load (1-20, default 5)",
+          default: 5,
+        },
+      },
+    },
+  },
+  {
+    name: "write_session_summary",
+    description:
+      "Write a session summary at the end of a session. Critical for cross-session continuity. " +
+      "Call this BEFORE the session ends (when the user says goodbye, or context is running low). " +
+      "Include key decisions, open loops, and topics discussed.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
+        summary: { type: "string", description: "Narrative of what happened - decisions, work completed, problems solved" },
+        topics: { type: "array", items: { type: "string" }, description: "Topic tags for searchability" },
+        open_loops: { type: "array", items: { type: "string" }, description: "Unfinished tasks or questions to carry forward" },
+        decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
+        platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
+        duration_minutes: { type: "number", description: "Approximate session duration" },
+      },
+      required: ["session_id", "summary"],
+    },
+  },
+  {
+    name: "add_fact",
+    description:
+      "Add a new atomic fact to UnClick Memory. One fact = one statement. " +
+      "Use when the user states a preference, makes a decision, or shares important info. " +
+      "Good: 'Team prefers Tailwind over CSS modules'. Bad: 'We talked about styling'.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        fact: { type: "string", description: "The fact - a single atomic statement" },
+        category: {
+          type: "string",
+          description: "Category: preference, decision, technical, contact, project, general",
+          default: "general",
+        },
+        confidence: { type: "number", minimum: 0, maximum: 1, default: 0.9 },
+        source_session_id: { type: "string", description: "Session ID where this fact was learned" },
+      },
+      required: ["fact"],
+    },
+  },
+  {
+    name: "search_memory",
+    description:
+      "Full-text search across UnClick Memory conversation logs. Use when you need to recall " +
+      "something specific from a previous session.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query" },
+        max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "set_business_context",
+    description:
+      "Add or update a standing rule in UnClick Memory (Layer 1). Business context is ALWAYS loaded " +
+      "at session start. Use for standing rules, client info, and preferences that are always relevant.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        category: {
+          type: "string",
+          description: "Category: identity, preference, client, workflow, technical, standing_rule",
+        },
+        key: { type: "string", description: "Unique key within category (e.g. 'timezone', 'preferred_stack')" },
+        value: { type: "string", description: "The value to store (plain text or JSON string)" },
+        priority: { type: "number", description: "Priority for loading order (higher = loaded first)" },
+      },
+      required: ["category", "key", "value"],
     },
   },
 ] as const;
@@ -539,6 +636,14 @@ export function createServer(): Server {
     const args = (rawArgs ?? {}) as Record<string, unknown>;
 
     try {
+      // ── UnClick Memory (direct tools + memory.* endpoints) ───────
+      if (MEMORY_HANDLERS[name]) {
+        const result = await MEMORY_HANDLERS[name](args);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       // ── Meta tools ──────────────────────────────────────────────
       if (name === "unclick_search") {
         const results = searchTools(
@@ -643,6 +748,18 @@ export function createServer(): Server {
       if (name === "unclick_call") {
         const endpointId = String(args.endpoint_id ?? "");
         const params = (args.params ?? {}) as Record<string, unknown>;
+
+        // Memory endpoints: "memory.add_fact", "memory.store_code", etc.
+        if (endpointId.startsWith("memory.")) {
+          const op = endpointId.slice("memory.".length);
+          const memHandler = MEMORY_HANDLERS[op];
+          if (memHandler) {
+            const result = await memHandler(params);
+            return {
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            };
+          }
+        }
 
         // Check local handlers first (avoids remote API dependency)
         const localHandler = LOCAL_CATALOG_HANDLERS[endpointId];

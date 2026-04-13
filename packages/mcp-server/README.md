@@ -2,13 +2,15 @@
 
 **MCP server for the [UnClick](https://unclick.world) tool marketplace.**
 
-Lets any MCP-compatible AI agent (Claude, Cursor, etc.) discover and use every tool in the UnClick marketplace — URL shortening, QR codes, image processing, hashing, CSV/JSON, regex, cron, color utilities, key-value storage, and more.
+One install gives any MCP-compatible AI agent (Claude, Cursor, etc.) access to:
+- **450+ callable endpoints** across 60+ integrations (social, e-commerce, accounting, messaging, and more)
+- **Persistent cross-session memory** — the agent remembers you across sessions, zero config
 
 ## Quick Start
 
-### Claude Desktop
+### Claude Desktop / Claude Code
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Add to your MCP config (Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`, or run `claude mcp add` in Claude Code):
 
 ```json
 {
@@ -26,11 +28,31 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 Get your API key at [unclick.world](https://unclick.world).
 
+### Cursor
+
+Same config snippet as above — Cursor uses the same MCP format.
+
 ### Local / Development
 
 ```bash
 UNCLICK_API_KEY=unck_... npx @unclick/mcp-server
 ```
+
+## Memory (built in, zero config)
+
+Memory works out of the box. No setup needed — data is stored as JSON files in `~/.unclick/memory/`.
+
+**Want cross-machine sync?** Add Supabase env vars to your config:
+
+```json
+"env": {
+  "UNCLICK_API_KEY": "your_api_key_here",
+  "SUPABASE_URL": "https://your-project.supabase.co",
+  "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
+}
+```
+
+Memory tools exposed at session level: `get_startup_context`, `write_session_summary`, `add_fact`, `search_memory`, `set_business_context`. Full 17 operations available via `unclick_call` with `endpoint_id: "memory.*"`.
 
 ## Configuration
 

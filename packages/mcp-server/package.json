@@ -1,6 +1,6 @@
 {
   "name": "@unclick/mcp-server",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "mcpName": "io.github.malamutemayhem/unclick-mcp-server",
   "description": "MCP server for the UnClick tool marketplace — lets AI agents discover and use every UnClick tool",
   "type": "module",
@@ -27,6 +27,7 @@
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.15.1",
+    "@supabase/supabase-js": "^2.103.0",
     "@types/imap": "^0.8.43",
     "@types/nodemailer": "^8.0.0",
     "csv-parse": "^6.2.1",
