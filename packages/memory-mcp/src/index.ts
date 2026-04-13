@@ -155,7 +155,7 @@ server.tool(
 
 server.tool(
   "add_fact",
-  "Add a new extracted fact to memory. Facts are atomic, searchable pieces of knowledge. Examples: 'Chris prefers Tailwind over CSS modules', 'The Supabase project ref is xmooqsylqlknuksiddca'.",
+  "Add a new extracted fact to memory. Facts are atomic, searchable pieces of knowledge. Examples: 'Team prefers Tailwind over CSS modules', 'Deploy target is Vercel for frontend'.",
   {
     fact: z.string().min(5).describe("The fact text - a single atomic statement"),
     category: z.string().default("general").describe("Category: preference, decision, technical, contact, project, general"),

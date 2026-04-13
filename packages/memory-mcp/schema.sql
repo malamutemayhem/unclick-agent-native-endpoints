@@ -584,35 +584,23 @@ CREATE POLICY "Users can manage their own code_dumps" ON code_dumps
   FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================
--- SEED DATA - Chris's business context
+-- EXAMPLE SEED DATA
+-- Replace these with your own business context after setup.
 -- ============================================================
 INSERT INTO business_context (category, key, value, priority) VALUES
-  ('standing_rules', 'communication_style', '"Direct, no fluff. Technical depth welcome. Use analogies for complex concepts. Emoji-light."'::jsonb, 100),
-  ('standing_rules', 'decision_framework', '"Bias toward action. Ship fast, iterate. Open source where possible. Ethical always."'::jsonb, 99),
-  ('standing_rules', 'tech_preferences', '{"frontend": "React + TypeScript + Vite + Tailwind + Radix UI", "backend": "Cloudflare Workers + Supabase", "deployment": "Vercel (frontend) + Cloudflare (API)", "mcp": true}'::jsonb, 98),
-  ('clients', 'primary_project', '{"name": "UnClick", "url": "unclick.world", "description": "The operating system for AI agents. Tools to act, memory to remember, credentials to authenticate, reputation to prove value.", "products": ["Tools (172+ MCP tools)", "Memory (persistent cross-session context)", "BackstagePass (credential vault)", "Arena (AI agent competition)"]}'::jsonb, 95),
-  ('infrastructure', 'github', '{"org": "malamutemayhem", "repos": ["unclick-agent-native-endpoints"], "frontend_stack": "React + TS + Vite"}'::jsonb, 80),
-  ('infrastructure', 'supabase', '{"project": "xmooqsylqlknuksiddca", "region": "ap-southeast-2", "use": "UnClick backend + Memory BYOD"}'::jsonb, 80),
-  ('infrastructure', 'cloudflare', '{"use": "Workers for API/orchestration, DNS"}'::jsonb, 75),
-  ('preferences', 'naming', '"Products: UnClick (parent), Memory, BackstagePass, Arena, Tools. Person: Chris. AI assistant persona: Bailey Amarok."'::jsonb, 70),
-  ('preferences', 'pricing_model', '{"free": "172+ tools (100/day), Memory (self-hosted direct), BackstagePass (5 creds)", "pro_29": "Unlimited tools, Memory proxy + extraction + decay + dashboard, unlimited BackstagePass, Arena reputation", "team_79": "5 seats, multi-user memory, shared business context, role-based creds"}'::jsonb, 90)
+  ('standing_rules', 'communication_style', '"Direct and concise. Technical depth welcome."'::jsonb, 100),
+  ('standing_rules', 'decision_framework', '"Bias toward action. Ship fast, iterate."'::jsonb, 99),
+  ('standing_rules', 'tech_preferences', '{"frontend": "React + TypeScript + Vite + Tailwind", "backend": "Supabase", "deployment": "Vercel", "mcp": true}'::jsonb, 98)
 ON CONFLICT (category, key) DO UPDATE SET
   value = EXCLUDED.value,
   priority = EXCLUDED.priority,
   updated_at = now();
 
--- Seed some initial extracted facts
+-- Example extracted facts - replace with your own
 INSERT INTO extracted_facts (fact, category, confidence, source_type) VALUES
-  ('UnClick repo is at github.com/malamutemayhem/unclick-agent-native-endpoints', 'technical', 1.0, 'manual'),
-  ('Frontend stack is React + TypeScript + Vite + Tailwind + Radix UI', 'technical', 1.0, 'manual'),
-  ('Supabase project ID is xmooqsylqlknuksiddca (ap-southeast-2)', 'technical', 1.0, 'manual'),
-  ('Chris prefers direct communication, no fluff, with technical depth', 'preference', 1.0, 'manual'),
-  ('UnClick pricing: Free / Pro $29/mo / Team $79/mo', 'financial', 1.0, 'manual'),
+  ('Frontend stack is React + TypeScript + Vite + Tailwind', 'technical', 1.0, 'manual'),
   ('Memory product uses BYOD architecture - user data stays in their database', 'technical', 1.0, 'manual'),
-  ('Main competitor for Memory is Mem0 at $249/mo', 'financial', 0.9, 'manual'),
-  ('Arena uses reputation tiers: Rookie -> Expert -> Master -> Legend', 'technical', 1.0, 'manual'),
-  ('Site needs new pages: /memory, /pricing, /tools', 'technical', 1.0, 'manual'),
-  ('Claude Code session bridge is a key feature - sessions read startup context and write summaries', 'technical', 1.0, 'manual');
+  ('Session bridge is a key feature - sessions read startup context and write summaries', 'technical', 1.0, 'manual');
 
 -- ============================================================
 -- DONE. Schema ready for UnClick Memory.

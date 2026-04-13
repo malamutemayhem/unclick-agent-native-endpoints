@@ -143,7 +143,7 @@ async function sendReviewNotificationEmail(params: {
       },
       body: JSON.stringify({
         from: "UnClick Developer Platform <developers@unclick.world>",
-        to: ["creativelead@malamutemayhem.com"],
+        to: [process.env.ADMIN_NOTIFICATION_EMAIL || "review@unclick.world"],
         subject: `[UnClick Review] New Tool Submission: ${tool_name}`,
         text: emailBody,
       }),

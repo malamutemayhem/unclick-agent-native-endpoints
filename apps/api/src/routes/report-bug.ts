@@ -104,7 +104,7 @@ async function sendBugEmail(params: {
     },
     body: JSON.stringify({
       from: 'UnClick Bugs <bugs@unclick.world>',
-      to: ['creativelead@malamutemayhem.com'],
+      to: [process.env.ADMIN_NOTIFICATION_EMAIL || 'bugs@unclick.world'],
       subject: `[UnClick Bug] ${severity.toUpperCase()}: ${tool_name}`,
       text: body,
     }),

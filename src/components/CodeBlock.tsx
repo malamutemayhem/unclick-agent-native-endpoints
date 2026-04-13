@@ -26,8 +26,8 @@ const curlExample = `curl -X POST https://api.unclick.world/v1/links/pages \\
     "slug": "my-consulting",
     "title": "My Consulting",
     "links": [
-      { "label": "Book a call", "url": "https://cal.com/chris" },
-      { "label": "My portfolio", "url": "https://chris.com" }
+      { "label": "Book a call", "url": "https://cal.com/yourname" },
+      { "label": "My portfolio", "url": "https://yourname.com" }
     ]
   }'`;
 
