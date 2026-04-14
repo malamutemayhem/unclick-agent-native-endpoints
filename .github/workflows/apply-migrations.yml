@@ -8,6 +8,11 @@ name: Apply Supabase migrations
 #   SUPABASE_ACCESS_TOKEN  - https://supabase.com/dashboard/account/tokens
 #   SUPABASE_PROJECT_REF   - the xxxxx from xxxxx.supabase.co
 #   SUPABASE_DB_PASSWORD   - the database password (Dashboard → Settings → Database)
+#
+# Self-healing: if the remote DB has legacy migrations that pre-date the repo's
+# migration directory, the CLI refuses to push. The "Auto-reconcile" step
+# catches that error, marks the orphan migrations as reverted (bookkeeping only,
+# the DB data is untouched), and retries the push.
 
 on:
   push:
@@ -20,6 +25,9 @@ on:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,15 +37,39 @@ jobs:
           version: latest
 
       - name: Link project
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
 
-      - name: Push pending migrations
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Push pending migrations (self-healing)
         run: |
-          supabase db push --include-all --yes
+          set +e
+          output=$(supabase db push --include-all --yes 2>&1)
+          status=$?
+          echo "$output"
+
+          if [ $status -eq 0 ]; then
+            echo "Migrations applied cleanly."
+            exit 0
+          fi
+
+          # Detect the orphan-migration case. If present, extract the list of
+          # version IDs the CLI wants marked reverted and repair them.
+          if echo "$output" | grep -q "Remote migration versions not found"; then
+            echo "Detected orphan legacy migrations on remote. Reconciling."
+            ids=$(echo "$output" \
+              | grep -oE 'supabase migration repair --status reverted [0-9 ]+' \
+              | head -1 \
+              | sed 's/supabase migration repair --status reverted //')
+            if [ -z "$ids" ]; then
+              echo "Could not extract migration IDs from CLI output. Bailing."
+              exit 1
+            fi
+            echo "Marking as reverted: $ids"
+            supabase migration repair --status reverted $ids || exit 1
+            echo "Retrying push."
+            supabase db push --include-all --yes
+            exit $?
+          fi
+
+          # Some other error. Surface it.
+          exit $status
