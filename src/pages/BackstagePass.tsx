@@ -304,17 +304,6 @@ export default function BackstagePassPage() {
         </FadeIn>
       </section>
 
-      {/* ---- Hero Image ---- */}
-      <FadeIn delay={0.25}>
-        <div className="mx-auto max-w-4xl px-6 pb-16">
-          <img
-            src="/backstagepass-hero.png"
-            alt="An AI agent receiving a backstage pass to access services like GitHub, Slack, and Shopify"
-            className="w-full rounded-xl border border-border/40 shadow-lg"
-          />
-        </div>
-      </FadeIn>
-
       {/* ---- How It Works ---- */}
       <section id="setup" className="mx-auto max-w-5xl px-6 pb-24">
         <FadeIn>

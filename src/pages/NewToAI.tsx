@@ -8,6 +8,8 @@ import {
   Brain,
   Calendar,
   Key,
+  Users,
+  Trophy,
   ArrowRight,
   CheckCircle2,
   MessageSquare,
@@ -105,31 +107,37 @@ const PRODUCTS = [
     name: "Tools",
     desc: "172+ integrations: email, weather, finance, social media, and more.",
     link: "/tools",
+    icon: Wrench,
   },
   {
     name: "Memory",
     desc: "Your AI remembers your preferences, decisions, and past conversations.",
     link: "/memory",
+    icon: Brain,
   },
   {
     name: "Organiser",
     desc: "Calendar, to-dos, and daily briefings in one unified place.",
     link: "/organiser",
+    icon: Calendar,
   },
   {
     name: "BackstagePass",
     desc: "Secure credential management for authenticated services.",
     link: "/backstagepass",
+    icon: Key,
   },
   {
     name: "Crews",
     desc: "Teams of AI agents working together on complex projects.",
     link: "/crews",
+    icon: Users,
   },
   {
     name: "Arena",
     desc: "Test and compare different AI models side-by-side.",
     link: "/arena",
+    icon: Trophy,
   },
 ];
 
@@ -191,17 +199,6 @@ const NewToAI = () => {
           </FadeIn>
         </div>
       </section>
-
-      {/* Visual */}
-      <FadeIn delay={0.2}>
-        <div className="mx-auto max-w-3xl px-6">
-          <img
-            src="/backstagepass-hero.png"
-            alt="An AI agent receiving a backstage pass to access services like GitHub, Slack, and Shopify"
-            className="w-full rounded-xl border border-border/40 shadow-lg"
-          />
-      </div>
-      </FadeIn>
 
       {/* What Is UnClick? */}
       <section id="how" className="px-6 py-16">
@@ -343,13 +340,18 @@ const NewToAI = () => {
               <FadeIn key={product.name} delay={0.03 * i}>
                 <Link
                   to={product.link}
-                  className="group rounded-xl border border-border/60 bg-card/60 p-6 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/80"
+                  className="group block h-full rounded-xl border border-border/60 bg-card/60 p-6 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/80"
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-heading">{product.name}</h3>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <product.icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-heading">{product.name}</h3>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
                   </div>
-                  <p className="text-sm text-body">{product.desc}</p>
+                  <p className="text-sm text-body leading-relaxed">{product.desc}</p>
                 </Link>
               </FadeIn>
             ))}
