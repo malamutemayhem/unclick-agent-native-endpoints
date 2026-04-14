@@ -1,183 +1,382 @@
-import { useState, useCallback, useEffect } from "react";
-import { SITE_STATS } from "@/config/site-stats";
+import { useState } from "react";
 import FadeIn from "./FadeIn";
 import ApiKeySignup from "./ApiKeySignup";
 import { motion } from "framer-motion";
-import { getOrIssueTicket } from "@/lib/install-ticket";
 
-type Tab = "Ask Your Agent" | "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
-type ManualTab = Exclude<Tab, "Ask Your Agent">;
+// ─── Platform-first install UX ────────────────────────────────────────────
+//
+// Every major MCP client in April 2026 accepts a remote MCP URL natively.
+// We show the 5 shortest paths (Claude, ChatGPT, Cursor, VS Code, Other) and
+// let the user pick. No AI middleman, no "walk me through it", just paste
+// one field or click one button.
+//
+// Auth: api_key embedded as ?key= query param. /api/mcp accepts this because
+// Claude.ai's and ChatGPT's "Add custom connector" dialogs only expose a URL
+// field — no place to set a header.
 
-const PLACEHOLDER = "YOUR_INSTALL_CODE";
+type Platform = "Claude" | "ChatGPT" | "Cursor" | "VS Code" | "Other";
+type ClaudeSurface = "Web" | "Desktop" | "Code";
 
-// The install config uses a short-lived "ticket" instead of the raw API key.
-// The ticket looks like a project slug, not a credential, so pasting it
-// into a chat doesn't trigger credential-leak warnings.
-function makeJsonConfig(installCode: string) {
+const MCP_ORIGIN = "https://unclick.world/api/mcp";
+const PLACEHOLDER_KEY = "YOUR_API_KEY";
+
+const platforms: Platform[] = ["Claude", "ChatGPT", "Cursor", "VS Code", "Other"];
+const claudeSurfaces: ClaudeSurface[] = ["Web", "Desktop", "Code"];
+
+function mcpUrl(key: string) {
+  return `${MCP_ORIGIN}?key=${key}`;
+}
+
+function claudeCodeCommand(key: string) {
+  return `claude mcp add --transport http unclick ${mcpUrl(key)}`;
+}
+
+function geminiCommand(key: string) {
+  return `gemini mcp add unclick --transport http ${mcpUrl(key)}`;
+}
+
+function stdioJson(key: string) {
   return `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
       "args": ["-y", "@unclick/mcp-server"],
-      "env": {
-        "UNCLICK_API_KEY": "${installCode}"
-      }
+      "env": { "UNCLICK_API_KEY": "${key}" }
     }
   }
 }`;
 }
 
-// The direct API example still needs the real key (it's a Bearer header),
-// so we only swap in the install code for the MCP flows.
-function makeApiConfig(apiKey: string) {
-  return `curl https://api.unclick.world/v1/shorten \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"url": "https://example.com/very/long/url"}'`;
+function cursorDeeplink(key: string) {
+  const config = btoa(JSON.stringify({ url: mcpUrl(key) }));
+  return `cursor://anysphere.cursor-deeplink/mcp/install?name=unclick&config=${config}`;
 }
 
-// Neutral, low-trust framing. We explicitly tell the agent it's NOT being
-// asked to execute anything; it's helping a human read a guide. This gets
-// past the "fetch-a-URL-and-follow-its-instructions is a prompt-injection
-// vector" reflex that well-aligned agents reach for first.
-function makeAgentPrompt(installCode: string) {
-  return `I'm installing the UnClick MCP server on my own machine. Please fetch the install steps from this URL and read them out to me one at a time so I can follow along. I'll do all the config edits myself; you're just helping me read the guide (no execution, no file access on your end):
-
-https://unclick.world/api/install-ticket?t=${installCode}`;
+function vscodeDeeplink(key: string) {
+  const config = JSON.stringify({
+    name: "unclick",
+    type: "http",
+    url: mcpUrl(key),
+  });
+  return `vscode:mcp/install?${encodeURIComponent(config)}`;
 }
 
-const tabs: Tab[] = ["Ask Your Agent", "Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
-
-const manualConfigs: Record<ManualTab, { label: string; instruction: string | null; make: (key: string) => string }> = {
-  "Claude Desktop": {
-    label: "claude_desktop_config.json",
-    instruction:
-      "Open Claude Desktop, go to Settings > Developer > Edit Config. Paste this into claude_desktop_config.json:",
-    make: makeJsonConfig,
-  },
-  Cursor: {
-    label: ".cursor/mcp.json",
-    instruction:
-      "Create or edit .cursor/mcp.json in your project root (or globally at ~/.cursor/mcp.json). Paste this:",
-    make: makeJsonConfig,
-  },
-  OpenClaw: {
-    label: "~/.openclaw/openclaw.json",
-    instruction: "Create or edit ~/.openclaw/openclaw.json and paste this:",
-    make: makeJsonConfig,
-  },
-  "Direct API": {
-    label: "curl",
-    instruction: null,
-    make: makeApiConfig,
-  },
-};
-
-const steps = [
-  {
-    n: "1",
-    label: "Enter your email",
-    detail: "Free forever. No credit card. One key. Every tool. Unlocked immediately.",
-  },
-  {
-    n: "2",
-    label: "Copy your install config",
-    detail: `Your install code is already inserted. One copy-paste connects all ${SITE_STATS.TOOLS_DISPLAY} tools.`,
-  },
-  {
-    n: "3",
-    label: "Paste and go",
-    detail: "Drop it into your agent's chat or your MCP client's config. All tools activate at once.",
-  },
-];
-
-function BlurredText({ text, hasKey }: { text: string; hasKey: boolean }) {
-  if (hasKey) return <>{text}</>;
+// Tiny copyable row: a read-only input + Copy button. Same shape everywhere
+// so the UI pattern is predictable and the user never has to "figure out"
+// where to click.
+function CopyField({
+  label,
+  value,
+  hasKey,
+  mono = true,
+}: {
+  label: string;
+  value: string;
+  hasKey: boolean;
+  mono?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!hasKey) return;
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
-    <>
-      {text.split(PLACEHOLDER).map((part, i, arr) =>
-        i < arr.length - 1 ? (
-          <span key={i}>
-            {part}
-            <span className="rounded bg-muted/20 px-1 blur-[3px] text-muted-foreground">
-              {PLACEHOLDER}
-            </span>
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
+    <div>
+      <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div className="flex items-stretch gap-2">
+        <code
+          className={`flex-1 min-w-0 truncate rounded-md border bg-card/60 px-3 py-2 text-xs ${
+            mono ? "font-mono" : ""
+          } ${hasKey ? "border-border/50 text-heading" : "border-border/30 text-body/40 select-none blur-[2px]"}`}
+        >
+          {value}
+        </code>
+        <motion.button
+          onClick={copy}
+          disabled={!hasKey}
+          whileTap={hasKey ? { scale: 0.95 } : {}}
+          className={`shrink-0 rounded-md border border-border/60 bg-card/80 px-3 py-2 font-mono text-[11px] transition-all ${
+            hasKey
+              ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
+              : "text-muted-foreground/30 cursor-not-allowed"
+          }`}
+        >
+          {copied ? "Copied!" : "Copy"}
+        </motion.button>
+      </div>
+    </div>
   );
 }
 
-const InstallSection = () => {
-  const [active, setActive] = useState<Tab>("Ask Your Agent");
-  const [promptCopied, setPromptCopied] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
-  const [apiKey, setApiKey] = useState<string>("");
-  const [installCode, setInstallCode] = useState<string>("");
-  const [showConfig, setShowConfig] = useState(false);
+// Block with copyable multi-line content (used for the stdio JSON fallback).
+function CodeBlock({ code, hasKey }: { code: string; hasKey: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!hasKey) return;
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="relative rounded-md border border-border/40 bg-card/40 p-4">
+      <pre
+        className={`overflow-x-auto font-mono text-xs leading-relaxed ${
+          hasKey ? "text-body" : "text-body/40 select-none blur-[2px]"
+        }`}
+      >
+        <code>{code}</code>
+      </pre>
+      <motion.button
+        onClick={copy}
+        disabled={!hasKey}
+        whileTap={hasKey ? { scale: 0.95 } : {}}
+        className={`absolute right-3 top-3 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
+          hasKey
+            ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
+            : "text-muted-foreground/30 cursor-not-allowed"
+        }`}
+      >
+        {copied ? "Copied!" : "Copy"}
+      </motion.button>
+    </div>
+  );
+}
 
-  const handleKeyReady = useCallback((key: string) => {
-    setApiKey(key);
-  }, []);
+// Deeplink install button — renders as <a> so the browser hands the URL to
+// the platform's registered protocol handler.
+function DeeplinkButton({
+  href,
+  label,
+  hasKey,
+}: {
+  href: string;
+  label: string;
+  hasKey: boolean;
+}) {
+  const content = (
+    <>
+      <span>{label}</span>
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2.2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M13 5l7 7-7 7M5 12h15"
+        />
+      </svg>
+    </>
+  );
+  const cls =
+    "inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-all";
+  if (!hasKey) {
+    return (
+      <button
+        disabled
+        className={`${cls} border border-border/40 bg-card/40 text-muted-foreground/40 cursor-not-allowed`}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <motion.a
+      href={href}
+      whileTap={{ scale: 0.97 }}
+      className={`${cls} bg-primary text-black hover:opacity-90`}
+    >
+      {content}
+    </motion.a>
+  );
+}
 
-  // When the API key becomes available, fetch a 24h install ticket so every
-  // config block shows a neutral-looking handoff code instead of the raw key.
-  useEffect(() => {
-    if (!apiKey) {
-      setInstallCode("");
-      return;
+function Steps({ items }: { items: string[] }) {
+  return (
+    <ol className="space-y-1.5 text-sm text-body">
+      {items.map((item, i) => (
+        <li key={i} className="flex gap-2.5">
+          <span className="shrink-0 pt-0.5 font-mono text-xs text-primary">
+            {i + 1}.
+          </span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// ─── Per-platform panels ──────────────────────────────────────────────────
+
+function ClaudePanel({ apiKey, surface }: { apiKey: string; surface: ClaudeSurface }) {
+  const hasKey = Boolean(apiKey);
+  const key = apiKey || PLACEHOLDER_KEY;
+
+  if (surface === "Code") {
+    return (
+      <div className="space-y-4">
+        <Steps
+          items={[
+            "Open your terminal.",
+            "Paste the command below and press Enter.",
+            'Start a new session and ask: "What tools do you have from unclick?"',
+          ]}
+        />
+        <CopyField label="Terminal command" value={claudeCodeCommand(key)} hasKey={hasKey} />
+      </div>
+    );
+  }
+
+  const where =
+    surface === "Web"
+      ? "Open claude.ai → Settings → Connectors → Add custom connector."
+      : 'Open Claude Desktop → "+" in a chat → Connectors → Manage Connectors → Add custom.';
+
+  return (
+    <div className="space-y-4">
+      <Steps
+        items={[
+          where,
+          'Paste the Name and URL below into the dialog, then click "Add".',
+          'In a new chat, ask: "What tools do you have from unclick?"',
+        ]}
+      />
+      <div className="space-y-3">
+        <CopyField label="Name" value="UnClick" hasKey={hasKey} mono={false} />
+        <CopyField label="Remote MCP server URL" value={mcpUrl(key)} hasKey={hasKey} />
+      </div>
+    </div>
+  );
+}
+
+function ChatGPTPanel({ apiKey }: { apiKey: string }) {
+  const hasKey = Boolean(apiKey);
+  const key = apiKey || PLACEHOLDER_KEY;
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
+        Requires a paid ChatGPT plan (Plus / Pro / Business / Enterprise /
+        Edu) with Developer Mode enabled.
+      </div>
+      <Steps
+        items={[
+          "In ChatGPT: Settings → Connectors → Advanced → toggle Developer Mode on.",
+          'Click "Create" and paste the Name and URL below.',
+          'Open a new chat and ask: "What tools do you have from unclick?"',
+        ]}
+      />
+      <div className="space-y-3">
+        <CopyField label="Name" value="UnClick" hasKey={hasKey} mono={false} />
+        <CopyField label="MCP server URL" value={mcpUrl(key)} hasKey={hasKey} />
+      </div>
+    </div>
+  );
+}
+
+function CursorPanel({ apiKey }: { apiKey: string }) {
+  const hasKey = Boolean(apiKey);
+  const key = apiKey || PLACEHOLDER_KEY;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-body">
+        One click. Cursor opens with the install pre-filled.
+      </p>
+      <DeeplinkButton href={cursorDeeplink(key)} label="Add to Cursor" hasKey={hasKey} />
+      <details className="group">
+        <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-body">
+          Prefer a manual install?
+        </summary>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Edit <code className="font-mono">~/.cursor/mcp.json</code> and paste:
+          </p>
+          <CodeBlock
+            code={`{
+  "mcpServers": {
+    "unclick": {
+      "url": "${mcpUrl(key)}"
     }
-    let cancelled = false;
-    getOrIssueTicket(apiKey)
-      .then(({ ticket }) => {
-        if (!cancelled) setInstallCode(ticket);
-      })
-      .catch((err) => {
-        console.error("[InstallSection] issue ticket failed", err);
-        // Fall back to the real key if ticket issuance fails. The MCP server
-        // accepts both shapes transparently.
-        if (!cancelled) setInstallCode(apiKey);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [apiKey]);
+  }
+}`}
+            hasKey={hasKey}
+          />
+        </div>
+      </details>
+    </div>
+  );
+}
 
-  // What gets shown inside each config block. Direct-API still uses the
-  // real key (cURL needs a Bearer token that the API actually accepts).
-  const displayMcpCode = installCode || PLACEHOLDER;
-  const displayApiKey = apiKey || PLACEHOLDER;
-  const hasKey = Boolean(apiKey) && Boolean(installCode);
-  const isAgentTab = active === "Ask Your Agent";
+function VSCodePanel({ apiKey }: { apiKey: string }) {
+  const hasKey = Boolean(apiKey);
+  const key = apiKey || PLACEHOLDER_KEY;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-body">
+        One click. VS Code (with GitHub Copilot) opens with the install pre-filled.
+      </p>
+      <DeeplinkButton href={vscodeDeeplink(key)} label="Add to VS Code" hasKey={hasKey} />
+      <details className="group">
+        <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-body">
+          Prefer a manual install?
+        </summary>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Command Palette → "MCP: Add Server" → HTTP, then paste:
+          </p>
+          <CopyField label="URL" value={mcpUrl(key)} hasKey={hasKey} />
+        </div>
+      </details>
+    </div>
+  );
+}
 
-  const agentPrompt = makeAgentPrompt(displayMcpCode);
-  const jsonConfig = makeJsonConfig(displayMcpCode);
-  const manualCode = isAgentTab
-    ? ""
-    : active === "Direct API"
-      ? manualConfigs["Direct API"].make(displayApiKey)
-      : manualConfigs[active as ManualTab].make(displayMcpCode);
+function OtherPanel({ apiKey }: { apiKey: string }) {
+  const hasKey = Boolean(apiKey);
+  const key = apiKey || PLACEHOLDER_KEY;
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-heading">Gemini CLI</p>
+        <CopyField label="Terminal command" value={geminiCommand(key)} hasKey={hasKey} />
+      </div>
 
-  const handleCopyPrompt = () => {
-    navigator.clipboard.writeText(agentPrompt);
-    setPromptCopied(true);
-    setTimeout(() => setPromptCopied(false), 2000);
-  };
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-heading">
+          Windsurf, Continue, Zed, Cline, Roo
+        </p>
+        <p className="text-xs text-muted-foreground">
+          In your client's MCP settings, add a new server with this URL:
+        </p>
+        <CopyField label="MCP server URL" value={mcpUrl(key)} hasKey={hasKey} />
+      </div>
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(isAgentTab ? jsonConfig : manualCode);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
-  };
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-heading">Local / self-hosted (stdio)</p>
+        <p className="text-xs text-muted-foreground">
+          Runs UnClick as a local process via npx. Use this if your client
+          doesn't support remote URLs or you want to self-host.
+        </p>
+        <CodeBlock code={stdioJson(key)} hasKey={hasKey} />
+      </div>
+    </div>
+  );
+}
 
-  const handleTabChange = (tab: Tab) => {
-    setActive(tab);
-    setPromptCopied(false);
-    setCodeCopied(false);
-  };
+// ─── Main section ─────────────────────────────────────────────────────────
+
+const InstallSection = () => {
+  const [platform, setPlatform] = useState<Platform>("Claude");
+  const [claudeSurface, setClaudeSurface] = useState<ClaudeSurface>("Web");
+  const [apiKey, setApiKey] = useState<string>("");
+
+  const hasKey = Boolean(apiKey);
 
   return (
     <section id="install" className="relative mx-auto max-w-4xl px-6 py-24">
@@ -188,186 +387,82 @@ const InstallSection = () => {
       </FadeIn>
       <FadeIn delay={0.05}>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Connect in under 2 minutes.
+          Connect in under a minute.
         </h2>
       </FadeIn>
       <FadeIn delay={0.1}>
-        <p className="mt-3 text-body max-w-xl">
-          No developer knowledge needed. Sign up once and every tool is yours. No per-tool installs, ever.
+        <p className="mt-3 max-w-xl text-body">
+          Pick your app. Paste one URL (or click one button). Done.
         </p>
       </FadeIn>
 
-      {/* Steps */}
+      {/* Signup */}
       <FadeIn delay={0.15}>
-        <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {steps.map((s) => (
-            <div key={s.n} className="rounded-lg border border-border/40 bg-card/30 p-4">
-              <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-bold text-primary">
-                {s.n}
-              </div>
-              <p className="text-sm font-medium text-heading">{s.label}</p>
-              <p className="mt-1 text-xs text-body leading-relaxed">{s.detail}</p>
-            </div>
-          ))}
-        </div>
-      </FadeIn>
-
-      {/* Signup form */}
-      <FadeIn delay={0.2}>
         <div className="mt-8">
-          <ApiKeySignup onKeyReady={handleKeyReady} />
+          <ApiKeySignup onKeyReady={setApiKey} />
         </div>
       </FadeIn>
 
-      {/* Install block */}
-      <FadeIn delay={0.25}>
+      {/* Platform picker + panel */}
+      <FadeIn delay={0.2}>
         <div
-          className={`mt-6 rounded-xl border overflow-hidden transition-all duration-300 ${
+          className={`mt-6 overflow-hidden rounded-xl border transition-all duration-300 ${
             hasKey ? "border-border/60 bg-card/40" : "border-border/30 bg-card/20"
           }`}
         >
-          {/* Tab row */}
-          <div className="flex items-center border-b border-border/60 bg-card/60 px-1 overflow-x-auto">
-            {tabs.map((tab) => (
+          {/* Platform tabs */}
+          <div className="flex items-center overflow-x-auto border-b border-border/60 bg-card/60 px-1">
+            {platforms.map((p) => (
               <button
-                key={tab}
-                onClick={() => handleTabChange(tab)}
-                className={`px-4 py-3 text-xs font-medium transition-colors whitespace-nowrap ${
-                  active === tab
-                    ? "text-heading border-b-2 border-primary -mb-px"
+                key={p}
+                onClick={() => setPlatform(p)}
+                className={`whitespace-nowrap px-4 py-3 text-xs font-medium transition-colors ${
+                  platform === p
+                    ? "-mb-px border-b-2 border-primary text-heading"
                     : "text-muted-foreground hover:text-body"
                 }`}
               >
-                {tab}
+                {p}
               </button>
             ))}
-            {!isAgentTab && (
-              <div className="ml-auto px-4 flex-shrink-0">
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  {manualConfigs[active as ManualTab].label}
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Ask Your Agent tab */}
-          {isAgentTab && (
-            <div className="p-5">
-              <p className="text-sm font-semibold text-heading mb-1">One copy. One paste.</p>
-              <p className="text-xs text-muted-foreground mb-4">
-                Copy this, paste it into your AI chat. It will fetch the install script and walk you through the rest. Code is good for 24 hours, one use.
-              </p>
-
-              {/* Copyable prompt box */}
-              <div
-                className={`relative rounded-lg border p-4 transition-all duration-300 ${
-                  hasKey ? "border-primary/30 bg-primary/5" : "border-border/40 bg-card/30"
-                }`}
-              >
-                <p
-                  className={`text-sm leading-relaxed pr-20 transition-all duration-300 ${
-                    hasKey ? "text-body" : "text-body/40 select-none"
+          {/* Claude sub-pills */}
+          {platform === "Claude" && (
+            <div className="flex items-center gap-1.5 border-b border-border/40 bg-card/40 px-4 py-2.5">
+              {claudeSurfaces.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setClaudeSurface(s)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                    claudeSurface === s
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-body"
                   }`}
                 >
-                  <BlurredText text={agentPrompt} hasKey={hasKey} />
-                </p>
-                <motion.button
-                  onClick={handleCopyPrompt}
-                  disabled={!hasKey}
-                  className={`absolute right-3 top-3 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
-                    hasKey
-                      ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
-                      : "text-muted-foreground/30 cursor-not-allowed"
-                  }`}
-                  whileTap={hasKey ? { scale: 0.95 } : {}}
-                >
-                  {promptCopied ? "Copied!" : "Copy"}
-                </motion.button>
-              </div>
-
-              {/* Collapsible JSON config for power users */}
-              {hasKey && (
-                <div className="mt-3">
-                  <button
-                    onClick={() => setShowConfig(!showConfig)}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-body transition-colors"
-                  >
-                    <span
-                      className="inline-block transition-transform duration-200"
-                      style={{ transform: showConfig ? "rotate(90deg)" : "rotate(0deg)" }}
-                    >
-                      ▶
-                    </span>
-                    {showConfig ? "Hide config" : "Show config"}
-                  </button>
-                  {showConfig && (
-                    <div className="relative mt-2 rounded-lg border border-border/40 bg-card/30 p-4">
-                      <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-body">
-                        <code>{jsonConfig}</code>
-                      </pre>
-                      <motion.button
-                        onClick={handleCopyCode}
-                        className="absolute right-3 top-3 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] text-muted-foreground backdrop-blur-sm hover:border-primary/30 hover:text-heading transition-all cursor-pointer"
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {codeCopied ? "Copied!" : "Copy"}
-                      </motion.button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!hasKey && (
-                <div className="mt-4 border-t border-border/30 pt-3">
-                  <p className="text-xs text-muted-foreground text-center">
-                    Enter your email above to get your API key and unlock this prompt.
-                  </p>
-                </div>
-              )}
+                  {s === "Web" ? "Claude.ai (web)" : s === "Desktop" ? "Claude Desktop" : "Claude Code"}
+                </button>
+              ))}
             </div>
           )}
 
-          {/* Manual client tabs */}
-          {!isAgentTab && (
-            <>
-              {manualConfigs[active as ManualTab].instruction && (
-                <div className="px-5 pt-4 pb-0">
-                  <p className="text-xs text-muted-foreground">
-                    {manualConfigs[active as ManualTab].instruction}
-                  </p>
-                </div>
-              )}
-              <div className="relative p-5">
-                <pre
-                  className={`overflow-x-auto font-mono text-xs leading-relaxed transition-all duration-300 ${
-                    hasKey ? "text-body" : "text-body/40 select-none"
-                  }`}
-                >
-                  <code>
-                    <BlurredText text={manualCode} hasKey={hasKey} />
-                  </code>
-                </pre>
-                <motion.button
-                  onClick={handleCopyCode}
-                  disabled={!hasKey}
-                  className={`absolute right-4 top-4 rounded-md border border-border/60 bg-card/80 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm transition-all ${
-                    hasKey
-                      ? "text-muted-foreground hover:border-primary/30 hover:text-heading cursor-pointer"
-                      : "text-muted-foreground/30 cursor-not-allowed"
-                  }`}
-                  whileTap={hasKey ? { scale: 0.95 } : {}}
-                >
-                  {codeCopied ? "Copied!" : "Copy"}
-                </motion.button>
-              </div>
-              {!hasKey && (
-                <div className="border-t border-border/30 bg-card/40 px-5 py-3">
-                  <p className="text-xs text-muted-foreground text-center">
-                    Enter your email above to get your API key and unlock this config.
-                  </p>
-                </div>
-              )}
-            </>
+          {/* Panel */}
+          <div className="p-5">
+            {platform === "Claude" && (
+              <ClaudePanel apiKey={apiKey} surface={claudeSurface} />
+            )}
+            {platform === "ChatGPT" && <ChatGPTPanel apiKey={apiKey} />}
+            {platform === "Cursor" && <CursorPanel apiKey={apiKey} />}
+            {platform === "VS Code" && <VSCodePanel apiKey={apiKey} />}
+            {platform === "Other" && <OtherPanel apiKey={apiKey} />}
+          </div>
+
+          {!hasKey && (
+            <div className="border-t border-border/30 bg-card/40 px-5 py-3">
+              <p className="text-center text-xs text-muted-foreground">
+                Enter your email above to unlock your install.
+              </p>
+            </div>
           )}
         </div>
       </FadeIn>

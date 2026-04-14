@@ -6,8 +6,12 @@
  *
  * Usage:
  *   POST https://unclick.world/api/mcp
- *   Authorization: Bearer <unclick_api_key>
  *   Content-Type: application/json
+ *   Auth (either form):
+ *     - Authorization: Bearer <unclick_api_key>         (preferred)
+ *     - ?key=<unclick_api_key> query param              (for clients whose
+ *       "Add custom connector" dialog accepts a URL only, e.g. Claude.ai
+ *       and ChatGPT's Connectors UI)
  *   Body: MCP JSON-RPC message (initialize, tools/list, tools/call, etc.)
  *
  * The endpoint is stateless — each request spins up a fresh MCP server
@@ -43,9 +47,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // ── Auth — extract API key from Authorization header ───────────────────────
+  // ── Auth — accept Bearer header OR ?key= query param ──────────────────────
+  // Some MCP clients (Claude.ai Connectors, ChatGPT Connectors) only expose a
+  // URL field in their "Add custom connector" dialog — no way to set headers.
+  // For those, the key is embedded in the URL as ?key=uc_...
   const authHeader = (req.headers.authorization as string) ?? "";
-  const apiKey = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const keyFromHeader = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const keyRaw = req.query.key;
+  const keyFromQuery =
+    typeof keyRaw === "string"
+      ? keyRaw.trim()
+      : Array.isArray(keyRaw)
+        ? (keyRaw[0] ?? "").trim()
+        : "";
+  const apiKey = keyFromHeader || keyFromQuery;
 
   if (!apiKey) {
     return res.status(401).json({
@@ -53,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: {
         code: -32600,
         message:
-          "Missing API key. Set Authorization: Bearer <your_unclick_api_key>. " +
+          "Missing API key. Pass it as Authorization: Bearer <key> or as ?key=<key> in the URL. " +
           "Get a key at https://unclick.world",
       },
       id: null,
