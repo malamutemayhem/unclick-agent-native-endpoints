@@ -1,16 +1,13 @@
 name: CI
 
-# Runs on every PR, on push to main, AND on push to the development branch.
-# Catches broken builds, type errors, and lint regressions before they ship.
-# Non-blocking for unit tests since the suite is still young, but they run
-# so failures are visible.
+# Runs on every PR and on push to main. Catches broken builds, type errors,
+# and lint regressions before they ship. Non-blocking for unit tests since
+# the suite is still young, but they run so failures are visible.
 
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - claude/setup-malamute-mayhem-zkquO
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
