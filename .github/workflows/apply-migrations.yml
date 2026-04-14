@@ -24,6 +24,7 @@ on:
     paths:
       - "supabase/migrations/**"
       - ".github/workflows/apply-migrations.yml"
+      - ".github/scripts/apply_migrations.py"
   workflow_dispatch:
 
 jobs:
