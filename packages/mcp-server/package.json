@@ -35,7 +35,7 @@
     "fast-xml-parser": "^5.5.10",
     "imap": "^0.8.19",
     "js-yaml": "^4.1.1",
-    "marked": "^17.0.6",
+    "marked": "^18.0.0",
     "nodemailer": "^8.0.5",
     "turndown": "^7.2.4",
     "zod": "^3.23.8"
