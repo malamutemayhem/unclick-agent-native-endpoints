@@ -1,0 +1,30 @@
+name: Auto-promote to main
+
+# Every push to the development branch fast-forwards `main` to match, which
+# triggers Vercel's production deploy (Vercel's production branch = main).
+# This removes the manual "merge feature branch into main" step so pushes
+# become production as quickly as possible.
+#
+# If main has diverged (someone committed directly to main), the push will
+# fail as non-fast-forward and the run surfaces a loud error — investigate
+# manually before resolving.
+
+on:
+  push:
+    branches:
+      - claude/setup-malamute-mayhem-zkquO
+
+concurrency:
+  group: auto-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fast-forward main to this commit
+        run: git push origin HEAD:main
