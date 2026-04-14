@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "unclick_api_key";
+const EMAIL_KEY = "unclick_user_email";
 
 interface ApiKeySignupProps {
   onKeyReady: (key: string) => void;
@@ -59,6 +60,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
       if (existing?.api_key) {
         const key = existing.api_key as string;
         localStorage.setItem(STORAGE_KEY, key);
+        localStorage.setItem(EMAIL_KEY, trimmed.toLowerCase());
         setIsReturning(true);
         setApiKey(key);
         onKeyReady(key);
@@ -75,6 +77,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
       if (insertError) throw insertError;
 
       localStorage.setItem(STORAGE_KEY, newKey);
+      localStorage.setItem(EMAIL_KEY, trimmed.toLowerCase());
       setIsReturning(false);
       setApiKey(newKey);
       onKeyReady(newKey);
@@ -94,6 +97,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
 
   const handleReset = () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(EMAIL_KEY);
     setApiKey(null);
     setEmail("");
     onKeyReady("");
