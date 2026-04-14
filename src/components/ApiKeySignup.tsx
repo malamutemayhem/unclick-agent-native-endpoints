@@ -48,14 +48,27 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
     setLoading(true);
     setError("");
 
+    // Guard against preview deploys that forgot to set Supabase env vars.
+    const hasSupabaseConfig =
+      !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!hasSupabaseConfig) {
+      setLoading(false);
+      setError(
+        "Signup is not configured on this deployment. Email hello@unclick.world for a key.",
+      );
+      return;
+    }
+
     try {
       // Check if email already has a key
-      const { data: existing } = await supabase
+      const { data: existing, error: selectError } = await supabase
         .from("api_keys")
         .select("api_key")
         .eq("email", trimmed.toLowerCase())
         .eq("status", "active")
         .maybeSingle();
+
+      if (selectError) throw selectError;
 
       if (existing?.api_key) {
         const key = existing.api_key as string;
@@ -81,8 +94,14 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
       setIsReturning(false);
       setApiKey(newKey);
       onKeyReady(newKey);
-    } catch {
-      setError("Something went wrong. Try again or email hello@unclick.world");
+    } catch (err) {
+      // Surface the real reason to the console so we can diagnose in DevTools.
+      console.error("[ApiKeySignup] signup failed", err);
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Something went wrong. Try again or email hello@unclick.world";
+      setError(message);
     } finally {
       setLoading(false);
     }
