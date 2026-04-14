@@ -28,6 +28,8 @@ Add to your MCP config (Claude Desktop: `~/Library/Application Support/Claude/cl
 
 Get your API key at [unclick.world](https://unclick.world).
 
+> **Install codes.** The `UNCLICK_API_KEY` can also be a short-lived install code like `unclick-ember-falcon-2847` (good for 24 hours). On first boot the server exchanges it for the real key and caches it at `~/.unclick/credentials.json`. This means install snippets shared in chat look like project slugs rather than credentials.
+
 ### Cursor
 
 Same config snippet as above — Cursor uses the same MCP format.
