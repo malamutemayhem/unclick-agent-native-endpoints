@@ -45,7 +45,7 @@
     "@types/node": "^22.0.0",
     "@types/turndown": "^5.0.6",
     "tsx": "^4.19.2",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.2"
   },
   "engines": {
     "node": ">=18"
