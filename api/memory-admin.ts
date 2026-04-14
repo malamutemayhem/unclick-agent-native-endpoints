@@ -1,9 +1,9 @@
 /**
  * UnClick Memory Admin - Vercel serverless function
  *
- * Route: GET /api/memory-admin?action=<action>&...
+ * Route: GET|POST|DELETE /api/memory-admin?action=<action>&...
  *
- * Actions:
+ * Admin actions (read/write the 6 memory layers):
  *   - status: Returns counts per layer + decay tier distribution
  *   - business_context: Returns all business context entries
  *   - sessions: Returns recent session summaries (limit param)
@@ -13,22 +13,143 @@
  *   - conversations: Returns conversation log for a session (session_id param)
  *   - code: Returns code dumps (session_id param optional)
  *   - search: Full-text search across conversation logs (query param)
- *   - delete_fact: DELETE a fact by ID (fact_id param, POST only)
- *   - delete_session: DELETE a session summary by ID (session_id param, POST only)
- *   - update_business_context: Upsert a business context entry (POST only)
+ *   - delete_fact: Archive a fact by ID (fact_id, POST)
+ *   - delete_session: DELETE a session summary by ID (session_id, POST)
+ *   - update_business_context: Upsert a business context entry (POST)
+ *
+ * BYOD / wizard actions (control plane, keyed by UnClick API key):
+ *   - setup: POST with { api_key, service_role_key, supabase_url?, email? }
+ *            Validates + JWT-decodes the URL, installs schema via exec_sql
+ *            RPC, and stores encrypted creds
+ *   - setup_status: GET ?api_key=... — returns whether cloud memory is on
+ *   - disconnect: DELETE ?api_key=... — removes a user's memory config
+ *   - config: GET with Bearer <api_key> — MCP fetches decrypted creds
+ *   - device_check: POST with Bearer <api_key> + fingerprint — heartbeat
+ *                   + nudge signal
+ *   - list_devices: GET with Bearer <api_key>
+ *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+
+// ─── Crypto helpers (mirror /api/credentials) ──────────────────────────────
+
+const PBKDF2_ITERATIONS = 100_000;
+const KEY_BYTES = 32;
+const IV_BYTES = 12;
+const SALT_BYTES = 32;
+
+function sha256hex(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function deriveKey(apiKey: string, salt: Buffer): Buffer {
+  return crypto.pbkdf2Sync(apiKey, salt, PBKDF2_ITERATIONS, KEY_BYTES, "sha256");
+}
+
+function encryptString(plaintext: string, key: Buffer) {
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return {
+    iv: iv.toString("hex"),
+    authTag: cipher.getAuthTag().toString("hex"),
+    ciphertext: enc.toString("hex"),
+  };
+}
+
+function decryptString(iv: string, authTag: string, ciphertext: string, key: Buffer): string {
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "hex"));
+  decipher.setAuthTag(Buffer.from(authTag, "hex"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "hex")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+/** Decode a Supabase service_role JWT and return the project ref. */
+function decodeProjectRef(jwt: string): string | null {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
+      ref?: string;
+      role?: string;
+    };
+    if (payload.role !== "service_role") return null;
+    return payload.ref ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Load the bundled memory schema SQL. */
+function loadSchemaSql(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, "..", "packages", "memory-mcp", "schema.sql"),
+    path.join(here, "..", "..", "packages", "memory-mcp", "schema.sql"),
+    path.join(process.cwd(), "packages", "memory-mcp", "schema.sql"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return fs.readFileSync(p, "utf8");
+  }
+  return "";
+}
+
+/** Try to install the memory schema via the user's Supabase exec_sql RPC. */
+async function installSchema(supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {
+  const sql = loadSchemaSql();
+  if (!sql) return false;
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sql }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Probe whether the schema is live. */
+async function verifySchema(supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/business_context?select=id&limit=1`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function bearerFrom(req: VercelRequest): string {
+  return (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
+}
+
+// ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
@@ -287,6 +408,242 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { onConflict: "category,key" }
           );
 
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      // ── BYOD / wizard actions ────────────────────────────────────────
+      case "setup_status": {
+        const apiKey = String(req.query.api_key ?? "").trim();
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+        const { data, error } = await supabase
+          .from("memory_configs")
+          .select("supabase_url,schema_installed,schema_installed_at,last_used_at,updated_at")
+          .eq("api_key_hash", sha256hex(apiKey))
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(200).json({ configured: false });
+        return res.status(200).json({ configured: true, ...data });
+      }
+
+      case "setup": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const body = req.body as {
+          api_key?: string;
+          service_role_key?: string;
+          supabase_url?: string;
+          email?: string;
+        };
+        const apiKey = (body?.api_key ?? "").trim();
+        const serviceRoleKey = (body?.service_role_key ?? "").trim();
+        let userSupabaseUrl = (body?.supabase_url ?? "").trim();
+        const email = body?.email?.trim().toLowerCase();
+
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+        if (!apiKey.startsWith("uc_") && !apiKey.startsWith("agt_")) {
+          return res.status(400).json({ error: "Invalid api_key format" });
+        }
+        if (!serviceRoleKey || serviceRoleKey.length < 40) {
+          return res.status(400).json({ error: "service_role_key looks invalid" });
+        }
+
+        if (!userSupabaseUrl) {
+          const ref = decodeProjectRef(serviceRoleKey);
+          if (!ref) {
+            return res.status(400).json({
+              error: "Couldn't read project ref from key. Paste the Supabase URL too.",
+              need_url: true,
+            });
+          }
+          userSupabaseUrl = `https://${ref}.supabase.co`;
+        }
+
+        // Validate creds by pinging the project.
+        const pingRes = await fetch(`${userSupabaseUrl}/rest/v1/`, {
+          headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+        });
+        if (!pingRes.ok && pingRes.status !== 404) {
+          return res.status(400).json({
+            error: `Supabase rejected that key (HTTP ${pingRes.status}). Double-check you copied service_role, not anon.`,
+          });
+        }
+
+        const installed = await installSchema(userSupabaseUrl, serviceRoleKey);
+        const schemaInstalled = installed || (await verifySchema(userSupabaseUrl, serviceRoleKey));
+
+        const salt = crypto.randomBytes(SALT_BYTES);
+        const encKey = deriveKey(apiKey, salt);
+        const { iv, authTag, ciphertext } = encryptString(serviceRoleKey, encKey);
+
+        const { error } = await supabase
+          .from("memory_configs")
+          .upsert(
+            {
+              api_key_hash: sha256hex(apiKey),
+              email: email ?? null,
+              supabase_url: userSupabaseUrl,
+              encrypted_service_key: ciphertext,
+              encryption_iv: iv,
+              encryption_tag: authTag,
+              encryption_salt: salt.toString("hex"),
+              schema_installed: schemaInstalled,
+              schema_installed_at: schemaInstalled ? new Date().toISOString() : null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "api_key_hash" }
+          );
+        if (error) throw error;
+
+        return res.status(200).json({
+          success: true,
+          supabase_url: userSupabaseUrl,
+          schema_installed: schemaInstalled,
+          schema_sql: schemaInstalled ? undefined : loadSchemaSql(),
+          message: schemaInstalled
+            ? "Memory cloud sync is live. Restart your MCP client."
+            : "Credentials saved. Run the included SQL in your Supabase SQL editor, then you're done.",
+        });
+      }
+
+      case "disconnect": {
+        if (req.method !== "DELETE") return res.status(405).json({ error: "DELETE required" });
+        const apiKey = String(req.query.api_key ?? "").trim();
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+        const { error } = await supabase
+          .from("memory_configs")
+          .delete()
+          .eq("api_key_hash", sha256hex(apiKey));
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "config": {
+        // MCP server calls this at startup.
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("memory_configs")
+          .select("*")
+          .eq("api_key_hash", sha256hex(apiKey))
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ configured: false, error: "No memory config" });
+
+        try {
+          const salt = Buffer.from(data.encryption_salt, "hex");
+          const key = deriveKey(apiKey, salt);
+          const serviceRoleKey = decryptString(
+            data.encryption_iv,
+            data.encryption_tag,
+            data.encrypted_service_key,
+            key
+          );
+          // Fire-and-forget last_used_at update
+          supabase
+            .from("memory_configs")
+            .update({ last_used_at: new Date().toISOString() })
+            .eq("api_key_hash", sha256hex(apiKey))
+            .then(() => {});
+          return res.status(200).json({
+            configured: true,
+            supabase_url: data.supabase_url,
+            service_role_key: serviceRoleKey,
+            schema_installed: data.schema_installed,
+          });
+        } catch {
+          return res.status(500).json({
+            error: "Failed to decrypt memory config. Your API key may have changed — rerun setup.",
+          });
+        }
+      }
+
+      case "device_check": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as {
+          device_fingerprint?: string;
+          label?: string;
+          platform?: string;
+          storage_mode?: "local" | "cloud";
+        };
+        const fp = (body?.device_fingerprint ?? "").trim();
+        if (!fp) return res.status(400).json({ error: "device_fingerprint required" });
+        const mode = body?.storage_mode === "cloud" ? "cloud" : "local";
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { error: upErr } = await supabase
+          .from("memory_devices")
+          .upsert(
+            {
+              api_key_hash: apiKeyHash,
+              device_fingerprint: fp,
+              label: body?.label ?? null,
+              platform: body?.platform ?? null,
+              storage_mode: mode,
+              last_seen: new Date().toISOString(),
+            },
+            { onConflict: "api_key_hash,device_fingerprint" }
+          );
+        if (upErr) throw upErr;
+
+        const { data: rows } = await supabase
+          .from("memory_devices")
+          .select("storage_mode,nudge_dismissed")
+          .eq("api_key_hash", apiKeyHash);
+
+        const list = (rows ?? []) as Array<{ storage_mode: string; nudge_dismissed: boolean }>;
+        const totalDevices = list.length;
+        const localDevices = list.filter((r) => r.storage_mode === "local").length;
+        const anyDismissed = list.some((r) => r.nudge_dismissed);
+        const nudge = mode === "local" && totalDevices >= 2 && localDevices >= 1 && !anyDismissed;
+
+        return res.status(200).json({
+          success: true,
+          total_devices: totalDevices,
+          local_devices: localDevices,
+          nudge,
+          nudge_message: nudge
+            ? `You're using UnClick memory on ${totalDevices} machines. Turn on cloud sync: https://unclick.world/memory/setup`
+            : null,
+        });
+      }
+
+      case "list_devices": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("memory_devices")
+          .select("*")
+          .eq("api_key_hash", sha256hex(apiKey))
+          .order("last_seen", { ascending: false });
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "remove_device": {
+        if (req.method !== "DELETE") return res.status(405).json({ error: "DELETE required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const fp = String(req.query.fingerprint ?? "").trim();
+        if (!fp) return res.status(400).json({ error: "fingerprint required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        if (req.query.dismiss === "1") {
+          const { error } = await supabase
+            .from("memory_devices")
+            .update({ nudge_dismissed: true })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("device_fingerprint", fp);
+          if (error) throw error;
+          return res.status(200).json({ success: true });
+        }
+
+        const { error } = await supabase
+          .from("memory_devices")
+          .delete()
+          .eq("api_key_hash", apiKeyHash)
+          .eq("device_fingerprint", fp);
         if (error) throw error;
         return res.status(200).json({ success: true });
       }

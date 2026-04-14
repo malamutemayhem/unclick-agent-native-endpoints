@@ -81,8 +81,8 @@ export default function MemoryAdminPage() {
     (async () => {
       try {
         const [cfgRes, devRes] = await Promise.all([
-          fetch(`/api/memory-setup?api_key=${encodeURIComponent(apiKey)}`),
-          fetch("/api/memory-device-check", {
+          fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(apiKey)}`),
+          fetch("/api/memory-admin?action=list_devices", {
             headers: { Authorization: `Bearer ${apiKey}` },
           }),
         ]);

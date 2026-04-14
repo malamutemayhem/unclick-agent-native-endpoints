@@ -156,7 +156,7 @@ export default function MemorySetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/memory-setup", {
+      const res = await fetch("/api/memory-admin?action=setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

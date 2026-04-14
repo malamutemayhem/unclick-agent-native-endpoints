@@ -17,11 +17,14 @@ import type { MemoryBackend } from "./types.js";
 
 let backend: MemoryBackend | null = null;
 
-const UNCLICK_BASE_URL = process.env.UNCLICK_BASE_URL || "https://api.unclick.world";
+// The memory admin endpoints live on the main site, not the tool-calling API.
+// Separate override so users can self-host either independently.
+const MEMORY_API_BASE =
+  process.env.UNCLICK_MEMORY_BASE_URL || process.env.UNCLICK_SITE_URL || "https://unclick.world";
 
 async function tryFetchCloudConfig(apiKey: string): Promise<boolean> {
   try {
-    const res = await fetch(`${UNCLICK_BASE_URL}/api/memory-config`, {
+    const res = await fetch(`${MEMORY_API_BASE}/api/memory-admin?action=config`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!res.ok) return false;

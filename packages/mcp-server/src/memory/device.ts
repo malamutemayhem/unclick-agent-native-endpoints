@@ -11,7 +11,8 @@
 import * as os from "os";
 import * as crypto from "crypto";
 
-const UNCLICK_BASE_URL = process.env.UNCLICK_BASE_URL || "https://api.unclick.world";
+const MEMORY_API_BASE =
+  process.env.UNCLICK_MEMORY_BASE_URL || process.env.UNCLICK_SITE_URL || "https://unclick.world";
 
 function fingerprint(): string {
   const parts = [os.hostname(), os.platform(), os.arch(), os.homedir()].join("|");
@@ -32,7 +33,7 @@ export async function sendDeviceHeartbeat(storageMode: "local" | "cloud"): Promi
   if (!apiKey) return null;
 
   try {
-    const res = await fetch(`${UNCLICK_BASE_URL}/api/memory-device-check`, {
+    const res = await fetch(`${MEMORY_API_BASE}/api/memory-admin?action=device_check`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
