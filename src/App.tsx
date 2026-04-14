@@ -34,6 +34,7 @@ import CrewsPage from "./pages/Crews.tsx";
 import ToolsPage from "./pages/Tools.tsx";
 import NewToAIPage from "./pages/NewToAI.tsx";
 import SmartHomePage from "./pages/SmartHome.tsx";
+import InstallRecoverPage from "./pages/InstallRecover.tsx";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,8 @@ const App = () => (
           <Route path="/new-to-ai" element={<NewToAIPage />} />
           <Route path="/smarthome" element={<SmartHomePage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          {/* Install ticket recovery: fresh 24h code for returning users */}
+          <Route path="/i" element={<InstallRecoverPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

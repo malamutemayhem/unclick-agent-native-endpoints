@@ -1,28 +1,34 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { SITE_STATS } from "@/config/site-stats";
 import FadeIn from "./FadeIn";
 import ApiKeySignup from "./ApiKeySignup";
 import { motion } from "framer-motion";
+import { getOrIssueTicket } from "@/lib/install-ticket";
 
 type Tab = "Ask Your Agent" | "Claude Desktop" | "Cursor" | "OpenClaw" | "Direct API";
 type ManualTab = Exclude<Tab, "Ask Your Agent">;
 
-const PLACEHOLDER = "YOUR_API_KEY";
+const PLACEHOLDER = "YOUR_INSTALL_CODE";
 
-function makeJsonConfig(apiKey: string) {
+// The install config uses a short-lived "ticket" instead of the raw API key.
+// The ticket looks like a project slug, not a credential, so pasting it
+// into a chat doesn't trigger credential-leak warnings.
+function makeJsonConfig(installCode: string) {
   return `{
   "mcpServers": {
     "unclick": {
       "command": "npx",
       "args": ["-y", "@unclick/mcp-server"],
       "env": {
-        "UNCLICK_API_KEY": "${apiKey}"
+        "UNCLICK_API_KEY": "${installCode}"
       }
     }
   }
 }`;
 }
 
+// The direct API example still needs the real key (it's a Bearer header),
+// so we only swap in the install code for the MCP flows.
 function makeApiConfig(apiKey: string) {
   return `curl https://api.unclick.world/v1/shorten \\
   -H "Authorization: Bearer ${apiKey}" \\
@@ -30,8 +36,21 @@ function makeApiConfig(apiKey: string) {
   -d '{"url": "https://example.com/very/long/url"}'`;
 }
 
-function makeAgentPrompt(apiKey: string) {
-  return `Install the UnClick MCP server. Run it via npx with the package @unclick/mcp-server and set UNCLICK_API_KEY to ${apiKey}.`;
+// Neutral prose + JSON config. Works when pasted into a chat (the agent sees
+// a standard MCP config, not a credential and not an imperative command) and
+// also works when pasted straight into a client's settings file.
+function makeAgentPrompt(installCode: string) {
+  return `UnClick MCP config (install code good for 24 hours):
+
+{
+  "mcpServers": {
+    "unclick": {
+      "command": "npx",
+      "args": ["-y", "@unclick/mcp-server"],
+      "env": { "UNCLICK_API_KEY": "${installCode}" }
+    }
+  }
+}`;
 }
 
 const tabs: Tab[] = ["Ask Your Agent", "Claude Desktop", "Cursor", "OpenClaw", "Direct API"];
@@ -69,13 +88,13 @@ const steps = [
   },
   {
     n: "2",
-    label: "Copy the prompt or config",
-    detail: `Pick your install method below. Your key is already inserted. One copy-paste connects all ${SITE_STATS.TOOLS_DISPLAY} tools.`,
+    label: "Copy your install config",
+    detail: `Your install code is already inserted. One copy-paste connects all ${SITE_STATS.TOOLS_DISPLAY} tools.`,
   },
   {
     n: "3",
     label: "Paste and go",
-    detail: "Drop the config or prompt into your agent and restart. All tools activate at once. No per-tool setup.",
+    detail: "Drop it into your agent's chat or your MCP client's config. All tools activate at once.",
   },
 ];
 
@@ -104,19 +123,50 @@ const InstallSection = () => {
   const [promptCopied, setPromptCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [apiKey, setApiKey] = useState<string>("");
+  const [installCode, setInstallCode] = useState<string>("");
   const [showConfig, setShowConfig] = useState(false);
 
   const handleKeyReady = useCallback((key: string) => {
     setApiKey(key);
   }, []);
 
-  const displayKey = apiKey || PLACEHOLDER;
-  const hasKey = Boolean(apiKey);
+  // When the API key becomes available, fetch a 24h install ticket so every
+  // config block shows a neutral-looking handoff code instead of the raw key.
+  useEffect(() => {
+    if (!apiKey) {
+      setInstallCode("");
+      return;
+    }
+    let cancelled = false;
+    getOrIssueTicket(apiKey)
+      .then(({ ticket }) => {
+        if (!cancelled) setInstallCode(ticket);
+      })
+      .catch((err) => {
+        console.error("[InstallSection] issue ticket failed", err);
+        // Fall back to the real key if ticket issuance fails. The MCP server
+        // accepts both shapes transparently.
+        if (!cancelled) setInstallCode(apiKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey]);
+
+  // What gets shown inside each config block. Direct-API still uses the
+  // real key (cURL needs a Bearer token that the API actually accepts).
+  const displayMcpCode = installCode || PLACEHOLDER;
+  const displayApiKey = apiKey || PLACEHOLDER;
+  const hasKey = Boolean(apiKey) && Boolean(installCode);
   const isAgentTab = active === "Ask Your Agent";
 
-  const agentPrompt = makeAgentPrompt(displayKey);
-  const jsonConfig = makeJsonConfig(displayKey);
-  const manualCode = isAgentTab ? "" : manualConfigs[active as ManualTab].make(displayKey);
+  const agentPrompt = makeAgentPrompt(displayMcpCode);
+  const jsonConfig = makeJsonConfig(displayMcpCode);
+  const manualCode = isAgentTab
+    ? ""
+    : active === "Direct API"
+      ? manualConfigs["Direct API"].make(displayApiKey)
+      : manualConfigs[active as ManualTab].make(displayMcpCode);
 
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(agentPrompt);
@@ -210,9 +260,9 @@ const InstallSection = () => {
           {/* Ask Your Agent tab */}
           {isAgentTab && (
             <div className="p-5">
-              <p className="text-sm font-semibold text-heading mb-1">One prompt. That's it.</p>
+              <p className="text-sm font-semibold text-heading mb-1">One copy. One paste.</p>
               <p className="text-xs text-muted-foreground mb-4">
-                Works with Claude Code, Cursor, Windsurf, and any agent with file access. Paste this into your agent's chat.
+                Copy this and paste it into your agent's chat. The install code (not your real API key) is good for 24 hours, then self-destructs.
               </p>
 
               {/* Copyable prompt box */}
