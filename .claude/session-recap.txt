@@ -1,0 +1,269 @@
+===============================================================================
+UNCLICK SESSION RECAP
+Branch: claude/general-session-Nl1Sl
+Date range: Prior sessions through 2026-04-14
+Purpose: Context document for future Claude Code sessions and staff
+===============================================================================
+
+-------------------------------------------------------------------------------
+1. THE NORTH STAR (what we are building and why)
+-------------------------------------------------------------------------------
+
+OVERARCHING GOAL
+Build UnClick as the "OS shell" for AI agents. The product surface is:
+  - Website + Admin UI (card-based, not page-based)
+  - npm package @unclick/mcp-server (one install gives agents 450+ endpoints)
+  - Persistent cross-session memory so agents stop forgetting
+
+#1 PRIORITY: MEMORY
+The user (Chris, non-coder) is frustrated that every Claude Code session starts
+from zero. The solution is @unclick/memory-mcp: a persistent memory server
+that Claude sessions read at startup and write to at shutdown. This must work
+across multiple Claude Code accounts so future staff get the same context.
+
+STANDING USER PREFERENCES
+  - Plain English. Chris is not a coder. Explain in simple language.
+  - Reduce friction in the dev workflow across sessions and accounts.
+  - No em dashes anywhere (code or content). Use a regular dash or restructure.
+  - Memory is always the top priority.
+  - Card-based UI (OS shell foundation), not traditional pages.
+
+-------------------------------------------------------------------------------
+2. WHAT WAS BUILT IN PRIOR SESSIONS (already on branch)
+-------------------------------------------------------------------------------
+
+@unclick/memory-mcp v0.2.0
+  Location:        packages/memory-mcp/
+  Tools:           17 MCP tools
+  Architecture:    6-layer memory model
+                     1. Business Context
+                     2. Knowledge Library
+                     3. Session Summaries
+                     4. Extracted Facts
+                     5. Conversation Log
+                     6. Code Dumps
+  Backends:        MemoryBackend interface
+                     - LocalBackend: JSON files at ~/.unclick/memory/
+                     - SupabaseBackend: cloud mode with Postgres
+  Default mode:    Zero-config local
+  Bins:            unclick-memory-mcp, unclick-memory-setup
+  Package status:  100% publish-ready
+                     - 28 files, 27.6 KB
+                     - shasum 56882a11057400799711075c6ec8fae824b3306b
+                     - prepublishOnly runs build
+                     - npm pack --dry-run passes
+
+Session bridge protocol (documented in packages/memory-mcp/CLAUDE.md)
+  - Every Claude session MUST call get_startup_context first
+  - Every Claude session MUST call write_session_summary before leaving
+  - Mantra: "Read before you work, write before you leave"
+
+Memory Admin dashboard
+  Route:     /memory/admin
+  File:      src/pages/MemoryAdmin.tsx (~600 lines)
+  Wiring:    src/App.tsx route is live
+  API:       api/memory-admin.ts (12 actions, Supabase-direct, cloud-mode only)
+  UI:        Sidebar nav with sections:
+               Overview, Context, Library, Sessions, Facts, Logs, Code, Search
+  Components: StatCard, DecayBadge, StatusBadge, EmptyState, ErrorBanner
+  Responsive: Mobile slide-up sidebar
+
+OS Shell admin surface
+  File:  src/pages/Settings.tsx
+  Shape: OS-style control panel with sidebar nav
+  Nav:   Profile, API Keys, Notifications, Admin
+  Admin cards (AdminCard component with icon/title/description/link/badge):
+    - Memory          /memory/admin       (live)
+    - Integrations    /backstagepass      (live)
+    - Tools           /tools              (live)
+    - System Status   (soon)
+    - Team            (soon)
+    - Domains         (soon)
+    - Appearance      (soon)
+    - Storage         (soon)
+    - Security        (soon)
+  This is the foundation of the OS shell. Everything future gets a card here.
+
+BackstagePass (prior work, context only)
+  Encrypted credential vault, AES-256-GCM, 40+ platforms including Reddit OAuth.
+
+-------------------------------------------------------------------------------
+3. WHAT HAPPENED THIS SESSION
+-------------------------------------------------------------------------------
+
+GOAL: Publish @unclick/memory-mcp to npm so agents can install it.
+
+3.1 npm publish attempt (BLOCKED)
+  - Token tried: [REDACTED npm automation token, no longer valid]
+    - As --otp flag: failed
+    - In .npmrc: failed
+  - Result: 401 Unauthorized
+  - Possible causes (unclear which):
+      a) @unclick org does not exist on npm
+      b) Token lacks publish scope
+      c) Proxy interference
+  - Current state: Chris is logged in to npm as malamutemayhem
+      - unclick org is visible in his account
+      - 2 automation tokens exist, dated Apr 9, 2026
+      - Tokens are masked after creation (can't read values)
+
+3.2 npm frustration discussion
+  Chris said: "I am really tired of this npm site, what is it even and is there
+  alternative? can we make our own?"
+
+  We discussed alternatives in plain language:
+    - GitHub Packages: works but adds .npmrc friction for every installer
+    - JSR: too new, small ecosystem
+    - Verdaccio: self-host, adds ops burden
+    - Conclusion: npm is still best. The frustration is with npm's 2FA UX,
+      not npm itself.
+
+  Chris correctly pushed back: "you say they can already install with npm,
+  if we go git wont it be out dated?" - I confirmed GitHub Packages is live,
+  not outdated, but it adds friction and the real fix is automation.
+
+3.3 Reddit post as evidence
+  Chris shared: https://www.reddit.com/r/programmer/s/JsjrlJJBXf
+  Title: "npm's horrible 2FA" by u/HackTheDev (r/programmer, 2mo old)
+  Complaint: npm 2FA requires QR scan + fingerprint dance every publish.
+
+  Top comments recommend the same fix:
+    - dymos, RealisticDuck1957: Use GitHub Actions / CI for publishing
+    - prjctimg: Aegis 2FA app + passkeys
+    - bobrk_rwa2137: Mentioned Shai-Hulud supply chain attack context
+
+  Attempted to use UnClick's own reddit_read tool to avoid web friction, but
+  it requires access_token from BackstagePass. Chris pasted the post manually.
+
+3.4 Discovery: prior Claude session created the tokens
+  Chris asked: "the fact there is an automation token means a previous claude
+  bot i worked with did that correct?"
+  Confirmed: yes, the 2 tokens dated Apr 9, 2026 were created by a prior
+  Claude session. They are now masked, so we cannot reuse them; Chris must
+  either generate a fresh one, or adopt the GitHub Actions workflow.
+
+3.5 Final proposed path (awaiting Chris's choice)
+  Option A (one-time unblock)
+    Generate a fresh automation token on npm now that Chris is logged in.
+    Use it once to publish v0.2.0.
+  Option B (permanent fix, matches Reddit consensus)
+    Create .github/workflows/publish.yml that publishes on release.
+    Chris adds NPM_TOKEN as a GitHub secret.
+    Every future publish is one git tag away. No 2FA dance ever again.
+
+  Recommendation: do BOTH. Option A unblocks today. Option B prevents the
+  same frustration next time.
+
+-------------------------------------------------------------------------------
+4. CURRENT STATE OF THE BRANCH
+-------------------------------------------------------------------------------
+
+Branch: claude/general-session-Nl1Sl (pushed)
+Ready to merge to main once Chris approves.
+
+On this branch:
+  - @unclick/memory-mcp v0.2.0 built and packable
+  - src/pages/Settings.tsx OS-style admin control panel
+  - src/pages/MemoryAdmin.tsx 6-layer memory dashboard
+  - api/memory-admin.ts serverless endpoint (cherry-picked)
+  - src/App.tsx route /memory/admin wired
+  - LICENSE and SECURITY.md added (from prior session for Glama score)
+
+Not yet done:
+  - Publish to npm
+  - GitHub Actions publish workflow
+  - Merge to main
+  - Run schema.sql in Supabase (cloud mode activation)
+  - Verify Glama score bump from LICENSE + SECURITY.md
+  - Update awesome-mcp-servers PR #4409 with Glama badge
+  - Claim server on Glama (needs admin login)
+
+-------------------------------------------------------------------------------
+5. PENDING TASKS (prioritized)
+-------------------------------------------------------------------------------
+
+P0 Immediate
+  [ ] Publish @unclick/memory-mcp v0.2.0 to npm
+      - Option A: fresh npm automation token, then `npm publish --access public`
+      - Option B: .github/workflows/publish.yml + NPM_TOKEN secret
+
+P1 Near-term
+  [ ] Merge claude/general-session-Nl1Sl to main (after Chris approves)
+  [ ] Run packages/memory-mcp/schema.sql in Supabase for cloud mode
+  [ ] Verify Glama score picked up LICENSE + SECURITY.md
+  [ ] Update awesome-mcp-servers PR #4409 with Glama badge
+  [ ] Claim server on Glama (Chris admin login)
+
+P2 Future
+  [ ] Fill in the Settings admin cards marked "soon"
+  [ ] Expand MemoryAdmin with more granular tools as usage reveals gaps
+  [ ] Cross-account memory sync test (multiple Claude Code accounts)
+
+-------------------------------------------------------------------------------
+6. KEY FILES AND LINES (for next Claude session)
+-------------------------------------------------------------------------------
+
+CLAUDE.md                                   Project rules, 4 meta-tools, style
+packages/memory-mcp/package.json            v0.2.0, bins, files, prepublishOnly
+packages/memory-mcp/CLAUDE.md               Session bridge protocol
+packages/memory-mcp/schema.sql              Supabase schema for cloud mode
+packages/memory-mcp/src/                    17 tools, MemoryBackend, backends
+packages/mcp-server/src/server.ts           Main MCP server, 4 meta-tools
+packages/mcp-server/src/tool-wiring.ts      Endpoint map
+src/App.tsx                                 Route /memory/admin wired
+src/pages/Settings.tsx                      OS admin control panel, AdminCard
+src/pages/MemoryAdmin.tsx                   6-layer dashboard (~600 lines)
+src/pages/tools/Tools.tsx                   Tools grid, one tile per integration
+src/components/FadeIn.tsx                   Framer Motion wrapper (reference)
+api/memory-admin.ts                         Serverless endpoint, 12 actions
+LICENSE                                     Added for Glama score
+SECURITY.md                                 Added for Glama score
+
+-------------------------------------------------------------------------------
+7. ARCHITECTURE RULES (from CLAUDE.md, must follow)
+-------------------------------------------------------------------------------
+
+Monorepo:
+  packages/mcp-server/   npm package @unclick/mcp-server
+  src/                   React website (Vite + TS)
+  api/                   Vercel serverless functions
+
+4 meta-tools pattern (NEVER register per-tool MCP endpoints):
+  unclick_search      find tools by keyword
+  unclick_browse      list all tools, optionally by category
+  unclick_tool_info   endpoints and params for a tool
+  unclick_call        execute any endpoint with parameters
+
+Adding a new tool:
+  1. api/*-tool.ts       Vercel handler + endpoint logic
+  2. tool-wiring.ts      Add name, description, category, endpoint mapping
+  3. Tools.tsx           Add tile
+
+Style:
+  - No em dashes anywhere
+  - No per-tool MCP registrations
+
+-------------------------------------------------------------------------------
+8. HOW TO RESUME (drop-in instructions for the next Claude)
+-------------------------------------------------------------------------------
+
+Step 1. Read this file first.
+Step 2. Read CLAUDE.md and packages/memory-mcp/CLAUDE.md.
+Step 3. Check git status on branch claude/general-session-Nl1Sl.
+Step 4. Ask Chris which path for npm publish: fresh token (A) or CI (B).
+Step 5. If A: have Chris paste a fresh automation token, then publish.
+Step 6. If B: create .github/workflows/publish.yml, tell Chris to add
+        NPM_TOKEN secret at github.com/malamutemayhem/unclick-agent-native-
+        endpoints/settings/secrets/actions, then create a release tag.
+Step 7. After publish, verify `npm view @unclick/memory-mcp` shows v0.2.0.
+Step 8. Proceed to P1 tasks.
+
+Always:
+  - Call get_startup_context at session start (once memory is live and local)
+  - Call write_session_summary at session end
+  - Plain English with Chris
+  - Memory is the priority
+
+===============================================================================
+END OF RECAP
+===============================================================================
