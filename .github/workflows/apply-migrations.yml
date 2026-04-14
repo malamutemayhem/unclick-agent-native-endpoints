@@ -7,12 +7,16 @@ name: Apply Supabase migrations
 # One-time setup (GitHub repo → Settings → Secrets and variables → Actions):
 #   SUPABASE_ACCESS_TOKEN  - https://supabase.com/dashboard/account/tokens
 #   SUPABASE_PROJECT_REF   - the xxxxx from xxxxx.supabase.co
-#   SUPABASE_DB_PASSWORD   - the database password (Dashboard → Settings → Database)
+#   SUPABASE_DB_PASSWORD   - database password (Dashboard → Database → Settings)
+#
+# Connection note: we force the *session pooler* (port 5432) via an explicit
+# --db-url. The CLI's auto-selection sometimes picks the transaction pooler
+# (port 6543), which doesn't support the DDL operations migrations need and
+# returns a cryptic "unexpected EOF". Session pooler supports everything.
 #
 # Self-healing: if the remote DB has legacy migrations that pre-date the repo's
-# migration directory, the CLI refuses to push. The "Auto-reconcile" step
-# catches that error, marks the orphan migrations as reverted (bookkeeping only,
-# the DB data is untouched), and retries the push.
+# migration directory, the CLI refuses to push. We catch that specific error,
+# mark the orphans as reverted (bookkeeping only, DB data untouched), retry.
 
 on:
   push:
@@ -28,6 +32,8 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_REGION: ap-southeast-2
     steps:
       - uses: actions/checkout@v4
 
@@ -37,13 +43,24 @@ jobs:
           version: latest
 
       - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Build explicit session-pooler URL
+        id: dburl
         run: |
-          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          ENCODED_PW=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe=''))")
+          HOST="aws-1-${SUPABASE_REGION}.pooler.supabase.com"
+          URL="postgresql://postgres.${SUPABASE_PROJECT_REF}:${ENCODED_PW}@${HOST}:5432/postgres"
+          # Mask the URL so the password can't leak in logs
+          echo "::add-mask::$URL"
+          echo "db_url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: Push pending migrations (self-healing)
+        env:
+          DB_URL: ${{ steps.dburl.outputs.db_url }}
         run: |
           set +e
-          output=$(supabase db push --include-all --yes 2>&1)
+          output=$(supabase db push --db-url "$DB_URL" --include-all --yes 2>&1)
           status=$?
           echo "$output"
 
@@ -65,9 +82,9 @@ jobs:
               exit 1
             fi
             echo "Marking as reverted: $ids"
-            supabase migration repair --status reverted $ids || exit 1
+            supabase migration repair --db-url "$DB_URL" --status reverted $ids || exit 1
             echo "Retrying push."
-            supabase db push --include-all --yes
+            supabase db push --db-url "$DB_URL" --include-all --yes
             exit $?
           fi
 
