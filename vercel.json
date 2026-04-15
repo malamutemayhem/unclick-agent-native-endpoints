@@ -13,5 +13,11 @@
     { "source": "/og-image.svg",  "destination": "/og-image.svg" },
     { "source": "/og-image.png",  "destination": "/og-image.png" },
     { "source": "/(.*)",          "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/memory-admin?action=nightly_decay",
+      "schedule": "0 4 * * *"
+    }
   ]
 }

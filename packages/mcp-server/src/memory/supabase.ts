@@ -1,8 +1,19 @@
 /**
  * Supabase backend for UnClick Memory.
  *
- * Cloud mode: data lives in the user's own Supabase project (BYOD).
- * Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.
+ * Two tenancy modes:
+ *
+ *   BYOD     - data lives in the user's own Supabase project. Single-tenant
+ *              tables (business_context, extracted_facts, ...) and the
+ *              original RPC names. This is what the wizard (memory-admin
+ *              setup) installs into a user's Supabase.
+ *
+ *   managed  - data lives in UnClick's central Supabase. Multi-tenant
+ *              tables (mc_business_context, mc_extracted_facts, ...) where
+ *              every row is tagged with api_key_hash. RPCs are mc_-prefixed
+ *              and take p_api_key_hash as their first parameter. The backend
+ *              is responsible for filtering / inserting api_key_hash on
+ *              every operation.
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -15,34 +26,45 @@ import type {
   LibraryDocInput,
 } from "./types.js";
 
-let client: SupabaseClient | null = null;
+export type Tenancy =
+  | { mode: "byod" }
+  | { mode: "managed"; apiKeyHash: string };
 
-function getSupabase(): SupabaseClient {
-  if (client) return client;
-
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "Missing SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) environment variables. " +
-      "Set these in your MCP config's env block."
-    );
-  }
-
-  client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  return client;
+export interface SupabaseBackendConfig {
+  url: string;
+  serviceRoleKey: string;
+  tenancy: Tenancy;
 }
 
-async function rpc<T = unknown>(fn: string, params: Record<string, unknown> = {}): Promise<T> {
-  const sb = getSupabase();
-  const { data, error } = await sb.rpc(fn, params);
-  if (error) throw new Error(`rpc(${fn}) failed: ${error.message}`);
-  return data as T;
+interface TableNames {
+  business_context: string;
+  knowledge_library: string;
+  knowledge_library_history: string;
+  session_summaries: string;
+  extracted_facts: string;
+  conversation_log: string;
+  code_dumps: string;
 }
+
+const BYOD_TABLES: TableNames = {
+  business_context: "business_context",
+  knowledge_library: "knowledge_library",
+  knowledge_library_history: "knowledge_library_history",
+  session_summaries: "session_summaries",
+  extracted_facts: "extracted_facts",
+  conversation_log: "conversation_log",
+  code_dumps: "code_dumps",
+};
+
+const MANAGED_TABLES: TableNames = {
+  business_context: "mc_business_context",
+  knowledge_library: "mc_knowledge_library",
+  knowledge_library_history: "mc_knowledge_library_history",
+  session_summaries: "mc_session_summaries",
+  extracted_facts: "mc_extracted_facts",
+  conversation_log: "mc_conversation_log",
+  code_dumps: "mc_code_dumps",
+};
 
 function now(): string {
   return new Date().toISOString();
@@ -52,177 +74,427 @@ function truncate(s: string, max = 8000): string {
   return s.length > max ? s.slice(0, max) + "\n...[truncated]" : s;
 }
 
+// ─── Free-tier caps ──────────────────────────────────────────────────────
+// Starting values from the v2 build plan. Adjust with real data later.
+// Pro tier removes all caps. Caps only apply in managed cloud mode (BYOD
+// users own their database, so they manage their own quota).
+export const FREE_TIER_CAPS = {
+  storage_bytes: 50 * 1024 * 1024, // 50 MB
+  facts: 5000,
+} as const;
+
+/**
+ * Thrown when a free-tier user tries to write past their cap. The MCP
+ * handlers surface the message verbatim back to the agent so the user
+ * sees an actionable upgrade path.
+ */
+export class CapExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CapExceededError";
+  }
+}
+
 export class SupabaseBackend implements MemoryBackend {
-  constructor() {
-    // Verify connection on creation
-    getSupabase();
-    console.error("UnClick Memory: Supabase cloud mode");
+  private client: SupabaseClient;
+  private tenancy: Tenancy;
+  private tables: TableNames;
+
+  constructor(config: SupabaseBackendConfig) {
+    if (!config.url || !config.serviceRoleKey) {
+      throw new Error("SupabaseBackend requires url and serviceRoleKey");
+    }
+    this.client = createClient(config.url, config.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    this.tenancy = config.tenancy;
+    this.tables = config.tenancy.mode === "managed" ? MANAGED_TABLES : BYOD_TABLES;
+    console.error(
+      `UnClick Memory: Supabase ${
+        config.tenancy.mode === "managed" ? "managed cloud" : "BYOD"
+      } mode`
+    );
   }
 
+  // ─── Tenancy helpers ─────────────────────────────────────────────────────
+
+  /** Adds api_key_hash to a row in managed mode; passes through in BYOD. */
+  private withTenancy<T extends Record<string, unknown>>(row: T): T {
+    if (this.tenancy.mode === "managed") {
+      return { ...row, api_key_hash: this.tenancy.apiKeyHash };
+    }
+    return row;
+  }
+
+  /**
+   * Enforce free-tier caps on writes. Only runs in managed cloud mode.
+   * BYOD users own their database, so caps don't apply. Pro tier (or any
+   * non-free tier) skips the check.
+   *
+   * `kind` selects which cap to check first. Storage is always verified;
+   * `kind: "fact"` additionally verifies the fact-count cap because
+   * extracted_facts has a separate row count limit.
+   */
+  private async enforceCaps(kind: "fact" | "general"): Promise<void> {
+    if (this.tenancy.mode !== "managed") return;
+    const tier = (process.env.UNCLICK_TIER || "free").toLowerCase();
+    if (tier !== "free") return;
+
+    if (kind === "fact") {
+      const { data, error } = await this.client.rpc("mc_get_fact_count", {
+        p_api_key_hash: this.tenancy.apiKeyHash,
+      });
+      if (error) {
+        // Fail open on counter errors so a transient DB hiccup doesn't
+        // break legitimate writes. Log to stderr for observability.
+        console.error("[memory] mc_get_fact_count failed:", error.message);
+      } else if (typeof data === "number" && data >= FREE_TIER_CAPS.facts) {
+        throw new CapExceededError(
+          `Free tier limit reached: ${FREE_TIER_CAPS.facts.toLocaleString()} active ` +
+            `facts. Upgrade to Pro for unlimited facts, or prune old facts ` +
+            `via the Memory surface. Current count: ${data}.`
+        );
+      }
+    }
+
+    const { data: bytes, error: bytesErr } = await this.client.rpc(
+      "mc_get_storage_bytes",
+      { p_api_key_hash: this.tenancy.apiKeyHash }
+    );
+    if (bytesErr) {
+      console.error("[memory] mc_get_storage_bytes failed:", bytesErr.message);
+      return;
+    }
+    if (typeof bytes === "number" && bytes >= FREE_TIER_CAPS.storage_bytes) {
+      const usedMb = (bytes / (1024 * 1024)).toFixed(1);
+      throw new CapExceededError(
+        `Free tier limit reached: ${usedMb} MB used of ` +
+          `${FREE_TIER_CAPS.storage_bytes / (1024 * 1024)} MB. ` +
+          `Upgrade to Pro for unlimited storage, or prune memory via ` +
+          `the Memory surface.`
+      );
+    }
+  }
+
+  /** Calls an RPC, choosing the BYOD or managed name based on tenancy. */
+  private async rpc<T = unknown>(
+    byodName: string,
+    byodParams: Record<string, unknown>,
+    managedName: string,
+    managedParams: Record<string, unknown>
+  ): Promise<T> {
+    const fn = this.tenancy.mode === "managed" ? managedName : byodName;
+    const params =
+      this.tenancy.mode === "managed"
+        ? { p_api_key_hash: this.tenancy.apiKeyHash, ...managedParams }
+        : byodParams;
+    const { data, error } = await this.client.rpc(fn, params);
+    if (error) throw new Error(`rpc(${fn}) failed: ${error.message}`);
+    return data as T;
+  }
+
+  // ─── Memory operations ───────────────────────────────────────────────────
+
   async getStartupContext(numSessions: number): Promise<unknown> {
-    return rpc<Record<string, unknown>>("get_startup_context", { num_sessions: numSessions });
+    return this.rpc(
+      "get_startup_context",
+      { num_sessions: numSessions },
+      "mc_get_startup_context",
+      { p_num_sessions: numSessions }
+    );
   }
 
   async searchMemory(query: string, maxResults: number): Promise<unknown> {
-    return rpc("search_memory", { search_query: query, max_results: maxResults });
+    return this.rpc(
+      "search_memory",
+      { search_query: query, max_results: maxResults },
+      "mc_search_memory",
+      { p_search_query: query, p_max_results: maxResults }
+    );
   }
 
   async searchFacts(query: string): Promise<unknown> {
-    return rpc("search_facts", { search_query: query });
+    return this.rpc(
+      "search_facts",
+      { search_query: query },
+      "mc_search_facts",
+      { p_search_query: query }
+    );
   }
 
   async searchLibrary(query: string): Promise<unknown> {
-    return rpc("search_library", { search_query: query });
+    return this.rpc(
+      "search_library",
+      { search_query: query },
+      "mc_search_library",
+      { p_search_query: query }
+    );
   }
 
   async getLibraryDoc(slug: string): Promise<unknown> {
-    return rpc("get_library_doc", { doc_slug: slug });
+    return this.rpc(
+      "get_library_doc",
+      { doc_slug: slug },
+      "mc_get_library_doc",
+      { p_doc_slug: slug }
+    );
   }
 
   async listLibrary(): Promise<unknown> {
-    return rpc("list_library");
+    return this.rpc("list_library", {}, "mc_list_library", {});
   }
 
   async writeSessionSummary(data: SessionSummaryInput): Promise<{ id: string }> {
-    const sb = getSupabase();
-    const { data: row, error } = await sb.from("session_summaries").insert({
-      session_id: data.session_id,
-      summary: data.summary,
-      topics: data.topics,
-      open_loops: data.open_loops,
-      decisions: data.decisions,
-      platform: data.platform,
-      duration_minutes: data.duration_minutes,
-    }).select().single();
+    await this.enforceCaps("general");
+    const { data: row, error } = await this.client
+      .from(this.tables.session_summaries)
+      .insert(
+        this.withTenancy({
+          session_id: data.session_id,
+          summary: data.summary,
+          topics: data.topics,
+          open_loops: data.open_loops,
+          decisions: data.decisions,
+          platform: data.platform,
+          duration_minutes: data.duration_minutes,
+        })
+      )
+      .select()
+      .single();
     if (error) throw error;
     return { id: row.id };
   }
 
   async addFact(data: FactInput): Promise<{ id: string }> {
-    const sb = getSupabase();
-    const { data: row, error } = await sb.from("extracted_facts").insert({
-      fact: data.fact,
-      category: data.category,
-      confidence: data.confidence,
-      source_session_id: data.source_session_id ?? null,
-      source_type: "manual",
-      status: "active",
-      decay_tier: "hot",
-      last_accessed: now(),
-    }).select().single();
+    await this.enforceCaps("fact");
+    const { data: row, error } = await this.client
+      .from(this.tables.extracted_facts)
+      .insert(
+        this.withTenancy({
+          fact: data.fact,
+          category: data.category,
+          confidence: data.confidence,
+          source_session_id: data.source_session_id ?? null,
+          source_type: "manual",
+          status: "active",
+          decay_tier: "hot",
+          last_accessed: now(),
+        })
+      )
+      .select()
+      .single();
     if (error) throw error;
     return { id: row.id };
   }
 
-  async supersedeFact(oldId: string, newText: string, category?: string, confidence?: number): Promise<string> {
-    const params: Record<string, unknown> = { old_fact_id: oldId, new_fact_text: newText };
+  async supersedeFact(
+    oldId: string,
+    newText: string,
+    category?: string,
+    confidence?: number
+  ): Promise<string> {
+    if (this.tenancy.mode === "managed") {
+      const params: Record<string, unknown> = {
+        p_api_key_hash: this.tenancy.apiKeyHash,
+        p_old_fact_id: oldId,
+        p_new_fact_text: newText,
+      };
+      if (category !== undefined) params.p_new_category = category;
+      if (confidence !== undefined) params.p_new_confidence = confidence;
+      const { data, error } = await this.client.rpc("mc_supersede_fact", params);
+      if (error) throw new Error(`rpc(mc_supersede_fact) failed: ${error.message}`);
+      return String(data);
+    }
+    const params: Record<string, unknown> = {
+      old_fact_id: oldId,
+      new_fact_text: newText,
+    };
     if (category !== undefined) params.new_category = category;
     if (confidence !== undefined) params.new_confidence = confidence;
-    const data = await rpc("supersede_fact", params);
+    const { data, error } = await this.client.rpc("supersede_fact", params);
+    if (error) throw new Error(`rpc(supersede_fact) failed: ${error.message}`);
     return String(data);
   }
 
   async logConversation(data: ConversationInput): Promise<void> {
-    const sb = getSupabase();
-    const { error } = await sb.from("conversation_log").insert({
-      session_id: data.session_id,
-      role: data.role,
-      content: truncate(data.content),
-      has_code: data.has_code,
-    });
+    await this.enforceCaps("general");
+    const { error } = await this.client
+      .from(this.tables.conversation_log)
+      .insert(
+        this.withTenancy({
+          session_id: data.session_id,
+          role: data.role,
+          content: truncate(data.content),
+          has_code: data.has_code,
+        })
+      );
     if (error) throw error;
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {
-    return rpc("get_conversation_detail", { sid: sessionId });
+    return this.rpc(
+      "get_conversation_detail",
+      { sid: sessionId },
+      "mc_get_conversation_detail",
+      { p_session_id: sessionId }
+    );
   }
 
   async storeCode(data: CodeInput): Promise<{ id: string }> {
-    const sb = getSupabase();
-    const { data: row, error } = await sb.from("code_dumps").insert({
-      session_id: data.session_id,
-      language: data.language,
-      filename: data.filename ?? null,
-      content: truncate(data.content, 50000),
-      description: data.description ?? null,
-    }).select().single();
+    await this.enforceCaps("general");
+    const { data: row, error } = await this.client
+      .from(this.tables.code_dumps)
+      .insert(
+        this.withTenancy({
+          session_id: data.session_id,
+          language: data.language,
+          filename: data.filename ?? null,
+          content: truncate(data.content, 50000),
+          description: data.description ?? null,
+        })
+      )
+      .select()
+      .single();
     if (error) throw error;
     return { id: row.id };
   }
 
   async getBusinessContext(): Promise<unknown[]> {
-    const sb = getSupabase();
-    const { data, error } = await sb.from("business_context").select("*").order("category").order("key");
+    let query = this.client
+      .from(this.tables.business_context)
+      .select("*")
+      .order("category")
+      .order("key");
+    if (this.tenancy.mode === "managed") {
+      query = query.eq("api_key_hash", this.tenancy.apiKeyHash);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data ?? [];
   }
 
-  async setBusinessContext(category: string, key: string, value: unknown, priority?: number): Promise<void> {
-    const sb = getSupabase();
+  async setBusinessContext(
+    category: string,
+    key: string,
+    value: unknown,
+    priority?: number
+  ): Promise<void> {
+    await this.enforceCaps("general");
     const row: Record<string, unknown> = {
       category,
       key,
-      value: typeof value === "string" ? (() => { try { return JSON.parse(value); } catch { return value; } })() : value,
+      value:
+        typeof value === "string"
+          ? (() => {
+              try {
+                return JSON.parse(value);
+              } catch {
+                return value;
+              }
+            })()
+          : value,
       last_accessed: now(),
       decay_tier: "hot",
     };
     if (priority !== undefined) row.priority = priority;
-    const { error } = await sb.from("business_context")
-      .upsert(row, { onConflict: "category,key" })
-      .select().single();
+
+    const onConflict =
+      this.tenancy.mode === "managed" ? "api_key_hash,category,key" : "category,key";
+
+    const { error } = await this.client
+      .from(this.tables.business_context)
+      .upsert(this.withTenancy(row), { onConflict })
+      .select()
+      .single();
     if (error) throw error;
   }
 
   async upsertLibraryDoc(data: LibraryDocInput): Promise<string> {
-    const sb = getSupabase();
-    const { data: existing } = await sb.from("knowledge_library")
-      .select("id, version").eq("slug", data.slug).single();
+    await this.enforceCaps("general");
+    let existingQuery = this.client
+      .from(this.tables.knowledge_library)
+      .select("id, version")
+      .eq("slug", data.slug);
+    if (this.tenancy.mode === "managed") {
+      existingQuery = existingQuery.eq("api_key_hash", this.tenancy.apiKeyHash);
+    }
+    const { data: existing } = await existingQuery.maybeSingle();
 
     if (existing) {
       // DB trigger auto-archives old content and bumps version
-      const { error } = await sb.from("knowledge_library").update({
-        title: data.title,
-        category: data.category,
-        content: data.content,
-        tags: data.tags,
-        last_accessed: now(),
-        decay_tier: "hot",
-      }).eq("id", existing.id);
+      const { error } = await this.client
+        .from(this.tables.knowledge_library)
+        .update({
+          title: data.title,
+          category: data.category,
+          content: data.content,
+          tags: data.tags,
+          last_accessed: now(),
+          decay_tier: "hot",
+        })
+        .eq("id", existing.id);
       if (error) throw error;
       return `Library doc updated: "${data.title}" (v${existing.version + 1})`;
     } else {
-      const { error } = await sb.from("knowledge_library").insert({
-        slug: data.slug,
-        title: data.title,
-        category: data.category,
-        content: data.content,
-        tags: data.tags,
-        version: 1,
-        decay_tier: "hot",
-        last_accessed: now(),
-      });
+      const { error } = await this.client
+        .from(this.tables.knowledge_library)
+        .insert(
+          this.withTenancy({
+            slug: data.slug,
+            title: data.title,
+            category: data.category,
+            content: data.content,
+            tags: data.tags,
+            version: 1,
+            decay_tier: "hot",
+            last_accessed: now(),
+          })
+        );
       if (error) throw error;
       return `Library doc created: "${data.title}" (v1)`;
     }
   }
 
   async manageDecay(): Promise<unknown> {
-    return rpc("manage_decay");
+    return this.rpc("manage_decay", {}, "mc_manage_decay", {});
   }
 
   async getMemoryStatus(): Promise<unknown> {
-    const sb = getSupabase();
-    const tables = ["business_context", "knowledge_library", "session_summaries", "extracted_facts", "conversation_log", "code_dumps"];
+    const tableKeys: Array<keyof TableNames> = [
+      "business_context",
+      "knowledge_library",
+      "session_summaries",
+      "extracted_facts",
+      "conversation_log",
+      "code_dumps",
+    ];
     const counts: Record<string, unknown> = {};
-    for (const table of tables) {
-      const { count } = await sb.from(table).select("*", { count: "exact", head: true });
-      counts[table] = count;
+    for (const tk of tableKeys) {
+      let q = this.client.from(this.tables[tk]).select("*", { count: "exact", head: true });
+      if (this.tenancy.mode === "managed") {
+        q = q.eq("api_key_hash", this.tenancy.apiKeyHash);
+      }
+      const { count } = await q;
+      counts[tk] = count;
     }
-    const { data: factTiers } = await sb.from("extracted_facts").select("decay_tier").eq("status", "active");
+
+    let factTiersQuery = this.client
+      .from(this.tables.extracted_facts)
+      .select("decay_tier")
+      .eq("status", "active");
+    if (this.tenancy.mode === "managed") {
+      factTiersQuery = factTiersQuery.eq("api_key_hash", this.tenancy.apiKeyHash);
+    }
+    const { data: factTiers } = await factTiersQuery;
+
     const tiers = { hot: 0, warm: 0, cold: 0 };
     for (const row of factTiers ?? []) {
       tiers[row.decay_tier as keyof typeof tiers]++;
     }
-    return { mode: "supabase", table_counts: counts, fact_decay_tiers: tiers };
+    return {
+      mode: this.tenancy.mode === "managed" ? "supabase-managed" : "supabase-byod",
+      table_counts: counts,
+      fact_decay_tiers: tiers,
+    };
   }
 }

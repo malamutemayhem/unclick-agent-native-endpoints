@@ -28,6 +28,12 @@
  *                   + nudge signal
  *   - list_devices: GET with Bearer <api_key>
  *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
+ *
+ * Cron actions (called by Vercel cron with Authorization: Bearer <CRON_SECRET>):
+ *   - nightly_decay: Iterate every Pro/Team api_key and run mc_manage_decay
+ *                    against the central managed-cloud schema. Free-tier
+ *                    accounts are skipped (decay is a Pro perk per the v2
+ *                    build plan).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -646,6 +652,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("device_fingerprint", fp);
         if (error) throw error;
         return res.status(200).json({ success: true });
+      }
+
+      // ── Cron actions ────────────────────────────────────────────────
+      case "nightly_decay": {
+        // Vercel cron sends Authorization: Bearer <CRON_SECRET>. Reject any
+        // request that doesn't match. If CRON_SECRET is unset the endpoint
+        // refuses to run at all (fail closed; never expose decay to anon).
+        const cronSecret = process.env.CRON_SECRET;
+        if (!cronSecret) {
+          return res
+            .status(503)
+            .json({ error: "CRON_SECRET not configured on the server" });
+        }
+        const auth = bearerFrom(req);
+        if (auth !== cronSecret) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        // Pull all active non-free api_keys. Decay is a Pro tier perk.
+        const { data: keys, error: keysErr } = await supabase
+          .from("api_keys")
+          .select("key_hash, tier")
+          .eq("is_active", true)
+          .neq("tier", "free");
+        if (keysErr) throw keysErr;
+
+        const results: Array<{
+          api_key_hash: string;
+          tier: string | null;
+          ok: boolean;
+          error?: string;
+          decayed?: unknown;
+        }> = [];
+
+        for (const row of keys ?? []) {
+          const { data: decayed, error: decayErr } = await supabase.rpc(
+            "mc_manage_decay",
+            { p_api_key_hash: row.key_hash }
+          );
+          if (decayErr) {
+            results.push({
+              api_key_hash: row.key_hash,
+              tier: row.tier,
+              ok: false,
+              error: decayErr.message,
+            });
+          } else {
+            results.push({
+              api_key_hash: row.key_hash,
+              tier: row.tier,
+              ok: true,
+              decayed,
+            });
+          }
+        }
+
+        return res.status(200).json({
+          ran_at: new Date().toISOString(),
+          tenants_processed: results.length,
+          results,
+          note:
+            "Nightly extraction (LLM fact distillation from conversation_log) " +
+            "is not yet implemented. See docs/sessions for the open question " +
+            "to Chris about model selection.",
+        });
       }
 
       default:
