@@ -19,6 +19,10 @@ import {
   LogOut,
   Loader2,
   Clock,
+  Copy,
+  Check,
+  Plus,
+  AlertTriangle,
 } from "lucide-react";
 
 interface DeviceRow {
@@ -33,7 +37,8 @@ interface DeviceRow {
 interface ProfileData {
   user_id: string;
   email: string | null;
-  tier: string;
+  tier: string | null;
+  needs_key?: boolean;
   api_key: {
     id: string;
     prefix: string;
@@ -64,6 +69,19 @@ export default function AdminYou() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function fetchProfile() {
+    if (!session) return;
+    const headers = { Authorization: `Bearer ${session.access_token}` };
+    const profileRes = await fetch("/api/memory-admin?action=admin_profile", { headers });
+    if (profileRes.ok) {
+      setProfile(await profileRes.json());
+    }
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -91,6 +109,40 @@ export default function AdminYou() {
 
     return () => { cancelled = true; };
   }, [session]);
+
+  async function handleGenerateKey() {
+    if (!session) return;
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=generate_api_key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setGenError(body.error ?? "Failed to generate key");
+        return;
+      }
+      setGeneratedKey(body.api_key);
+      localStorage.setItem("unclick_api_key", body.api_key);
+      await fetchProfile();
+    } catch {
+      setGenError("Network error - please try again");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleCopyKey() {
+    if (!generatedKey) return;
+    await navigator.clipboard.writeText(generatedKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleLogout() {
     await signOut();
@@ -188,7 +240,31 @@ export default function AdminYou() {
               API Key
             </h2>
 
-            {profile?.api_key ? (
+            {generatedKey ? (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 p-3">
+                  <div className="flex items-start gap-2 text-xs text-[#E2B93B]">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Save this key now. You won't see it again.</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="min-w-0 flex-1 truncate rounded bg-[#0A0A0A] px-3 py-2 font-mono text-xs text-white">
+                      {generatedKey}
+                    </code>
+                    <button
+                      onClick={handleCopyKey}
+                      className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.04] p-2 text-white transition-colors hover:bg-white/[0.08]"
+                    >
+                      {copied ? (
+                        <Check className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : profile?.api_key ? (
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-[#888]">Key</span>
@@ -220,6 +296,31 @@ export default function AdminYou() {
                     {timeAgo(profile.api_key.last_used_at)}
                   </span>
                 </div>
+              </div>
+            ) : profile?.needs_key ? (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-lg border border-dashed border-white/[0.08] p-4 text-center">
+                  <p className="text-xs text-[#666]">
+                    No API key linked to your account.
+                  </p>
+                </div>
+                {genError && (
+                  <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+                    {genError}
+                  </div>
+                )}
+                <button
+                  onClick={handleGenerateKey}
+                  disabled={generating}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-4 py-2.5 text-sm font-medium text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20 disabled:opacity-50"
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  {generating ? "Generating..." : "Generate API Key"}
+                </button>
               </div>
             ) : (
               <div className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-4 text-center">

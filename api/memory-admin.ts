@@ -41,6 +41,10 @@
  *                    row to the signed-in auth.users row. Server
  *                    verifies that api_keys.email matches the session
  *                    user email before setting user_id.
+ *   - generate_api_key: POST (no body) - create a fresh api_key for a
+ *                       signed-in user who has no linked key. Returns
+ *                       the raw key ONCE (uc_ + 32 hex chars). User
+ *                       must save it; it cannot be recovered later.
  *   - auth_device_pair: POST with { device_id, device_name? } - upsert
  *                       a row in auth_devices for the signed-in user.
  *                       Stub today (no real pairing protocol yet, just
@@ -51,7 +55,9 @@
  *                         revoked. Soft delete.
  *
  * Phase 3 admin shell actions (session JWT, resolves user -> api_key_hash):
- *   - admin_profile: GET - user info, linked api_key tier/status, email
+ *   - admin_profile: GET - user info, linked api_key tier/status, email.
+ *                    Returns 200 with needs_key:true if the session is
+ *                    valid but no api_key is linked (instead of 401).
  *   - admin_facts: GET - mc_extracted_facts for user's tenant, ?query
  *                  for search, ?show_all=true for non-active statuses
  *   - admin_delete_fact: POST with { fact_id } - archive a fact
@@ -856,6 +862,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ success: true });
       }
 
+      case "generate_api_key": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) {
+          return res.status(401).json({ error: "Not signed in" });
+        }
+        if (!user.email) {
+          return res.status(400).json({
+            error: "Your account doesn't have a verified email yet. Complete sign in first.",
+          });
+        }
+
+        // Check if user already has a linked api_keys row
+        const { data: existingKey } = await supabase
+          .from("api_keys")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingKey) {
+          return res.status(409).json({ error: "You already have a linked key" });
+        }
+
+        // Generate a new API key
+        const rawKey = "uc_" + crypto.randomBytes(16).toString("hex");
+        const keyHash = sha256hex(rawKey);
+        const keyPrefix = rawKey.slice(0, 8);
+
+        const { error: insertErr } = await supabase
+          .from("api_keys")
+          .insert({
+            key_hash: keyHash,
+            key_prefix: keyPrefix,
+            user_id: user.id,
+            email: user.email,
+            tier: "free",
+            is_active: true,
+          });
+        if (insertErr) throw insertErr;
+
+        return res.status(200).json({
+          success: true,
+          api_key: rawKey,
+          message: "Save this key now. You will not see it again.",
+        });
+      }
+
       case "auth_device_pair": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
@@ -919,8 +973,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Phase 3 admin shell actions (session JWT -> tenant) ────────
       case "admin_profile": {
+        // Try resolving the full tenant (user + linked api_key).
+        // If the session is valid but no api_key is linked, return a
+        // partial profile with needs_key: true instead of a 401.
         const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        if (!tenant) {
+          // Session might still be valid - check user separately
+          const sessionUser = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+          if (!sessionUser) {
+            return res.status(401).json({ error: "Not signed in" });
+          }
+          // Valid session but no linked API key
+          return res.status(200).json({
+            user_id: sessionUser.id,
+            email: sessionUser.email,
+            tier: null,
+            api_key_hash: null,
+            api_key: null,
+            needs_key: true,
+          });
+        }
 
         // Fetch api_key row details
         const { data: keyRow } = await supabase
@@ -947,6 +1020,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 created_at: keyRow.created_at,
               }
             : null,
+          needs_key: false,
         });
       }
 
