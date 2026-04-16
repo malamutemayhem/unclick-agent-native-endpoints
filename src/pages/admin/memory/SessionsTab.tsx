@@ -7,11 +7,18 @@ interface Session {
   session_id: string;
   summary: string;
   topics: string[] | null;
-  decisions: string[] | null;
-  open_loops: string[] | null;
+  decisions: unknown[] | null;
+  open_loops: unknown[] | null;
   platform: string | null;
   duration_minutes: number | null;
   created_at: string;
+}
+
+/** Safely convert a JSONB array item to a displayable string. */
+function displayItem(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return JSON.stringify(v);
 }
 
 interface TranscriptMessage {
@@ -154,7 +161,7 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
                       {s.decisions!.map((d, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-white/60">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#61C1C4]/50" />
-                          {d}
+                          {displayItem(d)}
                         </li>
                       ))}
                     </ul>
@@ -168,7 +175,7 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
                       {s.open_loops!.map((l, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-white/60">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400/50" />
-                          {l}
+                          {displayItem(l)}
                         </li>
                       ))}
                     </ul>

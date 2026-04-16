@@ -6,9 +6,16 @@ interface ContextEntry {
   id: string;
   category: string;
   key: string;
-  value: string;
+  value: unknown;
   priority: number;
   decay_tier: string;
+}
+
+/** Safely convert a JSONB value to a displayable string. */
+function displayValue(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return JSON.stringify(v, null, 2);
 }
 
 const DECAY_COLORS: Record<string, string> = {
@@ -90,7 +97,7 @@ export default function ContextTab({ apiKey }: { apiKey: string }) {
 
   const startEdit = (e: ContextEntry) => {
     setEditId(e.id);
-    setForm({ category: e.category, key: e.key, value: e.value });
+    setForm({ category: e.category, key: e.key, value: displayValue(e.value) });
     setShowForm(false);
   };
 
@@ -165,7 +172,7 @@ export default function ContextTab({ apiKey }: { apiKey: string }) {
                     {entry.decay_tier}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-white/60 line-clamp-2">{entry.value}</p>
+                <p className="mt-1 text-xs text-white/60 line-clamp-2">{displayValue(entry.value)}</p>
               </div>
 
               {/* Actions */}
