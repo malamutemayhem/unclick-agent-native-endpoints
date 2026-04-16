@@ -34,6 +34,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ClaimKeyBanner from "@/components/ClaimKeyBanner";
 import { Brain, Database, Monitor, CheckCircle2, ArrowRight } from "lucide-react";
 
 interface MemoryConfigStatus {
@@ -112,6 +113,7 @@ export default function MemoryAdminPage() {
     <div className="min-h-screen">
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pb-32 pt-28">
+        <ClaimKeyBanner />
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Brain className="h-5 w-5" />
