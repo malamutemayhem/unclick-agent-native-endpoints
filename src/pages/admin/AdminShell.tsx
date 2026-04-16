@@ -5,7 +5,7 @@
  * user avatar/email, logout. Floating chat assistant stub in the
  * bottom-right corner. Content rendered via React Router <Outlet>.
  *
- * Dark palette: bg #0A0A0A, accent amber #E2B93B.
+ * Dark palette: bg #0A0A0A, primary teal #61C1C4, secondary amber #E2B93B.
  * Each surface is extractable as a native app later.
  */
 
@@ -45,7 +45,7 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
       className={({ isActive }) =>
         `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
           isActive
-            ? "bg-[#E2B93B]/10 text-[#E2B93B]"
+            ? "bg-[#61C1C4]/10 text-[#61C1C4]"
             : "text-[#888] hover:bg-white/[0.04] hover:text-[#ccc]"
         }`
       }
@@ -90,7 +90,7 @@ export default function AdminShell() {
 
         <div className="border-t border-white/[0.06] p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E2B93B]/10 text-[#E2B93B]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#61C1C4]/10 text-[#61C1C4]">
               <User className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -177,7 +177,7 @@ export default function AdminShell() {
               </button>
             </div>
             <div className="mt-4 flex flex-col items-center justify-center py-8">
-              <MessageCircle className="h-8 w-8 text-[#E2B93B]/40" />
+              <MessageCircle className="h-8 w-8 text-[#61C1C4]/40" />
               <p className="mt-3 text-xs text-[#666]">Coming soon</p>
               <p className="mt-1 text-[10px] text-[#444]">
                 Your AI assistant will live here
@@ -187,7 +187,7 @@ export default function AdminShell() {
         )}
         <button
           onClick={() => setChatOpen((v) => !v)}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#E2B93B] text-black shadow-lg transition-transform hover:scale-105 active:scale-95"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#61C1C4] text-black shadow-lg transition-transform hover:scale-105 active:scale-95"
           aria-label="Open assistant"
         >
           <MessageCircle className="h-5 w-5" />

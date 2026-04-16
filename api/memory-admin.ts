@@ -28,50 +28,6 @@
  *                   + nudge signal
  *   - list_devices: GET with Bearer <api_key>
  *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
- *
- * Cron actions (called by Vercel cron with Authorization: Bearer <CRON_SECRET>):
- *   - nightly_decay: Iterate every Pro/Team api_key and run mc_manage_decay
- *                    against the central managed-cloud schema. Free-tier
- *                    accounts are skipped (decay is a Pro perk per the v2
- *                    build plan).
- *
- * Phase 2 auth actions (keyed by Supabase Auth session JWT - Bearer from
- * the browser's supabase-js session, NOT an UnClick api_key):
- *   - claim_api_key: POST with { api_key } - link an anonymous api_keys
- *                    row to the signed-in auth.users row. Server
- *                    verifies that api_keys.email matches the session
- *                    user email before setting user_id.
- *   - generate_api_key: POST (no body) - create a fresh api_key for a
- *                       signed-in user who has no linked key. Returns
- *                       the raw key ONCE (uc_ + 32 hex chars). User
- *                       must save it; it cannot be recovered later.
- *   - auth_device_pair: POST with { device_id, device_name? } - upsert
- *                       a row in auth_devices for the signed-in user.
- *                       Stub today (no real pairing protocol yet, just
- *                       record the row so the UI has data to render).
- *   - auth_device_list: GET - list auth_devices rows for the signed-in
- *                       user.
- *   - auth_device_revoke: POST with { device_id } - mark the row as
- *                         revoked. Soft delete.
- *
- * Phase 3 admin shell actions (session JWT, resolves user -> api_key_hash):
- *   - admin_profile: GET - user info, linked api_key tier/status, email.
- *                    Returns 200 with needs_key:true if the session is
- *                    valid but no api_key is linked (instead of 401).
- *   - admin_facts: GET - mc_extracted_facts for user's tenant, ?query
- *                  for search, ?show_all=true for non-active statuses
- *   - admin_delete_fact: POST with { fact_id } - archive a fact
- *   - admin_update_fact: POST with { fact_id, fact } - update fact text
- *   - admin_activity: GET - metering_events summary + recent
- *                     mc_conversation_log sessions for user's tenant
- *   - admin_credentials: GET - platform_credentials for user's key_hash
- *   - admin_storage: GET - storage bytes + fact count via RPCs
- *
- * Note: the auth_device_* actions are namespaced separately from the
- * existing memory device_check/list_devices/remove_device actions which
- * are api_key_hash-keyed and operate on memory_devices (Phase 1).
- * auth_devices is user_id-keyed and is for authenticated device
- * pairing. Distinct concepts, distinct tables, distinct handlers.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -81,7 +37,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 
-// ─── Crypto helpers (mirror /api/credentials) ──────────────────────────────────
+// ─── Crypto helpers (mirror /api/credentials) ──────────────────────────────
 
 const PBKDF2_ITERATIONS = 100_000;
 const KEY_BYTES = 32;
@@ -279,7 +235,7 @@ async function resolveSessionTenant(
   return null;
 }
 
-// ─── Handler ─────────────────────────────────────────────────────────────────────
+// ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -787,293 +743,260 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ success: true });
       }
 
-      // ── Phase 2 auth actions (session JWT, not api_key) ─────────────
-      case "claim_api_key": {
-        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-        if (!user) {
-          return res.status(401).json({ error: "Not signed in" });
-        }
-        if (!user.email) {
-          return res.status(400).json({
-            error: "Your account doesn't have a verified email yet. Complete sign in first.",
-          });
-        }
-        const body = req.body as { api_key?: string };
-        const apiKey = (body?.api_key ?? "").trim();
-        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+      // ── Phase 4: Admin dashboard actions ───────────────────────────────
 
-        // Try new-shape lookup first (key_hash). Fall back to old-shape
-        // (api_key plaintext column) - see api_keys two-shape drift
-        // noted in 20260416000000_auth_foundation.sql.
-        const apiKeyHash = sha256hex(apiKey);
-        const { data: newShape, error: newErr } = await supabase
-          .from("api_keys")
-          .select("id, email, user_id")
-          .eq("key_hash", apiKeyHash)
-          .maybeSingle();
-        if (newErr && newErr.code !== "PGRST116" && newErr.code !== "42703") {
-          throw newErr;
-        }
+      case "admin_business_context": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const tenant = sha256hex(apiKey);
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
-        let row = newShape as
-          | { id: string; email: string | null; user_id: string | null }
-          | null
-          | undefined;
-
-        if (!row) {
-          const { data: oldShape, error: oldErr } = await supabase
-            .from("api_keys")
-            .select("id, email, user_id")
-            .eq("api_key", apiKey)
-            .maybeSingle();
-          // 42703 = undefined_column (old-shape columns don't exist on
-          // fresh databases). Treat as "not found" rather than a hard
-          // failure.
-          if (oldErr && oldErr.code !== "PGRST116" && oldErr.code !== "42703") {
-            throw oldErr;
+        switch (method) {
+          case "list": {
+            const { data, error } = await supabase
+              .from("business_context")
+              .select("*")
+              .order("priority", { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ data: data ?? [] });
           }
-          row = oldShape as typeof row;
+          case "create": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const { category, key, value } = req.body ?? {};
+            if (!category || !key || value === undefined) {
+              return res.status(400).json({ error: "category, key, and value required" });
+            }
+            // Auto-increment priority
+            const { data: maxRow } = await supabase
+              .from("business_context")
+              .select("priority")
+              .order("priority", { ascending: false })
+              .limit(1);
+            const nextPriority = ((maxRow?.[0]?.priority as number) ?? 0) + 1;
+            const { data, error } = await supabase
+              .from("business_context")
+              .insert({
+                category,
+                key,
+                value: typeof value === "string" ? value : JSON.stringify(value),
+                priority: nextPriority,
+                decay_tier: "hot",
+                updated_at: new Date().toISOString(),
+                last_accessed: new Date().toISOString(),
+              })
+              .select()
+              .single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+          }
+          case "update": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const { id, value: val, priority: pri, category: cat } = req.body ?? {};
+            if (!id) return res.status(400).json({ error: "id required" });
+            const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+            if (val !== undefined) updates.value = typeof val === "string" ? val : JSON.stringify(val);
+            if (pri !== undefined) updates.priority = pri;
+            if (cat !== undefined) updates.category = cat;
+            const { error } = await supabase.from("business_context").update(updates).eq("id", id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+          }
+          case "delete": {
+            if (req.method !== "POST" && req.method !== "DELETE") {
+              return res.status(405).json({ error: "POST or DELETE required" });
+            }
+            const delId = req.body?.id ?? req.query.id;
+            if (!delId) return res.status(400).json({ error: "id required" });
+            const { error } = await supabase.from("business_context").delete().eq("id", delId);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+          }
+          case "reorder": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const items = req.body?.items as Array<{ id: string; priority: number }>;
+            if (!items?.length) return res.status(400).json({ error: "items array required" });
+            for (const item of items) {
+              await supabase
+                .from("business_context")
+                .update({ priority: item.priority, updated_at: new Date().toISOString() })
+                .eq("id", item.id);
+            }
+            return res.status(200).json({ success: true });
+          }
+          default:
+            return res.status(400).json({ error: `Unknown method: ${method}` });
         }
-
-        if (!row) {
-          return res.status(404).json({ error: "That API key doesn't exist." });
-        }
-
-        if (row.user_id && row.user_id !== user.id) {
-          return res.status(409).json({
-            error: "That API key is already linked to a different account.",
-          });
-        }
-
-        if (row.email && row.email.toLowerCase() !== user.email.toLowerCase()) {
-          return res.status(403).json({
-            error:
-              "The email on that API key doesn't match your signed-in email. Sign in with the email you used to create the key.",
-          });
-        }
-
-        const { error: updErr } = await supabase
-          .from("api_keys")
-          .update({ user_id: user.id })
-          .eq("id", row.id);
-        if (updErr) throw updErr;
-
-        return res.status(200).json({ success: true });
       }
 
-      case "generate_api_key": {
-        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-        if (!user) {
-          return res.status(401).json({ error: "Not signed in" });
-        }
-        if (!user.email) {
-          return res.status(400).json({
-            error: "Your account doesn't have a verified email yet. Complete sign in first.",
-          });
-        }
+      case "admin_sessions": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
-        // Check if user already has a linked api_keys row
-        const { data: existingKey } = await supabase
-          .from("api_keys")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingKey) {
-          return res.status(409).json({ error: "You already have a linked key" });
+        if (method === "transcript") {
+          const sessionId = req.body?.session_id ?? req.query.session_id;
+          if (!sessionId) return res.status(400).json({ error: "session_id required" });
+          const { data, error } = await supabase
+            .from("conversation_log")
+            .select("*")
+            .eq("session_id", sessionId)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
         }
 
-        // Generate a new API key
-        const rawKey = "uc_" + crypto.randomBytes(16).toString("hex");
-        const keyHash = sha256hex(rawKey);
-        const keyPrefix = rawKey.slice(0, 8);
-
-        const { error: insertErr } = await supabase
-          .from("api_keys")
-          .insert({
-            key_hash: keyHash,
-            key_prefix: keyPrefix,
-            user_id: user.id,
-            tier: "free",
-            is_active: true,
-          });
-        if (insertErr) throw insertErr;
-
-        return res.status(200).json({
-          success: true,
-          api_key: rawKey,
-          message: "Save this key now. You will not see it again.",
-        });
-      }
-
-      case "auth_device_pair": {
-        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-        if (!user) return res.status(401).json({ error: "Not signed in" });
-        const body = req.body as { device_id?: string; device_name?: string };
-        const deviceId = (body?.device_id ?? "").trim();
-        if (!deviceId) return res.status(400).json({ error: "device_id required" });
-        const deviceName = body?.device_name?.trim() || null;
-
-        // Upsert on (user_id, device_id). This is a stub: pairing
-        // today just means "I saw this device, record it". A real
-        // pairing protocol (nonce + client-side confirmation) is a
-        // later phase.
+        // list
         const { data, error } = await supabase
-          .from("auth_devices")
-          .upsert(
-            {
-              user_id: user.id,
-              device_id: deviceId,
-              device_name: deviceName,
-              last_seen_at: new Date().toISOString(),
-              revoked_at: null,
-            },
-            { onConflict: "user_id,device_id" },
-          )
-          .select("id, device_id, device_name, paired_at, last_seen_at")
-          .single();
-        if (error) throw error;
-        return res.status(200).json({ success: true, device: data });
-      }
-
-      case "auth_device_list": {
-        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-        if (!user) return res.status(401).json({ error: "Not signed in" });
-        const { data, error } = await supabase
-          .from("auth_devices")
-          .select("id, device_id, device_name, paired_at, last_seen_at, revoked_at")
-          .eq("user_id", user.id)
-          .is("revoked_at", null)
-          .order("last_seen_at", { ascending: false });
+          .from("session_summaries")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(20);
         if (error) throw error;
         return res.status(200).json({ data: data ?? [] });
       }
 
-      case "auth_device_revoke": {
-        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-        if (!user) return res.status(401).json({ error: "Not signed in" });
-        const body = req.body as { device_id?: string };
-        const deviceId = (body?.device_id ?? "").trim();
-        if (!deviceId) return res.status(400).json({ error: "device_id required" });
+      case "admin_library": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
-        const { error } = await supabase
-          .from("auth_devices")
-          .update({ revoked_at: new Date().toISOString() })
-          .eq("user_id", user.id)
-          .eq("device_id", deviceId);
-        if (error) throw error;
-        return res.status(200).json({ success: true });
-      }
-
-      // ── Phase 3 admin shell actions (session JWT -> tenant) ────────
-      case "admin_profile": {
-        // Try resolving the full tenant (user + linked api_key).
-        // If the session is valid but no api_key is linked, return a
-        // partial profile with needs_key: true instead of a 401.
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-
-        if (!tenant) {
-          // Session might still be valid - check user separately
-          const sessionUser = await resolveSessionUser(req, supabaseUrl, supabaseKey);
-          if (!sessionUser) {
-            return res.status(401).json({ error: "Not signed in" });
-          }
-          // Valid session but no linked API key
-          return res.status(200).json({
-            user_id: sessionUser.id,
-            email: sessionUser.email,
-            tier: null,
-            api_key_hash: null,
-            api_key: null,
-            needs_key: true,
-          });
+        if (method === "view") {
+          const docId = req.body?.id ?? req.query.id;
+          if (!docId) return res.status(400).json({ error: "id required" });
+          const { data, error } = await supabase
+            .from("knowledge_library")
+            .select("*")
+            .eq("id", docId)
+            .single();
+          if (error) throw error;
+          return res.status(200).json({ data });
         }
 
-        // Fetch api_key row details
-        const { data: keyRow } = await supabase
-          .from("api_keys")
-          .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
-          .eq("user_id", tenant.userId)
-          .limit(1)
-          .maybeSingle();
+        if (method === "history") {
+          const slug = (req.body?.slug ?? req.query.slug) as string;
+          if (!slug) return res.status(400).json({ error: "slug required" });
+          const { data, error } = await supabase
+            .from("knowledge_library_history")
+            .select("*")
+            .eq("slug", slug)
+            .order("version", { ascending: false });
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
+        }
+
+        // list
+        const { data, error } = await supabase
+          .from("knowledge_library")
+          .select("id, slug, title, updated_at, version, decay_tier, category, tags")
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "admin_memory_activity": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+
+        // Facts by day (last 30 days)
+        const { data: allFacts } = await supabase
+          .from("extracted_facts")
+          .select("created_at")
+          .gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString())
+          .order("created_at", { ascending: true });
+
+        const factsByDay: Record<string, number> = {};
+        for (const f of allFacts ?? []) {
+          const day = (f.created_at as string).slice(0, 10);
+          factsByDay[day] = (factsByDay[day] ?? 0) + 1;
+        }
+
+        // Storage counts (reuse status logic)
+        const [bc, lib, sessions, facts, convos, code] = await Promise.all([
+          supabase.from("business_context").select("id", { count: "exact", head: true }),
+          supabase.from("knowledge_library").select("id", { count: "exact", head: true }),
+          supabase.from("session_summaries").select("id", { count: "exact", head: true }),
+          supabase.from("extracted_facts").select("id", { count: "exact", head: true }),
+          supabase.from("conversation_log").select("id", { count: "exact", head: true }),
+          supabase.from("code_dumps").select("id", { count: "exact", head: true }),
+        ]);
+
+        // Recent decay transitions
+        const { data: recentDecay } = await supabase
+          .from("extracted_facts")
+          .select("id, fact, category, decay_tier, updated_at")
+          .neq("decay_tier", "hot")
+          .order("updated_at", { ascending: false })
+          .limit(20);
+
+        // Most accessed facts
+        const { data: topFacts } = await supabase
+          .from("extracted_facts")
+          .select("id, fact, category, access_count, decay_tier")
+          .eq("status", "active")
+          .order("access_count", { ascending: false })
+          .limit(10);
 
         return res.status(200).json({
-          user_id: tenant.userId,
-          email: tenant.email,
-          api_key_hash: tenant.apiKeyHash,
-          tier: tenant.tier,
-          api_key: keyRow
-            ? {
-                id: keyRow.id,
-                prefix: keyRow.key_prefix,
-                label: keyRow.label,
-                tier: keyRow.tier,
-                is_active: keyRow.is_active,
-                usage_count: keyRow.usage_count,
-                last_used_at: keyRow.last_used_at,
-                created_at: keyRow.created_at,
-              }
-            : null,
-          needs_key: false,
+          facts_by_day: factsByDay,
+          storage: {
+            business_context: bc.count ?? 0,
+            knowledge_library: lib.count ?? 0,
+            session_summaries: sessions.count ?? 0,
+            extracted_facts: facts.count ?? 0,
+            conversation_log: convos.count ?? 0,
+            code_dumps: code.count ?? 0,
+            total: (bc.count ?? 0) + (lib.count ?? 0) + (sessions.count ?? 0) +
+                   (facts.count ?? 0) + (convos.count ?? 0) + (code.count ?? 0),
+          },
+          recent_decay: recentDecay ?? [],
+          top_facts: topFacts ?? [],
         });
       }
 
-      case "admin_facts": {
+      case "admin_tools": {
         const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+        if (!tenant) return res.status(401).json({ error: "Not signed in" });
 
-        const query = req.query.query as string;
-        const showAll = req.query.show_all === "true";
-        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+        // Metering events grouped by operation
+        const { data: metering } = await supabase
+          .from("metering_events")
+          .select("operation")
+          .eq("key_hash", tenant.apiKeyHash);
 
-        let q = supabase
-          .from("mc_extracted_facts")
-          .select("*")
-          .eq("api_key_hash", tenant.apiKeyHash)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (!showAll) {
-          q = q.eq("status", "active");
+        const meteringMap: Record<string, { count: number; last_used?: string }> = {};
+        for (const m of metering ?? []) {
+          const op = m.operation as string;
+          if (!meteringMap[op]) meteringMap[op] = { count: 0 };
+          meteringMap[op].count++;
         }
 
-        const { data, error } = await q;
-        if (error) throw error;
+        // Platform connectors with user's credential status
+        const { data: connectors } = await supabase
+          .from("platform_connectors")
+          .select("*");
 
-        let results = data ?? [];
-        if (query) {
-          const lower = query.toLowerCase();
-          results = results.filter(
-            (f: { fact: string; category: string }) =>
-              f.fact.toLowerCase().includes(lower) ||
-              f.category.toLowerCase().includes(lower),
-          );
+        const { data: creds } = await supabase
+          .from("platform_credentials")
+          .select("platform, is_valid, last_tested_at")
+          .eq("key_hash", tenant.apiKeyHash);
+
+        const credMap = new Map<string, { is_valid: boolean; last_tested_at: string | null }>();
+        for (const c of creds ?? []) {
+          credMap.set(c.platform as string, {
+            is_valid: c.is_valid as boolean,
+            last_tested_at: c.last_tested_at as string | null,
+          });
         }
 
-        return res.status(200).json({ data: results });
-      }
+        const enrichedConnectors = (connectors ?? []).map((pc) => ({
+          ...pc,
+          credential: credMap.get(pc.id as string) ?? null,
+        }));
 
-      case "admin_delete_fact": {
-        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
-
-        const factId = req.body?.fact_id;
-        if (!factId) return res.status(400).json({ error: "fact_id required" });
-
-        const { error } = await supabase
-          .from("mc_extracted_facts")
-          .update({ status: "archived" })
-          .eq("id", factId)
-          .eq("api_key_hash", tenant.apiKeyHash);
-
-        if (error) throw error;
-        return res.status(200).json({ success: true });
+        return res.status(200).json({
+          metering: meteringMap,
+          connectors: enrichedConnectors,
+        });
       }
 
       case "admin_update_fact": {
@@ -1094,114 +1017,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (error) throw error;
         return res.status(200).json({ success: true });
-      }
-
-      case "admin_activity": {
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
-
-        // Metering events (last 200, grouped later client-side)
-        const { data: events } = await supabase
-          .from("metering_events")
-          .select("id, platform, operation, success, response_ms, created_at")
-          .eq("key_hash", tenant.apiKeyHash)
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        // Recent conversation sessions (distinct session_ids)
-        const { data: convos } = await supabase
-          .from("mc_conversation_log")
-          .select("session_id, role, created_at")
-          .eq("api_key_hash", tenant.apiKeyHash)
-          .order("created_at", { ascending: false })
-          .limit(500);
-
-        // Aggregate conversation sessions
-        const sessionMap = new Map<string, { count: number; last_message: string }>();
-        for (const msg of convos ?? []) {
-          const existing = sessionMap.get(msg.session_id);
-          if (existing) {
-            existing.count++;
-          } else {
-            sessionMap.set(msg.session_id, { count: 1, last_message: msg.created_at });
-          }
-        }
-        const sessions = Array.from(sessionMap.entries())
-          .map(([id, info]) => ({
-            session_id: id,
-            message_count: info.count,
-            last_message: info.last_message,
-          }))
-          .slice(0, 20);
-
-        return res.status(200).json({
-          metering_events: events ?? [],
-          conversation_sessions: sessions,
-        });
-      }
-
-      case "admin_credentials": {
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
-
-        const { data, error } = await supabase
-          .from("platform_credentials")
-          .select("id, platform, label, is_valid, last_tested_at, created_at")
-          .eq("key_hash", tenant.apiKeyHash)
-          .order("platform");
-
-        if (error) throw error;
-
-        // Enrich with connector info
-        const { data: connectors } = await supabase
-          .from("platform_connectors")
-          .select("id, name, category, icon");
-
-        const connectorMap = new Map(
-          (connectors ?? []).map((c: { id: string; name: string; category: string; icon: string | null }) => [c.id, c]),
-        );
-
-        const enriched = (data ?? []).map((cred: {
-          id: string;
-          platform: string;
-          label: string;
-          is_valid: boolean;
-          last_tested_at: string | null;
-          created_at: string;
-        }) => ({
-          ...cred,
-          connector: connectorMap.get(cred.platform) ?? null,
-        }));
-
-        return res.status(200).json({ data: enriched });
-      }
-
-      case "admin_storage": {
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
-
-        const [bytesResult, countResult] = await Promise.all([
-          supabase.rpc("mc_get_storage_bytes", { p_api_key_hash: tenant.apiKeyHash }),
-          supabase.rpc("mc_get_fact_count", { p_api_key_hash: tenant.apiKeyHash }),
-        ]);
-
-        const storageBytes = bytesResult.data ?? 0;
-        const factCount = countResult.data ?? 0;
-
-        // Free tier caps
-        const caps = {
-          free: { storage_bytes: 50 * 1024 * 1024, facts: 5000 },
-          pro: { storage_bytes: 500 * 1024 * 1024, facts: 50000 },
-          team: { storage_bytes: 2 * 1024 * 1024 * 1024, facts: 200000 },
-        };
-        const tierCaps = caps[tenant.tier as keyof typeof caps] ?? caps.free;
-
-        return res.status(200).json({
-          storage_bytes: storageBytes,
-          fact_count: factCount,
-          tier: tenant.tier,
-          caps: tierCaps,
-        });
       }
 
       // ── Cron actions ────────────────────────────────────────────────────
