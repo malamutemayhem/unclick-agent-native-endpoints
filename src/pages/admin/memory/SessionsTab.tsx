@@ -7,8 +7,8 @@ interface Session {
   session_id: string;
   summary: string;
   topics: string[] | null;
-  decisions: string[] | null;
-  open_loops: string[] | null;
+  decisions: unknown[] | null;
+  open_loops: unknown[] | null;
   platform: string | null;
   duration_minutes: number | null;
   created_at: string;
@@ -27,6 +27,13 @@ const ROLE_COLORS: Record<string, string> = {
   system: "bg-white/10 text-white/50",
   tool: "bg-green-500/20 text-green-400",
 };
+
+/** Safely render a JSONB array item that might be an object */
+function displayItem(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  return JSON.stringify(v);
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -154,7 +161,7 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
                       {s.decisions!.map((d, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-white/60">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#61C1C4]/50" />
-                          {d}
+                          {displayItem(d)}
                         </li>
                       ))}
                     </ul>
@@ -168,7 +175,7 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
                       {s.open_loops!.map((l, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-white/60">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400/50" />
-                          {l}
+                          {displayItem(l)}
                         </li>
                       ))}
                     </ul>
