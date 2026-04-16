@@ -129,9 +129,9 @@ const META_TOOLS = [
   {
     name: "get_startup_context",
     description:
-      "Load Session Context - Loads the user's business context, recent sessions, and hot facts at " +
-      "session start. Call this FIRST in every new session to understand the user's ongoing projects, " +
-      "preferences, and open loops. Works zero-config locally, or with Supabase for cross-machine sync.",
+      "Load Session Context - CALL THIS FIRST at the start of every session. Returns the user's business " +
+      "context (standing rules), recent session summaries, active facts, and knowledge library index. " +
+      "This is the user's persistent memory across all sessions and devices.",
     inputSchema: {
       type: "object" as const,
       properties: {

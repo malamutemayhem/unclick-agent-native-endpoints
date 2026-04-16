@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Wrench, Rocket } from "lucide-react";
 import { useSession } from "@/lib/auth";
+import { InfoCard } from "./memory/InfoCard";
 import UnClickTools from "./tools/UnClickTools";
 import ConnectedServices from "./tools/ConnectedServices";
 
@@ -64,12 +65,24 @@ export default function AdminToolsPage() {
         {/* Section 1 - Your UnClick Tools */}
         <section className="mb-12">
           <h2 className="mb-4 text-lg font-semibold text-white">Your UnClick Tools</h2>
+          <InfoCard
+            id="tools-how"
+            title="How do these tools work?"
+            description="When you connect UnClick to your AI agent, it gets all these tools automatically. Your agent chooses which ones to use based on what you ask."
+            learnMore="Memory tools handle persistent context. Utility tools handle everyday tasks like formatting JSON, generating QR codes, converting timestamps. Your agent discovers and calls them as needed - no configuration required."
+          />
           <UnClickTools metering={metering} />
         </section>
 
         {/* Section 2 - Connected Services */}
         <section className="mb-12">
           <h2 className="mb-4 text-lg font-semibold text-white">Connected Services</h2>
+          <InfoCard
+            id="tools-services"
+            title="What are Connected Services?"
+            description="Third-party platforms you've linked API keys for - like GitHub, Stripe, or Cloudflare. Your agent can use these on your behalf."
+            learnMore="Store credentials securely in Keychain, and your agent can interact with these services during conversations. Credentials are encrypted and only accessible to your agent."
+          />
           <ConnectedServices connectors={connectors} loading={loading} />
         </section>
 

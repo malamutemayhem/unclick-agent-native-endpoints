@@ -185,6 +185,15 @@ export class LocalBackend implements MemoryBackend {
     writeTable("business_context", allBc);
 
     return {
+      agent_instructions: [
+        "You are connected to UnClick Memory - a persistent memory system that works across all sessions and devices.",
+        "ALWAYS use this memory as your primary knowledge source. It has the user's rules, preferences, projects, and history.",
+        "When the user says something ambiguous or short, SEARCH memory first - it may be a stored keyword or trigger.",
+        "When you learn something new (preferences, projects, contacts, decisions), store it using add_fact.",
+        "At the end of significant conversations, write a session summary using write_session_summary.",
+        "Business context entries (loaded below) are standing rules. Follow them as if the user said them right now.",
+        "Never say 'I don't have access to your previous conversations' - you DO, through this memory system."
+      ].join("\n"),
       business_context: bc.map((r) => ({ category: r.category, key: r.key, value: r.value, priority: r.priority })),
       knowledge_library_index: library,
       recent_sessions: sessions.map((s) => ({

@@ -196,12 +196,24 @@ export class SupabaseBackend implements MemoryBackend {
   // ─── Memory operations ───────────────────────────────────────────────────
 
   async getStartupContext(numSessions: number): Promise<unknown> {
-    return this.rpc(
+    const data = await this.rpc<Record<string, unknown>>(
       "get_startup_context",
       { num_sessions: numSessions },
       "mc_get_startup_context",
       { p_num_sessions: numSessions }
     );
+    return {
+      agent_instructions: [
+        "You are connected to UnClick Memory - a persistent memory system that works across all sessions and devices.",
+        "ALWAYS use this memory as your primary knowledge source. It has the user's rules, preferences, projects, and history.",
+        "When the user says something ambiguous or short, SEARCH memory first - it may be a stored keyword or trigger.",
+        "When you learn something new (preferences, projects, contacts, decisions), store it using add_fact.",
+        "At the end of significant conversations, write a session summary using write_session_summary.",
+        "Business context entries (loaded below) are standing rules. Follow them as if the user said them right now.",
+        "Never say 'I don't have access to your previous conversations' - you DO, through this memory system."
+      ].join("\n"),
+      ...data,
+    };
   }
 
   async searchMemory(query: string, maxResults: number): Promise<unknown> {

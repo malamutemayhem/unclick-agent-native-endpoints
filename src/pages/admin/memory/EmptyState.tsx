@@ -4,11 +4,12 @@ interface EmptyStateProps {
   icon: LucideIcon;
   heading: string;
   description: string;
+  steps?: string[];
   cta?: string;
   onAction?: () => void;
 }
 
-export default function EmptyState({ icon: Icon, heading, description, cta, onAction }: EmptyStateProps) {
+export default function EmptyState({ icon: Icon, heading, description, steps, cta, onAction }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.06] bg-white/[0.02] px-6 py-16 text-center">
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10">
@@ -16,6 +17,15 @@ export default function EmptyState({ icon: Icon, heading, description, cta, onAc
       </div>
       <h3 className="text-sm font-semibold text-white">{heading}</h3>
       <p className="mt-2 max-w-sm text-xs leading-relaxed text-white/50">{description}</p>
+      {steps && steps.length > 0 && (
+        <ol className="mt-3 space-y-1 text-left">
+          {steps.map((step, i) => (
+            <li key={i} className="text-sm text-white/40 pl-1">
+              <span className="text-white/50 font-medium">{i + 1}.</span> {step}
+            </li>
+          ))}
+        </ol>
+      )}
       {cta && onAction && (
         <button
           onClick={onAction}

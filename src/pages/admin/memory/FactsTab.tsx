@@ -95,8 +95,13 @@ export default function FactsTab({ apiKey }: { apiKey: string }) {
       {facts.length === 0 ? (
         <EmptyState
           icon={Lightbulb}
-          heading="No facts recorded yet"
-          description="Facts are atomic pieces of knowledge your agent extracts during conversations. Preferences, decisions, and important details appear here automatically."
+          heading="No facts extracted yet"
+          description="Facts appear automatically as your agent learns from conversations."
+          steps={[
+            "Have a conversation with your agent",
+            "Tell it about yourself and your projects",
+            "Facts are extracted and stored automatically",
+          ]}
         />
       ) : (
         <div className="space-y-2">

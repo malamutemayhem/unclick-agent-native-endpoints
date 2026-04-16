@@ -263,6 +263,18 @@ export default function AdminYou() {
                     </button>
                   </div>
                 </div>
+                <div className="bg-white/[0.02] border border-white/[0.04] rounded-lg p-4 mt-4">
+                  <h3 className="text-sm font-medium text-white/70 mb-2">You're almost set up</h3>
+                  <p className="text-sm text-white/50 mb-3">
+                    Connect UnClick to your AI agent. Go to your agent's MCP settings and add this as a Remote MCP Server:
+                  </p>
+                  <code className="block bg-black/30 rounded px-3 py-2 text-xs text-white/60 break-all">
+                    https://unclick.world/api/mcp?key={generatedKey}
+                  </code>
+                  <p className="text-xs text-white/40 mt-2">
+                    Once connected, your agent loads your memory at the start of every conversation.
+                  </p>
+                </div>
               </div>
             ) : profile?.api_key ? (
               <div className="mt-4 space-y-3">
