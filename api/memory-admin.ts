@@ -34,6 +34,27 @@
  *                    against the central managed-cloud schema. Free-tier
  *                    accounts are skipped (decay is a Pro perk per the v2
  *                    build plan).
+ *
+ * Phase 2 auth actions (keyed by Supabase Auth session JWT - Bearer from
+ * the browser's supabase-js session, NOT an UnClick api_key):
+ *   - claim_api_key: POST with { api_key } - link an anonymous api_keys
+ *                    row to the signed-in auth.users row. Server
+ *                    verifies that api_keys.email matches the session
+ *                    user email before setting user_id.
+ *   - auth_device_pair: POST with { device_id, device_name? } - upsert
+ *                       a row in auth_devices for the signed-in user.
+ *                       Stub today (no real pairing protocol yet, just
+ *                       record the row so the UI has data to render).
+ *   - auth_device_list: GET - list auth_devices rows for the signed-in
+ *                       user.
+ *   - auth_device_revoke: POST with { device_id } - mark the row as
+ *                         revoked. Soft delete.
+ *
+ * Note: the auth_device_* actions are namespaced separately from the
+ * existing memory device_check/list_devices/remove_device actions which
+ * are api_key_hash-keyed and operate on memory_devices (Phase 1).
+ * auth_devices is user_id-keyed and is for authenticated device
+ * pairing. Distinct concepts, distinct tables, distinct handlers.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -144,6 +165,42 @@ async function verifySchema(supabaseUrl: string, serviceRoleKey: string): Promis
 
 function bearerFrom(req: VercelRequest): string {
   return (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
+}
+
+/**
+ * Resolve a Supabase Auth session JWT to the underlying auth.users row.
+ * Used by Phase 2 auth actions (claim_api_key, auth_device_*) which are
+ * called from the browser with the active supabase-js session token.
+ * Returns null if the token is missing, invalid, or expired.
+ *
+ * Distinct from bearerFrom() + api_keys lookup, which is the
+ * api_key-based auth path used by BYOD and memory tooling.
+ */
+async function resolveSessionUser(
+  req: VercelRequest,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<{ id: string; email: string | null } | null> {
+  const token = bearerFrom(req);
+  if (!token) return null;
+  // Tokens that look like UnClick api_keys (uc_* / agt_*) are never
+  // valid session JWTs. Reject early to avoid sending garbage to
+  // supabase.auth.getUser.
+  if (token.startsWith("uc_") || token.startsWith("agt_")) return null;
+
+  try {
+    // Use an anon client scoped to this token. getUser() verifies the
+    // JWT against the project's Auth secret server-side.
+    const scoped = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data, error } = await scoped.auth.getUser(token);
+    if (error || !data?.user) return null;
+    return { id: data.user.id, email: data.user.email ?? null };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -650,6 +707,142 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .delete()
           .eq("api_key_hash", apiKeyHash)
           .eq("device_fingerprint", fp);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      // ── Phase 2 auth actions (session JWT, not api_key) ─────────────
+      case "claim_api_key": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) {
+          return res.status(401).json({ error: "Not signed in" });
+        }
+        if (!user.email) {
+          return res.status(400).json({
+            error: "Your account doesn't have a verified email yet. Complete sign in first.",
+          });
+        }
+        const body = req.body as { api_key?: string };
+        const apiKey = (body?.api_key ?? "").trim();
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+
+        // Try new-shape lookup first (key_hash). Fall back to old-shape
+        // (api_key plaintext column) - see api_keys two-shape drift
+        // noted in 20260416000000_auth_foundation.sql.
+        const apiKeyHash = sha256hex(apiKey);
+        const { data: newShape, error: newErr } = await supabase
+          .from("api_keys")
+          .select("id, email, user_id")
+          .eq("key_hash", apiKeyHash)
+          .maybeSingle();
+        if (newErr && newErr.code !== "PGRST116" && newErr.code !== "42703") {
+          throw newErr;
+        }
+
+        let row = newShape as
+          | { id: string; email: string | null; user_id: string | null }
+          | null
+          | undefined;
+
+        if (!row) {
+          const { data: oldShape, error: oldErr } = await supabase
+            .from("api_keys")
+            .select("id, email, user_id")
+            .eq("api_key", apiKey)
+            .maybeSingle();
+          // 42703 = undefined_column (old-shape columns don't exist on
+          // fresh databases). Treat as "not found" rather than a hard
+          // failure.
+          if (oldErr && oldErr.code !== "PGRST116" && oldErr.code !== "42703") {
+            throw oldErr;
+          }
+          row = oldShape as typeof row;
+        }
+
+        if (!row) {
+          return res.status(404).json({ error: "That API key doesn't exist." });
+        }
+
+        if (row.user_id && row.user_id !== user.id) {
+          return res.status(409).json({
+            error: "That API key is already linked to a different account.",
+          });
+        }
+
+        if (row.email && row.email.toLowerCase() !== user.email.toLowerCase()) {
+          return res.status(403).json({
+            error:
+              "The email on that API key doesn't match your signed-in email. Sign in with the email you used to create the key.",
+          });
+        }
+
+        const { error: updErr } = await supabase
+          .from("api_keys")
+          .update({ user_id: user.id })
+          .eq("id", row.id);
+        if (updErr) throw updErr;
+
+        return res.status(200).json({ success: true });
+      }
+
+      case "auth_device_pair": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Not signed in" });
+        const body = req.body as { device_id?: string; device_name?: string };
+        const deviceId = (body?.device_id ?? "").trim();
+        if (!deviceId) return res.status(400).json({ error: "device_id required" });
+        const deviceName = body?.device_name?.trim() || null;
+
+        // Upsert on (user_id, device_id). This is a stub: pairing
+        // today just means "I saw this device, record it". A real
+        // pairing protocol (nonce + client-side confirmation) is a
+        // later phase.
+        const { data, error } = await supabase
+          .from("auth_devices")
+          .upsert(
+            {
+              user_id: user.id,
+              device_id: deviceId,
+              device_name: deviceName,
+              last_seen_at: new Date().toISOString(),
+              revoked_at: null,
+            },
+            { onConflict: "user_id,device_id" },
+          )
+          .select("id, device_id, device_name, paired_at, last_seen_at")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ success: true, device: data });
+      }
+
+      case "auth_device_list": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Not signed in" });
+        const { data, error } = await supabase
+          .from("auth_devices")
+          .select("id, device_id, device_name, paired_at, last_seen_at, revoked_at")
+          .eq("user_id", user.id)
+          .is("revoked_at", null)
+          .order("last_seen_at", { ascending: false });
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "auth_device_revoke": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Not signed in" });
+        const body = req.body as { device_id?: string };
+        const deviceId = (body?.device_id ?? "").trim();
+        if (!deviceId) return res.status(400).json({ error: "device_id required" });
+
+        const { error } = await supabase
+          .from("auth_devices")
+          .update({ revoked_at: new Date().toISOString() })
+          .eq("user_id", user.id)
+          .eq("device_id", deviceId);
         if (error) throw error;
         return res.status(200).json({ success: true });
       }

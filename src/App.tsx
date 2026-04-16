@@ -35,6 +35,10 @@ import ToolsPage from "./pages/Tools.tsx";
 import NewToAIPage from "./pages/NewToAI.tsx";
 import SmartHomePage from "./pages/SmartHome.tsx";
 import InstallRecoverPage from "./pages/InstallRecover.tsx";
+import LoginPage from "./pages/Login.tsx";
+import SignupPage from "./pages/Signup.tsx";
+import AuthCallbackPage from "./pages/AuthCallback.tsx";
+import RequireAuth from "./components/RequireAuth.tsx";
 
 const queryClient = new QueryClient();
 
@@ -70,8 +74,19 @@ const App = () => (
           {/* Core product pages */}
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
-          <Route path="/memory/admin" element={<MemoryAdminPage />} />
+          <Route
+            path="/memory/admin"
+            element={
+              <RequireAuth>
+                <MemoryAdminPage />
+              </RequireAuth>
+            }
+          />
           <Route path="/memory/setup" element={<MemorySetupPage />} />
+          {/* Phase 2 auth surface */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/organiser" element={<OrganiserPage />} />
           <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/crews" element={<CrewsPage />} />
