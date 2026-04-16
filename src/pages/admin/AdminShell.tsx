@@ -86,6 +86,12 @@ export default function AdminShell() {
           {surfaces.map((s) => (
             <SurfaceLink key={s.path} {...s} />
           ))}
+          <a
+            href="/memory"
+            className="text-white/30 hover:text-white/50 text-xs block px-3 py-2"
+          >
+            How it works →
+          </a>
         </nav>
 
         <div className="border-t border-white/[0.06] p-4">

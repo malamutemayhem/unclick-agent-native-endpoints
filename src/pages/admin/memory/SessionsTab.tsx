@@ -95,8 +95,13 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
     return (
       <EmptyState
         icon={MessageSquare}
-        heading="No sessions recorded yet"
+        heading="No sessions recorded"
         description="Session summaries appear automatically after conversations. Your agent writes these when a session ends."
+        steps={[
+          "Have a conversation through any connected platform",
+          "Your agent writes a summary at the end",
+          "Next session starts by reading the last 5 summaries",
+        ]}
       />
     );
   }

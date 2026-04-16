@@ -112,6 +112,11 @@ export default function LibraryTab({ apiKey }: { apiKey: string }) {
         icon={BookOpen}
         heading="Your knowledge library is empty"
         description="Documents and templates stored by your agent appear here. The knowledge library holds versioned reference docs."
+        steps={[
+          "Ask your agent to save a document to the library",
+          "It will be versioned - see how it changes over time",
+          "Only titles load at startup; full docs fetched on demand",
+        ]}
       />
     );
   }

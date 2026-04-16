@@ -104,6 +104,11 @@ export default function ContextTab({ apiKey }: { apiKey: string }) {
         icon={Shield}
         heading="Your master context is empty"
         description="This is the first thing your agent reads every session. Add your name, role, key projects, and preferences here."
+        steps={[
+          "Add your name and role",
+          "Add your key projects",
+          "Add your preferences - how you like to work",
+        ]}
         cta="Add your first context entry"
         onAction={() => setShowForm(true)}
       />

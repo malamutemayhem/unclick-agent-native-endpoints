@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Brain } from "lucide-react";
 import StorageBar from "./memory/StorageBar";
+import { InfoCard } from "./memory/InfoCard";
 import ContextTab from "./memory/ContextTab";
 import FactsTab from "./memory/FactsTab";
 import SessionsTab from "./memory/SessionsTab";
@@ -104,11 +105,61 @@ export default function AdminMemoryPage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === "context" && <ContextTab apiKey={apiKey} />}
-        {activeTab === "facts" && <FactsTab apiKey={apiKey} />}
-        {activeTab === "sessions" && <SessionsTab apiKey={apiKey} />}
-        {activeTab === "library" && <LibraryTab apiKey={apiKey} />}
-        {activeTab === "activity" && <MemoryActivityTab apiKey={apiKey} />}
+        {activeTab === "context" && (
+          <>
+            <InfoCard
+              id="context"
+              title="What is Business Context?"
+              description="These are your standing rules - things your agent should always know. Your name, role, key projects, how you like to work. They load FIRST at the start of every session."
+              learnMore="Think of these as instructions pinned to the top of every conversation. Priority #1 loads first. Your agent reads all of these before it says a word. You can add, edit, reorder, or remove entries anytime."
+            />
+            <ContextTab apiKey={apiKey} />
+          </>
+        )}
+        {activeTab === "facts" && (
+          <>
+            <InfoCard
+              id="facts"
+              title="What are Extracted Facts?"
+              description="Atomic things your agent learned from conversations - preferences, decisions, project details. Each has a confidence score and freshness tier."
+              learnMore="Facts are extracted automatically. 'Hot' facts load every session. 'Warm' are available but not auto-loaded. 'Cold' are archived but searchable. Frequently used facts stay hot; unused ones naturally cool down."
+            />
+            <FactsTab apiKey={apiKey} />
+          </>
+        )}
+        {activeTab === "sessions" && (
+          <>
+            <InfoCard
+              id="sessions"
+              title="What are Session Summaries?"
+              description="A recap of each conversation - what was discussed, decided, and what's still open. Your agent reads the last 5 at startup."
+              learnMore="Written automatically at the end of significant conversations. They include decisions, open loops, and topic tags. This is how your agent picks up where you left off."
+            />
+            <SessionsTab apiKey={apiKey} />
+          </>
+        )}
+        {activeTab === "library" && (
+          <>
+            <InfoCard
+              id="library"
+              title="What is the Knowledge Library?"
+              description="Versioned reference documents - playbooks, templates, client briefs. Your agent looks them up by name anytime."
+              learnMore="Unlike facts (small, atomic), library docs are full-length reference material. Version-controlled so you can see changes over time. Only titles load at session start; full docs are fetched on demand."
+            />
+            <LibraryTab apiKey={apiKey} />
+          </>
+        )}
+        {activeTab === "activity" && (
+          <>
+            <InfoCard
+              id="activity"
+              title="What does this show?"
+              description="How your agent uses memory - what's being stored, aging out, and accessed most."
+              learnMore="The decay system keeps memory fresh. Frequently used items stay 'hot' and load every session. Unused items gradually cool to 'warm' then 'cold'. Your agent's context stays relevant, not cluttered."
+            />
+            <MemoryActivityTab apiKey={apiKey} />
+          </>
+        )}
     </>
   );
 }
