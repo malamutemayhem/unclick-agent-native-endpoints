@@ -50,6 +50,17 @@
  *   - auth_device_revoke: POST with { device_id } - mark the row as
  *                         revoked. Soft delete.
  *
+ * Phase 3 admin shell actions (session JWT, resolves user -> api_key_hash):
+ *   - admin_profile: GET - user info, linked api_key tier/status, email
+ *   - admin_facts: GET - mc_extracted_facts for user's tenant, ?query
+ *                  for search, ?show_all=true for non-active statuses
+ *   - admin_delete_fact: POST with { fact_id } - archive a fact
+ *   - admin_update_fact: POST with { fact_id, fact } - update fact text
+ *   - admin_activity: GET - metering_events summary + recent
+ *                     mc_conversation_log sessions for user's tenant
+ *   - admin_credentials: GET - platform_credentials for user's key_hash
+ *   - admin_storage: GET - storage bytes + fact count via RPCs
+ *
  * Note: the auth_device_* actions are namespaced separately from the
  * existing memory device_check/list_devices/remove_device actions which
  * are api_key_hash-keyed and operate on memory_devices (Phase 1).
@@ -201,6 +212,65 @@ async function resolveSessionUser(
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a session JWT all the way to the tenant's api_key_hash.
+ * Used by Phase 3 admin_* actions so each surface can query mc_*
+ * tables scoped to the authenticated user's tenant.
+ *
+ * Path: Bearer JWT -> auth.users row -> api_keys.user_id -> key_hash.
+ * Handles both old-shape (api_key plaintext) and new-shape (key_hash)
+ * api_keys rows.
+ */
+async function resolveSessionTenant(
+  req: VercelRequest,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  sb: ReturnType<typeof createClient>,
+): Promise<{ userId: string; email: string | null; apiKeyHash: string; tier: string } | null> {
+  const user = await resolveSessionUser(req, supabaseUrl, serviceRoleKey);
+  if (!user) return null;
+
+  // New shape: key_hash column from Phase 1 keychain_mvp migration
+  const { data: newRow, error: newErr } = await sb
+    .from("api_keys")
+    .select("key_hash, tier")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!newErr && newRow?.key_hash) {
+    return {
+      userId: user.id,
+      email: user.email,
+      apiKeyHash: newRow.key_hash,
+      tier: newRow.tier ?? "free",
+    };
+  }
+
+  // Old shape fallback: api_key plaintext column, compute hash
+  try {
+    const { data: oldRow } = await sb
+      .from("api_keys")
+      .select("api_key, status")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (oldRow?.api_key) {
+      return {
+        userId: user.id,
+        email: user.email,
+        apiKeyHash: sha256hex(oldRow.api_key),
+        tier: "free",
+      };
+    }
+  } catch {
+    // 42703 = column doesn't exist on fresh DB, treat as not found
+  }
+
+  return null;
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -845,6 +915,220 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("device_id", deviceId);
         if (error) throw error;
         return res.status(200).json({ success: true });
+      }
+
+      // ── Phase 3 admin shell actions (session JWT -> tenant) ────────
+      case "admin_profile": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        // Fetch api_key row details
+        const { data: keyRow } = await supabase
+          .from("api_keys")
+          .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+          .eq("user_id", tenant.userId)
+          .limit(1)
+          .maybeSingle();
+
+        return res.status(200).json({
+          user_id: tenant.userId,
+          email: tenant.email,
+          api_key_hash: tenant.apiKeyHash,
+          tier: tenant.tier,
+          api_key: keyRow
+            ? {
+                id: keyRow.id,
+                prefix: keyRow.key_prefix,
+                label: keyRow.label,
+                tier: keyRow.tier,
+                is_active: keyRow.is_active,
+                usage_count: keyRow.usage_count,
+                last_used_at: keyRow.last_used_at,
+                created_at: keyRow.created_at,
+              }
+            : null,
+        });
+      }
+
+      case "admin_facts": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        const query = req.query.query as string;
+        const showAll = req.query.show_all === "true";
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+
+        let q = supabase
+          .from("mc_extracted_facts")
+          .select("*")
+          .eq("api_key_hash", tenant.apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (!showAll) {
+          q = q.eq("status", "active");
+        }
+
+        const { data, error } = await q;
+        if (error) throw error;
+
+        let results = data ?? [];
+        if (query) {
+          const lower = query.toLowerCase();
+          results = results.filter(
+            (f: { fact: string; category: string }) =>
+              f.fact.toLowerCase().includes(lower) ||
+              f.category.toLowerCase().includes(lower),
+          );
+        }
+
+        return res.status(200).json({ data: results });
+      }
+
+      case "admin_delete_fact": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        const factId = req.body?.fact_id;
+        if (!factId) return res.status(400).json({ error: "fact_id required" });
+
+        const { error } = await supabase
+          .from("mc_extracted_facts")
+          .update({ status: "archived" })
+          .eq("id", factId)
+          .eq("api_key_hash", tenant.apiKeyHash);
+
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "admin_update_fact": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        const { fact_id: fId, fact: newText } = req.body ?? {};
+        if (!fId || !newText) {
+          return res.status(400).json({ error: "fact_id and fact required" });
+        }
+
+        const { error } = await supabase
+          .from("mc_extracted_facts")
+          .update({ fact: newText, updated_at: new Date().toISOString() })
+          .eq("id", fId)
+          .eq("api_key_hash", tenant.apiKeyHash);
+
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "admin_activity": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        // Metering events (last 200, grouped later client-side)
+        const { data: events } = await supabase
+          .from("metering_events")
+          .select("id, platform, operation, success, response_ms, created_at")
+          .eq("key_hash", tenant.apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(200);
+
+        // Recent conversation sessions (distinct session_ids)
+        const { data: convos } = await supabase
+          .from("mc_conversation_log")
+          .select("session_id, role, created_at")
+          .eq("api_key_hash", tenant.apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        // Aggregate conversation sessions
+        const sessionMap = new Map<string, { count: number; last_message: string }>();
+        for (const msg of convos ?? []) {
+          const existing = sessionMap.get(msg.session_id);
+          if (existing) {
+            existing.count++;
+          } else {
+            sessionMap.set(msg.session_id, { count: 1, last_message: msg.created_at });
+          }
+        }
+        const sessions = Array.from(sessionMap.entries())
+          .map(([id, info]) => ({
+            session_id: id,
+            message_count: info.count,
+            last_message: info.last_message,
+          }))
+          .slice(0, 20);
+
+        return res.status(200).json({
+          metering_events: events ?? [],
+          conversation_sessions: sessions,
+        });
+      }
+
+      case "admin_credentials": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        const { data, error } = await supabase
+          .from("platform_credentials")
+          .select("id, platform, label, is_valid, last_tested_at, created_at")
+          .eq("key_hash", tenant.apiKeyHash)
+          .order("platform");
+
+        if (error) throw error;
+
+        // Enrich with connector info
+        const { data: connectors } = await supabase
+          .from("platform_connectors")
+          .select("id, name, category, icon");
+
+        const connectorMap = new Map(
+          (connectors ?? []).map((c: { id: string; name: string; category: string; icon: string | null }) => [c.id, c]),
+        );
+
+        const enriched = (data ?? []).map((cred: {
+          id: string;
+          platform: string;
+          label: string;
+          is_valid: boolean;
+          last_tested_at: string | null;
+          created_at: string;
+        }) => ({
+          ...cred,
+          connector: connectorMap.get(cred.platform) ?? null,
+        }));
+
+        return res.status(200).json({ data: enriched });
+      }
+
+      case "admin_storage": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
+
+        const [bytesResult, countResult] = await Promise.all([
+          supabase.rpc("mc_get_storage_bytes", { p_api_key_hash: tenant.apiKeyHash }),
+          supabase.rpc("mc_get_fact_count", { p_api_key_hash: tenant.apiKeyHash }),
+        ]);
+
+        const storageBytes = bytesResult.data ?? 0;
+        const factCount = countResult.data ?? 0;
+
+        // Free tier caps
+        const caps = {
+          free: { storage_bytes: 50 * 1024 * 1024, facts: 5000 },
+          pro: { storage_bytes: 500 * 1024 * 1024, facts: 50000 },
+          team: { storage_bytes: 2 * 1024 * 1024 * 1024, facts: 200000 },
+        };
+        const tierCaps = caps[tenant.tier as keyof typeof caps] ?? caps.free;
+
+        return res.status(200).json({
+          storage_bytes: storageBytes,
+          fact_count: factCount,
+          tier: tenant.tier,
+          caps: tierCaps,
+        });
       }
 
       // ── Cron actions ────────────────────────────────────────────────

@@ -28,7 +28,7 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      navigate("/memory/admin", { replace: true });
+      navigate("/admin", { replace: true });
     }
   }, [loading, session, navigate]);
 
