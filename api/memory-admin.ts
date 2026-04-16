@@ -412,6 +412,258 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ success: true });
       }
 
+      // ── Phase 4 admin actions ─────────────────────────────────────────
+
+      case "admin_business_context": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const tenant = sha256hex(apiKey);
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
+
+        switch (method) {
+          case "list": {
+            const { data, error } = await supabase
+              .from("business_context")
+              .select("*")
+              .order("priority", { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ data: data ?? [] });
+          }
+          case "create": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const { category, key, value } = req.body ?? {};
+            if (!category || !key || value === undefined) {
+              return res.status(400).json({ error: "category, key, and value required" });
+            }
+            // Auto-increment priority
+            const { data: maxRow } = await supabase
+              .from("business_context")
+              .select("priority")
+              .order("priority", { ascending: false })
+              .limit(1);
+            const nextPriority = ((maxRow?.[0]?.priority as number) ?? -1) + 1;
+            const { data, error } = await supabase
+              .from("business_context")
+              .insert({
+                category,
+                key,
+                value: typeof value === "string" ? value : JSON.stringify(value),
+                priority: nextPriority,
+                decay_tier: "hot",
+                updated_at: new Date().toISOString(),
+                last_accessed: new Date().toISOString(),
+              })
+              .select()
+              .single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+          }
+          case "update": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const { id, ...updates } = req.body ?? {};
+            if (!id) return res.status(400).json({ error: "id required" });
+            const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+            if (updates.value !== undefined) updatePayload.value = typeof updates.value === "string" ? updates.value : JSON.stringify(updates.value);
+            if (updates.priority !== undefined) updatePayload.priority = updates.priority;
+            if (updates.category !== undefined) updatePayload.category = updates.category;
+            if (updates.key !== undefined) updatePayload.key = updates.key;
+            const { error } = await supabase
+              .from("business_context")
+              .update(updatePayload)
+              .eq("id", id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+          }
+          case "delete": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const delId = req.body?.id;
+            if (!delId) return res.status(400).json({ error: "id required" });
+            const { error } = await supabase
+              .from("business_context")
+              .delete()
+              .eq("id", delId);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+          }
+          case "reorder": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const items = req.body?.items as Array<{ id: string; priority: number }>;
+            if (!items?.length) return res.status(400).json({ error: "items array required" });
+            for (const item of items) {
+              await supabase
+                .from("business_context")
+                .update({ priority: item.priority, updated_at: new Date().toISOString() })
+                .eq("id", item.id);
+            }
+            return res.status(200).json({ success: true });
+          }
+          default:
+            return res.status(400).json({ error: `Unknown method: ${method}` });
+        }
+      }
+
+      case "admin_sessions": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
+
+        if (method === "list") {
+          const { data, error } = await supabase
+            .from("session_summaries")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(20);
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
+        }
+
+        if (method === "transcript") {
+          const sessionId = req.body?.session_id ?? req.query.session_id;
+          if (!sessionId) return res.status(400).json({ error: "session_id required" });
+          const { data, error } = await supabase
+            .from("conversation_log")
+            .select("*")
+            .eq("session_id", sessionId)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
+        }
+
+        return res.status(400).json({ error: `Unknown method: ${method}` });
+      }
+
+      case "admin_library": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const method = (req.body?.method ?? req.query.method ?? "list") as string;
+
+        if (method === "list") {
+          const { data, error } = await supabase
+            .from("knowledge_library")
+            .select("id, slug, title, updated_at, version, decay_tier, category, tags")
+            .order("updated_at", { ascending: false });
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
+        }
+
+        if (method === "view") {
+          const id = req.body?.id ?? req.query.id;
+          if (!id) return res.status(400).json({ error: "id required" });
+          const { data, error } = await supabase
+            .from("knowledge_library")
+            .select("*")
+            .eq("id", id)
+            .single();
+          if (error) throw error;
+          return res.status(200).json({ data });
+        }
+
+        if (method === "history") {
+          const slug = req.body?.slug ?? req.query.slug;
+          if (!slug) return res.status(400).json({ error: "slug required" });
+          const { data, error } = await supabase
+            .from("knowledge_library_history")
+            .select("*")
+            .eq("slug", slug)
+            .order("version", { ascending: false });
+          if (error) throw error;
+          return res.status(200).json({ data: data ?? [] });
+        }
+
+        return res.status(400).json({ error: `Unknown method: ${method}` });
+      }
+
+      case "admin_memory_activity": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+
+        const [factsResult, statusResult, decayResult, accessedResult] = await Promise.all([
+          // Facts by day (last 30 days)
+          supabase
+            .from("extracted_facts")
+            .select("created_at")
+            .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+            .order("created_at", { ascending: true }),
+          // Storage stats
+          supabase
+            .from("extracted_facts")
+            .select("id", { count: "exact", head: true }),
+          // Recent decay transitions
+          supabase
+            .from("extracted_facts")
+            .select("id, fact, category, decay_tier, updated_at")
+            .neq("decay_tier", "hot")
+            .order("updated_at", { ascending: false })
+            .limit(20),
+          // Most accessed facts
+          supabase
+            .from("extracted_facts")
+            .select("id, fact, category, access_count, decay_tier")
+            .eq("status", "active")
+            .order("access_count", { ascending: false })
+            .limit(10),
+        ]);
+
+        // Group facts by day
+        const factsByDay: Record<string, number> = {};
+        for (const f of factsResult.data ?? []) {
+          const day = (f.created_at as string).slice(0, 10);
+          factsByDay[day] = (factsByDay[day] ?? 0) + 1;
+        }
+
+        return res.status(200).json({
+          facts_by_day: factsByDay,
+          total_facts: statusResult.count ?? 0,
+          recent_decay: decayResult.data ?? [],
+          most_accessed: accessedResult.data ?? [],
+        });
+      }
+
+      case "admin_tools": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+
+        // Metering events grouped by operation
+        const { data: metering } = await supabase
+          .from("metering_events")
+          .select("operation")
+          .order("created_at", { ascending: false })
+          .limit(10000);
+
+        const meteringByOp: Record<string, number> = {};
+        for (const m of metering ?? []) {
+          const op = m.operation as string;
+          meteringByOp[op] = (meteringByOp[op] ?? 0) + 1;
+        }
+
+        // Platform connectors with credential status
+        const { data: connectors } = await supabase
+          .from("platform_connectors")
+          .select("*");
+
+        const { data: credentials } = await supabase
+          .from("platform_credentials")
+          .select("platform, is_valid, last_tested_at");
+
+        const credMap: Record<string, { is_valid: boolean; last_tested_at: string | null }> = {};
+        for (const c of credentials ?? []) {
+          credMap[c.platform as string] = {
+            is_valid: c.is_valid as boolean,
+            last_tested_at: c.last_tested_at as string | null,
+          };
+        }
+
+        const enrichedConnectors = (connectors ?? []).map((pc) => ({
+          ...pc,
+          credential: credMap[(pc as Record<string, unknown>).id as string] ?? null,
+        }));
+
+        return res.status(200).json({
+          metering: meteringByOp,
+          connectors: enrichedConnectors,
+        });
+      }
+
       // ── BYOD / wizard actions ────────────────────────────────────────
       case "setup_status": {
         const apiKey = String(req.query.api_key ?? "").trim();

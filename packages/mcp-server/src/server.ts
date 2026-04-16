@@ -46,9 +46,9 @@ const META_TOOLS = [
   {
     name: "unclick_search",
     description:
-      "Search the UnClick tool marketplace by keyword or description. " +
+      "Search Available Tools - Search the UnClick tool marketplace by keyword or description. " +
       "Use this to discover which tools are available for a task. " +
-      "Example: 'I need to resize an image' → returns the image tool with its endpoints.",
+      "Example: 'I need to resize an image' returns the image tool with its endpoints.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -68,7 +68,7 @@ const META_TOOLS = [
   {
     name: "unclick_browse",
     description:
-      "Browse all available UnClick tools, optionally filtered by category. " +
+      "Browse Tool Catalog - Browse all available UnClick tools, optionally filtered by category. " +
       "Returns a list of tools with their slugs and descriptions.",
     inputSchema: {
       type: "object" as const,
@@ -84,7 +84,7 @@ const META_TOOLS = [
   {
     name: "unclick_tool_info",
     description:
-      "Get detailed information about a specific UnClick tool including all its endpoints, " +
+      "Get Tool Details - Get detailed information about a specific UnClick tool including all its endpoints, " +
       "required parameters, and response shapes. Use this after unclick_search to understand " +
       "exactly how to call a tool.",
     inputSchema: {
@@ -103,7 +103,7 @@ const META_TOOLS = [
   {
     name: "unclick_call",
     description:
-      "Call any UnClick tool endpoint. Specify the endpoint ID and parameters. " +
+      "Execute Tool - Call any UnClick tool endpoint. Specify the endpoint ID and parameters. " +
       "Use unclick_search or unclick_tool_info to discover endpoint IDs and required params. " +
       "Example: endpoint_id='image.resize', params={image: '<base64>', width: 800, height: 600}",
     inputSchema: {
@@ -129,10 +129,9 @@ const META_TOOLS = [
   {
     name: "get_startup_context",
     description:
-      "Load persistent UnClick Memory at session start. Returns business context (standing rules), " +
-      "recent session summaries, and hot facts. Call this FIRST in every new session to understand " +
-      "the user's ongoing projects, preferences, and open loops. Works zero-config locally, or with " +
-      "Supabase for cross-machine sync.",
+      "Load Session Context - Loads the user's business context, recent sessions, and hot facts at " +
+      "session start. Call this FIRST in every new session to understand the user's ongoing projects, " +
+      "preferences, and open loops. Works zero-config locally, or with Supabase for cross-machine sync.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -147,8 +146,8 @@ const META_TOOLS = [
   {
     name: "write_session_summary",
     description:
-      "Write a session summary at the end of a session. Critical for cross-session continuity. " +
-      "Call this BEFORE the session ends (when the user says goodbye, or context is running low). " +
+      "Save Session Summary - Write a session summary before the session ends. Critical for " +
+      "cross-session continuity. Call this when the user says goodbye or context is running low. " +
       "Include key decisions, open loops, and topics discussed.",
     inputSchema: {
       type: "object" as const,
@@ -167,7 +166,7 @@ const META_TOOLS = [
   {
     name: "add_fact",
     description:
-      "Add a new atomic fact to UnClick Memory. One fact = one statement. " +
+      "Store New Fact - Add a new atomic fact to UnClick Memory. One fact = one statement. " +
       "Use when the user states a preference, makes a decision, or shares important info. " +
       "Good: 'Team prefers Tailwind over CSS modules'. Bad: 'We talked about styling'.",
     inputSchema: {
@@ -188,8 +187,8 @@ const META_TOOLS = [
   {
     name: "search_memory",
     description:
-      "Full-text search across UnClick Memory conversation logs. Use when you need to recall " +
-      "something specific from a previous session.",
+      "Search Conversations - Full-text search across UnClick Memory conversation logs. Use " +
+      "when you need to recall something specific from a previous session.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -202,8 +201,9 @@ const META_TOOLS = [
   {
     name: "set_business_context",
     description:
-      "Add or update a standing rule in UnClick Memory (Layer 1). Business context is ALWAYS loaded " +
-      "at session start. Use for standing rules, client info, and preferences that are always relevant.",
+      "Update Business Context - Add or update a standing rule in UnClick Memory (Layer 1). " +
+      "Business context is ALWAYS loaded at session start. Use for standing rules, client info, " +
+      "and preferences that are always relevant.",
     inputSchema: {
       type: "object" as const,
       properties: {
