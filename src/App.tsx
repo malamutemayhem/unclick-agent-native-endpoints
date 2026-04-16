@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -25,7 +25,6 @@ import TermsPage from "./pages/Terms.tsx";
 import PrivacyPage from "./pages/Privacy.tsx";
 import BackstagePassPage from "./pages/BackstagePass.tsx";
 import MemoryPage from "./pages/Memory.tsx";
-import MemoryAdminPage from "./pages/MemoryAdmin.tsx";
 import MemorySetupPage from "./pages/MemorySetup.tsx";
 import PricingPage from "./pages/Pricing.tsx";
 import OrganiserPage from "./pages/Organiser.tsx";
@@ -39,6 +38,12 @@ import LoginPage from "./pages/Login.tsx";
 import SignupPage from "./pages/Signup.tsx";
 import AuthCallbackPage from "./pages/AuthCallback.tsx";
 import RequireAuth from "./components/RequireAuth.tsx";
+import AdminShell from "./pages/admin/AdminShell.tsx";
+import AdminYou from "./pages/admin/AdminYou.tsx";
+import AdminMemory from "./pages/admin/AdminMemory.tsx";
+import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
+import AdminTools from "./pages/admin/AdminTools.tsx";
+import AdminActivity from "./pages/admin/AdminActivity.tsx";
 
 const queryClient = new QueryClient();
 
@@ -74,15 +79,25 @@ const App = () => (
           {/* Core product pages */}
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
+          {/* /memory/admin redirects to the new admin shell */}
+          <Route path="/memory/admin" element={<Navigate to="/admin/memory" replace />} />
+          <Route path="/memory/setup" element={<MemorySetupPage />} />
+          {/* Phase 3: Admin shell with five surfaces */}
           <Route
-            path="/memory/admin"
+            path="/admin"
             element={
               <RequireAuth>
-                <MemoryAdminPage />
+                <AdminShell />
               </RequireAuth>
             }
-          />
-          <Route path="/memory/setup" element={<MemorySetupPage />} />
+          >
+            <Route index element={<Navigate to="/admin/you" replace />} />
+            <Route path="you" element={<AdminYou />} />
+            <Route path="memory" element={<AdminMemory />} />
+            <Route path="keychain" element={<AdminKeychain />} />
+            <Route path="tools" element={<AdminTools />} />
+            <Route path="activity" element={<AdminActivity />} />
+          </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />

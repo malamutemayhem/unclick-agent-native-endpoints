@@ -1,0 +1,279 @@
+/**
+ * AdminYou - Identity surface (/admin/you)
+ *
+ * The Apple ID equivalent. Shows: user email, auth provider, linked
+ * api_key info, paired devices (auth_devices), logout button.
+ * ClaimKeyBanner is shown if the user has an unclaimed localStorage key.
+ */
+
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSession, signOut } from "@/lib/auth";
+import ClaimKeyBanner from "@/components/ClaimKeyBanner";
+import {
+  User,
+  Mail,
+  Shield,
+  KeyRound,
+  Monitor,
+  LogOut,
+  Loader2,
+  Clock,
+} from "lucide-react";
+
+interface DeviceRow {
+  id: string;
+  device_id: string;
+  device_name: string | null;
+  paired_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+}
+
+interface ProfileData {
+  user_id: string;
+  email: string | null;
+  tier: string;
+  api_key: {
+    id: string;
+    prefix: string;
+    label: string;
+    tier: string;
+    is_active: boolean;
+    usage_count: number;
+    last_used_at: string | null;
+    created_at: string;
+  } | null;
+}
+
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+export default function AdminYou() {
+  const { session, user } = useSession();
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const headers = { Authorization: `Bearer ${session.access_token}` };
+        const [profileRes, devicesRes] = await Promise.all([
+          fetch("/api/memory-admin?action=admin_profile", { headers }),
+          fetch("/api/memory-admin?action=auth_device_list", { headers }),
+        ]);
+
+        if (!cancelled && profileRes.ok) {
+          setProfile(await profileRes.json());
+        }
+        if (!cancelled && devicesRes.ok) {
+          const body = await devicesRes.json();
+          setDevices(body.data ?? []);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [session]);
+
+  async function handleLogout() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+
+  async function revokeDevice(deviceId: string) {
+    if (!session) return;
+    await fetch("/api/memory-admin?action=auth_device_revoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ device_id: deviceId }),
+    });
+    setDevices((prev) => prev.filter((d) => d.device_id !== deviceId));
+  }
+
+  const provider = user?.app_metadata?.provider ?? "email";
+  const providerLabel =
+    provider === "google" ? "Google" :
+    provider === "azure" ? "Microsoft" :
+    provider === "email" ? "Magic link" :
+    provider;
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-white">You</h1>
+        <p className="mt-1 text-sm text-[#888]">Identity, accounts, and devices</p>
+      </div>
+
+      <ClaimKeyBanner />
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-12 text-[#666]">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Loading profile...</span>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Identity card */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <User className="h-4 w-4 text-[#E2B93B]" />
+              Identity
+            </h2>
+
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-[#888]">
+                  <Mail className="h-3.5 w-3.5" />
+                  Email
+                </span>
+                <span className="font-mono text-xs text-white">
+                  {user?.email ?? "Unknown"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-[#888]">
+                  <Shield className="h-3.5 w-3.5" />
+                  Auth provider
+                </span>
+                <span className="text-xs text-white">{providerLabel}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-[#888]">
+                  <Clock className="h-3.5 w-3.5" />
+                  Member since
+                </span>
+                <span className="text-xs text-white">
+                  {user?.created_at
+                    ? new Date(user.created_at).toLocaleDateString()
+                    : "Unknown"}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </div>
+
+          {/* API Key card */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <KeyRound className="h-4 w-4 text-[#E2B93B]" />
+              API Key
+            </h2>
+
+            {profile?.api_key ? (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#888]">Key</span>
+                  <code className="rounded bg-white/[0.04] px-2 py-0.5 font-mono text-xs text-white">
+                    {profile.api_key.prefix}...
+                  </code>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#888]">Tier</span>
+                  <span className="inline-flex items-center rounded-full border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#E2B93B]">
+                    {profile.api_key.tier}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#888]">Status</span>
+                  <span className={`text-xs ${profile.api_key.is_active ? "text-green-400" : "text-red-400"}`}>
+                    {profile.api_key.is_active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#888]">Total calls</span>
+                  <span className="font-mono text-xs text-white">
+                    {(profile.api_key.usage_count ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#888]">Last used</span>
+                  <span className="text-xs text-white">
+                    {timeAgo(profile.api_key.last_used_at)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-4 text-center">
+                <p className="text-xs text-[#666]">
+                  No API key linked. Use the banner above to claim your key, or{" "}
+                  <a href="/#install" className="text-[#E2B93B] underline-offset-2 hover:underline">
+                    get started
+                  </a>.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Devices card (full width) */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6 lg:col-span-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Monitor className="h-4 w-4 text-[#E2B93B]" />
+              Paired Devices
+              <span className="ml-auto font-mono text-[11px] text-[#666]">
+                {devices.length} device{devices.length !== 1 ? "s" : ""}
+              </span>
+            </h2>
+
+            {devices.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-6 text-center">
+                <p className="text-xs text-[#666]">
+                  No paired devices yet. Devices appear here when you sign in from another browser or machine.
+                </p>
+              </div>
+            ) : (
+              <ul className="mt-4 divide-y divide-white/[0.04]">
+                {devices.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">
+                        {d.device_name ?? d.device_id}
+                      </p>
+                      <p className="text-[11px] text-[#666]">
+                        Paired {timeAgo(d.paired_at)} - Last seen {timeAgo(d.last_seen_at)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => revokeDevice(d.device_id)}
+                      className="ml-4 shrink-0 rounded-md border border-red-500/20 px-2.5 py-1 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                    >
+                      Revoke
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

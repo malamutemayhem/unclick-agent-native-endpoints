@@ -35,7 +35,7 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (!sessionLoading && session) {
-      navigate("/memory/admin", { replace: true });
+      navigate("/admin", { replace: true });
     }
   }, [sessionLoading, session, navigate]);
 

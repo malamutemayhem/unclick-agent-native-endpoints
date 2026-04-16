@@ -31,7 +31,7 @@ export default function LoginPage() {
   // If already authenticated, bounce to memory admin.
   useEffect(() => {
     if (!sessionLoading && session) {
-      navigate("/memory/admin", { replace: true });
+      navigate("/admin", { replace: true });
     }
   }, [sessionLoading, session, navigate]);
 
