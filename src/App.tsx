@@ -26,6 +26,7 @@ import PrivacyPage from "./pages/Privacy.tsx";
 import BackstagePassPage from "./pages/BackstagePass.tsx";
 import MemoryPage from "./pages/Memory.tsx";
 import MemorySetupPage from "./pages/MemorySetup.tsx";
+import MemoryConnectPage from "./pages/MemoryConnect.tsx";
 import PricingPage from "./pages/Pricing.tsx";
 import OrganiserPage from "./pages/Organiser.tsx";
 import DispatchPage from "./pages/Dispatch.tsx";
@@ -83,6 +84,7 @@ const App = () => (
           {/* /memory/admin redirects to the new admin shell */}
           <Route path="/memory/admin" element={<Navigate to="/admin/memory" replace />} />
           <Route path="/memory/setup" element={<MemorySetupPage />} />
+          <Route path="/memory/connect" element={<MemoryConnectPage />} />
           {/* Phase 3: Admin shell with five surfaces */}
           <Route
             path="/admin"

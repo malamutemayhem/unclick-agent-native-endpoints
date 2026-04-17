@@ -1049,6 +1049,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ data: data ?? [] });
       }
 
+      case "admin_check_connection": {
+        // Lightweight check used by the Connect page to verify that Claude Code
+        // (or any MCP client) has handshaken with this user's API key recently.
+        // Returns whether the api key resolves to a configured account, fact
+        // count, and last activity timestamp.
+        const apiKey = String(req.query.api_key ?? "").trim() || bearerFrom(req);
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data: cfg } = await supabase
+          .from("memory_configs")
+          .select("supabase_url,schema_installed,last_used_at,updated_at")
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+
+        const [bcRes, factsRes, sessionRes] = await Promise.all([
+          supabase.from("business_context").select("id", { count: "exact", head: true }),
+          supabase.from("extracted_facts").select("id", { count: "exact", head: true }).eq("status", "active"),
+          supabase
+            .from("session_summaries")
+            .select("created_at,platform")
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
+
+        const factCount = factsRes.count ?? 0;
+        const contextCount = bcRes.count ?? 0;
+        const lastSession = sessionRes.data?.[0]?.created_at ?? null;
+        const lastSessionPlatform = sessionRes.data?.[0]?.platform ?? null;
+        const lastUsedAt = cfg?.last_used_at ?? null;
+
+        // "Connected" means we've seen a successful MCP handshake (last_used_at)
+        // OR there's session activity. If neither, the user has set up cloud
+        // memory but no client has spoken to it yet.
+        const connected = Boolean(lastUsedAt || lastSession);
+
+        return res.status(200).json({
+          connected,
+          configured: Boolean(cfg),
+          has_context: contextCount > 0,
+          context_count: contextCount,
+          fact_count: factCount,
+          last_session: lastSession,
+          last_session_platform: lastSessionPlatform,
+          last_used_at: lastUsedAt,
+        });
+      }
+
       case "remove_device": {
         if (req.method !== "DELETE") return res.status(405).json({ error: "DELETE required" });
         const apiKey = bearerFrom(req);
