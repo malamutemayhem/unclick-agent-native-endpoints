@@ -1530,6 +1530,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ data: eventData });
       }
 
+      // ── Tenant auto-load settings ───────────────────────────────────
+      case "admin_get_autoload_settings": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data, error } = await supabase
+          .from("tenant_settings")
+          .select("autoload_enabled, prompt_enabled, resources_enabled, autoload_instructions")
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (error) throw error;
+
+        return res.status(200).json({
+          settings: data ?? {
+            autoload_enabled: true,
+            prompt_enabled: true,
+            resources_enabled: true,
+            autoload_instructions: null,
+          },
+        });
+      }
+
+      case "admin_update_autoload_settings": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = req.body ?? {};
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+        for (const field of ["autoload_enabled", "prompt_enabled", "resources_enabled"]) {
+          if (body[field] !== undefined) {
+            if (typeof body[field] !== "boolean") {
+              return res.status(400).json({ error: `${field} must be boolean` });
+            }
+            updates[field] = body[field];
+          }
+        }
+
+        if (body.autoload_instructions !== undefined) {
+          const instr = body.autoload_instructions;
+          if (instr !== null && typeof instr !== "string") {
+            return res.status(400).json({ error: "autoload_instructions must be string or null" });
+          }
+          if (typeof instr === "string" && instr.length > 2000) {
+            return res.status(400).json({ error: "autoload_instructions max 2000 characters" });
+          }
+          updates.autoload_instructions = instr;
+        }
+
+        const { data, error } = await supabase
+          .from("tenant_settings")
+          .upsert(
+            { api_key_hash: apiKeyHash, ...updates },
+            { onConflict: "api_key_hash" }
+          )
+          .select("autoload_enabled, prompt_enabled, resources_enabled, autoload_instructions")
+          .single();
+        if (error) throw error;
+
+        return res.status(200).json({ settings: data });
+      }
+
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }

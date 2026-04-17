@@ -44,6 +44,7 @@ import AdminMemory from "./pages/admin/AdminMemory.tsx";
 import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
 import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
+import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 
 const queryClient = new QueryClient();
@@ -98,6 +99,7 @@ const App = () => (
             <Route path="keychain" element={<AdminKeychain />} />
             <Route path="tools" element={<AdminTools />} />
             <Route path="activity" element={<AdminActivity />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />

@@ -18,6 +18,7 @@ import {
   KeyRound,
   Wrench,
   Activity,
+  Settings,
   LogOut,
   MessageCircle,
   X,
@@ -30,6 +31,7 @@ const surfaces = [
   { path: "/admin/keychain", label: "Keychain", icon: KeyRound },
   { path: "/admin/tools", label: "Tools", icon: Wrench },
   { path: "/admin/activity", label: "Activity", icon: Activity },
+  { path: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 
 function SurfaceLink({ path, label, icon: Icon, onClick }: {
