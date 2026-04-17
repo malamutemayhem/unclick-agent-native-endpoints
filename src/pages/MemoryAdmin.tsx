@@ -35,7 +35,7 @@ import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight } from "lucide-react";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock } from "lucide-react";
 
 interface MemoryConfigStatus {
   configured: boolean;
@@ -53,6 +53,15 @@ interface Device {
   last_seen: string;
 }
 
+interface MemoryStatus {
+  business_context?: number;
+  library?: number;
+  sessions?: number;
+  facts?: number;
+  conversations?: number;
+  code?: number;
+}
+
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "never";
   const ts = new Date(iso).getTime();
@@ -66,9 +75,19 @@ function formatRelative(iso: string | null | undefined): string {
   return `${days}d ago`;
 }
 
+const STAT_CARDS: { key: keyof MemoryStatus; label: string; icon: typeof Layers }[] = [
+  { key: "facts", label: "Facts", icon: Search },
+  { key: "sessions", label: "Sessions", icon: Clock },
+  { key: "library", label: "Library docs", icon: Layers },
+  { key: "business_context", label: "Context entries", icon: FileText },
+  { key: "conversations", label: "Conversations", icon: Brain },
+  { key: "code", label: "Code dumps", icon: Code },
+];
+
 export default function MemoryAdminPage() {
   const [config, setConfig] = useState<MemoryConfigStatus | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,9 +100,12 @@ export default function MemoryAdminPage() {
 
     (async () => {
       try {
-        const [cfgRes, devRes] = await Promise.all([
+        const [cfgRes, devRes, statusRes] = await Promise.all([
           fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(apiKey)}`),
           fetch("/api/memory-admin?action=list_devices", {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          }),
+          fetch("/api/memory-admin?action=status", {
             headers: { Authorization: `Bearer ${apiKey}` },
           }),
         ]);
@@ -95,6 +117,11 @@ export default function MemoryAdminPage() {
           const body = (await devRes.json()) as { data: Device[] };
           setDevices(body.data ?? []);
         }
+        if (!cancelled && statusRes.ok) {
+          const body = (await statusRes.json()) as MemoryStatus & { data?: MemoryStatus };
+          // Endpoint may return raw counts or wrap them under `data`.
+          setStatus(body.data ?? body);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,6 +131,9 @@ export default function MemoryAdminPage() {
       cancelled = true;
     };
   }, []);
+
+  const hasApiKey =
+    typeof window !== "undefined" && Boolean(localStorage.getItem("unclick_api_key"));
 
   const localCount = devices.filter((d) => d.storage_mode === "local").length;
   const cloudCount = devices.filter((d) => d.storage_mode === "cloud").length;
@@ -122,6 +152,29 @@ export default function MemoryAdminPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Memory Admin</h1>
             <p className="text-sm text-body">View and manage your agent's persistent memory</p>
           </div>
+        </div>
+
+        {/* Stat cards: counts per memory layer from ?action=status */}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {STAT_CARDS.map(({ key, label, icon: Icon }) => {
+            const value = status?.[key];
+            const display =
+              !hasApiKey ? "-" : loading ? "..." : typeof value === "number" ? value.toLocaleString() : "0";
+            return (
+              <div
+                key={key}
+                className="rounded-xl border border-border/40 bg-card/20 p-4"
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <Icon className="h-3 w-3 text-primary/70" />
+                  {label}
+                </div>
+                <div className="mt-2 font-mono text-2xl font-semibold text-heading tabular-nums">
+                  {display}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Top-level nudge: user has 2+ devices on local storage but no cloud config */}
