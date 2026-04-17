@@ -3,12 +3,20 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { CATALOG, TOOL_MAP, ENDPOINT_MAP, type ToolDef } from "./catalog.js";
 import { createClient, type UnClickClient } from "./client.js";
 import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
+import { getBackend } from "./memory/db.js";
+import {
+  getTenantSettings,
+  DEFAULT_AUTOLOAD_INSTRUCTIONS,
+  type TenantSettings,
+} from "./memory/tenant-settings.js";
 
 // ─── Search helper ──────────────────────────────────────────────────────────
 
@@ -602,9 +610,62 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
     c.call("POST", "/v1/report-bug", a as Record<string, unknown>),
 };
 
+// ─── Prompts ────────────────────────────────────────────────────────────────
+
+const LOAD_MEMORY_PROMPT = {
+  name: "load-memory",
+  description:
+    "Load this user's full UnClick Memory context - business identity, standing rules, " +
+    "project memory, and session history. Use this if get_startup_context was not called automatically.",
+  arguments: [
+    {
+      name: "depth",
+      description:
+        "How much context to load: 'full' (default) returns everything, 'light' returns business context and active facts only",
+      required: false,
+    },
+  ],
+};
+
+function formatStartupContextAsPrompt(ctx: unknown, depth: string): string {
+  const c = (ctx ?? {}) as Record<string, unknown>;
+  const full = depth !== "light";
+
+  const payload: Record<string, unknown> = {
+    business_context: c.business_context ?? [],
+    active_facts: c.active_facts ?? [],
+  };
+  if (full) {
+    payload.recent_sessions = c.recent_sessions ?? [];
+    payload.knowledge_library_index = c.knowledge_library_index ?? [];
+  }
+  payload.loaded_at = c.loaded_at ?? new Date().toISOString();
+
+  return [
+    "# UnClick Memory - Startup Context",
+    "",
+    "The following is this user's persistent memory. Treat business context and standing rules as",
+    "authoritative: they override any default assumptions. Use active facts, open loops, and recent",
+    "session summaries to pick up where the last session left off.",
+    "",
+    "```json",
+    JSON.stringify(payload, null, 2),
+    "```",
+  ].join("\n");
+}
+
 // ─── Server factory ─────────────────────────────────────────────────────────
 
-export function createServer(): Server {
+export async function createServer(): Promise<Server> {
+  const settings: TenantSettings = await getTenantSettings();
+
+  const capabilities: Record<string, Record<string, unknown>> = { tools: {} };
+  if (settings.prompt_enabled) capabilities.prompts = {};
+
+  const instructions = settings.autoload_enabled
+    ? settings.autoload_instructions ?? DEFAULT_AUTOLOAD_INSTRUCTIONS
+    : undefined;
+
   const server = new Server(
     {
       name: "UnClick",
@@ -620,7 +681,8 @@ export function createServer(): Server {
       ],
     },
     {
-      capabilities: { tools: {} },
+      capabilities,
+      ...(instructions ? { instructions } : {}),
     }
   );
 
@@ -629,6 +691,37 @@ export function createServer(): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools: [...META_TOOLS] };
   });
+
+  // PROMPTS — only registered when the tenant has prompts enabled.
+  if (settings.prompt_enabled) {
+    server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return { prompts: [LOAD_MEMORY_PROMPT] };
+    });
+
+    server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: rawArgs } = request.params;
+      const promptArgs = (rawArgs ?? {}) as Record<string, unknown>;
+
+      if (name !== "load-memory") {
+        throw new Error(`Unknown prompt: ${name}`);
+      }
+
+      const depth = typeof promptArgs.depth === "string" ? promptArgs.depth : "full";
+      const db = await getBackend();
+      const ctx = await db.getStartupContext(depth === "light" ? 0 : 5);
+      const text = formatStartupContextAsPrompt(ctx, depth);
+
+      return {
+        description: "UnClick Memory startup context for this user.",
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text },
+          },
+        ],
+      };
+    });
+  }
 
   // CALL TOOL
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -852,7 +945,7 @@ export function createServer(): Server {
 }
 
 export async function startServer(): Promise<void> {
-  const server = createServer();
+  const server = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Server is running — errors go to stderr so they don't corrupt the MCP stream
