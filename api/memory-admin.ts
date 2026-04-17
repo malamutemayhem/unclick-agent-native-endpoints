@@ -256,7 +256,16 @@ function isAdminChatEnabled(): boolean {
   return flag === "1" || flag === "true" || flag === "yes";
 }
 
-function buildAdminChatTools(supabase: SupabaseClient) {
+function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null) {
+  const requireKey = () =>
+    apiKeyHash
+      ? null
+      : {
+          success: false,
+          error:
+            "No api_key was provided with the chat request. Pass it in the request body as 'api_key'.",
+        };
+
   return {
     search_memory: tool({
       description:
@@ -435,6 +444,108 @@ function buildAdminChatTools(supabase: SupabaseClient) {
         return { success: true, summary_id: data.id };
       },
     }),
+
+    create_build_task: tool({
+      description:
+        "Create a new build task with a title, description, and acceptance criteria. Tasks can later be dispatched to AI coding workers. Always confirm with the user before creating.",
+      inputSchema: z.object({
+        title: z.string().min(1).describe("Imperative, specific title, e.g. 'Fix login timeout bug'"),
+        description: z.string().describe("Enough detail that a developer could execute independently"),
+        acceptance_criteria: z
+          .array(z.string())
+          .optional()
+          .describe("Concrete checklist items defining done"),
+        priority: z.enum(["low", "medium", "high"]).optional().describe("Default 'medium'"),
+      }),
+      execute: async ({ title, description, acceptance_criteria, priority }) => {
+        const missing = requireKey();
+        if (missing) return missing;
+        const { data, error } = await supabase
+          .from("build_tasks")
+          .insert({
+            api_key_hash: apiKeyHash,
+            title,
+            description,
+            acceptance_criteria: acceptance_criteria ?? [],
+            priority: priority ?? "medium",
+            status: "pending",
+          })
+          .select("id, title, status, priority, created_at")
+          .single();
+        if (error) return { success: false, error: error.message };
+        return { success: true, task: data };
+      },
+    }),
+
+    list_build_tasks: tool({
+      description:
+        "List current build tasks and their status for this user. Use when the user asks 'what's on my plate?' or similar.",
+      inputSchema: z.object({
+        status: z
+          .enum(["pending", "in_progress", "completed", "cancelled", "all"])
+          .optional()
+          .describe("Filter by status, or 'all' for everything. Default 'pending'."),
+        limit: z.number().int().positive().max(50).optional(),
+      }),
+      execute: async ({ status, limit = 10 }) => {
+        const missing = requireKey();
+        if (missing) return { tasks: [], ...missing };
+        let q = supabase
+          .from("build_tasks")
+          .select("id, title, description, status, priority, acceptance_criteria, created_at, updated_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        const effective = status ?? "pending";
+        if (effective !== "all") {
+          q = q.eq("status", effective);
+        }
+        const { data, error } = await q;
+        if (error) return { tasks: [], error: error.message };
+        return { tasks: data ?? [], filter: effective };
+      },
+    }),
+
+    update_build_task: tool({
+      description:
+        "Update a build task's status, title, description, or acceptance criteria. Only updates tasks owned by the current user.",
+      inputSchema: z.object({
+        task_id: z.string().uuid().describe("UUID of the task to update"),
+        status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        acceptance_criteria: z.array(z.string()).optional(),
+        priority: z.enum(["low", "medium", "high"]).optional(),
+      }),
+      execute: async ({ task_id, status, title, description, acceptance_criteria, priority }) => {
+        const missing = requireKey();
+        if (missing) return missing;
+        const patch: Record<string, unknown> = {};
+        if (status !== undefined) patch.status = status;
+        if (title !== undefined) patch.title = title;
+        if (description !== undefined) patch.description = description;
+        if (acceptance_criteria !== undefined) patch.acceptance_criteria = acceptance_criteria;
+        if (priority !== undefined) patch.priority = priority;
+        if (Object.keys(patch).length === 0) {
+          return { success: false, error: "No fields to update were provided." };
+        }
+        const { data, error } = await supabase
+          .from("build_tasks")
+          .update(patch)
+          .eq("id", task_id)
+          .eq("api_key_hash", apiKeyHash)
+          .select("id, title, status, priority, updated_at")
+          .maybeSingle();
+        if (error) return { success: false, error: error.message };
+        if (!data) {
+          return {
+            success: false,
+            error: "No task with that ID exists for this user.",
+          };
+        }
+        return { success: true, task: data };
+      },
+    }),
   };
 }
 
@@ -497,6 +608,16 @@ async function buildAdminChatSystemPrompt(supabase: SupabaseClient): Promise<str
     "- get_memory_stats: Check memory health and load rates",
     "- list_recent_sessions: Review what happened in recent sessions",
     "- write_session_summary: Save a summary of this conversation",
+    "",
+    "You can also manage build tasks. When the user describes work that needs to be done (features to build, bugs to fix, refactoring), offer to create a build task. Use create_build_task with:",
+    "- Clear specific title (imperative: 'Fix login timeout bug', not 'Login issue')",
+    "- Enough detail that a developer or AI worker could execute independently",
+    "- Acceptance criteria as a concrete checklist",
+    "- Reference relevant facts from memory in the description",
+    "",
+    "When the user gives a vague multi-part request like 'fix the homepage and add pricing', suggest breaking it into separate tasks. Show them the proposed tasks and ask for confirmation before creating.",
+    "",
+    "When they ask 'what's on my plate?' or similar, use list_build_tasks to show pending work.",
     "",
     "When the user tells you something worth remembering, proactively use add_fact to store it. When they ask about past work, use list_recent_sessions or search_memory. Be helpful and proactive with tools, but always tell the user what you did.",
     "",
@@ -1860,14 +1981,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
 
-        const body = req.body as { messages?: UIMessage[] } | undefined;
+        const body = req.body as
+          | { messages?: UIMessage[]; api_key?: string }
+          | undefined;
         const messages = Array.isArray(body?.messages) ? body!.messages! : [];
         if (messages.length === 0) {
           return res.status(400).json({ error: "messages array is required" });
         }
 
+        const rawApiKey = (body?.api_key ?? bearerFrom(req)).trim();
+        const apiKeyHash = rawApiKey ? sha256hex(rawApiKey) : null;
+
         const systemPrompt = await buildAdminChatSystemPrompt(supabase);
-        const tools = buildAdminChatTools(supabase);
+        const tools = buildAdminChatTools(supabase, apiKeyHash);
 
         const modelMessages = await convertToModelMessages(messages);
         const result = streamText({
