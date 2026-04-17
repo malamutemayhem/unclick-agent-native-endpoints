@@ -1,9 +1,9 @@
 /**
  * Tenant-level settings for UnClick MCP server.
  *
- * Controls whether the server advertises the `instructions` field and the
- * Prompts capability during MCP initialization, and lets each tenant override
- * the default autoload instruction string.
+ * Controls whether the server advertises the `instructions` field, the
+ * Prompts capability, and the Resources capability during MCP initialization,
+ * and lets each tenant override the default autoload instruction string.
  *
  * Source of truth (in priority order):
  *   1. `tenant_settings` row in the tenant's Supabase DB (cloud mode only),
@@ -20,7 +20,7 @@ export interface TenantSettings {
   autoload_enabled: boolean;
   /** If false, the server does NOT advertise the prompts capability. */
   prompt_enabled: boolean;
-  /** Reserved for a future MCP resources capability. */
+  /** If false, the server does NOT advertise the resources capability. */
   resources_enabled: boolean;
 }
 
@@ -41,11 +41,15 @@ function hashApiKey(apiKey: string): string {
   return crypto.createHash("sha256").update(apiKey).digest("hex");
 }
 
+let cached: TenantSettings | null = null;
+
 /**
  * Load tenant settings. Never throws - on any failure, returns defaults so
  * that a misconfigured tenant_settings table can never break server startup.
  */
 export async function getTenantSettings(): Promise<TenantSettings> {
+  if (cached) return cached;
+
   const apiKey = process.env.UNCLICK_API_KEY;
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey =
@@ -53,7 +57,8 @@ export async function getTenantSettings(): Promise<TenantSettings> {
 
   // Local mode or missing key: just use defaults.
   if (!apiKey || !supabaseUrl || !serviceKey) {
-    return { ...DEFAULT_TENANT_SETTINGS };
+    cached = { ...DEFAULT_TENANT_SETTINGS };
+    return cached;
   }
 
   try {
@@ -69,9 +74,12 @@ export async function getTenantSettings(): Promise<TenantSettings> {
       .eq("api_key_hash", keyHash)
       .maybeSingle();
 
-    if (error || !data) return { ...DEFAULT_TENANT_SETTINGS };
+    if (error || !data) {
+      cached = { ...DEFAULT_TENANT_SETTINGS };
+      return cached;
+    }
 
-    return {
+    cached = {
       autoload_instructions:
         typeof data.autoload_instructions === "string" && data.autoload_instructions.length > 0
           ? data.autoload_instructions
@@ -80,7 +88,16 @@ export async function getTenantSettings(): Promise<TenantSettings> {
       prompt_enabled: data.prompt_enabled !== false,
       resources_enabled: data.resources_enabled !== false,
     };
+    return cached;
   } catch {
-    return { ...DEFAULT_TENANT_SETTINGS };
+    cached = { ...DEFAULT_TENANT_SETTINGS };
+    return cached;
   }
+}
+
+/** Back-compat alias. Prefer `getTenantSettings`. */
+export const loadTenantSettings = getTenantSettings;
+
+export function resetTenantSettingsCache(): void {
+  cached = null;
 }
