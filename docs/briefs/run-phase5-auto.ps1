@@ -1,12 +1,12 @@
 # Phase 5 -- FULLY AUTOMATED (no pauses between chunks)
-# Usage: .\run-phase5-auto.ps1
+# Usage: .\docs\briefs\run-phase5-auto.ps1
 # This runs all 5 chunks back-to-back without stopping.
 # Use this if you trust the briefs and want to walk away.
 
 $ErrorActionPreference = "Stop"
 
-$briefsDir = $PSScriptRoot
-if (-not $briefsDir) { $briefsDir = "." }
+$briefsDir = Join-Path $PSScriptRoot ""
+if (-not $briefsDir) { $briefsDir = ".\docs\briefs\" }
 
 $chunks = @(
     "phase5-chunk0-agents-md.md",
@@ -43,7 +43,7 @@ foreach ($chunk in $chunks) {
     Write-Host "--- Running: $chunk ---" -ForegroundColor Green
 
     $briefContent = Get-Content $filePath -Raw
-    $briefContent | claude --dangerously-skip-permissions
+    claude --print -p $briefContent --dangerously-skip-permissions
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAILED: $chunk" -ForegroundColor Red
