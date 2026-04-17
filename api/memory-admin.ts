@@ -45,6 +45,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { streamText, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -184,6 +185,34 @@ async function resolveSessionUser(
     const { data, error } = await scoped.auth.getUser(token);
     if (error || !data?.user) return null;
     return { id: data.user.id, email: data.user.email ?? null };
+  } catch {
+    return null;
+  }
+}
+
+// ─── AI chat helpers ───────────────────────────────────────────────────────
+
+type ChatProvider = "google" | "openai" | "anthropic";
+
+function deriveAiKeyEncryptionKey(): Buffer | null {
+  const secret = process.env.AI_KEY_ENCRYPTION_SECRET;
+  if (!secret) return null;
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+function decryptAiApiKey(payload: string | null | undefined): string | null {
+  if (!payload) return null;
+  const key = deriveAiKeyEncryptionKey();
+  if (!key) return payload; // stored plaintext fallback
+  try {
+    const buf = Buffer.from(payload, "base64");
+    if (buf.length < IV_BYTES + 16 + 1) return null;
+    const iv = buf.subarray(0, IV_BYTES);
+    const authTag = buf.subarray(buf.length - 16);
+    const ciphertext = buf.subarray(IV_BYTES, buf.length - 16);
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch {
     return null;
   }
@@ -538,6 +567,116 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
 function buildSetupGuide(client: string): SetupGuide | null {
   return SETUP_GUIDES[client] ?? null;
 }
+
+async function normaliseChatMessages(
+  raw: unknown,
+): Promise<ModelMessage[] | { error: string }> {
+  if (!Array.isArray(raw)) return { error: "messages must be an array" };
+  if (raw.length === 0) return { error: "messages cannot be empty" };
+
+  // useChat v6 sends UIMessage[] with `parts`. Simple clients send `content`.
+  const looksLikeUiMessages = raw.every(
+    (m) => m && typeof m === "object" && Array.isArray((m as { parts?: unknown }).parts),
+  );
+
+  if (looksLikeUiMessages) {
+    try {
+      return await convertToModelMessages(raw as UIMessage[]);
+    } catch (err) {
+      return { error: `Invalid UI messages: ${(err as Error).message}` };
+    }
+  }
+
+  const out: ModelMessage[] = [];
+  for (const m of raw) {
+    if (!m || typeof m !== "object") return { error: "Invalid message shape" };
+    const role = (m as { role?: string }).role;
+    const content = (m as { content?: string }).content;
+    if (role !== "user" && role !== "assistant" && role !== "system") {
+      return { error: `Invalid role: ${String(role)}` };
+    }
+    if (typeof content !== "string") return { error: "content must be a string" };
+    out.push({ role, content } as ModelMessage);
+  }
+  return out;
+}
+
+// Use `any` here because the supabase-js SupabaseClient default-typed generics
+// conflict with `ReturnType<typeof createClient>` between versions.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildAiChatContext(supabase: any): Promise<{
+  businessContext: unknown[];
+  standingRules: unknown[];
+  facts: unknown[];
+  sessions: unknown[];
+}> {
+  const [bcRes, factsRes, sessionsRes] = await Promise.all([
+    supabase.from("business_context").select("*").order("priority", { ascending: false }),
+    supabase
+      .from("extracted_facts")
+      .select("id, fact, category, decay_tier, created_at")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("session_summaries")
+      .select("id, summary, topics, open_loops, decisions, platform, created_at")
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
+
+  const businessContext = (bcRes.data ?? []) as Array<{ category?: string }>;
+  const standingRules = businessContext.filter((r) => r.category === "standing_rules");
+
+  return {
+    businessContext,
+    standingRules,
+    facts: (factsRes.data ?? []) as unknown[],
+    sessions: (sessionsRes.data ?? []) as unknown[],
+  };
+}
+
+async function resolveAiChatModel(opts: {
+  provider: ChatProvider;
+  model: string;
+  userApiKey: string | null;
+}) {
+  const fallbackKey = process.env.AI_CHAT_DEFAULT_KEY ?? undefined;
+  const apiKey = opts.userApiKey ?? fallbackKey;
+
+  if (opts.provider === "google") {
+    const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
+    const g = createGoogleGenerativeAI({ apiKey });
+    return g(opts.model);
+  }
+  if (opts.provider === "openai") {
+    const { createOpenAI } = await import("@ai-sdk/openai");
+    const o = createOpenAI({ apiKey });
+    return o(opts.model);
+  }
+  if (opts.provider === "anthropic") {
+    const { createAnthropic } = await import("@ai-sdk/anthropic");
+    const a = createAnthropic({ apiKey });
+    return a(opts.model);
+  }
+  throw new Error(`Unsupported provider: ${opts.provider}`);
+}
+
+const DEFAULT_AI_CHAT_SYSTEM_PROMPT = `You are the UnClick AI Assistant for this workspace. You have access to this user's full business context and memory. Answer questions about their data, help them understand their setup, and suggest improvements.
+
+You are NOT a general-purpose AI. You specifically help with:
+- Answering questions about their business context, facts, and session history
+- Explaining what UnClick Memory contains and how it is being used
+- Suggesting improvements to their memory configuration
+- Summarizing recent session activity
+- Helping draft or refine standing rules and business context entries
+
+RULES:
+- Be concise. This is an admin tool, not a conversation.
+- Reference specific facts, sessions, or context entries when answering.
+- If you do not have enough context to answer, say so. Do not make things up.
+- If the user asks about something outside their UnClick data, politely redirect.
+- No em dashes. Use -- instead.`;
 
 // ─── Handler ───────────────────────────────────────────────────────────────
 
@@ -1985,6 +2124,98 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
+      // ── Tenant settings (AI chat feature flags) ─────────────────────
+      case "tenant_settings": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const hash = sha256hex(apiKey);
+        const envEnabled = process.env.AI_CHAT_ENABLED === "true";
+
+        if (req.method === "POST") {
+          if (!envEnabled) return res.status(404).end();
+          const body = req.body as {
+            ai_chat_enabled?: boolean;
+            ai_chat_provider?: ChatProvider;
+            ai_chat_model?: string;
+            ai_chat_api_key?: string | null;
+            ai_chat_system_prompt?: string | null;
+            ai_chat_max_turns?: number;
+          };
+
+          const update: Record<string, unknown> = {
+            api_key_hash: hash,
+            updated_at: new Date().toISOString(),
+          };
+          if (typeof body.ai_chat_enabled === "boolean")
+            update.ai_chat_enabled = body.ai_chat_enabled;
+          if (body.ai_chat_provider) update.ai_chat_provider = body.ai_chat_provider;
+          if (body.ai_chat_model) update.ai_chat_model = body.ai_chat_model;
+          if (typeof body.ai_chat_system_prompt === "string")
+            update.ai_chat_system_prompt = body.ai_chat_system_prompt;
+          if (typeof body.ai_chat_max_turns === "number")
+            update.ai_chat_max_turns = body.ai_chat_max_turns;
+
+          if (body.ai_chat_api_key === null) {
+            update.ai_chat_api_key_encrypted = null;
+          } else if (typeof body.ai_chat_api_key === "string" && body.ai_chat_api_key.length > 0) {
+            const key = deriveAiKeyEncryptionKey();
+            if (!key) {
+              console.warn(
+                "[memory-admin] AI_KEY_ENCRYPTION_SECRET not set -- storing AI key in plaintext (MVP)",
+              );
+              update.ai_chat_api_key_encrypted = body.ai_chat_api_key;
+            } else {
+              const iv = crypto.randomBytes(IV_BYTES);
+              const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+              const enc = Buffer.concat([
+                cipher.update(body.ai_chat_api_key, "utf8"),
+                cipher.final(),
+              ]);
+              const tag = cipher.getAuthTag();
+              update.ai_chat_api_key_encrypted = Buffer.concat([iv, enc, tag]).toString("base64");
+            }
+          }
+
+          const { error } = await supabase
+            .from("tenant_settings")
+            .upsert(update, { onConflict: "api_key_hash" });
+          if (error) throw error;
+          return res.status(200).json({ success: true });
+        }
+
+        const { data, error } = await supabase
+          .from("tenant_settings")
+          .select(
+            "ai_chat_enabled, ai_chat_provider, ai_chat_model, ai_chat_system_prompt, ai_chat_max_turns, ai_chat_api_key_encrypted",
+          )
+          .eq("api_key_hash", hash)
+          .maybeSingle();
+        if (error) throw error;
+
+        const row = data as
+          | {
+              ai_chat_enabled: boolean;
+              ai_chat_provider: string;
+              ai_chat_model: string;
+              ai_chat_system_prompt: string | null;
+              ai_chat_max_turns: number;
+              ai_chat_api_key_encrypted: string | null;
+            }
+          | null;
+
+        return res.status(200).json({
+          env_enabled: envEnabled,
+          settings: {
+            ai_chat_enabled: row?.ai_chat_enabled ?? false,
+            ai_chat_provider: row?.ai_chat_provider ?? "google",
+            ai_chat_model: row?.ai_chat_model ?? "gemini-2.0-flash",
+            ai_chat_system_prompt: row?.ai_chat_system_prompt ?? null,
+            ai_chat_max_turns: row?.ai_chat_max_turns ?? 20,
+            has_api_key: Boolean(row?.ai_chat_api_key_encrypted),
+          },
+        });
+      }
+
       case "admin_update_autoload_settings": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKey = bearerFrom(req);
@@ -2025,6 +2256,90 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (error) throw error;
 
         return res.status(200).json({ settings: data });
+      }
+
+      // ── Admin AI chat (streaming LLM with user's memory as context) ─
+      case "admin_ai_chat": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+
+        // Level 1: environment kill switch.
+        if (process.env.AI_CHAT_ENABLED !== "true") return res.status(404).end();
+
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+
+        // Level 2: tenant kill switch.
+        const { data: tenantRow, error: tenantErr } = await supabase
+          .from("tenant_settings")
+          .select(
+            "ai_chat_enabled, ai_chat_provider, ai_chat_model, ai_chat_system_prompt, ai_chat_api_key_encrypted",
+          )
+          .eq("api_key_hash", sha256hex(apiKey))
+          .maybeSingle();
+        if (tenantErr) throw tenantErr;
+
+        const tenant = tenantRow as
+          | {
+              ai_chat_enabled: boolean;
+              ai_chat_provider: ChatProvider;
+              ai_chat_model: string;
+              ai_chat_system_prompt: string | null;
+              ai_chat_api_key_encrypted: string | null;
+            }
+          | null;
+        if (!tenant?.ai_chat_enabled) return res.status(404).end();
+
+        const messagesInput = (req.body as { messages?: unknown })?.messages;
+        const modelMessages = await normaliseChatMessages(messagesInput);
+        if (!Array.isArray(modelMessages)) {
+          return res.status(400).json({ error: modelMessages.error });
+        }
+
+        // Load the user's context (business_context, facts, sessions).
+        const ctx = await buildAiChatContext(supabase);
+        const factCount = ctx.facts.length;
+        const sessionCount = ctx.sessions.length;
+
+        const baseSystemPrompt = tenant.ai_chat_system_prompt?.trim() || DEFAULT_AI_CHAT_SYSTEM_PROMPT;
+        const systemPrompt = `${baseSystemPrompt}
+
+CONTEXT (fact_count=${factCount}, session_count=${sessionCount}):
+${JSON.stringify(
+  {
+    business_context: ctx.businessContext,
+    standing_rules: ctx.standingRules,
+    active_facts: ctx.facts,
+    recent_sessions: ctx.sessions,
+  },
+  null,
+  2,
+)}`;
+
+        const provider: ChatProvider = tenant.ai_chat_provider ?? "google";
+        const model = tenant.ai_chat_model ?? "gemini-2.0-flash";
+        const userApiKey = decryptAiApiKey(tenant.ai_chat_api_key_encrypted);
+
+        try {
+          const languageModel = await resolveAiChatModel({
+            provider,
+            model,
+            userApiKey,
+          });
+
+          const result = streamText({
+            model: languageModel,
+            system: systemPrompt,
+            messages: modelMessages,
+          });
+
+          result.pipeUIMessageStreamToResponse(res);
+          return;
+        } catch (err) {
+          console.error("[admin_ai_chat] stream failed:", (err as Error).message);
+          return res
+            .status(500)
+            .json({ error: `AI chat failed: ${(err as Error).message}` });
+        }
       }
 
       default:
