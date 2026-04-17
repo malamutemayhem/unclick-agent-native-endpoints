@@ -16,16 +16,12 @@ export const ADMIN_CHAT_SUGGESTIONS: AIChatSuggestion[] = [
     prompt: "What are my current standing rules and business context?",
   },
   {
-    label: "What build tasks are pending?",
-    prompt: "What build tasks are pending?",
-  },
-  {
     label: "Summarize my last session",
     prompt: "Summarize my most recent session.",
   },
   {
-    label: "What facts do I have stored?",
-    prompt: "Show me the highest-confidence facts in my memory, grouped by category.",
+    label: "What build tasks are pending?",
+    prompt: "What build tasks are pending?",
   },
   {
     label: "Create a task to...",

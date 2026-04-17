@@ -37,7 +37,7 @@ import Footer from "@/components/Footer";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
 import AIChatPanel from "@/components/admin/AIChatPanel";
 import { isAdminAIChatEnabled } from "@/components/admin/aiChatConfig";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock, Sparkles, Plug } from "lucide-react";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock, Sparkles, Plug, Hammer } from "lucide-react";
 
 interface MemoryConfigStatus {
   configured: boolean;
@@ -181,6 +181,16 @@ export default function MemoryAdminPage() {
   const tier = connectionTier(connection);
   const showConnectBanner = !loading && !connection?.connected;
 
+  // First-run welcome: user has never touched chat, Claude Code, or build
+  // tasks. We use "no sessions + not connected" as the proxy since a fresh
+  // account has no activity of any kind.
+  const isFirstRun =
+    !loading &&
+    hasApiKey &&
+    !connection?.connected &&
+    (status?.sessions ?? 0) === 0 &&
+    (status?.conversations ?? 0) === 0;
+
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -233,6 +243,93 @@ export default function MemoryAdminPage() {
             )}
           </div>
         </div>
+
+        {/* First-run welcome: fresh account with no activity anywhere */}
+        {isFirstRun && (
+          <div className="mb-6 rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-heading">Your AI Command Center</h2>
+                  <p className="mt-1 max-w-lg text-sm text-body">
+                    Plan, build, and manage with AI. Chat with your memory, connect Claude Code,
+                    and track build tasks, all from one place.
+                  </p>
+                </div>
+              </div>
+              {chatEnabled && (
+                <button
+                  onClick={() => setChatOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Get Started
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Orchestrator: single command center grouping chat, connect, build */}
+        <section className="mb-6 rounded-2xl border border-primary/20 bg-card/20 p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+              Orchestrator
+            </span>
+            <span className="text-[10px] text-muted-foreground">Your AI command center</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setChatOpen(true)}
+              disabled={!chatEnabled}
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">AI Assistant</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {chatEnabled ? "Chat with your memory" : "Coming soon"}
+                </p>
+              </div>
+            </button>
+
+            <Link
+              to="/memory/connect"
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Plug className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">Connect Claude Code</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {connection?.connected ? tier.label : "One command to wire it up"}
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              to="/build"
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Hammer className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">Build Tasks</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  Plan and track your work
+                </p>
+              </div>
+            </Link>
+          </div>
+        </section>
 
         {/* Stat cards: counts per memory layer from ?action=status */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

@@ -15,8 +15,14 @@ interface AIChatPanelProps {
   onClose: () => void;
 }
 
+interface ChatStats {
+  factCount: number;
+  sessionCount: number;
+}
+
 export default function AIChatPanel({ open, onClose }: AIChatPanelProps) {
   const [input, setInput] = useState("");
+  const [stats, setStats] = useState<ChatStats | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const transport = useMemo(
@@ -31,6 +37,35 @@ export default function AIChatPanel({ open, onClose }: AIChatPanelProps) {
       }),
     []
   );
+
+  useEffect(() => {
+    if (!open) return;
+    const apiKey =
+      typeof window !== "undefined" ? localStorage.getItem("unclick_api_key") ?? "" : "";
+    if (!apiKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/memory-admin?action=status", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          layers?: { extracted_facts?: number; session_summaries?: number };
+        };
+        if (cancelled) return;
+        setStats({
+          factCount: body.layers?.extracted_facts ?? 0,
+          sessionCount: body.layers?.session_summaries ?? 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const { messages, sendMessage, status, stop, error, clearError, regenerate } = useChat({
     transport,
@@ -101,7 +136,9 @@ export default function AIChatPanel({ open, onClose }: AIChatPanelProps) {
         </header>
 
         <div className="border-b border-border/30 bg-muted/10 px-4 py-2 text-[11px] text-muted-foreground">
-          I can see your business context, active facts, and recent sessions. I can also search, add facts, and update context for you.
+          {stats
+            ? `AI can see: your business context, ${stats.factCount} facts, ${stats.sessionCount} sessions, build tasks`
+            : "AI can see: your business context, facts, sessions, build tasks"}
         </div>
 
         <div ref={scrollerRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
