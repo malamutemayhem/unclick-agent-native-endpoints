@@ -16,6 +16,8 @@
  *   - delete_fact: Archive a fact by ID (fact_id, POST)
  *   - delete_session: DELETE a session summary by ID (session_id, POST)
  *   - update_business_context: Upsert a business context entry (POST)
+ *   - admin_get_setup_guide: Returns client-specific onboarding instructions
+ *                            for maximising memory auto-load (client param)
  *
  * BYOD / wizard actions (control plane, keyed by UnClick API key):
  *   - setup: POST with { api_key, service_role_key, supabase_url?, email? }
@@ -140,6 +142,297 @@ function bearerFrom(req: VercelRequest): string {
   return (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "").trim();
 }
 
+// ─── Setup guide content ────────────────────────────────────────────────────
+//
+// Static, client-specific instructions for maximising memory auto-load
+// reliability. Returned by action=admin_get_setup_guide.
+
+type Reliability = "High" | "Medium-High" | "Medium" | "Varies";
+
+interface SetupStep {
+  title: string;
+  description: string;
+  code_snippet?: string;
+}
+
+interface SetupGuide {
+  client: string;
+  client_label: string;
+  features_supported: string[];
+  auto_load_method: string;
+  reliability: Reliability;
+  reliability_notes: string;
+  setup_steps: SetupStep[];
+  config_file?: { filename: string; content: string };
+}
+
+const AGENTS_MD_CONTENT = `# Agent instructions
+
+You have access to the UnClick MCP server, which exposes persistent cross-session memory.
+
+## At session start
+
+ALWAYS call \`get_startup_context\` before doing anything else. This loads:
+- Business context (standing rules)
+- Recent session summaries
+- Active extracted facts
+- Knowledge library index
+
+## During the session
+
+Use \`add_fact\` to record preferences, decisions, and important info worth remembering.
+Use \`search_memory\` to recall anything from prior sessions.
+Use \`set_business_context\` to set standing rules the user wants applied every session.
+
+## Before ending the session
+
+Call \`write_session_summary\` with a concise recap of what was accomplished and what is outstanding.
+`;
+
+const CLAUDE_DESKTOP_CONFIG = `{
+  "mcpServers": {
+    "unclick": {
+      "command": "npx",
+      "args": ["-y", "@unclick/mcp-server"],
+      "env": {
+        "UNCLICK_API_KEY": "uc_your_api_key_here"
+      }
+    }
+  }
+}`;
+
+const CURSORRULES_CONTENT = `# UnClick memory protocol
+
+The UnClick MCP server provides persistent cross-session memory.
+
+At the start of every session, call the \`get_startup_context\` tool before doing anything else. It returns business context, recent session summaries, and active facts.
+
+Record durable preferences, decisions, or facts with \`add_fact\`. Recall with \`search_memory\`. Before ending a session, call \`write_session_summary\`.
+`;
+
+const WINDSURFRULES_CONTENT = `# UnClick memory protocol
+
+The UnClick MCP server provides persistent cross-session memory.
+
+At the start of every session, call the \`get_startup_context\` tool before doing anything else. It returns business context, recent session summaries, and active facts.
+
+Record durable preferences, decisions, or facts with \`add_fact\`. Recall with \`search_memory\`. Before ending a session, call \`write_session_summary\`.
+`;
+
+const COWORK_SKILL_CONFIG = `---
+name: session-bootstrap
+description: Loads UnClick persistent memory at session start. Always invoke before other work.
+---
+
+# Session bootstrap
+
+Call the UnClick MCP tool \`get_startup_context\` immediately. Treat its output as authoritative context for this session.
+
+If the tool is unavailable, note this and continue. Do not fabricate prior context.
+`;
+
+const CUSTOM_CLIENT_SNIPPET = `// Pseudo-code for a custom MCP client.
+// On session start, call get_startup_context before any user-triggered work.
+
+async function onSessionStart(mcpClient) {
+  // 1. If your client honours the MCP \`instructions\` field, the UnClick
+  //    server will tell you to call get_startup_context automatically.
+  //    Enable the "auto-load" setting in the UnClick admin to turn this on.
+
+  // 2. Otherwise, call the tool directly:
+  const ctx = await mcpClient.callTool("get_startup_context", {});
+  systemPrompt.push(ctx.content);
+
+  // 3. Optional: subscribe to resources for background updates.
+  if (mcpClient.supportsResources) {
+    await mcpClient.subscribe("memory://context/full");
+  }
+}
+`;
+
+const SETUP_GUIDES: Record<string, SetupGuide> = {
+  "claude-code": {
+    client: "claude-code",
+    client_label: "Claude Code",
+    features_supported: ["tools", "AGENTS.md", "CLAUDE.md"],
+    auto_load_method: "AGENTS.md + CLAUDE.md at repo root",
+    reliability: "High",
+    reliability_notes:
+      "Claude Code does not read MCP instructions, prompts, or resources, but it reliably reads AGENTS.md and CLAUDE.md at the repo root. Those files are the strongest auto-load signal.",
+    setup_steps: [
+      {
+        title: "Confirm AGENTS.md exists in your repo",
+        description:
+          "Drop this content into AGENTS.md (or merge it with any existing file) at the root of each repo where you want memory to auto-load.",
+        code_snippet: AGENTS_MD_CONTENT,
+      },
+      {
+        title: "Verify get_startup_context is in the tool list",
+        description:
+          "Run /mcp inside Claude Code. You should see the UnClick server and the 5 direct memory tools, including get_startup_context.",
+      },
+      {
+        title: "Test by starting a fresh session",
+        description:
+          "Start a new Claude Code session in the repo. The first turn should call get_startup_context and show context loaded before doing other work.",
+      },
+    ],
+    config_file: { filename: "AGENTS.md", content: AGENTS_MD_CONTENT },
+  },
+
+  "claude-desktop": {
+    client: "claude-desktop",
+    client_label: "Claude Desktop",
+    features_supported: ["tools", "prompts", "resources", "instructions (partial)"],
+    auto_load_method: "MCP instructions field plus resources subscription",
+    reliability: "Medium-High",
+    reliability_notes:
+      "Claude Desktop honours the MCP instructions field in most recent versions, which is enough to auto-call get_startup_context. Subscribing to memory://context/full as a resource is a belt-and-braces backup.",
+    setup_steps: [
+      {
+        title: "Add UnClick to claude_desktop_config.json",
+        description:
+          "Open Claude Desktop settings and edit the MCP config. Restart Claude Desktop so the server registers.",
+        code_snippet: CLAUDE_DESKTOP_CONFIG,
+      },
+      {
+        title: "Enable auto-load in the UnClick admin",
+        description:
+          "Turn on auto-load so the server sends its instructions field. Claude Desktop will then call get_startup_context on session start.",
+      },
+      {
+        title: "Optional: subscribe to the memory context resource",
+        description:
+          "In the MCP panel, subscribe to memory://context/full. Claude Desktop will surface updates if the server pushes them mid-session.",
+      },
+    ],
+    config_file: { filename: "claude_desktop_config.json", content: CLAUDE_DESKTOP_CONFIG },
+  },
+
+  cursor: {
+    client: "cursor",
+    client_label: "Cursor",
+    features_supported: ["tools", ".cursorrules"],
+    auto_load_method: ".cursorrules file plus tool description reminders",
+    reliability: "Medium",
+    reliability_notes:
+      "Cursor supports MCP tools but not prompts or resources. Auto-load relies on .cursorrules text telling the agent to call get_startup_context. Some sessions may skip the call if the rules file is terse.",
+    setup_steps: [
+      {
+        title: "Add the UnClick MCP server to Cursor",
+        description:
+          "Open Cursor settings, go to MCP, add a new server pointing at @unclick/mcp-server with your UNCLICK_API_KEY in env.",
+        code_snippet: CLAUDE_DESKTOP_CONFIG,
+      },
+      {
+        title: "Create .cursorrules at the project root",
+        description:
+          "Cursor reads .cursorrules on every session. This is the main hook that persuades the agent to call get_startup_context.",
+        code_snippet: CURSORRULES_CONTENT,
+      },
+      {
+        title: "Verify the tool appears in Cursor's MCP panel",
+        description:
+          "Open the MCP panel and confirm get_startup_context, add_fact, search_memory, write_session_summary, and set_business_context are listed.",
+      },
+    ],
+    config_file: { filename: ".cursorrules", content: CURSORRULES_CONTENT },
+  },
+
+  windsurf: {
+    client: "windsurf",
+    client_label: "Windsurf",
+    features_supported: ["tools", ".windsurfrules"],
+    auto_load_method: ".windsurfrules file plus tool description reminders",
+    reliability: "Medium",
+    reliability_notes:
+      "Windsurf's MCP support is limited to tools. As with Cursor, the rules file is the main auto-load hook. Reliability improves when the rules file is short and explicit.",
+    setup_steps: [
+      {
+        title: "Add the UnClick MCP server to Windsurf",
+        description:
+          "In Windsurf's MCP config, add a server running @unclick/mcp-server with your UNCLICK_API_KEY in env. Restart Windsurf.",
+        code_snippet: CLAUDE_DESKTOP_CONFIG,
+      },
+      {
+        title: "Create .windsurfrules at the project root",
+        description:
+          "This file is read at the start of every session. It is the most reliable way to get Windsurf to call get_startup_context.",
+        code_snippet: WINDSURFRULES_CONTENT,
+      },
+      {
+        title: "Verify the tool is active",
+        description:
+          "Start a fresh session and confirm the first action is a call to get_startup_context.",
+      },
+    ],
+    config_file: { filename: ".windsurfrules", content: WINDSURFRULES_CONTENT },
+  },
+
+  cowork: {
+    client: "cowork",
+    client_label: "Cowork",
+    features_supported: ["tools", "prompts", "skills"],
+    auto_load_method: "Session-bootstrap skill plus MCP prompts",
+    reliability: "Medium",
+    reliability_notes:
+      "Cowork's skills system can invoke MCP tools automatically at session start. The load-memory MCP prompt is a fallback if the skill is not triggered.",
+    setup_steps: [
+      {
+        title: "Install the UnClick MCP server in Cowork",
+        description:
+          "Add @unclick/mcp-server through the Cowork MCP settings UI. Confirm the 5 direct memory tools show up.",
+        code_snippet: CLAUDE_DESKTOP_CONFIG,
+      },
+      {
+        title: "Create or update the session-bootstrap skill",
+        description:
+          "Save this skill so it runs first on every session. The skill calls get_startup_context before the user's first turn.",
+        code_snippet: COWORK_SKILL_CONFIG,
+      },
+      {
+        title: "Fallback: use the load-memory MCP prompt",
+        description:
+          "If the skill does not fire, ask Cowork to run the UnClick load-memory prompt. It calls get_startup_context and returns the context inline.",
+      },
+    ],
+    config_file: { filename: "session-bootstrap.md", content: COWORK_SKILL_CONFIG },
+  },
+
+  custom: {
+    client: "custom",
+    client_label: "Custom MCP client",
+    features_supported: ["depends on client"],
+    auto_load_method: "Depends on what the client supports",
+    reliability: "Varies",
+    reliability_notes:
+      "Reliability depends on how fully the client implements the MCP spec. Clients that honour the instructions field get auto-load for free. Others need to invoke get_startup_context from client code.",
+    setup_steps: [
+      {
+        title: "Check whether your client honours the MCP instructions field",
+        description:
+          "If yes, enabling auto-load in the UnClick admin is enough. The server will send a systemPrompt asking the agent to call get_startup_context.",
+      },
+      {
+        title: "If the instructions field is not honoured, call the tool yourself",
+        description:
+          "Invoke get_startup_context from client code on session start and feed its output into the system prompt or first message.",
+        code_snippet: CUSTOM_CLIENT_SNIPPET,
+      },
+      {
+        title: "Optional: subscribe to memory resources",
+        description:
+          "If your client supports MCP resources, subscribe to memory://context/full to receive updates when facts or business context change.",
+      },
+    ],
+    config_file: { filename: "mcp-client-init.ts", content: CUSTOM_CLIENT_SNIPPET },
+  },
+};
+
+function buildSetupGuide(client: string): SetupGuide | null {
+  return SETUP_GUIDES[client] ?? null;
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -162,6 +455,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     switch (action) {
+      case "admin_get_setup_guide": {
+        const client = String(req.query.client ?? "").trim().toLowerCase();
+        const guide = buildSetupGuide(client);
+        if (!guide) {
+          return res.status(400).json({
+            error: "Unknown client. Use one of: claude-code, claude-desktop, cursor, windsurf, cowork, custom.",
+          });
+        }
+        return res.status(200).json(guide);
+      }
+
       case "status": {
         const [bc, lib, sessions, facts, convos, code] = await Promise.all([
           supabase.from("business_context").select("id", { count: "exact", head: true }),
