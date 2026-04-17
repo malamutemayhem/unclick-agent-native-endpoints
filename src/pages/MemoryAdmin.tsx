@@ -35,19 +35,48 @@ import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock, BookOpen, MessageSquare } from "lucide-react";
 import AIChatPanel from "@/components/admin/AIChatPanel";
 import {
-  aiChatEnvEnabled,
+  isAdminAIChatEnabled,
   fetchAiChatTenantSettings,
   type AiChatTenantSettings,
 } from "@/components/admin/aiChatConfig";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock, Sparkles, Plug, Hammer, BookOpen, MessageSquare } from "lucide-react";
 
 interface MemoryConfigStatus {
   configured: boolean;
   supabase_url?: string;
   schema_installed?: boolean;
   last_used_at?: string | null;
+}
+
+interface ConnectionCheck {
+  connected: boolean;
+  configured: boolean;
+  has_context: boolean;
+  context_count: number;
+  fact_count: number;
+  last_session: string | null;
+  last_session_platform: string | null;
+  last_used_at: string | null;
+}
+
+function connectionTier(check: ConnectionCheck | null): {
+  dot: string;
+  label: string;
+  tone: "primary" | "amber" | "muted";
+} {
+  if (!check || !check.connected) {
+    return { dot: "bg-muted-foreground", label: "Claude Code not connected", tone: "muted" };
+  }
+  const last = check.last_session ?? check.last_used_at;
+  if (last) {
+    const ageDays = (Date.now() - new Date(last).getTime()) / 86_400_000;
+    if (ageDays > 7) {
+      return { dot: "bg-amber-400", label: "Claude Code inactive", tone: "amber" };
+    }
+  }
+  return { dot: "bg-primary", label: "Claude Code connected", tone: "primary" };
 }
 
 interface Device {
@@ -94,10 +123,11 @@ export default function MemoryAdminPage() {
   const [config, setConfig] = useState<MemoryConfigStatus | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [status, setStatus] = useState<MemoryStatus | null>(null);
+  const [connection, setConnection] = useState<ConnectionCheck | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState<string>("");
   const [aiChatSettings, setAiChatSettings] = useState<AiChatTenantSettings | null>(null);
-  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [statusCounts, setStatusCounts] = useState<{
     facts: number;
     sessions: number;
@@ -114,7 +144,7 @@ export default function MemoryAdminPage() {
 
     (async () => {
       try {
-        const [cfgRes, devRes, aiRes, statusRes] = await Promise.all([
+        const [cfgRes, devRes, aiRes, statusRes, connRes] = await Promise.all([
           fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(key)}`),
           fetch("/api/memory-admin?action=list_devices", {
             headers: { Authorization: `Bearer ${key}` },
@@ -123,6 +153,9 @@ export default function MemoryAdminPage() {
           fetch("/api/memory-admin?action=status", {
             headers: { Authorization: `Bearer ${key}` },
           }),
+          fetch(
+            `/api/memory-admin?action=admin_check_connection&api_key=${encodeURIComponent(apiKey)}`,
+          ),
         ]);
 
         if (!cancelled && cfgRes.ok) {
@@ -145,6 +178,9 @@ export default function MemoryAdminPage() {
             sessions: parsed.sessions ?? 0,
           });
         }
+        if (!cancelled && connRes.ok) {
+          setConnection((await connRes.json()) as ConnectionCheck);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -157,19 +193,36 @@ export default function MemoryAdminPage() {
 
   const hasApiKey =
     typeof window !== "undefined" && Boolean(localStorage.getItem("unclick_api_key"));
-  const aiChatVisible =
-    aiChatEnvEnabled() && Boolean(aiChatSettings?.ai_chat_enabled) && Boolean(apiKey);
+  // Three-level kill switch: env flag + tenant setting + api key present.
+  // If the backend tenant_settings endpoint isn't deployed yet we fall back
+  // to the env-only check so Phase 7's 9-tool chat still shows up.
+  const chatEnabled =
+    isAdminAIChatEnabled() &&
+    (aiChatSettings ? Boolean(aiChatSettings.ai_chat_enabled) : true) &&
+    Boolean(apiKey);
 
   const localCount = devices.filter((d) => d.storage_mode === "local").length;
   const cloudCount = devices.filter((d) => d.storage_mode === "cloud").length;
   const shouldNudge = !config?.configured && devices.length >= 2;
+  const tier = connectionTier(connection);
+  const showConnectBanner = !loading && !connection?.connected;
+
+  // First-run welcome: user has never touched chat, Claude Code, or build
+  // tasks. We use "no sessions + not connected" as the proxy since a fresh
+  // account has no activity of any kind.
+  const isFirstRun =
+    !loading &&
+    hasApiKey &&
+    !connection?.connected &&
+    (status?.sessions ?? 0) === 0 &&
+    (status?.conversations ?? 0) === 0;
 
   return (
     <div className="min-h-screen">
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pb-32 pt-28">
         <ClaimKeyBanner />
-        <div className="mb-8 flex items-center gap-3">
+        <div className="mb-8 flex flex-wrap items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Brain className="h-5 w-5" />
           </div>
@@ -177,31 +230,139 @@ export default function MemoryAdminPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Memory Admin</h1>
             <p className="text-sm text-body">View and manage your agent's persistent memory</p>
           </div>
-          <Link
-            to="/memory/setup-guide"
-            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Setup Guide
-          </Link>
-          {aiChatVisible && (
-            <button
-              onClick={() => setAiChatOpen(true)}
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted/20"
-              style={{ borderColor: "rgba(97, 193, 196, 0.4)", color: "#61C1C4" }}
-              title="Open UnClick AI (beta)"
+          <div className="flex items-center gap-3">
+            <Link
+              to="/memory/connect"
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                tier.tone === "primary"
+                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                  : tier.tone === "amber"
+                    ? "border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+                    : "border-border/50 bg-card/40 text-body hover:bg-card/60"
+              }`}
             >
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">UnClick AI</span>
-              <span
-                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase text-black"
-                style={{ backgroundColor: "#E2B93B" }}
+              <span className={`h-2 w-2 rounded-full ${tier.dot}`} />
+              {loading ? "..." : tier.label}
+            </Link>
+            <Link
+              to="/memory/setup-guide"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Setup Guide
+            </Link>
+            <Link
+              to="/memory/connect"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-card/40 px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-card/60"
+              aria-label="Connect Claude Code"
+            >
+              <Plug className="h-3.5 w-3.5 text-primary" />
+              Connect
+            </Link>
+            {chatEnabled && (
+              <button
+                onClick={() => setChatOpen(true)}
+                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
               >
-                Beta
-              </span>
-            </button>
-          )}
+                <Sparkles className="h-3.5 w-3.5" />
+                Ask memory
+                <span
+                  className="rounded-full px-1.5 py-0.5 font-mono text-[9px] font-semibold"
+                  style={{ backgroundColor: "#E2B93B22", color: "#E2B93B" }}
+                >
+                  BETA
+                </span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* First-run welcome: fresh account with no activity anywhere */}
+        {isFirstRun && (
+          <div className="mb-6 rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-heading">Your AI Command Center</h2>
+                  <p className="mt-1 max-w-lg text-sm text-body">
+                    Plan, build, and manage with AI. Chat with your memory, connect Claude Code,
+                    and track build tasks, all from one place.
+                  </p>
+                </div>
+              </div>
+              {chatEnabled && (
+                <button
+                  onClick={() => setChatOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Get Started
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Orchestrator: single command center grouping chat, connect, build */}
+        <section className="mb-6 rounded-2xl border border-primary/20 bg-card/20 p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+              Orchestrator
+            </span>
+            <span className="text-[10px] text-muted-foreground">Your AI command center</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setChatOpen(true)}
+              disabled={!chatEnabled}
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">AI Assistant</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {chatEnabled ? "Chat with your memory" : "Coming soon"}
+                </p>
+              </div>
+            </button>
+
+            <Link
+              to="/memory/connect"
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Plug className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">Connect Claude Code</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {connection?.connected ? tier.label : "One command to wire it up"}
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              to="/build"
+              className="group flex items-start gap-3 rounded-xl border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Hammer className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-heading">Build Tasks</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  Plan and track your work
+                </p>
+              </div>
+            </Link>
+          </div>
+        </section>
 
         {/* Stat cards: counts per memory layer from ?action=status */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -225,6 +386,35 @@ export default function MemoryAdminPage() {
             );
           })}
         </div>
+
+        {/* First-visit banner: no Claude Code activity yet */}
+        {showConnectBanner && (
+          <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Plug className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-heading">
+                    Connect Claude Code to load your memory automatically
+                  </p>
+                  <p className="mt-1 text-xs text-body">
+                    One command. Every future session knows your standing rules, business context, and
+                    open loops.
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/memory/connect"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              >
+                Connect
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Top-level nudge: user has 2+ devices on local storage but no cloud config */}
         {shouldNudge && (
@@ -360,15 +550,7 @@ export default function MemoryAdminPage() {
         </div>
       </main>
       <Footer />
-      {aiChatVisible && (
-        <AIChatPanel
-          open={aiChatOpen}
-          onClose={() => setAiChatOpen(false)}
-          apiKey={apiKey}
-          factCount={statusCounts?.facts}
-          sessionCount={statusCounts?.sessions}
-        />
-      )}
+      {chatEnabled && <AIChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
     </div>
   );
 }

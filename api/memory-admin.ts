@@ -44,8 +44,10 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClient } from "@supabase/supabase-js";
-import { streamText, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
+import { google } from "@ai-sdk/google";
+import { z } from "zod";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -678,6 +680,416 @@ RULES:
 - If the user asks about something outside their UnClick data, politely redirect.
 - No em dashes. Use -- instead.`;
 
+
+// ─── Admin AI chat helpers ─────────────────────────────────────────────────
+
+function isAdminChatEnabled(): boolean {
+  const flag = (process.env.AI_CHAT_ENABLED ?? "").toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
+function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null) {
+  const requireKey = () =>
+    apiKeyHash
+      ? null
+      : {
+          success: false,
+          error:
+            "No api_key was provided with the chat request. Pass it in the request body as 'api_key'.",
+        };
+
+  return {
+    search_memory: tool({
+      description:
+        "Search the user's UnClick Memory for facts or session history matching a query. Returns matching extracted_facts and session_summaries.",
+      inputSchema: z.object({
+        query: z.string().describe("Text to search for in facts and session summaries"),
+        limit: z.number().int().positive().max(25).optional().describe("Max results per table"),
+      }),
+      execute: async ({ query, limit = 10 }) => {
+        const pattern = `%${query.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+        const [factsRes, sessionsRes] = await Promise.all([
+          supabase
+            .from("extracted_facts")
+            .select("id, fact, category, confidence, status, created_at")
+            .eq("status", "active")
+            .ilike("fact", pattern)
+            .order("confidence", { ascending: false })
+            .limit(limit),
+          supabase
+            .from("session_summaries")
+            .select("id, session_id, platform, summary, topics, created_at")
+            .ilike("summary", pattern)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        ]);
+        return {
+          query,
+          facts: factsRes.data ?? [],
+          sessions: sessionsRes.data ?? [],
+          error: factsRes.error?.message ?? sessionsRes.error?.message ?? null,
+        };
+      },
+    }),
+
+    add_fact: tool({
+      description:
+        "Store a new fact in the user's UnClick Memory (extracted_facts). Use this when the user tells you something worth remembering across sessions.",
+      inputSchema: z.object({
+        category: z.string().describe("Fact category, e.g. 'preferences', 'technical', 'clients'"),
+        key: z.string().optional().describe("Short key/label for the fact (stored as a topic tag)"),
+        value: z.string().describe("The fact itself, stated atomically"),
+        tier: z.enum(["hot", "warm", "cold"]).optional().describe("Decay tier, default 'hot'"),
+      }),
+      execute: async ({ category, value, tier = "hot" }) => {
+        const { data, error } = await supabase
+          .from("extracted_facts")
+          .insert({
+            fact: value,
+            category,
+            decay_tier: tier,
+            source_type: "admin_chat",
+            confidence: 1.0,
+            status: "active",
+          })
+          .select("id")
+          .single();
+        if (error) return { success: false, error: error.message };
+        return { success: true, fact_id: data.id };
+      },
+    }),
+
+    update_business_context: tool({
+      description:
+        "Upsert a business_context entry (standing rule, preference, client profile). Always loaded at session startup.",
+      inputSchema: z.object({
+        category: z.string().describe("e.g. 'standing_rules', 'clients', 'brand'"),
+        key: z.string().describe("Unique key within the category"),
+        value: z.string().describe("The context value as a JSON-encoded string or plain text"),
+      }),
+      execute: async ({ category, key, value }) => {
+        let stored: unknown = value;
+        try {
+          stored = JSON.parse(value);
+        } catch {
+          stored = value;
+        }
+        const { error } = await supabase
+          .from("business_context")
+          .upsert(
+            {
+              category,
+              key,
+              value: stored,
+              priority: 50,
+              decay_tier: "hot",
+              updated_at: new Date().toISOString(),
+              last_accessed: new Date().toISOString(),
+            },
+            { onConflict: "category,key" }
+          );
+        if (error) return { success: false, error: error.message };
+        return { success: true, category, key };
+      },
+    }),
+
+    get_memory_stats: tool({
+      description:
+        "Get current memory usage statistics: layer counts, decay tier distribution, and fact status breakdown.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const [bc, lib, sessions, facts, convos, code] = await Promise.all([
+          supabase.from("business_context").select("id", { count: "exact", head: true }),
+          supabase.from("knowledge_library").select("id", { count: "exact", head: true }),
+          supabase.from("session_summaries").select("id", { count: "exact", head: true }),
+          supabase.from("extracted_facts").select("id", { count: "exact", head: true }),
+          supabase.from("conversation_log").select("id", { count: "exact", head: true }),
+          supabase.from("code_dumps").select("id", { count: "exact", head: true }),
+        ]);
+        const { data: factsTiers } = await supabase
+          .from("extracted_facts")
+          .select("decay_tier, status");
+        const tiers = { hot: 0, warm: 0, cold: 0 };
+        const statuses = { active: 0, superseded: 0, archived: 0, disputed: 0 };
+        for (const f of factsTiers ?? []) {
+          if (f.decay_tier && tiers[f.decay_tier as keyof typeof tiers] !== undefined) {
+            tiers[f.decay_tier as keyof typeof tiers]++;
+          }
+          if (f.status && statuses[f.status as keyof typeof statuses] !== undefined) {
+            statuses[f.status as keyof typeof statuses]++;
+          }
+        }
+        return {
+          layers: {
+            business_context: bc.count ?? 0,
+            knowledge_library: lib.count ?? 0,
+            session_summaries: sessions.count ?? 0,
+            extracted_facts: facts.count ?? 0,
+            conversation_log: convos.count ?? 0,
+            code_dumps: code.count ?? 0,
+          },
+          decay_tiers: tiers,
+          fact_statuses: statuses,
+        };
+      },
+    }),
+
+    list_recent_sessions: tool({
+      description: "List recent work session summaries, ordered by most recent first.",
+      inputSchema: z.object({
+        limit: z.number().int().positive().max(25).optional(),
+      }),
+      execute: async ({ limit = 10 }) => {
+        const { data, error } = await supabase
+          .from("session_summaries")
+          .select("id, session_id, platform, summary, topics, decisions, open_loops, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (error) return { sessions: [], error: error.message };
+        return { sessions: data ?? [] };
+      },
+    }),
+
+    write_session_summary: tool({
+      description:
+        "Write a summary of the current conversation as a session_summaries record. Use this at the end of a session, or when the user asks to save a recap.",
+      inputSchema: z.object({
+        summary: z.string().describe("Narrative summary of the conversation"),
+        decisions: z.array(z.string()).optional().describe("Decisions made in this session"),
+        open_loops: z.array(z.string()).optional().describe("Unfinished threads or follow-ups"),
+        topics: z.array(z.string()).optional().describe("Topic tags for searchability"),
+      }),
+      execute: async ({ summary, decisions, open_loops, topics }) => {
+        const { data, error } = await supabase
+          .from("session_summaries")
+          .insert({
+            session_id: `admin-chat-${Date.now()}`,
+            platform: "admin-chat",
+            summary,
+            decisions: decisions ?? [],
+            open_loops: open_loops ?? [],
+            topics: topics ?? [],
+          })
+          .select("id")
+          .single();
+        if (error) return { success: false, error: error.message };
+        return { success: true, summary_id: data.id };
+      },
+    }),
+
+    create_build_task: tool({
+      description:
+        "Create a new build task with a title, description, and acceptance criteria. Tasks can later be dispatched to AI coding workers. Always confirm with the user before creating.",
+      inputSchema: z.object({
+        title: z.string().min(1).describe("Imperative, specific title, e.g. 'Fix login timeout bug'"),
+        description: z.string().describe("Enough detail that a developer could execute independently"),
+        acceptance_criteria: z
+          .array(z.string())
+          .optional()
+          .describe("Concrete checklist items defining done"),
+      }),
+      execute: async ({ title, description, acceptance_criteria }) => {
+        const missing = requireKey();
+        if (missing) return missing;
+        const { data, error } = await supabase
+          .from("build_tasks")
+          .insert({
+            api_key_hash: apiKeyHash,
+            title,
+            description,
+            acceptance_criteria_json: acceptance_criteria ?? [],
+            status: "draft",
+          })
+          .select("id, title, status, created_at")
+          .single();
+        if (error) return { success: false, error: error.message };
+        return { success: true, task: data };
+      },
+    }),
+
+    list_build_tasks: tool({
+      description:
+        "List current build tasks and their status for this user. Use when the user asks 'what's on my plate?' or similar.",
+      inputSchema: z.object({
+        status: z
+          .enum([
+            "draft",
+            "planned",
+            "dispatched",
+            "in_progress",
+            "review",
+            "done",
+            "failed",
+            "pending",
+            "all",
+          ])
+          .optional()
+          .describe(
+            "Filter by status. 'pending' is a shorthand for work not yet done (draft, planned, dispatched, in_progress, review). Use 'all' for everything. Default 'pending'.",
+          ),
+        limit: z.number().int().positive().max(50).optional(),
+      }),
+      execute: async ({ status, limit = 10 }) => {
+        const missing = requireKey();
+        if (missing) return { tasks: [], ...missing };
+        let q = supabase
+          .from("build_tasks")
+          .select(
+            "id, title, description, status, acceptance_criteria_json, created_at, updated_at",
+          )
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        const effective = status ?? "pending";
+        if (effective === "pending") {
+          q = q.in("status", ["draft", "planned", "dispatched", "in_progress", "review"]);
+        } else if (effective !== "all") {
+          q = q.eq("status", effective);
+        }
+        const { data, error } = await q;
+        if (error) return { tasks: [], error: error.message };
+        return { tasks: data ?? [], filter: effective };
+      },
+    }),
+
+    update_build_task: tool({
+      description:
+        "Update a build task's status, title, description, or acceptance criteria. Only updates tasks owned by the current user.",
+      inputSchema: z.object({
+        task_id: z.string().uuid().describe("UUID of the task to update"),
+        status: z
+          .enum([
+            "draft",
+            "planned",
+            "dispatched",
+            "in_progress",
+            "review",
+            "done",
+            "failed",
+          ])
+          .optional(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        acceptance_criteria: z.array(z.string()).optional(),
+      }),
+      execute: async ({ task_id, status, title, description, acceptance_criteria }) => {
+        const missing = requireKey();
+        if (missing) return missing;
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (status !== undefined) patch.status = status;
+        if (title !== undefined) patch.title = title;
+        if (description !== undefined) patch.description = description;
+        if (acceptance_criteria !== undefined) patch.acceptance_criteria_json = acceptance_criteria;
+        if (Object.keys(patch).length === 1) {
+          return { success: false, error: "No fields to update were provided." };
+        }
+        const { data, error } = await supabase
+          .from("build_tasks")
+          .update(patch)
+          .eq("id", task_id)
+          .eq("api_key_hash", apiKeyHash)
+          .select("id, title, status, updated_at")
+          .maybeSingle();
+        if (error) return { success: false, error: error.message };
+        if (!data) {
+          return {
+            success: false,
+            error: "No task with that ID exists for this user.",
+          };
+        }
+        return { success: true, task: data };
+      },
+    }),
+  };
+}
+
+async function buildAdminChatSystemPrompt(supabase: SupabaseClient): Promise<string> {
+  const [bcRes, sessRes, factsRes] = await Promise.all([
+    supabase
+      .from("business_context")
+      .select("category, key, value, priority")
+      .in("decay_tier", ["hot", "warm"])
+      .order("priority", { ascending: false })
+      .limit(40),
+    supabase
+      .from("session_summaries")
+      .select("session_id, platform, summary, topics, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("extracted_facts")
+      .select("fact, category, confidence")
+      .eq("status", "active")
+      .in("decay_tier", ["hot", "warm"])
+      .order("confidence", { ascending: false })
+      .limit(30),
+  ]);
+
+  const bc = bcRes.data ?? [];
+  const sessions = sessRes.data ?? [];
+  const facts = factsRes.data ?? [];
+
+  const ctxBlock = bc.length
+    ? bc
+        .map((r) => {
+          const v = typeof r.value === "string" ? r.value : JSON.stringify(r.value);
+          return `- [${r.category}/${r.key}] ${v}`;
+        })
+        .join("\n")
+    : "(none yet)";
+
+  const factsBlock = facts.length
+    ? facts.map((f) => `- (${f.category}) ${f.fact}`).join("\n")
+    : "(none yet)";
+
+  const sessionsBlock = sessions.length
+    ? sessions
+        .map((s) => {
+          const when = s.created_at ? new Date(s.created_at).toISOString().slice(0, 10) : "unknown";
+          const topics = Array.isArray(s.topics) && s.topics.length ? ` [${s.topics.join(", ")}]` : "";
+          return `- ${when} (${s.platform ?? "unknown"})${topics}: ${s.summary}`;
+        })
+        .join("\n")
+    : "(none yet)";
+
+  return [
+    "You are the UnClick Memory admin assistant. You help the user inspect and curate their persistent memory.",
+    "",
+    "You have tools available to interact with this user's UnClick Memory. Use them when appropriate:",
+    "- search_memory: Find specific facts or session history",
+    "- add_fact: Store new information the user tells you",
+    "- update_business_context: Update their business identity or settings",
+    "- get_memory_stats: Check memory health and load rates",
+    "- list_recent_sessions: Review what happened in recent sessions",
+    "- write_session_summary: Save a summary of this conversation",
+    "",
+    "You can also manage build tasks. When the user describes work that needs to be done (features to build, bugs to fix, refactoring), offer to create a build task. Use create_build_task with:",
+    "- Clear specific title (imperative: 'Fix login timeout bug', not 'Login issue')",
+    "- Enough detail that a developer or AI worker could execute independently",
+    "- Acceptance criteria as a concrete checklist",
+    "- Reference relevant facts from memory in the description",
+    "",
+    "When the user gives a vague multi-part request like 'fix the homepage and add pricing', suggest breaking it into separate tasks. Show them the proposed tasks and ask for confirmation before creating.",
+    "",
+    "When they ask 'what's on my plate?' or similar, use list_build_tasks to show pending work.",
+    "",
+    "When the user tells you something worth remembering, proactively use add_fact to store it. When they ask about past work, use list_recent_sessions or search_memory. Be helpful and proactive with tools, but always tell the user what you did.",
+    "",
+    "Style: concise, direct, no fluff. Use Markdown sparingly. Do not use em dashes; use a regular dash or restructure.",
+    "",
+    "CURRENT MEMORY SNAPSHOT",
+    "",
+    "Business context (standing rules + preferences):",
+    ctxBlock,
+    "",
+    "Recent sessions:",
+    sessionsBlock,
+    "",
+    "Active facts (highest confidence):",
+    factsBlock,
+  ].join("\n");
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -1221,6 +1633,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .order("last_seen", { ascending: false });
         if (error) throw error;
         return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "admin_check_connection": {
+        // Lightweight check used by the Connect page to verify that Claude Code
+        // (or any MCP client) has handshaken with this user's API key recently.
+        // Returns whether the api key resolves to a configured account, fact
+        // count, and last activity timestamp.
+        const apiKey = String(req.query.api_key ?? "").trim() || bearerFrom(req);
+        if (!apiKey) return res.status(400).json({ error: "api_key required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data: cfg } = await supabase
+          .from("memory_configs")
+          .select("supabase_url,schema_installed,last_used_at,updated_at")
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+
+        const [bcRes, factsRes, sessionRes] = await Promise.all([
+          supabase.from("business_context").select("id", { count: "exact", head: true }),
+          supabase.from("extracted_facts").select("id", { count: "exact", head: true }).eq("status", "active"),
+          supabase
+            .from("session_summaries")
+            .select("created_at,platform")
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
+
+        const factCount = factsRes.count ?? 0;
+        const contextCount = bcRes.count ?? 0;
+        const lastSession = sessionRes.data?.[0]?.created_at ?? null;
+        const lastSessionPlatform = sessionRes.data?.[0]?.platform ?? null;
+        const lastUsedAt = cfg?.last_used_at ?? null;
+
+        // "Connected" means we've seen a successful MCP handshake (last_used_at)
+        // OR there's session activity. If neither, the user has set up cloud
+        // memory but no client has spoken to it yet.
+        const connected = Boolean(lastUsedAt || lastSession);
+
+        return res.status(200).json({
+          connected,
+          configured: Boolean(cfg),
+          has_context: contextCount > 0,
+          context_count: contextCount,
+          fact_count: factCount,
+          last_session: lastSession,
+          last_session_platform: lastSessionPlatform,
+          last_used_at: lastUsedAt,
+        });
       }
 
       // ── Instrumentation: log a tool call from the MCP server ─────────
@@ -2259,87 +2719,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // ── Admin AI chat (streaming LLM with user's memory as context) ─
+
       case "admin_ai_chat": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-
-        // Level 1: environment kill switch.
-        if (process.env.AI_CHAT_ENABLED !== "true") return res.status(404).end();
-
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-
-        // Level 2: tenant kill switch.
-        const { data: tenantRow, error: tenantErr } = await supabase
-          .from("tenant_settings")
-          .select(
-            "ai_chat_enabled, ai_chat_provider, ai_chat_model, ai_chat_system_prompt, ai_chat_api_key_encrypted",
-          )
-          .eq("api_key_hash", sha256hex(apiKey))
-          .maybeSingle();
-        if (tenantErr) throw tenantErr;
-
-        const tenant = tenantRow as
-          | {
-              ai_chat_enabled: boolean;
-              ai_chat_provider: ChatProvider;
-              ai_chat_model: string;
-              ai_chat_system_prompt: string | null;
-              ai_chat_api_key_encrypted: string | null;
-            }
-          | null;
-        if (!tenant?.ai_chat_enabled) return res.status(404).end();
-
-        const messagesInput = (req.body as { messages?: unknown })?.messages;
-        const modelMessages = await normaliseChatMessages(messagesInput);
-        if (!Array.isArray(modelMessages)) {
-          return res.status(400).json({ error: modelMessages.error });
+        if (!isAdminChatEnabled()) {
+          return res.status(503).json({
+            error: "Admin AI chat is disabled. Set AI_CHAT_ENABLED=true to turn it on.",
+          });
+        }
+        if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+          return res.status(503).json({
+            error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured on the server.",
+          });
         }
 
-        // Load the user's context (business_context, facts, sessions).
-        const ctx = await buildAiChatContext(supabase);
-        const factCount = ctx.facts.length;
-        const sessionCount = ctx.sessions.length;
-
-        const baseSystemPrompt = tenant.ai_chat_system_prompt?.trim() || DEFAULT_AI_CHAT_SYSTEM_PROMPT;
-        const systemPrompt = `${baseSystemPrompt}
-
-CONTEXT (fact_count=${factCount}, session_count=${sessionCount}):
-${JSON.stringify(
-  {
-    business_context: ctx.businessContext,
-    standing_rules: ctx.standingRules,
-    active_facts: ctx.facts,
-    recent_sessions: ctx.sessions,
-  },
-  null,
-  2,
-)}`;
-
-        const provider: ChatProvider = tenant.ai_chat_provider ?? "google";
-        const model = tenant.ai_chat_model ?? "gemini-2.0-flash";
-        const userApiKey = decryptAiApiKey(tenant.ai_chat_api_key_encrypted);
-
-        try {
-          const languageModel = await resolveAiChatModel({
-            provider,
-            model,
-            userApiKey,
-          });
-
-          const result = streamText({
-            model: languageModel,
-            system: systemPrompt,
-            messages: modelMessages,
-          });
-
-          result.pipeUIMessageStreamToResponse(res);
-          return;
-        } catch (err) {
-          console.error("[admin_ai_chat] stream failed:", (err as Error).message);
-          return res
-            .status(500)
-            .json({ error: `AI chat failed: ${(err as Error).message}` });
+        const body = req.body as
+          | { messages?: UIMessage[]; api_key?: string }
+          | undefined;
+        const messages = Array.isArray(body?.messages) ? body!.messages! : [];
+        if (messages.length === 0) {
+          return res.status(400).json({ error: "messages array is required" });
         }
+
+        const rawApiKey = (body?.api_key ?? bearerFrom(req)).trim();
+        const apiKeyHash = rawApiKey ? sha256hex(rawApiKey) : null;
+
+        const systemPrompt = await buildAdminChatSystemPrompt(supabase);
+        const tools = buildAdminChatTools(supabase, apiKeyHash);
+
+        const modelMessages = await convertToModelMessages(messages);
+        const result = streamText({
+          model: google("gemini-2.0-flash"),
+          system: systemPrompt,
+          messages: modelMessages,
+          tools,
+          stopWhen: stepCountIs(5),
+          onError({ error }) {
+            console.error("admin_ai_chat stream error:", error);
+          },
+        });
+
+        result.pipeUIMessageStreamToResponse(res);
+        return;
       }
 
       default:
