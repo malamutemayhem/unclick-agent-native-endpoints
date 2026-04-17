@@ -16,6 +16,10 @@ export const ADMIN_CHAT_SUGGESTIONS: AIChatSuggestion[] = [
     prompt: "What are my current standing rules and business context?",
   },
   {
+    label: "What build tasks are pending?",
+    prompt: "What build tasks are pending?",
+  },
+  {
     label: "Summarize my last session",
     prompt: "Summarize my most recent session.",
   },
@@ -45,6 +49,14 @@ export function describeToolCall(toolName: string, input: unknown): string {
       return `Listed recent sessions${i.limit ? ` (${i.limit})` : ""}`;
     case "write_session_summary":
       return "Wrote session summary";
+    case "create_build_task":
+      return `Created build task: ${String(i.title ?? "new task")}`;
+    case "list_build_tasks": {
+      const status = i.status ? String(i.status) : "pending";
+      return `Listed build tasks (${status})`;
+    }
+    case "update_build_task":
+      return `Updated build task${i.status ? ` to ${String(i.status)}` : ""}`;
     default:
       return `Called ${toolName}`;
   }

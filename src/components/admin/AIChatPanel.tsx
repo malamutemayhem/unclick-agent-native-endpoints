@@ -20,7 +20,15 @@ export default function AIChatPanel({ open, onClose }: AIChatPanelProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: ADMIN_AI_CHAT_API }),
+    () =>
+      new DefaultChatTransport({
+        api: ADMIN_AI_CHAT_API,
+        body: () => {
+          const apiKey =
+            typeof window !== "undefined" ? localStorage.getItem("unclick_api_key") ?? "" : "";
+          return apiKey ? { api_key: apiKey } : {};
+        },
+      }),
     []
   );
 
