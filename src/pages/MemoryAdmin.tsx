@@ -34,13 +34,42 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight } from "lucide-react";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Plug } from "lucide-react";
 
 interface MemoryConfigStatus {
   configured: boolean;
   supabase_url?: string;
   schema_installed?: boolean;
   last_used_at?: string | null;
+}
+
+interface ConnectionCheck {
+  connected: boolean;
+  configured: boolean;
+  has_context: boolean;
+  context_count: number;
+  fact_count: number;
+  last_session: string | null;
+  last_session_platform: string | null;
+  last_used_at: string | null;
+}
+
+function connectionTier(check: ConnectionCheck | null): {
+  dot: string;
+  label: string;
+  tone: "primary" | "amber" | "muted";
+} {
+  if (!check || !check.connected) {
+    return { dot: "bg-muted-foreground", label: "Claude Code not connected", tone: "muted" };
+  }
+  const last = check.last_session ?? check.last_used_at;
+  if (last) {
+    const ageDays = (Date.now() - new Date(last).getTime()) / 86_400_000;
+    if (ageDays > 7) {
+      return { dot: "bg-amber-400", label: "Claude Code inactive", tone: "amber" };
+    }
+  }
+  return { dot: "bg-primary", label: "Claude Code connected", tone: "primary" };
 }
 
 interface Device {
@@ -68,6 +97,7 @@ function formatRelative(iso: string | null | undefined): string {
 export default function MemoryAdminPage() {
   const [config, setConfig] = useState<MemoryConfigStatus | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [connection, setConnection] = useState<ConnectionCheck | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -80,11 +110,14 @@ export default function MemoryAdminPage() {
 
     (async () => {
       try {
-        const [cfgRes, devRes] = await Promise.all([
+        const [cfgRes, devRes, connRes] = await Promise.all([
           fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(apiKey)}`),
           fetch("/api/memory-admin?action=list_devices", {
             headers: { Authorization: `Bearer ${apiKey}` },
           }),
+          fetch(
+            `/api/memory-admin?action=admin_check_connection&api_key=${encodeURIComponent(apiKey)}`,
+          ),
         ]);
 
         if (!cancelled && cfgRes.ok) {
@@ -93,6 +126,9 @@ export default function MemoryAdminPage() {
         if (!cancelled && devRes.ok) {
           const body = (await devRes.json()) as { data: Device[] };
           setDevices(body.data ?? []);
+        }
+        if (!cancelled && connRes.ok) {
+          setConnection((await connRes.json()) as ConnectionCheck);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -107,20 +143,74 @@ export default function MemoryAdminPage() {
   const localCount = devices.filter((d) => d.storage_mode === "local").length;
   const cloudCount = devices.filter((d) => d.storage_mode === "cloud").length;
   const shouldNudge = !config?.configured && devices.length >= 2;
+  const tier = connectionTier(connection);
+  const showConnectBanner = !loading && !connection?.connected;
 
   return (
     <div className="min-h-screen">
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pb-32 pt-28">
-        <div className="mb-8 flex items-center gap-3">
+        <div className="mb-8 flex flex-wrap items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Brain className="h-5 w-5" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-semibold tracking-tight">Memory Admin</h1>
             <p className="text-sm text-body">View and manage your agent's persistent memory</p>
           </div>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/memory/connect"
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                tier.tone === "primary"
+                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                  : tier.tone === "amber"
+                    ? "border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+                    : "border-border/50 bg-card/40 text-body hover:bg-card/60"
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${tier.dot}`} />
+              {loading ? "..." : tier.label}
+            </Link>
+            <Link
+              to="/memory/connect"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-card/40 px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-card/60"
+              aria-label="Connect Claude Code"
+            >
+              <Plug className="h-3.5 w-3.5 text-primary" />
+              Connect
+            </Link>
+          </div>
         </div>
+
+        {/* First-visit banner: no Claude Code activity yet */}
+        {showConnectBanner && (
+          <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Plug className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-heading">
+                    Connect Claude Code to load your memory automatically
+                  </p>
+                  <p className="mt-1 text-xs text-body">
+                    One command. Every future session knows your standing rules, business context, and
+                    open loops.
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/memory/connect"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              >
+                Connect
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Top-level nudge: user has 2+ devices on local storage but no cloud config */}
         {shouldNudge && (
