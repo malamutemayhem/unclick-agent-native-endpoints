@@ -35,7 +35,13 @@ import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock } from "lucide-react";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, Layers, FileText, Search, Code, Clock, BookOpen, MessageSquare } from "lucide-react";
+import AIChatPanel from "@/components/admin/AIChatPanel";
+import {
+  aiChatEnvEnabled,
+  fetchAiChatTenantSettings,
+  type AiChatTenantSettings,
+} from "@/components/admin/aiChatConfig";
 
 interface MemoryConfigStatus {
   configured: boolean;
@@ -89,24 +95,33 @@ export default function MemoryAdminPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [aiChatSettings, setAiChatSettings] = useState<AiChatTenantSettings | null>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [statusCounts, setStatusCounts] = useState<{
+    facts: number;
+    sessions: number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const apiKey = localStorage.getItem("unclick_api_key") ?? "";
-    if (!apiKey) {
+    const key = localStorage.getItem("unclick_api_key") ?? "";
+    setApiKey(key);
+    if (!key) {
       setLoading(false);
       return;
     }
 
     (async () => {
       try {
-        const [cfgRes, devRes, statusRes] = await Promise.all([
-          fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(apiKey)}`),
+        const [cfgRes, devRes, aiRes, statusRes] = await Promise.all([
+          fetch(`/api/memory-admin?action=setup_status&api_key=${encodeURIComponent(key)}`),
           fetch("/api/memory-admin?action=list_devices", {
-            headers: { Authorization: `Bearer ${apiKey}` },
+            headers: { Authorization: `Bearer ${key}` },
           }),
+          fetchAiChatTenantSettings(key),
           fetch("/api/memory-admin?action=status", {
-            headers: { Authorization: `Bearer ${apiKey}` },
+            headers: { Authorization: `Bearer ${key}` },
           }),
         ]);
 
@@ -117,10 +132,18 @@ export default function MemoryAdminPage() {
           const body = (await devRes.json()) as { data: Device[] };
           setDevices(body.data ?? []);
         }
+        if (!cancelled && aiRes?.env_enabled) {
+          setAiChatSettings(aiRes.settings);
+        }
         if (!cancelled && statusRes.ok) {
           const body = (await statusRes.json()) as MemoryStatus & { data?: MemoryStatus };
           // Endpoint may return raw counts or wrap them under `data`.
-          setStatus(body.data ?? body);
+          const parsed = body.data ?? body;
+          setStatus(parsed);
+          setStatusCounts({
+            facts: parsed.facts ?? 0,
+            sessions: parsed.sessions ?? 0,
+          });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -134,6 +157,8 @@ export default function MemoryAdminPage() {
 
   const hasApiKey =
     typeof window !== "undefined" && Boolean(localStorage.getItem("unclick_api_key"));
+  const aiChatVisible =
+    aiChatEnvEnabled() && Boolean(aiChatSettings?.ai_chat_enabled) && Boolean(apiKey);
 
   const localCount = devices.filter((d) => d.storage_mode === "local").length;
   const cloudCount = devices.filter((d) => d.storage_mode === "cloud").length;
@@ -148,10 +173,34 @@ export default function MemoryAdminPage() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Brain className="h-5 w-5" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-semibold tracking-tight">Memory Admin</h1>
             <p className="text-sm text-body">View and manage your agent's persistent memory</p>
           </div>
+          <Link
+            to="/memory/setup-guide"
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Setup Guide
+          </Link>
+          {aiChatVisible && (
+            <button
+              onClick={() => setAiChatOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted/20"
+              style={{ borderColor: "rgba(97, 193, 196, 0.4)", color: "#61C1C4" }}
+              title="Open UnClick AI (beta)"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">UnClick AI</span>
+              <span
+                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase text-black"
+                style={{ backgroundColor: "#E2B93B" }}
+              >
+                Beta
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Stat cards: counts per memory layer from ?action=status */}
@@ -311,6 +360,15 @@ export default function MemoryAdminPage() {
         </div>
       </main>
       <Footer />
+      {aiChatVisible && (
+        <AIChatPanel
+          open={aiChatOpen}
+          onClose={() => setAiChatOpen(false)}
+          apiKey={apiKey}
+          factCount={statusCounts?.facts}
+          sessionCount={statusCounts?.sessions}
+        />
+      )}
     </div>
   );
 }

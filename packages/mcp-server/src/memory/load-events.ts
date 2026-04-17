@@ -1,49 +1,70 @@
 /**
- * Tool-call event logger for UnClick Memory reliability metrics.
+ * Load event logger for the UnClick MCP server.
  *
- * Fire-and-forget POST to /api/memory-admin?action=log_tool_event whenever
- * the MCP server dispatches a tool. The control plane uses these rows to
- * compute get_startup_context compliance across sessions and clients.
+ * Fires a single memory_load_events row per session on the first tool
+ * call, capturing everything session-state.ts has observed up to that
+ * point (client info, whether instructions were sent, whether the
+ * load-memory prompt fired, which memory:// resources were read, etc.).
  *
- * Never blocks or throws into the tool-call path: a logging failure must
- * not break the actual tool invocation.
+ * Designed to be fire-and-forget: any failure is swallowed so
+ * instrumentation never breaks an agent's actual tool call.
  */
 
 import * as crypto from "crypto";
+import {
+  sessionState,
+  recordToolCall,
+  type SessionState,
+} from "./session-state.js";
 
 const MEMORY_API_BASE =
   process.env.UNCLICK_MEMORY_BASE_URL ||
   process.env.UNCLICK_SITE_URL ||
   "https://unclick.world";
 
-// Stable for the lifetime of this MCP server process.
-// A fresh server boot counts as a new session for compliance metrics.
-const SESSION_IDENTIFIER = crypto.randomUUID();
-
-function clientType(): string {
-  return (
-    process.env.UNCLICK_CLIENT_TYPE ||
-    process.env.MCP_CLIENT_NAME ||
-    "unknown"
-  );
+function sha256hex(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
 }
 
-export function logToolCall(toolName: string): void {
+function buildPayload(state: SessionState) {
   const apiKey = process.env.UNCLICK_API_KEY;
-  if (!apiKey) return;
+  return {
+    api_key_hash: apiKey ? sha256hex(apiKey) : null,
+    session_id: state.sessionId,
+    client_name: state.clientInfo?.name ?? null,
+    client_version: state.clientInfo?.version ?? null,
+    first_tool: state.firstToolCall,
+    context_loaded: state.contextLoaded,
+    tools_called_before_context: state.toolsCalledBeforeContext,
+    instructions_sent: state.instructionsSent,
+    prompt_used: state.promptUsed,
+    resource_read: state.resourcesRead.length > 0,
+    autoload_method: state.contextLoadMethod ?? "none",
+  };
+}
 
-  fetch(`${MEMORY_API_BASE}/api/memory-admin?action=log_tool_event`, {
+async function sendEvent(payload: Record<string, unknown>): Promise<void> {
+  const apiKey = process.env.UNCLICK_API_KEY;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  await fetch(`${MEMORY_API_BASE}/api/memory-admin?action=log_tool_event`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      tool_name: toolName,
-      session_identifier: SESSION_IDENTIFIER,
-      client_type: clientType(),
-    }),
-  }).catch(() => {
-    // Swallow: reliability metrics must never break tool dispatch.
+    headers,
+    body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Log a tool call event. Safe to call on every tool invocation: the first
+ * call writes the memory_load_events row for this session, subsequent
+ * calls are no-ops (we only care about the initial load pattern).
+ */
+export async function logToolCall(toolName: string): Promise<void> {
+  recordToolCall(toolName);
+  if (sessionState.logged) return;
+  sessionState.logged = true;
+
+  const payload = buildPayload(sessionState);
+  // Fire-and-forget. Never let instrumentation break a tool call.
+  sendEvent(payload).catch(() => {});
 }

@@ -2,7 +2,13 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ReadResourceRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { CATALOG, TOOL_MAP, ENDPOINT_MAP, type ToolDef } from "./catalog.js";
 import { createClient, type UnClickClient } from "./client.js";
@@ -10,6 +16,18 @@ import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
 import { logToolCall } from "./memory/load-events.js";
+import { getBackend } from "./memory/db.js";
+import {
+  getTenantSettings,
+  DEFAULT_AUTOLOAD_INSTRUCTIONS,
+  type TenantSettings,
+} from "./memory/tenant-settings.js";
+import {
+  logMemoryLoadEvent,
+  trackInitialize,
+  trackPromptUsed,
+  trackResourceRead,
+} from "./memory/instrumentation.js";
 
 // Appended to every tool description except get_startup_context itself, so the
 // agent sees the session-start protocol reminder every time it lists tools.
@@ -614,9 +632,167 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
     c.call("POST", "/v1/report-bug", a as Record<string, unknown>),
 };
 
+// ─── Prompts ────────────────────────────────────────────────────────────────
+
+const LOAD_MEMORY_PROMPT = {
+  name: "load-memory",
+  description:
+    "Load this user's full UnClick Memory context - business identity, standing rules, " +
+    "project memory, and session history. Use this if get_startup_context was not called automatically.",
+  arguments: [
+    {
+      name: "depth",
+      description:
+        "How much context to load: 'full' (default) returns everything, 'light' returns business context and active facts only",
+      required: false,
+    },
+  ],
+};
+
+function formatStartupContextAsPrompt(ctx: unknown, depth: string): string {
+  const c = (ctx ?? {}) as Record<string, unknown>;
+  const full = depth !== "light";
+
+  const payload: Record<string, unknown> = {
+    business_context: c.business_context ?? [],
+    active_facts: c.active_facts ?? [],
+  };
+  if (full) {
+    payload.recent_sessions = c.recent_sessions ?? [];
+    payload.knowledge_library_index = c.knowledge_library_index ?? [];
+  }
+  payload.loaded_at = c.loaded_at ?? new Date().toISOString();
+
+  return [
+    "# UnClick Memory - Startup Context",
+    "",
+    "The following is this user's persistent memory. Treat business context and standing rules as",
+    "authoritative: they override any default assumptions. Use active facts, open loops, and recent",
+    "session summaries to pick up where the last session left off.",
+    "",
+    "```json",
+    JSON.stringify(payload, null, 2),
+    "```",
+  ].join("\n");
+}
+
+// ─── MCP Resources (UnClick Memory as subscribable context) ─────────────────
+//
+// Resources let MCP clients (Claude Desktop and friends) attach memory context
+// as persistent reference material. Each URI below surfaces one slice of the
+// startup context; clients can subscribe to any of them and the server will
+// push notifications/resources/updated when the underlying memory changes.
+
+const MEMORY_RESOURCES = [
+  {
+    uri: "memory://context/full",
+    name: "Full UnClick Memory Context",
+    description:
+      "Complete business context, standing rules, project memory, session history, and active facts. Attach this to always have your operating context available.",
+    mimeType: "application/json",
+  },
+  {
+    uri: "memory://context/identity",
+    name: "Business Identity",
+    description:
+      "Core business context and identity - who this user is, what they do, brand details.",
+    mimeType: "application/json",
+  },
+  {
+    uri: "memory://context/rules",
+    name: "Standing Rules",
+    description:
+      "Non-negotiable rules and known scars that must be followed in every interaction.",
+    mimeType: "application/json",
+  },
+  {
+    uri: "memory://context/sessions",
+    name: "Recent Session History",
+    description:
+      "Summaries of recent work sessions including decisions made and open loops.",
+    mimeType: "application/json",
+  },
+  {
+    uri: "memory://facts/active",
+    name: "Active Facts",
+    description:
+      "Current active facts and knowledge items stored in memory.",
+    mimeType: "application/json",
+  },
+] as const;
+
+type StartupContext = {
+  business_context?: Array<{ category: string; key: string; value: unknown; priority?: number }>;
+  recent_sessions?: unknown;
+  active_facts?: unknown;
+  [k: string]: unknown;
+};
+
+function isStandingRuleEntry(entry: { category: string }): boolean {
+  const c = entry.category.toLowerCase();
+  return c === "standing_rule" || c === "rule" || c === "scar";
+}
+
+async function readResourcePayload(uri: string): Promise<unknown> {
+  const db = await getBackend();
+  const ctx = (await db.getStartupContext(5)) as StartupContext;
+
+  switch (uri) {
+    case "memory://context/full":
+      return ctx;
+    case "memory://context/identity":
+      return {
+        business_context: (ctx.business_context ?? []).filter((e) => !isStandingRuleEntry(e)),
+      };
+    case "memory://context/rules":
+      return {
+        agent_instructions: (ctx.business_context ?? []).filter(isStandingRuleEntry),
+      };
+    case "memory://context/sessions":
+      return { recent_sessions: ctx.recent_sessions ?? [] };
+    case "memory://facts/active":
+      return { active_facts: ctx.active_facts ?? [] };
+    default:
+      throw new Error(`Unknown resource URI: ${uri}`);
+  }
+}
+
+function resourceUrisAffectedByMemoryOp(
+  op: string,
+  args: Record<string, unknown>
+): string[] {
+  switch (op) {
+    case "add_fact":
+      return ["memory://facts/active", "memory://context/full"];
+    case "write_session_summary":
+      return ["memory://context/sessions", "memory://context/full"];
+    case "set_business_context": {
+      const category = typeof args.category === "string" ? args.category.toLowerCase() : "";
+      if (category === "standing_rule" || category === "rule" || category === "scar") {
+        return ["memory://context/rules", "memory://context/full"];
+      }
+      return ["memory://context/identity", "memory://context/full"];
+    }
+    case "supersede_fact":
+      return ["memory://facts/active", "memory://context/full"];
+    default:
+      return [];
+  }
+}
+
 // ─── Server factory ─────────────────────────────────────────────────────────
 
-export function createServer(): Server {
+export async function createServer(): Promise<Server> {
+  const settings: TenantSettings = await getTenantSettings();
+
+  const capabilities: Record<string, Record<string, unknown>> = { tools: {} };
+  if (settings.prompt_enabled) capabilities.prompts = {};
+  if (settings.resources_enabled) capabilities.resources = { subscribe: true };
+
+  const instructions = settings.autoload_enabled
+    ? settings.autoload_instructions ?? DEFAULT_AUTOLOAD_INSTRUCTIONS
+    : undefined;
+
   const server = new Server(
     {
       name: "UnClick",
@@ -632,9 +808,39 @@ export function createServer(): Server {
       ],
     },
     {
-      capabilities: { tools: {} },
+      capabilities,
+      ...(instructions ? { instructions } : {}),
     }
   );
+
+  // Capture client info + mark instructions_sent for this session.
+  server.oninitialized = () => {
+    trackInitialize(server.getClientVersion(), Boolean(instructions));
+  };
+
+  // Subscribed resource URIs for this connection. Stdio transport means one
+  // process per client, so a simple Set is enough.
+  const subscribedUris = new Set<string>();
+
+  async function notifyResourceUpdated(uri: string): Promise<void> {
+    if (!subscribedUris.has(uri)) return;
+    try {
+      await server.notification({
+        method: "notifications/resources/updated",
+        params: { uri },
+      });
+    } catch {
+      // transport may be closed - instrumentation must never crash
+    }
+  }
+
+  async function notifyForMemoryOp(
+    op: string,
+    args: Record<string, unknown>
+  ): Promise<void> {
+    const uris = resourceUrisAffectedByMemoryOp(op, args);
+    await Promise.all(uris.map(notifyResourceUpdated));
+  }
 
   // LIST TOOLS — expose only the 4 meta tools; individual tools remain callable
   // via unclick_call for backwards compat but aren't advertised to reduce noise.
@@ -642,18 +848,94 @@ export function createServer(): Server {
     return { tools: [...META_TOOLS] };
   });
 
+  // PROMPTS - only registered when the tenant has prompts enabled.
+  if (settings.prompt_enabled) {
+    server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return { prompts: [LOAD_MEMORY_PROMPT] };
+    });
+
+    server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: rawArgs } = request.params;
+      const promptArgs = (rawArgs ?? {}) as Record<string, unknown>;
+
+      trackPromptUsed(name);
+
+      if (name !== "load-memory") {
+        throw new Error(`Unknown prompt: ${name}`);
+      }
+
+      const depth = typeof promptArgs.depth === "string" ? promptArgs.depth : "full";
+      const db = await getBackend();
+      const ctx = await db.getStartupContext(depth === "light" ? 0 : 5);
+      const text = formatStartupContextAsPrompt(ctx, depth);
+
+      return {
+        description: "UnClick Memory startup context for this user.",
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text },
+          },
+        ],
+      };
+    });
+  }
+
+  // ── MCP Resources (memory as subscribable context) ────────────────────────
+  if (settings.resources_enabled) {
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return { resources: [...MEMORY_RESOURCES] };
+    });
+
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+      trackResourceRead(uri);
+      const payload = await readResourcePayload(uri);
+      const text = JSON.stringify(payload, null, 2);
+
+      const uriPath = uri.replace(/^memory:\/\//, "");
+      logMemoryLoadEvent({
+        tool_name: `resource::${uriPath}`,
+        params: { uri },
+        result_bytes: Buffer.byteLength(text, "utf8"),
+      });
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text,
+          },
+        ],
+      };
+    });
+
+    server.setRequestHandler(SubscribeRequestSchema, async (request) => {
+      subscribedUris.add(request.params.uri);
+      return {};
+    });
+
+    server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
+      subscribedUris.delete(request.params.uri);
+      return {};
+    });
+  }
+
   // CALL TOOL
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
     const args = (rawArgs ?? {}) as Record<string, unknown>;
 
-    // Fire-and-forget reliability instrumentation (see memory/load-events.ts).
-    logToolCall(name);
+    // Fire-and-forget instrumentation. Catch errors so logging never
+    // breaks a real tool call.
+    logToolCall(name).catch(() => {});
 
     try {
       // ── UnClick Memory (direct tools + memory.* endpoints) ───────
       if (MEMORY_HANDLERS[name]) {
         const result = await MEMORY_HANDLERS[name](args);
+        void notifyForMemoryOp(name, args);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -770,6 +1052,7 @@ export function createServer(): Server {
           const memHandler = MEMORY_HANDLERS[op];
           if (memHandler) {
             const result = await memHandler(params);
+            void notifyForMemoryOp(op, params);
             return {
               content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
             };
@@ -867,7 +1150,7 @@ export function createServer(): Server {
 }
 
 export async function startServer(): Promise<void> {
-  const server = createServer();
+  const server = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Server is running — errors go to stderr so they don't corrupt the MCP stream
