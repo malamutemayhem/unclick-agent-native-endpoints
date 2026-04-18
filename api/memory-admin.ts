@@ -1138,6 +1138,15 @@ async function buildAdminChatSystemPrompt(supabase: SupabaseClient): Promise<str
   ].join("\n");
 }
 
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -1472,6 +1481,444 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (error) throw error;
         return res.status(200).json({ success: true });
+      }
+
+      // ── Agent profile actions ────────────────────────────────────────
+      case "admin_agents_list": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        let q = supabase
+          .from("agents")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true });
+
+        if (req.query.role) q = q.eq("role", String(req.query.role));
+        if (typeof req.query.is_active !== "undefined") {
+          q = q.eq("is_active", req.query.is_active === "true");
+        }
+
+        const { data: agents, error } = await q;
+        if (error) throw error;
+
+        const ids = (agents ?? []).map((a: { id: string }) => a.id);
+        let toolCounts: Record<string, number> = {};
+        let layerCounts: Record<string, number> = {};
+
+        if (ids.length > 0) {
+          const [toolsRes, layersRes] = await Promise.all([
+            supabase.from("agent_tools").select("agent_id").in("agent_id", ids),
+            supabase
+              .from("agent_memory_scope")
+              .select("agent_id, is_enabled")
+              .in("agent_id", ids),
+          ]);
+          for (const row of toolsRes.data ?? []) {
+            const id = (row as { agent_id: string }).agent_id;
+            toolCounts[id] = (toolCounts[id] ?? 0) + 1;
+          }
+          for (const row of layersRes.data ?? []) {
+            const r = row as { agent_id: string; is_enabled: boolean };
+            if (r.is_enabled) layerCounts[r.agent_id] = (layerCounts[r.agent_id] ?? 0) + 1;
+          }
+        }
+
+        const enriched = (agents ?? []).map((a: { id: string }) => ({
+          ...a,
+          tool_count: toolCounts[a.id] ?? 0,
+          memory_layer_count: layerCounts[a.id] ?? 0,
+        }));
+
+        return res.status(200).json({ data: enriched });
+      }
+
+      case "admin_agent_get": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const agentId = String(req.query.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data: agent, error: aErr } = await supabase
+          .from("agents")
+          .select("*")
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (aErr) throw aErr;
+        if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+        const [toolsRes, layersRes] = await Promise.all([
+          supabase.from("agent_tools").select("connector_id, is_enabled").eq("agent_id", agentId),
+          supabase
+            .from("agent_memory_scope")
+            .select("memory_layer, is_enabled")
+            .eq("agent_id", agentId),
+        ]);
+
+        return res.status(200).json({
+          agent,
+          tools: toolsRes.data ?? [],
+          memory_scope: layersRes.data ?? [],
+        });
+      }
+
+      case "admin_agent_create": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = (req.body ?? {}) as {
+          name?: string;
+          slug?: string;
+          role?: string;
+          description?: string;
+          system_prompt?: string;
+          avatar_url?: string;
+          is_default?: boolean;
+        };
+        const name = (body.name ?? "").trim();
+        if (!name) return res.status(400).json({ error: "name required" });
+
+        const slug = (body.slug ?? slugify(name)).trim();
+        if (!slug) return res.status(400).json({ error: "slug required" });
+
+        if (body.is_default) {
+          await supabase
+            .from("agents")
+            .update({ is_default: false })
+            .eq("api_key_hash", apiKeyHash);
+        }
+
+        const { data, error } = await supabase
+          .from("agents")
+          .insert({
+            api_key_hash: apiKeyHash,
+            name,
+            slug,
+            role: (body.role ?? "general").trim(),
+            description: body.description ?? null,
+            system_prompt: body.system_prompt ?? null,
+            avatar_url: body.avatar_url ?? null,
+            is_default: !!body.is_default,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ agent: data });
+      }
+
+      case "admin_agent_update": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          name?: string;
+          slug?: string;
+          role?: string;
+          description?: string;
+          system_prompt?: string;
+          avatar_url?: string;
+          is_active?: boolean;
+          is_default?: boolean;
+        };
+        const agentId = (body.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+
+        if (body.is_default === true) {
+          await supabase
+            .from("agents")
+            .update({ is_default: false })
+            .eq("api_key_hash", apiKeyHash);
+        }
+
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const k of [
+          "name",
+          "slug",
+          "role",
+          "description",
+          "system_prompt",
+          "avatar_url",
+          "is_active",
+          "is_default",
+        ] as const) {
+          if (typeof body[k] !== "undefined") updates[k] = body[k];
+        }
+
+        const { data, error } = await supabase
+          .from("agents")
+          .update(updates)
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash)
+          .select("*")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ agent: data });
+      }
+
+      case "admin_agent_delete": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+        const agentId = String(req.body?.agent_id ?? req.query.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+
+        const { error } = await supabase
+          .from("agents")
+          .delete()
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "admin_agent_tools_update": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = (req.body ?? {}) as { agent_id?: string; connector_ids?: unknown };
+        const agentId = (body.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        const connectorIds = Array.isArray(body.connector_ids)
+          ? body.connector_ids.map(String)
+          : [];
+
+        const { data: owned } = await supabase
+          .from("agents")
+          .select("id")
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (!owned) return res.status(404).json({ error: "Agent not found" });
+
+        const { error: delErr } = await supabase
+          .from("agent_tools")
+          .delete()
+          .eq("agent_id", agentId);
+        if (delErr) throw delErr;
+
+        if (connectorIds.length > 0) {
+          const rows = connectorIds.map((cid) => ({
+            agent_id: agentId,
+            connector_id: cid,
+            is_enabled: true,
+          }));
+          const { error: insErr } = await supabase.from("agent_tools").insert(rows);
+          if (insErr) throw insErr;
+        }
+        return res.status(200).json({ success: true, count: connectorIds.length });
+      }
+
+      case "admin_agent_memory_update": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          layers?: Array<{ memory_layer?: string; is_enabled?: boolean }>;
+        };
+        const agentId = (body.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+
+        const { data: owned } = await supabase
+          .from("agents")
+          .select("id")
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (!owned) return res.status(404).json({ error: "Agent not found" });
+
+        const layers = Array.isArray(body.layers) ? body.layers : [];
+
+        const { error: delErr } = await supabase
+          .from("agent_memory_scope")
+          .delete()
+          .eq("agent_id", agentId);
+        if (delErr) throw delErr;
+
+        if (layers.length > 0) {
+          const rows = layers
+            .filter((l) => typeof l.memory_layer === "string" && l.memory_layer)
+            .map((l) => ({
+              agent_id: agentId,
+              memory_layer: l.memory_layer!,
+              is_enabled: l.is_enabled !== false,
+            }));
+          if (rows.length > 0) {
+            const { error: insErr } = await supabase.from("agent_memory_scope").insert(rows);
+            if (insErr) throw insErr;
+          }
+        }
+        return res.status(200).json({ success: true, count: layers.length });
+      }
+
+      case "admin_agent_duplicate": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+        const agentId = String(req.body?.agent_id ?? "").trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+
+        const { data: source, error: srcErr } = await supabase
+          .from("agents")
+          .select("*")
+          .eq("id", agentId)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (srcErr) throw srcErr;
+        if (!source) return res.status(404).json({ error: "Agent not found" });
+
+        const newName = `${source.name} (Copy)`;
+        const baseSlug = `${source.slug}-copy`;
+        let newSlug = baseSlug;
+        let attempt = 1;
+        while (attempt < 50) {
+          const { data: clash } = await supabase
+            .from("agents")
+            .select("id")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("slug", newSlug)
+            .maybeSingle();
+          if (!clash) break;
+          attempt += 1;
+          newSlug = `${baseSlug}-${attempt}`;
+        }
+
+        const { data: newAgent, error: insErr } = await supabase
+          .from("agents")
+          .insert({
+            api_key_hash: apiKeyHash,
+            name: newName,
+            slug: newSlug,
+            role: source.role,
+            description: source.description,
+            system_prompt: source.system_prompt,
+            avatar_url: source.avatar_url,
+            is_active: source.is_active,
+            is_default: false,
+          })
+          .select("*")
+          .single();
+        if (insErr) throw insErr;
+
+        const [toolsRes, layersRes] = await Promise.all([
+          supabase.from("agent_tools").select("connector_id, is_enabled").eq("agent_id", agentId),
+          supabase
+            .from("agent_memory_scope")
+            .select("memory_layer, is_enabled")
+            .eq("agent_id", agentId),
+        ]);
+
+        if ((toolsRes.data ?? []).length > 0) {
+          const rows = (toolsRes.data ?? []).map(
+            (t: { connector_id: string; is_enabled: boolean }) => ({
+              agent_id: newAgent.id,
+              connector_id: t.connector_id,
+              is_enabled: t.is_enabled,
+            })
+          );
+          await supabase.from("agent_tools").insert(rows);
+        }
+        if ((layersRes.data ?? []).length > 0) {
+          const rows = (layersRes.data ?? []).map(
+            (l: { memory_layer: string; is_enabled: boolean }) => ({
+              agent_id: newAgent.id,
+              memory_layer: l.memory_layer,
+              is_enabled: l.is_enabled,
+            })
+          );
+          await supabase.from("agent_memory_scope").insert(rows);
+        }
+
+        return res.status(200).json({ agent: newAgent });
+      }
+
+      case "admin_agent_activity": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+        const agentId = String(req.query.agent_id ?? "").trim();
+
+        let q = supabase
+          .from("agent_activity")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(parseInt(String(req.query.limit ?? "200")) || 200);
+        if (agentId) q = q.eq("agent_id", agentId);
+
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "admin_agent_resolve": {
+        // Called by the MCP server to resolve which agent profile to use for a
+        // session. With agent_slug or agent_id, returns that agent. Otherwise
+        // returns the user's default agent. Returns null when no agents exist.
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+        const slug = String(req.query.agent_slug ?? "").trim();
+        const id = String(req.query.agent_id ?? "").trim();
+
+        let agentQuery = supabase
+          .from("agents")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("is_active", true);
+        if (id) agentQuery = agentQuery.eq("id", id);
+        else if (slug) agentQuery = agentQuery.eq("slug", slug);
+        else agentQuery = agentQuery.eq("is_default", true);
+
+        const { data: agent, error: aErr } = await agentQuery.maybeSingle();
+        if (aErr) throw aErr;
+
+        if (!agent) {
+          return res.status(200).json({ agent: null, tools: [], memory_scope: [] });
+        }
+
+        const [toolsRes, layersRes] = await Promise.all([
+          supabase
+            .from("agent_tools")
+            .select("connector_id, is_enabled")
+            .eq("agent_id", agent.id),
+          supabase
+            .from("agent_memory_scope")
+            .select("memory_layer, is_enabled")
+            .eq("agent_id", agent.id),
+        ]);
+
+        return res.status(200).json({
+          agent,
+          tools: toolsRes.data ?? [],
+          memory_scope: layersRes.data ?? [],
+        });
+      }
+
+      case "admin_connectors_list": {
+        const { data, error } = await supabase
+          .from("platform_connectors")
+          .select("id, name, category, description, icon, sort_order")
+          .order("category")
+          .order("sort_order")
+          .order("name");
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
       }
 
       // ── BYOD / wizard actions ────────────────────────────────────────

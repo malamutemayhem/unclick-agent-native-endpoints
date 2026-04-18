@@ -115,7 +115,9 @@ const VISIBLE_TOOLS = [
       "Optional: pass the names of other MCP tools available in this session as the session_tools " +
       "parameter. UnClick classifies them (compatible / replaceable / conflicting) and returns " +
       "tool_guidance - flagging conflicts and suggesting where UnClick's built-ins can replace " +
-      "duplicate tools.",
+      "duplicate tools.\n\n" +
+      "If the user has defined agent profiles in UnClick, pass agent_slug to load that agent's " +
+      "personality, scoped tools, and scoped memory layers.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -135,6 +137,16 @@ const VISIBLE_TOOLS = [
         platform: {
           type: "string",
           description: "Optional: AI client platform (claude-code, cursor, windsurf, copilot, chatgpt)",
+        },
+        agent_slug: {
+          type: "string",
+          description:
+            "Optional: slug of the UnClick agent profile to load (e.g. 'research-assistant'). " +
+            "Falls back to the user's default agent. If no agents exist, behaves as before.",
+        },
+        agent_id: {
+          type: "string",
+          description: "Optional: UUID of the UnClick agent profile (alternative to agent_slug).",
         },
       },
     },

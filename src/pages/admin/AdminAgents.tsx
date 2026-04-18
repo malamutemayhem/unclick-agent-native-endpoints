@@ -1,0 +1,857 @@
+/**
+ * AdminAgents - manage AI agent profiles.
+ *
+ * Users can create named agents with a role, system prompt, scoped tool
+ * access, and scoped memory layer access. Wires through /api/memory-admin
+ * actions admin_agent_*.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AdminShell from "@/components/admin/AdminShell";
+import {
+  Bot,
+  Plus,
+  Copy,
+  Pencil,
+  Trash2,
+  Power,
+  Star,
+  Search,
+  X,
+  Check,
+} from "lucide-react";
+import { AGENT_TEMPLATES, MEMORY_LAYERS, type MemoryLayerKey } from "./agentTemplates";
+
+interface Agent {
+  id: string;
+  api_key_hash: string;
+  name: string;
+  slug: string;
+  role: string;
+  description: string | null;
+  system_prompt: string | null;
+  avatar_url: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+  tool_count?: number;
+  memory_layer_count?: number;
+}
+
+interface Connector {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  icon: string | null;
+}
+
+interface AgentDetail {
+  agent: Agent;
+  tools: Array<{ connector_id: string; is_enabled: boolean }>;
+  memory_scope: Array<{ memory_layer: string; is_enabled: boolean }>;
+}
+
+const ROLE_OPTIONS = [
+  { value: "researcher", label: "Researcher" },
+  { value: "developer", label: "Developer" },
+  { value: "writer", label: "Writer" },
+  { value: "organiser", label: "Organiser" },
+  { value: "general", label: "General" },
+  { value: "custom", label: "Custom" },
+];
+
+function getApiKey(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("unclick_api_key") ?? "";
+}
+
+async function api<T>(action: string, opts: RequestInit = {}): Promise<T> {
+  const apiKey = getApiKey();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(opts.headers as Record<string, string> | undefined),
+  };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const res = await fetch(`/api/memory-admin?action=${action}`, { ...opts, headers });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `Request failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+export default function AdminAgentsPage() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AgentDetail | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        setHasApiKey(false);
+        setLoading(false);
+        return;
+      }
+      setHasApiKey(true);
+      const [agentsRes, connectorsRes] = await Promise.all([
+        api<{ data: Agent[] }>("admin_agents_list"),
+        api<{ data: Connector[] }>("admin_connectors_list"),
+      ]);
+      setAgents(agentsRes.data ?? []);
+      setConnectors(connectorsRes.data ?? []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const defaultAgent = useMemo(() => agents.find((a) => a.is_default), [agents]);
+  const noDefaultWarning = agents.length > 0 && !defaultAgent;
+
+  const handleCreate = async (template: (typeof AGENT_TEMPLATES)[number] | null) => {
+    setShowTemplates(false);
+    try {
+      const body = template
+        ? {
+            name: template.name,
+            role: template.role,
+            description: template.description,
+            system_prompt: template.system_prompt,
+            is_default: agents.length === 0,
+          }
+        : {
+            name: "New Agent",
+            role: "custom",
+            description: "",
+            system_prompt: "",
+            is_default: agents.length === 0,
+          };
+      const { agent } = await api<{ agent: Agent }>("admin_agent_create", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+
+      if (template) {
+        const slugSet = new Set(template.tool_slugs);
+        const matchedConnectorIds = connectors
+          .filter((c) => slugSet.has(c.id))
+          .map((c) => c.id);
+        if (matchedConnectorIds.length > 0) {
+          await api("admin_agent_tools_update", {
+            method: "POST",
+            body: JSON.stringify({
+              agent_id: agent.id,
+              connector_ids: matchedConnectorIds,
+            }),
+          });
+        }
+        const layers = MEMORY_LAYERS.map((l) => ({
+          memory_layer: l.key,
+          is_enabled: template.memory_layers.includes(l.key),
+        }));
+        await api("admin_agent_memory_update", {
+          method: "POST",
+          body: JSON.stringify({ agent_id: agent.id, layers }),
+        });
+      }
+
+      await refresh();
+      void openEditor(agent.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const openEditor = async (agentId: string) => {
+    try {
+      const detail = await api<AgentDetail>(`admin_agent_get&agent_id=${agentId}`);
+      setEditing(detail);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleDuplicate = async (agentId: string) => {
+    try {
+      await api("admin_agent_duplicate", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: agentId }),
+      });
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleToggleActive = async (agent: Agent) => {
+    try {
+      await api("admin_agent_update", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: agent.id, is_active: !agent.is_active }),
+      });
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleSetDefault = async (agentId: string) => {
+    try {
+      await api("admin_agent_update", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: agentId, is_default: true }),
+      });
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleDelete = async (agentId: string) => {
+    if (!window.confirm("Delete this agent? This cannot be undone.")) return;
+    try {
+      await api("admin_agent_delete", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: agentId }),
+      });
+      setEditing(null);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <AdminShell
+      title="Your Agents"
+      subtitle="Create AI agents with specific roles, tools, and personalities. Each agent remembers what you tell it and only uses the tools you allow."
+      agentCount={agents.length}
+    >
+      {!hasApiKey && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
+          <p className="font-medium text-heading">Sign in to manage agents</p>
+          <p className="mt-1 text-xs">
+            Drop your UnClick API key in localStorage as <code>unclick_api_key</code> to load this
+            page.
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-300">
+          {error}
+        </div>
+      )}
+
+      {hasApiKey && agents.length === 0 && !loading && (
+        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5 text-sm text-body">
+          <p className="font-medium text-heading">You haven't created any agents yet.</p>
+          <p className="mt-1 text-xs">
+            UnClick is using default settings. All tools and all memory are available to every AI
+            session. Create an agent to customise what your AI can do.
+          </p>
+        </div>
+      )}
+
+      {noDefaultWarning && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
+          <p className="font-medium text-heading">No default agent selected.</p>
+          <p className="mt-1 text-xs">
+            Pick one of your agents as the default so it loads automatically when you start a new
+            AI session.
+          </p>
+        </div>
+      )}
+
+      <div className="mb-6 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowTemplates(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" />
+          New Agent
+        </button>
+      </div>
+
+      {loading && hasApiKey ? (
+        <p className="text-xs text-muted-foreground">Loading agents...</p>
+      ) : (
+        <ul className="space-y-3">
+          {agents.map((agent) => (
+            <li
+              key={agent.id}
+              className="rounded-xl border border-border/40 bg-card/20 p-5 transition-colors hover:border-border/60"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    {agent.avatar_url ? (
+                      <img
+                        src={agent.avatar_url}
+                        alt={agent.name}
+                        className="h-10 w-10 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <Bot className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-heading">{agent.name}</h3>
+                      {agent.is_default && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                          <Star className="h-3 w-3" /> default
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] ${
+                          agent.is_active
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : "border-border/50 bg-card/40 text-muted-foreground"
+                        }`}
+                      >
+                        {agent.is_active ? "active" : "inactive"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-body">
+                      {agent.description ?? "No description"}
+                    </p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Tools: {agent.tool_count === 0 ? "all" : agent.tool_count} ·
+                      Memory:{" "}
+                      {agent.memory_layer_count === 0
+                        ? "all layers"
+                        : `${agent.memory_layer_count} of ${MEMORY_LAYERS.length}`}{" "}
+                      · Role: {agent.role}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {!agent.is_default && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefault(agent.id)}
+                      title="Make default"
+                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-amber-400"
+                    >
+                      <Star className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openEditor(agent.id)}
+                    title="Edit"
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicate(agent.id)}
+                    title="Duplicate"
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(agent)}
+                    title={agent.is_active ? "Disable" : "Enable"}
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    <Power className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(agent.id)}
+                    title="Delete"
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-rose-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showTemplates && (
+        <TemplatePicker onPick={handleCreate} onClose={() => setShowTemplates(false)} />
+      )}
+
+      {editing && (
+        <AgentEditor
+          detail={editing}
+          connectors={connectors}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await refresh();
+          }}
+          onDelete={() => editing && handleDelete(editing.agent.id)}
+        />
+      )}
+    </AdminShell>
+  );
+}
+
+function TemplatePicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (template: (typeof AGENT_TEMPLATES)[number] | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl rounded-xl border border-border/40 bg-card p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-heading">Start from a template</h2>
+            <p className="mt-1 text-xs text-body">
+              Each template ships with a sensible system prompt, role, and starter tool selection.
+              You can edit everything after creating.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground hover:text-heading"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {AGENT_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.role}
+              type="button"
+              onClick={() => onPick(tpl)}
+              className="rounded-lg border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-heading">{tpl.name}</span>
+                <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  {tpl.role}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-body">{tpl.description}</p>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            className="rounded-lg border border-dashed border-border/50 bg-card/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-heading">Custom</span>
+              <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                blank
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-body">Start from scratch and define everything yourself.</p>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentEditor({
+  detail,
+  connectors,
+  onClose,
+  onSaved,
+  onDelete,
+}: {
+  detail: AgentDetail;
+  connectors: Connector[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onDelete: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: detail.agent.name,
+    role: detail.agent.role,
+    description: detail.agent.description ?? "",
+    system_prompt: detail.agent.system_prompt ?? "",
+    avatar_url: detail.agent.avatar_url ?? "",
+    is_active: detail.agent.is_active,
+    is_default: detail.agent.is_default,
+  });
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(
+    new Set(detail.tools.map((t) => t.connector_id))
+  );
+  const [memoryEnabled, setMemoryEnabled] = useState<Record<string, boolean>>(() => {
+    const map: Record<string, boolean> = {};
+    const provided = new Map(detail.memory_scope.map((s) => [s.memory_layer, s.is_enabled]));
+    for (const l of MEMORY_LAYERS) {
+      map[l.key] = provided.has(l.key) ? !!provided.get(l.key) : provided.size === 0;
+    }
+    return map;
+  });
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    const lower = search.toLowerCase();
+    const filtered = connectors.filter(
+      (c) =>
+        !lower ||
+        c.name.toLowerCase().includes(lower) ||
+        c.category.toLowerCase().includes(lower) ||
+        (c.description ?? "").toLowerCase().includes(lower)
+    );
+    const map = new Map<string, Connector[]>();
+    for (const c of filtered) {
+      const arr = map.get(c.category) ?? [];
+      arr.push(c);
+      map.set(c.category, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [connectors, search]);
+
+  const toggleTool = (id: string) => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllInCategory = (cat: string) => {
+    const items = grouped.find(([c]) => c === cat)?.[1] ?? [];
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      const allOn = items.every((c) => next.has(c.id));
+      for (const c of items) {
+        if (allOn) next.delete(c.id);
+        else next.add(c.id);
+      }
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      await api("admin_agent_update", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: detail.agent.id, ...form }),
+      });
+      await api("admin_agent_tools_update", {
+        method: "POST",
+        body: JSON.stringify({
+          agent_id: detail.agent.id,
+          connector_ids: Array.from(selectedTools),
+        }),
+      });
+      const layers = MEMORY_LAYERS.map((l) => ({
+        memory_layer: l.key,
+        is_enabled: !!memoryEnabled[l.key],
+      }));
+      await api("admin_agent_memory_update", {
+        method: "POST",
+        body: JSON.stringify({ agent_id: detail.agent.id, layers }),
+      });
+      await onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl border border-border/40 bg-card shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-border/40 p-6">
+          <div>
+            <h2 className="text-lg font-semibold text-heading">Edit Agent: {form.name}</h2>
+            <p className="mt-1 text-xs text-body">
+              Slug: <code className="font-mono">{detail.agent.slug}</code>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground hover:text-heading"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {err && (
+            <div className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-300">
+              {err}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Name">
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full rounded-md border border-border/40 bg-card/40 px-3 py-2 text-sm text-heading focus:border-primary/40 focus:outline-none"
+              />
+            </Field>
+            <Field label="Role">
+              <select
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                className="w-full rounded-md border border-border/40 bg-card/40 px-3 py-2 text-sm text-heading focus:border-primary/40 focus:outline-none"
+              >
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <Field label="Description">
+              <input
+                type="text"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="One-line summary of what this agent does"
+                className="w-full rounded-md border border-border/40 bg-card/40 px-3 py-2 text-sm text-heading focus:border-primary/40 focus:outline-none"
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <Field
+              label="Personality &amp; Instructions"
+              hint="What the agent reads at the start of every session. Write it like you're briefing a smart new hire."
+            >
+              <textarea
+                value={form.system_prompt}
+                onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
+                rows={8}
+                className="w-full rounded-md border border-border/40 bg-card/40 px-3 py-2 font-mono text-xs text-heading focus:border-primary/40 focus:outline-none"
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Field label="Avatar URL (optional)">
+              <input
+                type="text"
+                value={form.avatar_url}
+                onChange={(e) => setForm({ ...form, avatar_url: e.target.value })}
+                placeholder="https://..."
+                className="w-full rounded-md border border-border/40 bg-card/40 px-3 py-2 text-sm text-heading focus:border-primary/40 focus:outline-none"
+              />
+            </Field>
+            <div className="flex items-end gap-4 pb-2">
+              <label className="flex items-center gap-2 text-xs text-body">
+                <input
+                  type="checkbox"
+                  checked={form.is_active}
+                  onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded border-border/40 bg-card/40 text-primary focus:ring-primary"
+                />
+                Active
+              </label>
+              <label className="flex items-center gap-2 text-xs text-body">
+                <input
+                  type="checkbox"
+                  checked={form.is_default}
+                  onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+                  className="h-4 w-4 rounded border-border/40 bg-card/40 text-primary focus:ring-primary"
+                />
+                Default agent
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-heading">
+                Tools ({selectedTools.size} of {connectors.length} enabled)
+              </p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search tools"
+                  className="rounded-md border border-border/40 bg-card/40 py-1 pl-7 pr-2 text-xs text-heading focus:border-primary/40 focus:outline-none"
+                />
+              </div>
+            </div>
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              Leave all unchecked to give the agent access to every tool. Otherwise it only sees
+              what you check.
+            </p>
+            <div className="space-y-3">
+              {grouped.map(([cat, items]) => {
+                const allOn = items.every((c) => selectedTools.has(c.id));
+                return (
+                  <div key={cat} className="rounded-lg border border-border/40 bg-card/20 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {cat}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => toggleAllInCategory(cat)}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        {allOn ? "Clear all" : "Select all"}
+                      </button>
+                    </div>
+                    <div className="grid gap-1 sm:grid-cols-2">
+                      {items.map((c) => {
+                        const on = selectedTools.has(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors ${
+                              on ? "bg-primary/10 text-heading" : "text-body hover:bg-card/40"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleTool(c.id)}
+                              className="h-3.5 w-3.5 rounded border-border/40 bg-card/40 text-primary focus:ring-primary"
+                            />
+                            <span className="truncate">{c.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {grouped.length === 0 && (
+                <p className="text-xs text-muted-foreground">No tools match your search.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-sm font-semibold text-heading">Memory Access</p>
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              Pick which memory layers this agent can read at session start.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {MEMORY_LAYERS.map((l) => (
+                <label
+                  key={l.key}
+                  className={`flex items-start gap-2 rounded-md border border-border/40 p-3 text-xs transition-colors ${
+                    memoryEnabled[l.key] ? "bg-primary/5" : "bg-card/20"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!memoryEnabled[l.key]}
+                    onChange={(e) =>
+                      setMemoryEnabled({ ...memoryEnabled, [l.key]: e.target.checked })
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-border/40 bg-card/40 text-primary focus:ring-primary"
+                  />
+                  <div className="min-w-0">
+                    <p className="font-medium text-heading">{l.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{l.hint}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border/40 p-6">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex items-center gap-1.5 text-xs text-rose-400 hover:underline"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete Agent
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-border/40 bg-card/40 px-4 py-2 text-sm text-body transition-colors hover:text-heading"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              <Check className="h-4 w-4" />
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-heading">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
+    </label>
+  );
+}
+
+export type { Agent, MemoryLayerKey };

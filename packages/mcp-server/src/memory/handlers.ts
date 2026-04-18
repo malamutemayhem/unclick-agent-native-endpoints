@@ -12,6 +12,7 @@ import {
   classifyTools,
   reportToolDetections,
 } from "./tool-awareness.js";
+import { resolveAgent, filterContextByLayers } from "./agent.js";
 
 type Args = Record<string, unknown>;
 
@@ -34,7 +35,13 @@ function bool(v: unknown, fallback = false): boolean {
 export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> = {
   async get_startup_context(args) {
     const db = await getBackend();
-    const context = await db.getStartupContext(num(args.num_sessions, 5));
+    const slug = typeof args.agent_slug === "string" ? args.agent_slug : undefined;
+    const id = typeof args.agent_id === "string" ? args.agent_id : undefined;
+
+    const [baseContext, resolved] = await Promise.all([
+      db.getStartupContext(num(args.num_sessions, 5)),
+      resolveAgent({ agent_slug: slug, agent_id: id }),
+    ]);
 
     // Optional: if the client passed the list of other tools in this session,
     // classify them and attach tool_guidance so the agent can nudge the user.
@@ -42,15 +49,36 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       ? args.session_tools.map(String).filter(Boolean)
       : [];
 
-    if (sessionTools.length === 0) {
-      return context;
+    let tool_guidance: unknown = undefined;
+    if (sessionTools.length > 0) {
+      const detections = classifyTools(sessionTools);
+      const nudgeable = await reportToolDetections(detections);
+      tool_guidance = buildToolGuidance(detections, nudgeable);
     }
 
-    const detections = classifyTools(sessionTools);
-    const nudgeable = await reportToolDetections(detections);
-    const tool_guidance = buildToolGuidance(detections, nudgeable);
+    if (!resolved) {
+      if (tool_guidance === undefined) return baseContext;
+      return { ...(baseContext as Record<string, unknown>), tool_guidance };
+    }
 
-    return { ...(context as Record<string, unknown>), tool_guidance };
+    const scoped = filterContextByLayers(baseContext, resolved.enabled_memory_layers);
+    const result: Record<string, unknown> = {
+      agent: {
+        id: resolved.agent.id,
+        slug: resolved.agent.slug,
+        name: resolved.agent.name,
+        role: resolved.agent.role,
+        description: resolved.agent.description,
+        system_prompt: resolved.agent.system_prompt,
+        is_default: resolved.agent.is_default,
+      },
+      enabled_tools: resolved.enabled_tools,
+      enabled_memory_layers: resolved.enabled_memory_layers,
+      memory:
+        scoped && typeof scoped === "object" ? scoped : { _raw: baseContext },
+    };
+    if (tool_guidance !== undefined) result.tool_guidance = tool_guidance;
+    return result;
   },
 
   async search_memory(args) {

@@ -47,6 +47,7 @@ import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
 import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
+import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 
 const queryClient = new QueryClient();
@@ -107,6 +108,8 @@ const App = () => (
             <Route path="activity" element={<AdminActivity />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
+          {/* AdminAgents ships its own shell wrapper, so register it at the top level */}
+          <Route path="/admin/agents" element={<AdminAgentsPage />} />
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
