@@ -28,6 +28,18 @@
  *                   + nudge signal
  *   - list_devices: GET with Bearer <api_key>
  *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
+ *
+ * Channels orchestrator actions (route admin chat via local Claude Code):
+ *   - admin_channel_send: POST with Bearer <api_key>, body { session_id, content }
+ *                         Inserts a pending user message into chat_messages.
+ *   - admin_channel_poll: GET with Bearer <api_key>, ?session_id=&after=<iso>
+ *                         Returns messages after the given timestamp (Realtime fallback).
+ *   - admin_channel_status: GET with Bearer <api_key>
+ *                           Reports whether a Channel plugin has checked in recently.
+ *   - admin_channel_heartbeat: POST with Bearer <api_key>, body { client_info }
+ *                              Bumps the channel_status.last_seen timestamp.
+ *   - admin_ai_chat: POST with Bearer <api_key>, body { session_id, content }
+ *                    Gemini fallback used when no Channel plugin is active.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -646,6 +658,182 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("device_fingerprint", fp);
         if (error) throw error;
         return res.status(200).json({ success: true });
+      }
+
+      // ── Channels orchestrator ─────────────────────────────────────────
+      case "admin_channel_send": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as { session_id?: string; content?: string };
+        const sessionId = (body?.session_id ?? "").trim();
+        const content = (body?.content ?? "").toString();
+        if (!sessionId) return res.status(400).json({ error: "session_id required" });
+        if (!content.trim()) return res.status(400).json({ error: "content required" });
+
+        const { data, error } = await supabase
+          .from("chat_messages")
+          .insert({
+            api_key_hash: sha256hex(apiKey),
+            session_id: sessionId,
+            role: "user",
+            content,
+            status: "pending",
+          })
+          .select("id, session_id, created_at")
+          .single();
+        if (error) throw error;
+
+        return res.status(200).json({
+          message_id: data.id,
+          session_id: data.session_id,
+          created_at: data.created_at,
+        });
+      }
+
+      case "admin_channel_poll": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const sessionId = String(req.query.session_id ?? "").trim();
+        const after = String(req.query.after ?? "").trim();
+        if (!sessionId) return res.status(400).json({ error: "session_id required" });
+
+        let q = supabase
+          .from("chat_messages")
+          .select("*")
+          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("session_id", sessionId)
+          .order("created_at", { ascending: true })
+          .limit(200);
+
+        if (after) q = q.gt("created_at", after);
+
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "admin_channel_status": {
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("channel_status")
+          .select("last_seen, client_info")
+          .eq("api_key_hash", sha256hex(apiKey))
+          .maybeSingle();
+        if (error) throw error;
+
+        const lastSeen = data?.last_seen ?? null;
+        const ageMs = lastSeen ? Date.now() - new Date(lastSeen).getTime() : Infinity;
+        const active = ageMs < 90_000; // 90s grace window for 30s heartbeats
+
+        return res.status(200).json({
+          channel_active: active,
+          last_seen: lastSeen,
+          client_info: data?.client_info ?? null,
+        });
+      }
+
+      case "admin_channel_heartbeat": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as { client_info?: string };
+        const clientInfo = (body?.client_info ?? "").toString().slice(0, 500);
+
+        const { error } = await supabase
+          .from("channel_status")
+          .upsert(
+            {
+              api_key_hash: sha256hex(apiKey),
+              client_info: clientInfo || null,
+              last_seen: new Date().toISOString(),
+            },
+            { onConflict: "api_key_hash" }
+          );
+        if (error) throw error;
+
+        return res.status(200).json({ success: true });
+      }
+
+      case "admin_ai_chat": {
+        // Gemini fallback used when no Channel plugin is active.
+        // Keeps the chat UI functional without a local Claude Code install.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as { session_id?: string; content?: string };
+        const sessionId = (body?.session_id ?? "").trim();
+        const content = (body?.content ?? "").toString();
+        if (!sessionId) return res.status(400).json({ error: "session_id required" });
+        if (!content.trim()) return res.status(400).json({ error: "content required" });
+
+        const apiKeyHash = sha256hex(apiKey);
+
+        // Record the user turn so the two modes share one log.
+        await supabase.from("chat_messages").insert({
+          api_key_hash: apiKeyHash,
+          session_id: sessionId,
+          role: "user",
+          content,
+          status: "completed",
+          metadata: { mode: "gemini" },
+        });
+
+        const geminiKey = process.env.GEMINI_API_KEY;
+        let reply: string;
+        if (!geminiKey) {
+          reply =
+            "AI fallback is not configured. Connect a Claude Code Channel plugin " +
+            "from /memory/setup for free chat through your own Claude session.";
+        } else {
+          try {
+            const gres = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ role: "user", parts: [{ text: content }] }],
+                }),
+              }
+            );
+            const json = (await gres.json()) as {
+              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+              error?: { message?: string };
+            };
+            if (!gres.ok) {
+              reply = `Gemini error: ${json.error?.message ?? "unknown"}`;
+            } else {
+              reply =
+                json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ??
+                "(empty response)";
+            }
+          } catch (e) {
+            reply = `Gemini request failed: ${(e as Error).message}`;
+          }
+        }
+
+        const { data: assistantRow, error: insErr } = await supabase
+          .from("chat_messages")
+          .insert({
+            api_key_hash: apiKeyHash,
+            session_id: sessionId,
+            role: "assistant",
+            content: reply,
+            status: "completed",
+            metadata: { mode: "gemini" },
+          })
+          .select("id, created_at")
+          .single();
+        if (insErr) throw insErr;
+
+        return res.status(200).json({
+          message_id: assistantRow.id,
+          session_id: sessionId,
+          reply,
+          mode: "gemini",
+        });
       }
 
       default:

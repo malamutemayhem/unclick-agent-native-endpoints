@@ -1,0 +1,21 @@
+{
+  "name": "@unclick/channel",
+  "version": "0.1.0",
+  "description": "UnClick Channel plugin for Claude Code - routes admin chat through your Claude Code session so no separate AI key is needed.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "unclick-channel": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0"
+  }
+}

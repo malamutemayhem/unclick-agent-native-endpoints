@@ -34,7 +34,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Brain, Database, Monitor, CheckCircle2, ArrowRight } from "lucide-react";
+import AIChatPanel from "@/components/admin/AIChatPanel";
+import { Brain, Database, Monitor, CheckCircle2, ArrowRight, MessageSquare } from "lucide-react";
 
 interface MemoryConfigStatus {
   configured: boolean;
@@ -239,6 +240,14 @@ export default function MemoryAdminPage() {
               </ul>
             )}
           </div>
+        </div>
+
+        <div className="mt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-heading">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            Chat with your agent
+          </h2>
+          <AIChatPanel />
         </div>
 
         <div className="mt-6 rounded-xl border border-border/40 bg-card/20 p-8">

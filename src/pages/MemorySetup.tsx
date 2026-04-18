@@ -22,7 +22,7 @@ import { useCanonical } from "@/hooks/use-canonical";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Database, Check, Copy, ExternalLink, KeyRound, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import { Database, Check, Copy, ExternalLink, KeyRound, Sparkles, AlertCircle, Loader2, Terminal, ChevronRight } from "lucide-react";
 
 const API_KEY_STORAGE = "unclick_api_key";
 const EMAIL_STORAGE = "unclick_user_email";
@@ -477,6 +477,11 @@ export default function MemorySetupPage() {
           </FadeIn>
         )}
 
+        {/* Advanced: chat through Claude Code */}
+        <FadeIn delay={0.12}>
+          <ChannelSetupSection apiKey={apiKey} />
+        </FadeIn>
+
         {/* Subtle trust footer */}
         <FadeIn delay={0.15}>
           <p className="mt-8 text-center text-[11px] text-muted-foreground">
@@ -487,6 +492,112 @@ export default function MemorySetupPage() {
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+/**
+ * Optional: enable admin chat through Claude Code.
+ *
+ * Shows install + launch instructions for the @unclick/channel plugin so the
+ * admin chat can be routed through the user's own Claude Code session.
+ */
+function ChannelSetupSection({ apiKey }: { apiKey: string }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState<string>("");
+
+  const installCmd = "npm install -g @unclick/channel";
+  const exportCmd = apiKey
+    ? `export UNCLICK_API_KEY=${apiKey}`
+    : "export UNCLICK_API_KEY=your_api_key";
+  const launchCmd = "claude --channel @unclick/channel";
+  const previewCmd = "claude --dangerously-load-development-channels --channel @unclick/channel";
+
+  const doCopy = async (text: string, tag: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(tag);
+      setTimeout(() => setCopied(""), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <section className="mt-8 rounded-2xl border border-border/40 bg-card/20">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Terminal className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-heading">
+              Enable AI Chat through Claude Code (Optional)
+            </h3>
+            <p className="text-xs text-body">
+              Route your admin chat through your Claude Code session. No separate AI key needed.
+            </p>
+          </div>
+        </div>
+        <ChevronRight
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-border/30 px-5 py-5 text-xs text-body">
+          <ol className="list-decimal space-y-4 pl-5">
+            <li>
+              <p className="mb-1.5 font-medium text-heading">Install the channel plugin</p>
+              <CopyableCommand text={installCmd} copied={copied === "install"} onCopy={() => doCopy(installCmd, "install")} />
+            </li>
+            <li>
+              <p className="mb-1.5 font-medium text-heading">Set your UnClick API key</p>
+              <CopyableCommand text={exportCmd} copied={copied === "export"} onCopy={() => doCopy(exportCmd, "export")} />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Also set <span className="font-mono">UNCLICK_SUPABASE_URL</span> and
+                {" "}<span className="font-mono">UNCLICK_SUPABASE_ANON</span> to the UnClick project values.
+              </p>
+            </li>
+            <li>
+              <p className="mb-1.5 font-medium text-heading">Start Claude Code with the channel</p>
+              <CopyableCommand text={launchCmd} copied={copied === "launch"} onCopy={() => doCopy(launchCmd, "launch")} />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                If your Claude Code build gates channel loading behind a flag:
+              </p>
+              <CopyableCommand text={previewCmd} copied={copied === "preview"} onCopy={() => doCopy(previewCmd, "preview")} />
+            </li>
+          </ol>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11px] text-primary">
+            Once the channel is running, your admin chat at
+            {" "}<a href="/memory/admin" className="underline">/memory/admin</a> switches from the Gemini
+            fallback to your Claude Code session automatically.
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CopyableCommand({
+  text,
+  copied,
+  onCopy,
+}: {
+  text: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border/40 bg-card/60 px-3 py-2">
+      <code className="flex-1 overflow-x-auto font-mono text-[11px] text-heading">{text}</code>
+      <Button variant="ghost" size="sm" onClick={onCopy} className="shrink-0 h-7 px-2">
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      </Button>
     </div>
   );
 }
