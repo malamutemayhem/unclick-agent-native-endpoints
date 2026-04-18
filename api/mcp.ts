@@ -69,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sessionIdGenerator: undefined, // stateless mode — no sessions in serverless
   });
 
-  const server = createServer();
+  const server = await createServer();
 
   try {
     await server.connect(transport);
