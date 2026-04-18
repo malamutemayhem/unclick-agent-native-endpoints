@@ -1,9 +1,10 @@
 /**
- * AdminShell - OS shell layout for the five admin surfaces.
+ * AdminShell - OS shell layout for the admin surfaces.
  *
  * Persistent sidebar (desktop) or top nav (tablet) with surface icons,
- * user avatar/email, logout. Floating chat assistant stub in the
- * bottom-right corner. Content rendered via React Router <Outlet>.
+ * user avatar/email, logout. Floating chat assistant in the bottom-right
+ * corner that pops open the real AIChatPanel when enabled. Content
+ * rendered via React Router <Outlet>.
  *
  * Dark palette: bg #0A0A0A, primary teal #61C1C4, secondary amber #E2B93B.
  * Each surface is extractable as a native app later.
@@ -12,6 +13,8 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
+import AIChatPanel from "@/components/admin/AIChatPanel";
+import { aiChatEnvEnabled } from "@/components/admin/aiChatConfig";
 import {
   User,
   Brain,
@@ -23,11 +26,13 @@ import {
   MessageCircle,
   X,
   Menu,
+  Sparkles,
 } from "lucide-react";
 
 const surfaces = [
   { path: "/admin/you", label: "You", icon: User },
   { path: "/admin/memory", label: "Memory", icon: Brain },
+  { path: "/admin/orchestrator", label: "Orchestrator", icon: Sparkles },
   { path: "/admin/keychain", label: "Keychain", icon: KeyRound },
   { path: "/admin/tools", label: "Tools", icon: Wrench },
   { path: "/admin/activity", label: "Activity", icon: Activity },
@@ -63,6 +68,10 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const [chatOpen, setChatOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // If the AI chat feature flag is off, hide the bubble entirely. No
+  // "Coming soon" placeholder - either it works or it's not there.
+  const chatBubbleEnabled = aiChatEnvEnabled();
 
   async function handleLogout() {
     await signOut();
@@ -171,36 +180,47 @@ export default function AdminShell() {
         </div>
       </main>
 
-      {/* ── Floating chat assistant placeholder ────────────────────── */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {chatOpen && (
-          <div className="mb-3 w-72 rounded-2xl border border-white/[0.08] bg-[#111111] p-4 shadow-2xl sm:w-80">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#ccc]">Assistant</h3>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="rounded-md p-1 text-[#666] hover:text-[#ccc]"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      {/* ── Floating chat assistant (only when env-enabled) ────────── */}
+      {chatBubbleEnabled && (
+        <div className="fixed bottom-6 right-6 z-50">
+          {chatOpen && (
+            <div className="mb-3 w-[22rem] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111111] shadow-2xl sm:w-[26rem]">
+              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#ccc]">
+                  <Sparkles className="h-4 w-4 text-[#61C1C4]" />
+                  Assistant
+                </div>
+                <div className="flex items-center gap-1">
+                  <Link
+                    to="/admin/orchestrator"
+                    onClick={() => setChatOpen(false)}
+                    className="rounded-md px-2 py-1 font-mono text-[10px] text-[#888] transition-colors hover:bg-white/[0.04] hover:text-[#ccc]"
+                    title="Open full Orchestrator"
+                  >
+                    Expand
+                  </Link>
+                  <button
+                    onClick={() => setChatOpen(false)}
+                    className="rounded-md p-1 text-[#666] hover:text-[#ccc]"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="bg-[#0A0A0A] p-3">
+                <AIChatPanel />
+              </div>
             </div>
-            <div className="mt-4 flex flex-col items-center justify-center py-8">
-              <MessageCircle className="h-8 w-8 text-[#61C1C4]/40" />
-              <p className="mt-3 text-xs text-[#666]">Coming soon</p>
-              <p className="mt-1 text-[10px] text-[#444]">
-                Your AI assistant will live here
-              </p>
-            </div>
-          </div>
-        )}
-        <button
-          onClick={() => setChatOpen((v) => !v)}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#61C1C4] text-black shadow-lg transition-transform hover:scale-105 active:scale-95"
-          aria-label="Open assistant"
-        >
-          <MessageCircle className="h-5 w-5" />
-        </button>
-      </div>
+          )}
+          <button
+            onClick={() => setChatOpen((v) => !v)}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[#61C1C4] text-black shadow-lg transition-transform hover:scale-105 active:scale-95"
+            aria-label="Open assistant"
+          >
+            <MessageCircle className="h-5 w-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

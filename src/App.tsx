@@ -43,6 +43,7 @@ import RequireAuth from "./components/RequireAuth.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
 import AdminYou from "./pages/admin/AdminYou.tsx";
 import AdminMemory from "./pages/admin/AdminMemory.tsx";
+import AdminOrchestrator from "./pages/admin/AdminOrchestrator.tsx";
 import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
 import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
@@ -102,6 +103,7 @@ const App = () => (
             <Route index element={<Navigate to="/admin/you" replace />} />
             <Route path="you" element={<AdminYou />} />
             <Route path="memory" element={<AdminMemory />} />
+            <Route path="orchestrator" element={<AdminOrchestrator />} />
             <Route path="keychain" element={<AdminKeychain />} />
             <Route path="tools" element={<AdminTools />} />
             <Route path="activity" element={<AdminActivity />} />
