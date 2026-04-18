@@ -1,10 +1,12 @@
 import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import HealthCheck from "@/components/HealthCheck";
 
-type SettingsSection = "profile" | "api-keys" | "notifications" | "admin";
+type SettingsSection = "health" | "profile" | "api-keys" | "notifications" | "admin";
 
 const NAV_ITEMS: { id: SettingsSection; label: string; description: string }[] = [
+  { id: "health", label: "Health Check", description: "Detect competing memory tools" },
   { id: "profile", label: "Profile", description: "Manage your account details" },
   { id: "api-keys", label: "API Keys", description: "Create and revoke API keys" },
   { id: "notifications", label: "Notifications", description: "Configure alerts and emails" },
@@ -82,7 +84,24 @@ function AdminSection() {
   );
 }
 
+function HealthCheckSection() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold text-heading">Health Check</h2>
+        <p className="mt-1 text-sm text-body">
+          We look for competing memory tools that would cause duplicate facts or mixed-up
+          responses. Non-memory tools (GitHub, Slack, browsers, databases) don't overlap with
+          UnClick and are always safe to run alongside it.
+        </p>
+      </div>
+      <HealthCheck />
+    </div>
+  );
+}
+
 const SECTION_CONTENT: Record<SettingsSection, React.ReactNode> = {
+  health: <HealthCheckSection />,
   profile: <ProfileSection />,
   "api-keys": <ApiKeysSection />,
   notifications: <NotificationsSection />,
@@ -90,7 +109,7 @@ const SECTION_CONTENT: Record<SettingsSection, React.ReactNode> = {
 };
 
 export default function SettingsPage() {
-  const [active, setActive] = useState<SettingsSection>("profile");
+  const [active, setActive] = useState<SettingsSection>("health");
 
   return (
     <div className="min-h-screen">

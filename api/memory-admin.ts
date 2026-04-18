@@ -28,6 +28,15 @@
  *                   + nudge signal
  *   - list_devices: GET with Bearer <api_key>
  *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
+ *
+ * Conflict detection actions (competing memory tools):
+ *   - conflict_detect: POST with Bearer + { tool, platform? } -- log detection,
+ *                      returns { should_warn, detection_count }. Throttled 24h.
+ *   - conflict_check:  GET ?api_key=... -- list active (unresolved) conflicts
+ *   - conflict_dismiss: POST with Bearer + { tool, type } ("temporary" | "permanent")
+ *   - conflict_resolve: POST with Bearer + { tool } -- user removed the conflict
+ *   - check_duplicates: GET ?threshold=0.6 -- returns near-duplicate fact pairs
+ *   - health_summary:  GET ?api_key=... -- full health status for the user
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -619,6 +628,310 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .order("last_seen", { ascending: false });
         if (error) throw error;
         return res.status(200).json({ data: data ?? [] });
+      }
+
+      // ── Conflict detection (competing memory tools) ──────────────────
+      case "conflict_detect": {
+        // Called by the MCP server at session start. Throttles warnings to
+        // once per tool per 24h and returns detection count for escalation.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as { tool?: string; platform?: string };
+        const tool = (body?.tool ?? "").trim();
+        if (!tool) return res.status(400).json({ error: "tool required" });
+        const platform = body?.platform?.trim() || null;
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data: existing, error: qErr } = await supabase
+          .from("conflict_detections")
+          .select("id,detected_at,dismissed,dismiss_type,resolved")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("conflicting_tool", tool)
+          .order("detected_at", { ascending: false });
+        if (qErr) throw qErr;
+
+        const rows = existing ?? [];
+        const active = rows.filter((r) => !r.resolved);
+        const permanentDismiss = active.some(
+          (r) => r.dismissed && r.dismiss_type === "permanent",
+        );
+
+        // Honor "keep both" permanent dismissal: stop warning entirely.
+        if (permanentDismiss) {
+          return res.status(200).json({
+            should_warn: false,
+            detection_count: active.length,
+            reason: "dismissed_permanent",
+          });
+        }
+
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        const WEEK_MS = 7 * DAY_MS;
+        const latest = rows[0];
+        const latestAge = latest ? Date.now() - new Date(latest.detected_at).getTime() : Infinity;
+
+        // Temporary dismissal: suppress warnings for 7 days from dismiss time.
+        const tempDismissed = active.find(
+          (r) => r.dismissed && r.dismiss_type === "temporary",
+        );
+        if (tempDismissed) {
+          const age = Date.now() - new Date(tempDismissed.detected_at).getTime();
+          if (age < WEEK_MS) {
+            // Still log the detection silently for admin history.
+            await supabase.from("conflict_detections").insert({
+              api_key_hash: apiKeyHash,
+              conflicting_tool: tool,
+              platform,
+            });
+            return res.status(200).json({
+              should_warn: false,
+              detection_count: active.length,
+              reason: "dismissed_temporary",
+            });
+          }
+        }
+
+        // Log the new detection.
+        const { error: iErr } = await supabase.from("conflict_detections").insert({
+          api_key_hash: apiKeyHash,
+          conflicting_tool: tool,
+          platform,
+        });
+        if (iErr) throw iErr;
+
+        // Throttle: only warn if the most recent detection is more than 24h old
+        // (or there are no prior detections).
+        const shouldWarn = latestAge >= DAY_MS;
+
+        return res.status(200).json({
+          should_warn: shouldWarn,
+          detection_count: active.length + 1,
+        });
+      }
+
+      case "conflict_check": {
+        const apiKey = String(req.query.api_key ?? bearerFrom(req)).trim();
+        if (!apiKey) return res.status(401).json({ error: "api_key required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const { data, error } = await supabase
+          .from("conflict_detections")
+          .select("conflicting_tool,detected_at,dismissed,dismiss_type,resolved")
+          .eq("api_key_hash", apiKeyHash)
+          .order("detected_at", { ascending: false });
+        if (error) throw error;
+
+        const groups = new Map<
+          string,
+          {
+            tool: string;
+            last_detected: string;
+            count: number;
+            dismissed: boolean;
+            dismiss_type: string | null;
+            resolved: boolean;
+          }
+        >();
+
+        for (const row of data ?? []) {
+          const existing = groups.get(row.conflicting_tool);
+          if (existing) {
+            existing.count++;
+            // dismissed / resolved flags reflect the MOST RECENT entry
+            // (array is sorted desc by detected_at)
+            continue;
+          }
+          groups.set(row.conflicting_tool, {
+            tool: row.conflicting_tool,
+            last_detected: row.detected_at,
+            count: 1,
+            dismissed: !!row.dismissed,
+            dismiss_type: row.dismiss_type ?? null,
+            resolved: !!row.resolved,
+          });
+        }
+
+        const active = Array.from(groups.values()).filter((g) => !g.resolved);
+        return res.status(200).json({ conflicts: active });
+      }
+
+      case "conflict_dismiss": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req) || String(req.body?.api_key ?? "").trim();
+        if (!apiKey) return res.status(401).json({ error: "api_key required" });
+        const tool = String(req.body?.tool ?? "").trim();
+        const type = req.body?.type === "permanent" ? "permanent" : "temporary";
+        if (!tool) return res.status(400).json({ error: "tool required" });
+
+        const { error } = await supabase
+          .from("conflict_detections")
+          .update({
+            dismissed: true,
+            dismissed_at: new Date().toISOString(),
+            dismiss_type: type,
+          })
+          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("conflicting_tool", tool)
+          .eq("resolved", false);
+        if (error) throw error;
+        return res.status(200).json({ success: true, dismiss_type: type });
+      }
+
+      case "conflict_resolve": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req) || String(req.body?.api_key ?? "").trim();
+        if (!apiKey) return res.status(401).json({ error: "api_key required" });
+        const tool = String(req.body?.tool ?? "").trim();
+        if (!tool) return res.status(400).json({ error: "tool required" });
+
+        const { error } = await supabase
+          .from("conflict_detections")
+          .update({
+            resolved: true,
+            resolved_at: new Date().toISOString(),
+          })
+          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("conflicting_tool", tool);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "check_duplicates": {
+        const threshold = parseFloat((req.query.threshold as string) ?? "0.6");
+        const { data, error } = await supabase
+          .from("extracted_facts")
+          .select("id,fact")
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+
+        const facts = (data ?? []) as Array<{ id: string; fact: string }>;
+        const tokenize = (s: string): Set<string> =>
+          new Set(
+            s
+              .toLowerCase()
+              .replace(/[^a-z0-9\s]/g, " ")
+              .split(/\s+/)
+              .filter((w) => w.length > 2),
+          );
+
+        const tokens = facts.map((f) => ({ id: f.id, fact: f.fact, tokens: tokenize(f.fact) }));
+
+        const pairs: Array<{
+          facts: Array<{ id: string; text: string }>;
+          similarity: number;
+        }> = [];
+
+        for (let i = 0; i < tokens.length; i++) {
+          for (let j = i + 1; j < tokens.length; j++) {
+            const a = tokens[i].tokens;
+            const b = tokens[j].tokens;
+            if (a.size === 0 || b.size === 0) continue;
+            let overlap = 0;
+            for (const t of a) if (b.has(t)) overlap++;
+            const similarity = overlap / Math.max(a.size, b.size);
+            if (similarity >= threshold) {
+              pairs.push({
+                facts: [
+                  { id: tokens[i].id, text: tokens[i].fact },
+                  { id: tokens[j].id, text: tokens[j].fact },
+                ],
+                similarity,
+              });
+            }
+          }
+        }
+
+        return res.status(200).json({ duplicate_groups: pairs });
+      }
+
+      case "health_summary": {
+        const apiKey = String(req.query.api_key ?? bearerFrom(req)).trim();
+        if (!apiKey) return res.status(401).json({ error: "api_key required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        const [factsRes, sessionsRes, bcRes, recentSessionsRes, conflictsRes] = await Promise.all([
+          supabase.from("extracted_facts").select("id", { count: "exact", head: true }).eq("status", "active"),
+          supabase.from("session_summaries").select("id,created_at", { count: "exact" }).order("created_at", { ascending: false }).limit(10),
+          supabase.from("business_context").select("id", { count: "exact", head: true }),
+          supabase.from("session_summaries").select("id").gte("created_at", since7d),
+          supabase
+            .from("conflict_detections")
+            .select("conflicting_tool,detected_at,dismissed,resolved")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("resolved", false)
+            .order("detected_at", { ascending: false }),
+        ]);
+
+        const factCount = factsRes.count ?? 0;
+        const sessionCount = sessionsRes.count ?? 0;
+        const identityCount = bcRes.count ?? 0;
+        const recentSessions = recentSessionsRes.data ?? [];
+        const lastSession = sessionsRes.data?.[0]?.created_at ?? null;
+
+        const conflicts = (conflictsRes.data ?? []) as Array<{
+          conflicting_tool: string;
+          detected_at: string;
+          dismissed: boolean;
+        }>;
+        const activeConflictTools = Array.from(
+          new Set(conflicts.filter((c) => !c.dismissed).map((c) => c.conflicting_tool)),
+        );
+
+        // Duplicate count: reuse the similarity check but cap at light sample.
+        let duplicateCount = 0;
+        try {
+          const { data: sample } = await supabase
+            .from("extracted_facts")
+            .select("id,fact")
+            .eq("status", "active")
+            .order("created_at", { ascending: false })
+            .limit(100);
+          const rows = (sample ?? []) as Array<{ id: string; fact: string }>;
+          const tok = rows.map((r) =>
+            new Set(
+              r.fact
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, " ")
+                .split(/\s+/)
+                .filter((w) => w.length > 2),
+            ),
+          );
+          for (let i = 0; i < tok.length; i++) {
+            for (let j = i + 1; j < tok.length; j++) {
+              if (tok[i].size === 0 || tok[j].size === 0) continue;
+              let overlap = 0;
+              for (const t of tok[i]) if (tok[j].has(t)) overlap++;
+              const sim = overlap / Math.max(tok[i].size, tok[j].size);
+              if (sim >= 0.6) duplicateCount++;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const memoryLoadRate = 1; // Placeholder: we don't track load_memory calls yet.
+
+        let status: "healthy" | "has_conflicts" | "inactive" | "not_configured" = "healthy";
+        if (factCount === 0 && sessionCount === 0) status = "not_configured";
+        else if (recentSessions.length === 0) status = "inactive";
+        else if (activeConflictTools.length > 0) status = "has_conflicts";
+
+        return res.status(200).json({
+          fact_count: factCount,
+          session_count: sessionCount,
+          identity_entries: identityCount,
+          active_conflicts: activeConflictTools,
+          memory_load_rate: memoryLoadRate,
+          duplicate_count: duplicateCount,
+          last_session_date: lastSession,
+          sessions_last_7d: recentSessions.length,
+          status,
+        });
       }
 
       case "remove_device": {

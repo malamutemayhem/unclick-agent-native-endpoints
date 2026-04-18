@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Database, Check, Copy, ExternalLink, KeyRound, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import HealthCheck from "@/components/HealthCheck";
 
 const API_KEY_STORAGE = "unclick_api_key";
 const EMAIL_STORAGE = "unclick_user_email";
@@ -465,6 +466,17 @@ export default function MemorySetupPage() {
                   <Copy className="mr-1.5 h-3.5 w-3.5" />
                   {configCopied ? "Copied" : "Copy config"}
                 </Button>
+              </div>
+
+              {/* Step 3 health check: catch any competing memory tools early */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-heading">Quick health check</h3>
+                <p className="mt-1 text-xs text-body">
+                  We'll look for other memory tools that could fight UnClick for the same facts.
+                </p>
+                <div className="mt-3">
+                  <HealthCheck compact />
+                </div>
               </div>
 
               <div className="mt-8 flex items-center justify-between rounded-lg border border-border/40 bg-card/30 p-4 text-xs text-body">

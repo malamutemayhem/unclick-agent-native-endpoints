@@ -34,6 +34,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import DuplicateFactsBanner from "@/components/DuplicateFactsBanner";
 import { Brain, Database, Monitor, CheckCircle2, ArrowRight } from "lucide-react";
 
 interface MemoryConfigStatus {
@@ -121,6 +122,9 @@ export default function MemoryAdminPage() {
             <p className="text-sm text-body">View and manage your agent's persistent memory</p>
           </div>
         </div>
+
+        {/* Duplicate fact detection - shown when two memory tools have been saving overlapping facts */}
+        <DuplicateFactsBanner />
 
         {/* Top-level nudge: user has 2+ devices on local storage but no cloud config */}
         {shouldNudge && (
