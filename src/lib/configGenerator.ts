@@ -8,7 +8,7 @@
  * and the MemoryConnect page can render the same output.
  */
 
-export type Platform = "claude-code" | "cursor" | "windsurf" | "copilot";
+export type Platform = "claude-code" | "cursor" | "windsurf" | "copilot" | "chatgpt";
 
 export interface BusinessContextEntry {
   category: string;
@@ -28,6 +28,7 @@ const PLATFORM_FILENAMES: Record<Platform, string> = {
   cursor: ".cursor/rules/unclick.mdc",
   windsurf: ".windsurfrules",
   copilot: ".github/copilot-instructions.md",
+  chatgpt: "(no file needed)",
 };
 
 const PLATFORM_TOOL_NAME: Record<Platform, string> = {
@@ -35,6 +36,7 @@ const PLATFORM_TOOL_NAME: Record<Platform, string> = {
   cursor: "get_startup_context",
   windsurf: "load_memory",
   copilot: "load_memory",
+  chatgpt: "load_memory",
 };
 
 const PLATFORM_LABELS: Record<Platform, string> = {
@@ -42,7 +44,13 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   cursor: "Cursor",
   windsurf: "Windsurf",
   copilot: "Copilot",
+  chatgpt: "ChatGPT",
 };
+
+/** Platforms that read context directly from the MCP server, not from a config file. */
+export function platformHasConfigFile(platform: Platform): boolean {
+  return platform !== "chatgpt";
+}
 
 export function platformLabel(platform: Platform): string {
   return PLATFORM_LABELS[platform];
@@ -98,6 +106,16 @@ export function generateConfig(
   platform: Platform,
   entries: BusinessContextEntry[]
 ): GeneratedConfig {
+  if (platform === "chatgpt") {
+    return {
+      filename: PLATFORM_FILENAMES.chatgpt,
+      content:
+        "ChatGPT loads your identity automatically via UnClick. No config file needed.",
+      instructions:
+        "Once the UnClick MCP server is added in ChatGPT's settings, your identity, facts, and session history are pulled in automatically at the start of every conversation. Nothing else to install.",
+    };
+  }
+
   const body = buildBody(platform, entries);
   const filename = PLATFORM_FILENAMES[platform];
 

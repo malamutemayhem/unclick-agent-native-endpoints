@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   generateConfig,
   platformFilename,
+  platformHasConfigFile,
   platformLabel,
   type BusinessContextEntry,
   type Platform,
@@ -47,7 +48,7 @@ import {
 
 const API_KEY_STORAGE = "unclick_api_key";
 const PLATFORM_STORAGE = "unclick_platform";
-const PLATFORMS: Platform[] = ["claude-code", "cursor", "windsurf", "copilot"];
+const PLATFORMS: Platform[] = ["claude-code", "cursor", "windsurf", "copilot", "chatgpt"];
 
 const SERVER_URL = "https://unclick.world/api/mcp";
 
@@ -368,58 +369,74 @@ export default function AdminSettings() {
         <section className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
           <h2 className="text-sm font-semibold text-white">Your AI Config</h2>
           <p className="mt-1 text-xs text-white/60">
-            UnClick can generate a config file for your AI tool so it knows who you are from the
-            first message.
+            {platformHasConfigFile(platform)
+              ? "UnClick can generate a config file for your AI tool so it knows who you are from the first message."
+              : `${platformLabel(platform)} loads your identity automatically via UnClick. No config file needed.`}
           </p>
 
-          <div className="mt-4 space-y-3 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <FileText className="h-4 w-4 text-white/40" />
-              <span className="text-white/50">Config file type:</span>
-              <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11px] text-[#61C1C4]">
-                {platformFilename(platform)}
-              </code>
-              <span className="text-white/40">(auto-selected from your platform choice)</span>
-            </div>
-            {serverConfig && (
-              <p className="text-white/40">
-                Last generated {formatRelative(serverConfig.generated_at)} for{" "}
-                {platformLabel(platform)}.
-              </p>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={handlePreview}>
-              {previewOpen ? "Refresh preview" : "Preview"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={regenerateFromServer}
-              disabled={generating || !apiKey}
-            >
-              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
-              Regenerate
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleCopy}>
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              Copy
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleDownload}>
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Download
-            </Button>
-          </div>
-
-          {previewOpen && (
-            <div className="mt-4 rounded-md border border-white/[0.06] bg-black/40">
-              <div className="border-b border-white/[0.06] px-3 py-2 font-mono text-[11px] text-white/40">
-                {activeConfig.filename}
+          {platformHasConfigFile(platform) ? (
+            <>
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <FileText className="h-4 w-4 text-white/40" />
+                  <span className="text-white/50">Config file type:</span>
+                  <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11px] text-[#61C1C4]">
+                    {platformFilename(platform)}
+                  </code>
+                  <span className="text-white/40">(auto-selected from your platform choice)</span>
+                </div>
+                {serverConfig && (
+                  <p className="text-white/40">
+                    Last generated {formatRelative(serverConfig.generated_at)} for{" "}
+                    {platformLabel(platform)}.
+                  </p>
+                )}
               </div>
-              <pre className="max-h-[420px] overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/90">
-                {activeConfig.content}
-              </pre>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={handlePreview}>
+                  {previewOpen ? "Refresh preview" : "Preview"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={regenerateFromServer}
+                  disabled={generating || !apiKey}
+                >
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
+                  Regenerate
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCopy}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDownload}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download
+                </Button>
+              </div>
+
+              {previewOpen && (
+                <div className="mt-4 rounded-md border border-white/[0.06] bg-black/40">
+                  <div className="border-b border-white/[0.06] px-3 py-2 font-mono text-[11px] text-white/40">
+                    {activeConfig.filename}
+                  </div>
+                  <pre className="max-h-[420px] overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/90">
+                    {activeConfig.content}
+                  </pre>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="mt-4 rounded-md border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-white/70">
+              <p>
+                Once the UnClick MCP server is added in {platformLabel(platform)}'s settings, your
+                identity, facts, and session history are pulled in automatically at the start of
+                every conversation. Nothing to install, nothing to paste.
+              </p>
+              <p className="mt-2 text-white/40">
+                See setup steps via "View setup steps for {platformLabel(platform)}" above.
+              </p>
             </div>
           )}
         </section>

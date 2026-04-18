@@ -99,6 +99,16 @@ const OTHER_CLIENTS: ClientCommand[] = [
         2,
       ),
   },
+  {
+    name: "ChatGPT",
+    description:
+      "ChatGPT desktop app, Settings, Tools and Integrations. Add an MCP server with the URL and Authorization header below, then restart ChatGPT.",
+    command: (k) =>
+      [
+        "URL: https://unclick.world/api/mcp",
+        `Authorization: Bearer ${k}`,
+      ].join("\n"),
+  },
 ];
 
 export default function MemoryConnectPage() {
