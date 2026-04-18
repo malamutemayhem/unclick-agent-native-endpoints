@@ -1,5 +1,5 @@
 // Hacker News Firebase API integration.
-// No authentication required — completely open.
+// No authentication required - completely open.
 // Base URL: https://hacker-news.firebaseio.com/v0/
 
 const HN_BASE = "https://hacker-news.firebaseio.com/v0";

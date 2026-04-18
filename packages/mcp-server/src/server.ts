@@ -79,7 +79,7 @@ const META_TOOLS = [
       properties: {
         query: {
           type: "string",
-          description: "Search term — describe what you want to do",
+          description: "Search term - describe what you want to do",
         },
         category: {
           type: "string",
@@ -269,7 +269,7 @@ const DIRECT_TOOLS = [
       properties: {
         text: { type: "string", description: "Text or URL to encode in the QR code" },
         format: { type: "string", enum: ["png", "svg"], default: "png" },
-        size: { type: "number", description: "Image size in pixels (100–1000)", default: 300 },
+        size: { type: "number", description: "Image size in pixels (100-1000)", default: 300 },
       },
       required: ["text"],
     },
@@ -842,7 +842,7 @@ export async function createServer(): Promise<Server> {
     await Promise.all(uris.map(notifyResourceUpdated));
   }
 
-  // LIST TOOLS — expose only the 4 meta tools; individual tools remain callable
+  // LIST TOOLS - expose only the 4 meta tools; individual tools remain callable
   // via unclick_call for backwards compat but aren't advertised to reduce noise.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools: [...META_TOOLS] };
@@ -982,7 +982,7 @@ export async function createServer(): Promise<Server> {
         for (const [cat, tools] of Object.entries(byCategory)) {
           lines.push(`## ${cat.toUpperCase()}`);
           for (const tool of tools) {
-            lines.push(`- **${tool.name}** (\`${tool.slug}\`) — ${tool.description}`);
+            lines.push(`- **${tool.name}** (\`${tool.slug}\`) - ${tool.description}`);
           }
           lines.push("");
         }
@@ -1023,7 +1023,7 @@ export async function createServer(): Promise<Server> {
         ];
 
         for (const ep of tool.endpoints) {
-          lines.push(`### \`${ep.id}\` — ${ep.name}`);
+          lines.push(`### \`${ep.id}\` - ${ep.name}`);
           lines.push(ep.description);
           lines.push(`**Method:** ${ep.method}  |  **Path:** ${ep.path}`);
           lines.push(`**Input Schema:**`);
@@ -1153,6 +1153,6 @@ export async function startServer(): Promise<void> {
   const server = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // Server is running — errors go to stderr so they don't corrupt the MCP stream
+  // Server is running - errors go to stderr so they don't corrupt the MCP stream
   process.stderr.write("UnClick MCP server running on stdio\n");
 }

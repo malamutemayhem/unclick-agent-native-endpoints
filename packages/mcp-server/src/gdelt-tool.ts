@@ -1,4 +1,4 @@
-// GDELT Project integration — global news intelligence, no auth required.
+// GDELT Project integration - global news intelligence, no auth required.
 // Docs: https://www.gdeltproject.org/
 // DOC API: https://api.gdeltproject.org/api/v2/doc/doc
 // GEO API: https://api.gdeltproject.org/api/v2/geo/geo
@@ -88,7 +88,7 @@ export async function gdeltNewsSearch(args: Record<string, unknown>): Promise<un
 }
 
 // ─── gdelt_tone_analysis ──────────────────────────────────────────────────────
-// Uses timelinetone mode — returns average tone score over time.
+// Uses timelinetone mode - returns average tone score over time.
 // Negative values = negative sentiment; positive = positive sentiment.
 
 export async function gdeltToneAnalysis(args: Record<string, unknown>): Promise<unknown> {
@@ -144,7 +144,7 @@ export async function gdeltToneAnalysis(args: Record<string, unknown>): Promise<
 }
 
 // ─── gdelt_geo_events ─────────────────────────────────────────────────────────
-// Uses the GDELT GEO API — returns geographic event clusters with article counts and tone.
+// Uses the GDELT GEO API - returns geographic event clusters with article counts and tone.
 
 export async function gdeltGeoEvents(args: Record<string, unknown>): Promise<unknown> {
   const query = String(args.query ?? "").trim();
@@ -180,7 +180,7 @@ export async function gdeltGeoEvents(args: Record<string, unknown>): Promise<unk
 }
 
 // ─── gdelt_trending ───────────────────────────────────────────────────────────
-// Uses timelinevol mode — returns article volume over time for a query.
+// Uses timelinevol mode - returns article volume over time for a query.
 // Shows whether a topic is surging, stable, or fading in the news cycle.
 
 export async function gdeltTrending(args: Record<string, unknown>): Promise<unknown> {

@@ -1,5 +1,5 @@
-// Numbers API integration — interesting facts about numbers, dates, and years.
-// No authentication required — completely free and open.
+// Numbers API integration - interesting facts about numbers, dates, and years.
+// No authentication required - completely free and open.
 // Base URL: http://numbersapi.com/
 
 const NUMBERS_BASE = "http://numbersapi.com";

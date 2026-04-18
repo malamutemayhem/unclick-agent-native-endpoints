@@ -1,5 +1,5 @@
 // Open-Meteo weather API integration.
-// No authentication required — completely free and open.
+// No authentication required - completely free and open.
 // Base URL: https://api.open-meteo.com/v1/
 // Geocoding: https://geocoding-api.open-meteo.com/v1/search
 

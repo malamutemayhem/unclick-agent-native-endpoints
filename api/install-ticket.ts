@@ -352,7 +352,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Try a few times in case of collision on the small readable space.
       let ticket = "";
-      let expiresAt = new Date(
+      const expiresAt = new Date(
         Date.now() + TICKET_TTL_HOURS * 60 * 60 * 1000,
       ).toISOString();
       for (let attempt = 0; attempt < 5; attempt++) {

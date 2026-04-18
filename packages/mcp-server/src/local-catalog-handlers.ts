@@ -941,7 +941,7 @@ export const LOCAL_CATALOG_HANDLERS: Record<string, LocalHandler> = {
     const d = parseTs(ts);
     if (isNaN(d.getTime())) return { error: `Cannot parse timestamp: ${ts}` };
     const dur = (args.duration ?? {}) as Record<string, number>;
-    let ms = d.getTime() + (dur.seconds ?? 0) * 1000 + (dur.minutes ?? 0) * 60000 + (dur.hours ?? 0) * 3600000 + (dur.days ?? 0) * 86400000 + (dur.weeks ?? 0) * 604800000;
+    const ms = d.getTime() + (dur.seconds ?? 0) * 1000 + (dur.minutes ?? 0) * 60000 + (dur.hours ?? 0) * 3600000 + (dur.days ?? 0) * 86400000 + (dur.weeks ?? 0) * 604800000;
     const result = new Date(ms);
     if (dur.months) result.setMonth(result.getMonth() + dur.months);
     if (dur.years) result.setFullYear(result.getFullYear() + dur.years);

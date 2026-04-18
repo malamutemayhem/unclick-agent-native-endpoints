@@ -116,9 +116,9 @@ function randomColorRgb(): { r: number; g: number; b: number; css: string } {
 }
 
 function randomColorHsl(): { h: number; s: number; l: number; css: string } {
-  const h = randomInt(361);       // 0–360
-  const s = randomInt(101);       // 0–100
-  const l = randomInt(101);       // 0–100
+  const h = randomInt(361);       // 0-360
+  const s = randomInt(101);       // 0-100
+  const l = randomInt(101);       // 0-100
   return { h, s, l, css: `hsl(${h}, ${s}%, ${l}%)` };
 }
 

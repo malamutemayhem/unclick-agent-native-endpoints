@@ -1,5 +1,5 @@
-// Radio Browser API integration — 50,000+ internet radio stations worldwide.
-// No authentication required — completely free and open.
+// Radio Browser API integration - 50,000+ internet radio stations worldwide.
+// No authentication required - completely free and open.
 // Base URL: https://de1.api.radio-browser.info/json/
 
 const RADIO_BASE = "https://de1.api.radio-browser.info/json";

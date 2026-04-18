@@ -1,6 +1,6 @@
 /**
  * UnClick OAuth Callback Handler
- * Vercel serverless function — exchanges OAuth authorization code for tokens
+ * Vercel serverless function - exchanges OAuth authorization code for tokens
  * and stores them encrypted in Supabase via the credentials endpoint.
  *
  * POST /api/oauth-callback
@@ -79,7 +79,7 @@ const PLATFORM_CONFIGS: Record<string, OAuthConfig> = {
     },
   },
 
-  // Shopify OAuth is per-store — the redirect URI and token URL include the store name.
+  // Shopify OAuth is per-store - the redirect URI and token URL include the store name.
   // Handled specially in the handler below.
 
 };

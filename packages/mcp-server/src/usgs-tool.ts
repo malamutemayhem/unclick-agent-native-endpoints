@@ -1,5 +1,5 @@
 // ─── USGS Earthquake Data ─────────────────────────────────────────────────────
-// Free USGS Earthquake Hazards Program API — no auth required.
+// Free USGS Earthquake Hazards Program API - no auth required.
 // Docs: https://earthquake.usgs.gov/fdsnws/event/1/
 
 const USGS_BASE = "https://earthquake.usgs.gov/fdsnws/event/1";

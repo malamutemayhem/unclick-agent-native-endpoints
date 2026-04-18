@@ -1,5 +1,5 @@
 // ─── Pure-local tool implementations ────────────────────────────────────────
-// These run entirely inside the MCP process — no API calls, no external deps.
+// These run entirely inside the MCP process - no API calls, no external deps.
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TEXT COUNT
@@ -79,7 +79,7 @@ export function generateLorem(
   if (unit === "sentences") {
     const sentences: string[] = [];
     for (let i = 0; i < count; i++) {
-      const len = 7 + (i * 4 % 9); // 7–15 words
+      const len = 7 + (i * 4 % 9); // 7-15 words
       sentences.push(loremSentence(i * 11 + 5, len));
     }
     const out = sentences.join(" ");
@@ -89,10 +89,10 @@ export function generateLorem(
   // paragraphs
   const paras: string[] = [];
   for (let p = 0; p < count; p++) {
-    const sentCount = 3 + (p % 3); // 3–5 sentences
+    const sentCount = 3 + (p % 3); // 3-5 sentences
     const sentences: string[] = [];
     for (let s = 0; s < sentCount; s++) {
-      const len = 8 + ((p * 5 + s * 3) % 10); // 8–17 words
+      const len = 8 + ((p * 5 + s * 3) % 10); // 8-17 words
       sentences.push(loremSentence(p * 50 + s * 13 + 5, len));
     }
     paras.push(sentences.join(" "));
@@ -124,7 +124,7 @@ export function decodeJwt(token: string) {
     header,
     payload,
     signature: parts[2],
-    warning: "Signature NOT verified — for inspection only",
+    warning: "Signature NOT verified - for inspection only",
   };
 
   if (typeof payload.iat === "number") {
@@ -194,7 +194,7 @@ const HTTP_STATUSES: Record<number, { phrase: string; category: string; descript
   415: { phrase: "Unsupported Media Type", category: "Client Error", description: "The request entity has a media type which the server or resource does not support." },
   416: { phrase: "Range Not Satisfiable", category: "Client Error", description: "The client has asked for a portion of the file, but the server cannot supply that portion." },
   417: { phrase: "Expectation Failed", category: "Client Error", description: "The server cannot meet the requirements of the Expect request-header field." },
-  418: { phrase: "I'm a Teapot", category: "Client Error", description: "The server refuses the attempt to brew coffee with a teapot. (RFC 2324, April Fools' joke — but real!)" },
+  418: { phrase: "I'm a Teapot", category: "Client Error", description: "The server refuses the attempt to brew coffee with a teapot. (RFC 2324, April Fools' joke - but real!)" },
   421: { phrase: "Misdirected Request", category: "Client Error", description: "The request was directed at a server that is not able to produce a response." },
   422: { phrase: "Unprocessable Content", category: "Client Error", description: "The request was well-formed but was unable to be followed due to semantic errors." },
   423: { phrase: "Locked", category: "Client Error", description: "The resource that is being accessed is locked." },
@@ -617,7 +617,7 @@ export function generateChangelog(opts: {
 
 export function getFaviconUrls(input: string) {
   // Normalise: strip protocol, path, etc.
-  let domain = input.trim().replace(/^https?:\/\//i, "").split("/")[0].split("?")[0];
+  const domain = input.trim().replace(/^https?:\/\//i, "").split("/")[0].split("?")[0];
   if (!domain) throw new Error("Could not parse domain from input");
 
   const directUrl = `https://${domain}/favicon.ico`;

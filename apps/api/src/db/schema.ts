@@ -649,7 +649,7 @@ export const marketplaceRatings = pgTable('marketplace_ratings', {
   id: text('id').primaryKey(),
   toolId: text('tool_id').notNull(),
   orgId: text('org_id').notNull(),
-  /** 1–5 integer star rating */
+  /** 1-5 integer star rating */
   rating: integer('rating').notNull(),
   review: text('review'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

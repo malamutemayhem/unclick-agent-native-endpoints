@@ -1,5 +1,5 @@
 // Australian Business Registry (ABN Lookup) integration.
-// Uses the free ABR JSONP API — no authentication required.
+// Uses the free ABR JSONP API - no authentication required.
 // Base URL: https://abr.business.gov.au/json/
 
 const ABN_BASE = "https://abr.business.gov.au/json";

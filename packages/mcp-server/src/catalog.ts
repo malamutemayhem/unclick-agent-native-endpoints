@@ -684,7 +684,7 @@ export const CATALOG: ToolDef[] = [
       {
         id: "json.merge",
         name: "Deep Merge",
-        description: "Deep-merge 2–10 JSON objects.",
+        description: "Deep-merge 2-10 JSON objects.",
         method: "POST",
         path: "/v1/json/merge",
         requiresAuth: true,
@@ -1180,7 +1180,7 @@ export const CATALOG: ToolDef[] = [
       {
         id: "color.mix",
         name: "Mix Colors",
-        description: "Blend two colors at a given weight (0.0–1.0).",
+        description: "Blend two colors at a given weight (0.0-1.0).",
         method: "POST",
         path: "/v1/color/mix",
         requiresAuth: true,
@@ -1213,7 +1213,7 @@ export const CATALOG: ToolDef[] = [
       {
         id: "color.lighten",
         name: "Lighten",
-        description: "Increase a color's lightness by a percentage (0–100).",
+        description: "Increase a color's lightness by a percentage (0-100).",
         method: "POST",
         path: "/v1/color/lighten",
         requiresAuth: true,
@@ -1229,7 +1229,7 @@ export const CATALOG: ToolDef[] = [
       {
         id: "color.darken",
         name: "Darken",
-        description: "Decrease a color's lightness by a percentage (0–100).",
+        description: "Decrease a color's lightness by a percentage (0-100).",
         method: "POST",
         path: "/v1/color/darken",
         requiresAuth: true,
@@ -1903,7 +1903,7 @@ export const CATALOG: ToolDef[] = [
     ],
   },
   // ─── MEMORY (persistent cross-session memory) ────────────────────────
-  // Handled by the local memory module — no HTTP call is made. The 5 most
+  // Handled by the local memory module - no HTTP call is made. The 5 most
   // important tools (get_startup_context, write_session_summary, add_fact,
   // search_memory, set_business_context) are also registered as direct
   // MCP tools so agents discover the session protocol.

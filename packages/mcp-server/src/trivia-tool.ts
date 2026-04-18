@@ -1,5 +1,5 @@
 // Open Trivia Database integration.
-// No authentication required — completely free and open.
+// No authentication required - completely free and open.
 // Base URL: https://opentdb.com/
 
 const OPENTDB_BASE = "https://opentdb.com";
@@ -7,11 +7,11 @@ const OPENTDB_BASE = "https://opentdb.com";
 // Response codes from the API
 const RESPONSE_CODES: Record<number, string> = {
   0: "Success",
-  1: "No results — the database does not have enough questions for the requested parameters.",
-  2: "Invalid parameter — one or more query parameters is invalid.",
+  1: "No results - the database does not have enough questions for the requested parameters.",
+  2: "Invalid parameter - one or more query parameters is invalid.",
   3: "Token not found.",
-  4: "Token is empty — all available questions have been returned.",
-  5: "Rate limit — too many requests. Please wait 5 seconds before trying again.",
+  4: "Token is empty - all available questions have been returned.",
+  5: "Rate limit - too many requests. Please wait 5 seconds before trying again.",
 };
 
 interface TriviaQuestion {

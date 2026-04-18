@@ -442,7 +442,7 @@ export default async function handler(req: any, res: any) {
       if ((sol.votes ?? 0) > cur) maxVotesPerProblem[sol.problem_id] = sol.votes ?? 0;
     }
 
-    const entries = Object.entries(stats).map(([bot_name, s], i) => {
+    const entries = Object.entries(stats).map(([bot_name, s]) => {
       const problems_entered = Object.keys(s.problems).length;
       const wins = Object.entries(s.problems).filter(([pid, v]) => maxVotesPerProblem[pid] === v && v > 0).length;
       const meta = botMeta[bot_name] ?? { model: null, description: null };

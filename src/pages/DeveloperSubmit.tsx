@@ -66,9 +66,9 @@ export default function DeveloperSubmitPage() {
       }
 
       setStatus("success");
-    } catch (err: any) {
+    } catch (err) {
       setStatus("error");
-      setErrorMsg(err.message || "Something went wrong. Please try again.");
+      setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     }
   };
 

@@ -1,5 +1,5 @@
 // ─── Open Food Facts Product Database ────────────────────────────────────────
-// Free, open-source food product database — no auth required.
+// Free, open-source food product database - no auth required.
 // Docs: https://wiki.openfoodfacts.org/API
 
 const OFF_BASE = "https://world.openfoodfacts.org";

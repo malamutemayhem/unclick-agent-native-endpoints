@@ -220,7 +220,7 @@ export async function bggUserCollection(args: Record<string, unknown>): Promise<
 }
 
 // ─── bgg_top_games ────────────────────────────────────────────────────────────
-// GET /hot?type=boardgame — returns BGG's "Hotness" list (top 50)
+// GET /hot?type=boardgame - returns BGG's "Hotness" list (top 50)
 
 export async function bggTopGames(args: Record<string, unknown>): Promise<unknown> {
   const limit = Math.min(Number(args.limit ?? 20), 50);

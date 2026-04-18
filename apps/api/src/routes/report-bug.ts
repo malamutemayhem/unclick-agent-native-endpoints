@@ -145,7 +145,7 @@ export function createReportBugRouter(db: Db) {
 
     const createdAt = (report.createdAt as Date).toISOString();
 
-    // Fire-and-forget email — don't block the response
+    // Fire-and-forget email - don't block the response
     sendBugEmail({
       tool_name: report.toolName,
       error_message: report.errorMessage,

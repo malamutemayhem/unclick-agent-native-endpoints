@@ -1,11 +1,11 @@
 // ─── Credential Broker: vault-bridge ──────────────────────────────────────────
 // Resolves platform credentials before any tool call.
 // Resolution order (first match wins):
-//   1. Inline args    — credentials already in the tool call (pass-through)
-//   2. Env vars       — UNCLICK_{SLUG}_{FIELD} (e.g., UNCLICK_XERO_ACCESS_TOKEN)
-//   3. Local vault    — keys "{slug}/{field}" in ~/.unclick/vault.enc
+//   1. Inline args    - credentials already in the tool call (pass-through)
+//   2. Env vars       - UNCLICK_{SLUG}_{FIELD} (e.g., UNCLICK_XERO_ACCESS_TOKEN)
+//   3. Local vault    - keys "{slug}/{field}" in ~/.unclick/vault.enc
 //                       requires UNCLICK_VAULT_PASSWORD env var to auto-unlock
-//   4. Supabase       — encrypted credentials stored via unclick.world/connect/{slug}
+//   4. Supabase       - encrypted credentials stored via unclick.world/connect/{slug}
 //                       requires UNCLICK_API_KEY env var (the user's UnClick API key)
 //                       fetches from https://unclick.world/api/credentials
 //
@@ -54,7 +54,7 @@ export async function resolveCredentials(
     (f) => !args[f.key] || String(args[f.key]).trim() === ""
   );
 
-  // All present inline — pass straight through.
+  // All present inline - pass straight through.
   if (missing.length === 0) return args;
 
   const resolved: Record<string, unknown> = { ...args };
@@ -92,7 +92,7 @@ export async function resolveCredentials(
           resolved[field.key] = (result as { value: string }).value;
         }
       } catch {
-        // vault miss — continue to next source
+        // vault miss - continue to next source
       }
     }
     stillMissing = stillMissing.filter(
@@ -123,7 +123,7 @@ export async function resolveCredentials(
         if (stillMissing.length === 0) return resolved;
       }
     } catch {
-      // network miss — fall through to error
+      // network miss - fall through to error
     }
   }
 

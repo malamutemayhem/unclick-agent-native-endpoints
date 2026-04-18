@@ -98,7 +98,6 @@ async function sendBugEmail(params: {
   created_at: string;
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  console.log("[sendBugEmail] RESEND_API_KEY present:", !!apiKey);
   if (!apiKey) {
     console.warn("[sendBugEmail] RESEND_API_KEY not set - skipping bug notification email");
     return;
@@ -117,7 +116,6 @@ async function sendBugEmail(params: {
     agent_context ? `\nAgent Context:\n${typeof agent_context === "string" ? agent_context : JSON.stringify(agent_context, null, 2)}` : "",
   ].filter(Boolean).join("\n");
 
-  console.log("[sendBugEmail] Sending to Resend API...");
   let resendRes: Response;
   try {
     resendRes = await fetch("https://api.resend.com/emails", {
@@ -138,14 +136,9 @@ async function sendBugEmail(params: {
     return;
   }
 
-  const resendText = await resendRes.text();
-  console.log("[sendBugEmail] Resend response status:", resendRes.status);
-  console.log("[sendBugEmail] Resend response body:", resendText);
-
   if (!resendRes.ok) {
-    console.error("[sendBugEmail] Resend API error - email not sent");
-  } else {
-    console.log("[sendBugEmail] Email sent successfully");
+    const resendText = await resendRes.text();
+    console.error("[sendBugEmail] Resend API error - email not sent:", resendRes.status, resendText);
   }
 }
 

@@ -23,10 +23,10 @@
  *   - setup: POST with { api_key, service_role_key, supabase_url?, email? }
  *            Validates + JWT-decodes the URL, installs schema via exec_sql
  *            RPC, and stores encrypted creds
- *   - setup_status: GET ?api_key=... — returns whether cloud memory is on
- *   - disconnect: DELETE ?api_key=... — removes a user's memory config
- *   - config: GET with Bearer <api_key> — MCP fetches decrypted creds
- *   - device_check: POST with Bearer <api_key> + fingerprint — heartbeat
+ *   - setup_status: GET ?api_key=... - returns whether cloud memory is on
+ *   - disconnect: DELETE ?api_key=... - removes a user's memory config
+ *   - config: GET with Bearer <api_key> - MCP fetches decrypted creds
+ *   - device_check: POST with Bearer <api_key> + fingerprint - heartbeat
  *                   + nudge signal
  *   - list_devices: GET with Bearer <api_key>
  *   - remove_device: DELETE ?fingerprint=... with Bearer (or ?dismiss=1)
@@ -1597,7 +1597,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         } catch {
           return res.status(500).json({
-            error: "Failed to decrypt memory config. Your API key may have changed — rerun setup.",
+            error: "Failed to decrypt memory config. Your API key may have changed - rerun setup.",
           });
         }
       }

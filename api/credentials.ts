@@ -1,6 +1,6 @@
 /**
  * UnClick Credentials API
- * Vercel serverless function — serves GET and POST for platform credentials.
+ * Vercel serverless function - serves GET and POST for platform credentials.
  *
  * GET  /api/credentials?platform=xero
  *   Authorization: Bearer <unclick_api_key>
@@ -13,12 +13,12 @@
  *   Used by Connect.tsx for bot_token / api_key flows (no OAuth exchange needed).
  *
  * Encryption: AES-256-GCM with PBKDF2 key derived from the user's API key.
- *             The API key is never stored — only its SHA-256 hash for lookups.
+ *             The API key is never stored - only its SHA-256 hash for lookups.
  *             This means only the key-holder can decrypt their own credentials.
  *
  * Required env vars (server-side only, never exposed to frontend):
- *   SUPABASE_URL            — same value as VITE_SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY — Supabase service role key (bypasses RLS)
+ *   SUPABASE_URL            - same value as VITE_SUPABASE_URL
+ *   SUPABASE_SERVICE_ROLE_KEY - Supabase service role key (bypasses RLS)
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";

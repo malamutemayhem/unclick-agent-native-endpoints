@@ -98,7 +98,7 @@ const ContrastSchema = z.object({
 
 const AdjustSchema = z.object({
   color: ColorInput,
-  /** Percentage points to adjust lightness [0–100]. */
+  /** Percentage points to adjust lightness [0-100]. */
   amount: z.number().min(0).max(100),
 });
 

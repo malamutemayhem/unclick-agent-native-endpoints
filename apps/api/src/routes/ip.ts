@@ -282,7 +282,7 @@ export function createIpRouter() {
     const { ip, prefix } = parseCidr(cidr);
 
     if (!isIPv4(ip)) throw Errors.validation('Subnet calculation only supports IPv4 CIDR');
-    if (prefix < 0 || prefix > 32) throw Errors.validation('Prefix must be 0–32');
+    if (prefix < 0 || prefix > 32) throw Errors.validation('Prefix must be 0-32');
 
     const ipInt = ipv4ToInt(ip);
     const mask = prefixToMask(prefix);
@@ -315,7 +315,7 @@ export function createIpRouter() {
     if (!isIPv4(ip)) throw Errors.validation('Range check only supports IPv4');
     const { ip: rangeIp, prefix } = parseCidr(cidr);
     if (!isIPv4(rangeIp)) throw Errors.validation('CIDR network address must be IPv4');
-    if (prefix < 0 || prefix > 32) throw Errors.validation('Prefix must be 0–32');
+    if (prefix < 0 || prefix > 32) throw Errors.validation('Prefix must be 0-32');
 
     const mask = prefixToMask(prefix);
     const ipInt = ipv4ToInt(ip);

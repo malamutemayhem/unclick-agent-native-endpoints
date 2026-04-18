@@ -49,7 +49,7 @@ async function linePost<T>(
     const detail = (data.details as Array<{ message: string }> | undefined)
       ?.map((d) => d.message)
       .join("; ");
-    throw new Error(`LINE API error: ${msg}${detail ? ` — ${detail}` : ""}`);
+    throw new Error(`LINE API error: ${msg}${detail ? ` - ${detail}` : ""}`);
   }
 
   return data as T;

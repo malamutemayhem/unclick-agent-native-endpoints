@@ -186,6 +186,7 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
             placeholder="you@example.com"
             autoComplete="email"
             required
+            aria-label="Email address"
             className="flex-1 rounded-md border border-border/60 bg-card/60 px-3 py-2 text-sm text-heading placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40 transition-colors"
           />
           <motion.button

@@ -185,7 +185,7 @@ function extractSupabaseAccessToken(cookieHeader: string): string | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ── CORS — allow any origin so AI agents can connect from anywhere ──────────
+  // ── CORS - allow any origin so AI agents can connect from anywhere ──────────
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
@@ -291,7 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── MCP over Streamable HTTP (stateless per-request) ───────────────────────
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless mode — no sessions in serverless
+    sessionIdGenerator: undefined, // stateless mode - no sessions in serverless
   });
 
   const server = await createServer();

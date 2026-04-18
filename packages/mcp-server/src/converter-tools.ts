@@ -1,5 +1,5 @@
 // ─── Pure-local converter tool implementations ───────────────────────────────
-// All run entirely inside the MCP process — no API calls.
+// All run entirely inside the MCP process - no API calls.
 
 import { marked } from "marked";
 import TurndownService from "turndown";

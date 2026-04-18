@@ -21,7 +21,7 @@ export class UnClickClient {
     path: string,
     body?: Record<string, unknown>
   ): Promise<unknown> {
-    // Resolve path params — e.g. /v1/webhook/:id/requests with { id: "abc" }
+    // Resolve path params - e.g. /v1/webhook/:id/requests with { id: "abc" }
     // We handle this by substituting :param tokens from the body, then removing them from body
     let resolvedPath = path;
     const remainingBody: Record<string, unknown> = { ...body };

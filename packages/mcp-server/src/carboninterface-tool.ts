@@ -56,7 +56,7 @@ export async function estimateFlightEmissions(
 
   if (!Array.isArray(legs) || legs.length === 0) {
     throw new Error(
-      "legs is required — array of { departure_airport, destination_airport } " +
+      "legs is required - array of { departure_airport, destination_airport } " +
       "(IATA codes, e.g. [{departure_airport:'SFO', destination_airport:'LAX'}])."
     );
   }

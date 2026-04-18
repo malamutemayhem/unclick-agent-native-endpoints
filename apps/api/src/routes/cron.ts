@@ -156,7 +156,7 @@ function describeWeekdays(days: number[]): string {
 
   if (sorted.length === 1) return `on ${WEEKDAY_NAMES[sorted[0]!]}s`;
 
-  // Monday–Friday
+  // Monday-Friday
   if (sorted.join(',') === '1,2,3,4,5') return 'Monday through Friday';
   // Weekends
   if (sorted.join(',') === '0,6') return 'on weekends';

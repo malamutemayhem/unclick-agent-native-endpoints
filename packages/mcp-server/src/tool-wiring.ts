@@ -767,7 +767,7 @@ export const ADDITIONAL_TOOLS = [
   },
   {
     name: "bgg_game_details",
-    description: "Get full details for a board game by its BGG ID — name, year, rating, players, playtime, description, categories, and mechanics.",
+    description: "Get full details for a board game by its BGG ID - name, year, rating, players, playtime, description, categories, and mechanics.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -790,7 +790,7 @@ export const ADDITIONAL_TOOLS = [
   },
   {
     name: "bgg_top_games",
-    description: "Get the BGG Hotness list — the most discussed and active board games right now.",
+    description: "Get the BGG Hotness list - the most discussed and active board games right now.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -6085,7 +6085,7 @@ export const ADDITIONAL_TOOLS = [
   // ── figma-tool.ts ─────────────────────────────────────────────────────────────
   {
     name: "figma_get_file",
-    description: "Get a Figma file's structure and metadata — pages, frames, and component count.",
+    description: "Get a Figma file's structure and metadata - pages, frames, and component count.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -6119,7 +6119,7 @@ export const ADDITIONAL_TOOLS = [
         file_key: { type: "string" },
         node_ids: { description: "Comma-separated node IDs or array of node ID strings" },
         format: { type: "string", description: "png, jpg, svg, or pdf (default: png)" },
-        scale: { type: "number", description: "Image scale factor 0.01–4 (default: 1, PNG/JPG only)" },
+        scale: { type: "number", description: "Image scale factor 0.01-4 (default: 1, PNG/JPG only)" },
       },
       required: ["personal_access_token", "file_key", "node_ids"],
     },
