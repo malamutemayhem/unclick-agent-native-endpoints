@@ -109,14 +109,14 @@ export default function ContextTab({ apiKey }: { apiKey: string }) {
     return (
       <EmptyState
         icon={Shield}
-        heading="Your master context is empty"
-        description="This is the first thing your agent reads every session. Add your name, role, key projects, and preferences here."
+        heading="Your identity is empty"
+        description="Add your business name, preferences, and standing rules so every AI session knows who you are from the start."
         steps={[
           "Add your name and role",
-          "Add your key projects",
+          "Add your key projects and clients",
           "Add your preferences - how you like to work",
         ]}
-        cta="Add your first context entry"
+        cta="Add your first entry"
         onAction={() => setShowForm(true)}
       />
     );
@@ -237,7 +237,7 @@ export default function ContextTab({ apiKey }: { apiKey: string }) {
           onClick={() => setShowForm(true)}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.1] py-3 text-xs text-white/40 transition-colors hover:border-[#61C1C4]/30 hover:text-[#61C1C4]"
         >
-          <Plus className="h-3.5 w-3.5" /> Add Context Entry
+          <Plus className="h-3.5 w-3.5" /> Add entry
         </button>
       )}
     </div>

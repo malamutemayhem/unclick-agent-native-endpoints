@@ -59,6 +59,10 @@
  *                   Searches facts/sessions/business context via ilike.
  *   - admin_bug_reports: GET with Bearer <api_key>, ?limit=
  *                        Recent bug reports scoped to this api_key_hash.
+ *
+ * Memory management actions:
+ *   - admin_update_fact: POST, updates fact text, category, and/or confidence.
+ *   - admin_fact_add: POST, inserts a new manually-authored fact.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -1669,11 +1673,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .maybeSingle();
 
         const [bcRes, factsRes, sessionRes] = await Promise.all([
-          supabase.from("business_context").select("id", { count: "exact", head: true }),
-          supabase.from("extracted_facts").select("id", { count: "exact", head: true }).eq("status", "active"),
           supabase
-            .from("session_summaries")
+            .from("mc_business_context")
+            .select("id", { count: "exact", head: true })
+            .eq("api_key_hash", apiKeyHash),
+          supabase
+            .from("mc_extracted_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("status", "active"),
+          supabase
+            .from("mc_session_summaries")
             .select("created_at,platform")
+            .eq("api_key_hash", apiKeyHash)
             .order("created_at", { ascending: false })
             .limit(1),
         ]);
@@ -2224,19 +2236,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
         if (!tenant) return res.status(401).json({ error: "Not signed in or no linked API key" });
 
-        const { fact_id: fId, fact: newText } = req.body ?? {};
-        if (!fId || !newText) {
-          return res.status(400).json({ error: "fact_id and fact required" });
+        const body = req.body ?? {};
+        const fId = body.fact_id;
+        if (!fId) return res.status(400).json({ error: "fact_id required" });
+
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (typeof body.fact === "string" && body.fact.trim().length > 0) {
+          updates.fact = body.fact.trim();
+        }
+        if (typeof body.category === "string" && body.category.trim().length > 0) {
+          updates.category = body.category.trim();
+        }
+        if (body.confidence !== undefined) {
+          const c = Number(body.confidence);
+          if (!Number.isFinite(c) || c < 0 || c > 1) {
+            return res.status(400).json({ error: "confidence must be a number between 0 and 1" });
+          }
+          updates.confidence = c;
+        }
+        if (Object.keys(updates).length === 1) {
+          return res.status(400).json({ error: "no fields to update" });
         }
 
         const { error } = await supabase
           .from("mc_extracted_facts")
-          .update({ fact: newText, updated_at: new Date().toISOString() })
+          .update(updates)
           .eq("id", fId)
           .eq("api_key_hash", tenant.apiKeyHash);
 
         if (error) throw error;
         return res.status(200).json({ success: true });
+      }
+
+      case "admin_fact_add": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKey = bearerFrom(req);
+        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = sha256hex(apiKey);
+
+        const body = req.body ?? {};
+        const fact = typeof body.fact === "string" ? body.fact.trim() : "";
+        if (!fact) return res.status(400).json({ error: "fact required" });
+        const category = typeof body.category === "string" && body.category.trim().length > 0
+          ? body.category.trim()
+          : "general";
+        let confidence = 1.0;
+        if (body.confidence !== undefined) {
+          const c = Number(body.confidence);
+          if (!Number.isFinite(c) || c < 0 || c > 1) {
+            return res.status(400).json({ error: "confidence must be a number between 0 and 1" });
+          }
+          confidence = c;
+        }
+
+        const { data, error } = await supabase
+          .from("mc_extracted_facts")
+          .insert({
+            api_key_hash: apiKeyHash,
+            fact,
+            category,
+            confidence,
+            source_type: "manual",
+            status: "active",
+            decay_tier: "hot",
+          })
+          .select("id, fact, category, confidence, status, decay_tier, created_at")
+          .single();
+
+        if (error) throw error;
+        return res.status(200).json({ success: true, data });
       }
 
       // ── Cron actions ────────────────────────────────────────────────────

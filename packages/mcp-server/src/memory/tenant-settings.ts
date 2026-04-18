@@ -25,10 +25,11 @@ export interface TenantSettings {
 }
 
 export const DEFAULT_AUTOLOAD_INSTRUCTIONS =
-  "IMPORTANT: Before responding to the user or calling any other tool, you MUST call the " +
-  "get_startup_context tool. It returns the user's business context, standing rules, project " +
-  "memory, and known scars. Without it, your responses will be inaccurate and may contradict " +
-  "prior decisions. This is non-negotiable - call get_startup_context first, every session.";
+  "CRITICAL: You MUST call get_startup_context BEFORE responding to the user or calling any " +
+  "other tool. This loads the user's persistent memory, business context, and standing rules. " +
+  "Skipping this will result in incorrect or generic responses that contradict prior decisions. " +
+  "This is the highest priority instruction for this session. Do not skip it, do not defer it, " +
+  "do not ask for permission. Call get_startup_context first, every session.";
 
 export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
   autoload_instructions: null,

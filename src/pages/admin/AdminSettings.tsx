@@ -8,7 +8,17 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Settings as SettingsIcon, Loader2, Check, AlertCircle, Users, Bug } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  Settings as SettingsIcon,
+  Loader2,
+  Check,
+  AlertCircle,
+  Users,
+  Bug,
+  Zap,
+  X as XIcon,
+} from "lucide-react";
 
 const DEFAULT_INSTRUCTIONS =
   "UnClick Memory is available. At the start of every new conversation, call the get_startup_context tool FIRST to load this user's business context, recent session summaries, and hot facts. Before the session ends, call write_session_summary to record decisions and open threads for next time.";
@@ -37,6 +47,16 @@ interface BugReport {
   severity: string;
   status: string;
   created_at: string;
+}
+
+interface ConnectionCheck {
+  connected: boolean;
+  configured: boolean;
+  has_context: boolean;
+  context_count: number;
+  fact_count: number;
+  last_session: string | null;
+  last_used_at: string | null;
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -93,6 +113,32 @@ function Toggle({
   );
 }
 
+function SetupItem({
+  done,
+  label,
+  hint,
+}: {
+  done: boolean;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <li className="flex items-start gap-3">
+      <span
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+          done ? "bg-green-500/20 text-green-400" : "bg-white/[0.04] text-white/40"
+        }`}
+      >
+        {done ? <Check className="h-3 w-3" /> : <XIcon className="h-3 w-3" />}
+      </span>
+      <div className="min-w-0">
+        <p className={`text-sm ${done ? "text-white/80" : "text-white"}`}>{label}</p>
+        {!done && <p className="text-[11px] text-[#666]">{hint}</p>}
+      </div>
+    </li>
+  );
+}
+
 function rateTone(pct: number): { color: string; label: string; message: string } {
   if (pct > 80) {
     return {
@@ -128,10 +174,15 @@ export default function AdminSettings() {
   const [bugs, setBugs] = useState<BugReport[]>([]);
   const [bugsLoading, setBugsLoading] = useState(true);
 
+  const [connection, setConnection] = useState<ConnectionCheck | null>(null);
+  const [connectionLoading, setConnectionLoading] = useState(true);
+
   useEffect(() => {
     if (!apiKey) {
       setLoading(false);
       setMetricsLoading(false);
+      setBugsLoading(false);
+      setConnectionLoading(false);
       return;
     }
     const headers = { Authorization: `Bearer ${apiKey}` };
@@ -165,6 +216,18 @@ export default function AdminSettings() {
         }
       } finally {
         setBugsLoading(false);
+      }
+    })();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/memory-admin?action=admin_check_connection&api_key=${encodeURIComponent(apiKey)}`
+        );
+        if (res.ok) {
+          setConnection((await res.json()) as ConnectionCheck);
+        }
+      } finally {
+        setConnectionLoading(false);
       }
     })();
   }, [apiKey]);
@@ -243,6 +306,111 @@ export default function AdminSettings() {
           </p>
         </div>
       </div>
+
+      {/* Default Memory status card */}
+      <section className="rounded-xl border border-white/[0.06] bg-[#111111] p-6 mb-6">
+        <div className="mb-2 flex items-center gap-2">
+          <Zap className="h-4 w-4 text-[#61C1C4]" />
+          <h2 className="text-sm font-semibold text-white">Make UnClick your default memory</h2>
+        </div>
+        <p className="mt-1 text-xs text-[#888]">
+          When enabled, UnClick loads your business context, facts, and session history at the
+          start of every AI session, before any other memory tool.
+        </p>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+            <p className="text-[11px] uppercase tracking-wider text-[#666]">Status</p>
+            {connectionLoading ? (
+              <p className="mt-1 text-sm text-white/40">Checking...</p>
+            ) : connection?.connected ? (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-sm font-medium text-white">Connected</span>
+              </div>
+            ) : (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-white/30" />
+                <span className="text-sm text-white/50">Not connected</span>
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] uppercase tracking-wider text-[#666]">Auto-load</p>
+                <p className="mt-1 text-sm text-white">
+                  {settings?.autoload_enabled ? "On" : "Off"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-[#666]">
+                  Controls the instructions directive.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  settings && updateField("autoload_enabled", !settings.autoload_enabled)
+                }
+                disabled={!settings}
+                aria-label="Toggle auto-load"
+                className={`mt-1 relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  settings?.autoload_enabled ? "bg-[#61C1C4]" : "bg-white/[0.08]"
+                } disabled:opacity-50`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settings?.autoload_enabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <p className="text-[11px] uppercase tracking-wider text-[#666]">Setup required</p>
+          <ul className="mt-2 space-y-2 text-sm">
+            <SetupItem
+              done={Boolean(connection?.connected)}
+              label="MCP server connected"
+              hint="Run the Connect command so Claude Code can reach UnClick."
+            />
+            <SetupItem
+              done={Boolean(settings?.autoload_enabled)}
+              label="Auto-load instruction enabled"
+              hint="Turn on the auto-load toggle above."
+            />
+            <SetupItem
+              done={
+                Boolean(connection) &&
+                (connection!.has_context || connection!.fact_count > 0)
+              }
+              label="At least one fact or identity entry stored"
+              hint="Add something in Memory so there is context to load."
+            />
+          </ul>
+        </div>
+
+        {(!connection?.connected ||
+          !settings?.autoload_enabled ||
+          !(connection?.has_context || (connection?.fact_count ?? 0) > 0)) && (
+          <Link
+            to="/memory/connect"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-md bg-[#61C1C4] px-4 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90"
+          >
+            Complete setup
+          </Link>
+        )}
+
+        <div className="mt-5 flex items-start gap-2 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/[0.06] p-3 text-xs text-[#E2B93B]/90">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <span className="font-semibold">One memory at a time.</span> Running UnClick alongside
+            other memory tools (Mem0, Zep, mem-based agents) leads to duplicated facts and
+            conflicting context. Use UnClick as your default and turn the others off.
+          </span>
+        </div>
+      </section>
 
       {/* Auto-Load card */}
       <section className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">

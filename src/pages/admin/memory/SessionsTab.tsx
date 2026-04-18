@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { ChevronDown, ChevronRight, MessageSquare, Clock } from "lucide-react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { ChevronDown, ChevronRight, MessageSquare, Clock, Search, Trash2 } from "lucide-react";
 import EmptyState from "./EmptyState";
 
 interface Session {
@@ -56,6 +56,7 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
   const [transcriptId, setTranscriptId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +73,27 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
   }, [apiKey]);
 
   useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sessions;
+    return sessions.filter((s) => {
+      if ((s.summary ?? "").toLowerCase().includes(q)) return true;
+      if ((s.platform ?? "").toLowerCase().includes(q)) return true;
+      if ((s.topics ?? []).some((t) => t.toLowerCase().includes(q))) return true;
+      return false;
+    });
+  }, [sessions, query]);
+
+  const deleteSession = async (id: string) => {
+    await fetch("/api/memory-admin?action=delete_session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: id }),
+    });
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (expandedId === id) setExpandedId(null);
+  };
 
   const loadTranscript = async (sessionId: string) => {
     if (transcriptId === sessionId) {
@@ -102,20 +124,28 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
     return (
       <EmptyState
         icon={MessageSquare}
-        heading="No sessions recorded"
-        description="Session summaries appear automatically after conversations. Your agent writes these when a session ends."
-        steps={[
-          "Have a conversation through any connected platform",
-          "Your agent writes a summary at the end",
-          "Next session starts by reading the last 5 summaries",
-        ]}
+        heading="No sessions recorded yet"
+        description="When you use UnClick with an AI tool, session summaries are saved automatically at the end of each conversation."
       />
     );
   }
 
   return (
     <div className="space-y-3">
-      {sessions.map((s) => {
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search sessions..."
+          className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] pl-9 pr-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#61C1C4]/50 focus:outline-none"
+        />
+      </div>
+      {filtered.length === 0 && (
+        <p className="px-4 py-8 text-center text-xs text-white/40">No sessions match your search.</p>
+      )}
+      {filtered.map((s) => {
         const isExpanded = expandedId === s.id;
         const showingTranscript = transcriptId === s.session_id;
 
@@ -182,13 +212,22 @@ export default function SessionsTab({ apiKey }: { apiKey: string }) {
                   </div>
                 )}
 
-                <button
-                  onClick={() => loadTranscript(s.session_id)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] px-3 py-1.5 text-xs text-white/50 hover:bg-white/[0.04] hover:text-white transition-colors"
-                >
-                  <MessageSquare className="h-3 w-3" />
-                  {showingTranscript ? "Hide Transcript" : "View Transcript"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => loadTranscript(s.session_id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] px-3 py-1.5 text-xs text-white/50 hover:bg-white/[0.04] hover:text-white transition-colors"
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    {showingTranscript ? "Hide transcript" : "View transcript"}
+                  </button>
+                  <button
+                    onClick={() => deleteSession(s.id)}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-red-500/30 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete
+                  </button>
+                </div>
 
                 {showingTranscript && (
                   <div className="mt-3 space-y-2 rounded-lg border border-white/[0.04] bg-white/[0.01] p-3">

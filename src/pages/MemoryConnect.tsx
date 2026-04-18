@@ -30,6 +30,8 @@ import {
 
 const API_KEY_STORAGE = "unclick_api_key";
 const MCP_URL = "https://unclick.world/api/mcp";
+const CLAUDE_MD_SNIPPET =
+  "Always call get_startup_context from the unclick MCP server before doing anything else.";
 
 interface CheckResult {
   connected: boolean;
@@ -111,6 +113,8 @@ export default function MemoryConnectPage() {
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [checkError, setCheckError] = useState<string>("");
 
+  const [claudeMdCopied, setClaudeMdCopied] = useState(false);
+
   useEffect(() => {
     try {
       setApiKey(localStorage.getItem(API_KEY_STORAGE) ?? "");
@@ -149,6 +153,13 @@ export default function MemoryConnectPage() {
     copy(command, () => {
       setOtherCopied(name);
       setTimeout(() => setOtherCopied((current) => (current === name ? null : current)), 3000);
+    });
+  };
+
+  const handleClaudeMdCopy = () => {
+    copy(CLAUDE_MD_SNIPPET, () => {
+      setClaudeMdCopied(true);
+      setTimeout(() => setClaudeMdCopied(false), 3000);
     });
   };
 
@@ -209,19 +220,15 @@ export default function MemoryConnectPage() {
 
         {/* Steps */}
         <FadeIn delay={0.05}>
-          <ol className="mt-10 grid gap-3 sm:grid-cols-3">
+          <ol className="mt-10 grid gap-3 sm:grid-cols-2">
             <li className="rounded-xl border border-border/40 bg-card/20 p-5">
               <div className="font-mono text-xs text-primary">Step 1</div>
-              <p className="mt-2 text-sm text-heading">Copy the command below</p>
+              <p className="mt-2 text-sm text-heading">Connect UnClick with one terminal command</p>
             </li>
             <li className="rounded-xl border border-border/40 bg-card/20 p-5">
               <div className="font-mono text-xs text-primary">Step 2</div>
-              <p className="mt-2 text-sm text-heading">Paste it in your terminal</p>
-            </li>
-            <li className="rounded-xl border border-border/40 bg-card/20 p-5">
-              <div className="font-mono text-xs text-primary">Step 3</div>
               <p className="mt-2 text-sm text-heading">
-                That's it. Every future session knows who you are.
+                Paste one line into CLAUDE.md so it loads automatically every session
               </p>
             </li>
           </ol>
@@ -230,9 +237,11 @@ export default function MemoryConnectPage() {
         {/* Command box */}
         <FadeIn delay={0.1}>
           <section className="mt-8 rounded-2xl border border-primary/30 bg-primary/5 p-6">
-            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wide text-primary">
-              <Terminal className="h-3.5 w-3.5" />
-              Run this in your terminal
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wide text-primary">
+                <Terminal className="h-3.5 w-3.5" />
+                Step 1 / Connect UnClick
+              </div>
             </div>
 
             {!apiKey && (
@@ -275,6 +284,70 @@ export default function MemoryConnectPage() {
               The copied command contains your full key. The display above hides the middle for
               shoulder-surfing protection.
             </p>
+          </section>
+        </FadeIn>
+
+        {/* Step 2: CLAUDE.md default memory instruction */}
+        <FadeIn delay={0.12}>
+          <section className="mt-6 rounded-2xl border border-primary/30 bg-primary/5 p-6">
+            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wide text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              Step 2 / Make it automatic
+            </div>
+            <h2 className="mt-2 text-base font-semibold text-heading">
+              Load your memory at the start of every session
+            </h2>
+            <p className="mt-2 text-sm text-body">
+              Add this line to your CLAUDE.md file so UnClick loads your memory before anything
+              else happens.
+            </p>
+
+            <div className="mt-4 overflow-x-auto rounded-lg border border-border/40 bg-background/80 p-4">
+              <code className="block whitespace-pre-wrap font-mono text-xs text-heading sm:text-sm">
+                {CLAUDE_MD_SNIPPET}
+              </code>
+            </div>
+
+            <Button
+              onClick={handleClaudeMdCopy}
+              className="mt-4 w-full bg-primary text-black font-semibold transition-opacity hover:opacity-90 sm:w-auto"
+              size="lg"
+            >
+              {claudeMdCopied ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-2 h-4 w-4" /> Copy line
+                </>
+              )}
+            </Button>
+
+            <div className="mt-5 space-y-2 rounded-md border border-border/30 bg-card/30 p-4 text-xs">
+              <p className="font-semibold text-heading">Where to paste it</p>
+              <ul className="space-y-1 text-body">
+                <li>
+                  <span className="text-heading">Global (all projects):</span>{" "}
+                  <code className="rounded bg-background/80 px-1.5 py-0.5 font-mono text-[11px]">~/.claude/CLAUDE.md</code>
+                </li>
+                <li>
+                  <span className="text-heading">This project only:</span>{" "}
+                  <code className="rounded bg-background/80 px-1.5 py-0.5 font-mono text-[11px]">CLAUDE.md</code>{" "}
+                  in your project root
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                <span className="font-semibold">Heads up:</span> pick one memory tool and stick with it.
+                Running UnClick alongside other memory systems (Mem0, Zep, mem-based agents) tends to
+                duplicate facts, scramble context, and slow your AI down. UnClick works best as your
+                only memory.
+              </span>
+            </div>
           </section>
         </FadeIn>
 

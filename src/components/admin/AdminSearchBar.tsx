@@ -41,7 +41,7 @@ const TYPE_META: Record<SearchHit["type"], { label: string; icon: typeof Search 
 const TARGETS: Record<SearchHit["type"], string> = {
   fact: "/admin/memory?tab=facts",
   session: "/admin/memory?tab=sessions",
-  context: "/admin/memory?tab=context",
+  context: "/admin/memory?tab=identity",
 };
 
 export default function AdminSearchBar() {
