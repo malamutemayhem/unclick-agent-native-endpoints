@@ -2,12 +2,15 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wrench, Brain, Calendar, Users, Trophy, HelpCircle } from "lucide-react";
+import { useSession } from "@/lib/auth";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const isHome = pathname === "/";
   const installHref = isHome ? "#install" : "/#install";
+  const session = useSession();
+  const isLoggedIn = Boolean(session);
 
   const navLinks = [
     { label: "Tools", href: "/tools", icon: Wrench },
@@ -60,12 +63,29 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <a
-            href={installHref}
-            className="hidden whitespace-nowrap rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:block"
-          >
-            Get Started Free
-          </a>
+          {isLoggedIn ? (
+            <Link
+              to="/admin/you"
+              className="hidden whitespace-nowrap text-sm text-body transition-colors hover:text-heading hover:underline sm:inline-block"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="hidden whitespace-nowrap text-sm text-body transition-colors hover:text-heading hover:underline sm:inline-block"
+              >
+                Log in
+              </Link>
+              <a
+                href={installHref}
+                className="hidden whitespace-nowrap rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:block"
+              >
+                Get Started Free
+              </a>
+            </>
+          )}
 
           {/* Hamburger button */}
           <button
@@ -125,13 +145,32 @@ const Navbar = () => {
                   </Link>
                 )
               )}
-              <a
-                href={installHref}
-                onClick={() => setOpen(false)}
-                className="mt-2 rounded-md bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground"
-              >
-                Get Started Free
-              </a>
+              {isLoggedIn ? (
+                <Link
+                  to="/admin/you"
+                  onClick={() => setOpen(false)}
+                  className="mt-2 py-2 text-sm text-body transition-colors hover:text-heading"
+                >
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setOpen(false)}
+                    className="mt-2 py-2 text-sm text-body transition-colors hover:text-heading"
+                  >
+                    Log in
+                  </Link>
+                  <a
+                    href={installHref}
+                    onClick={() => setOpen(false)}
+                    className="mt-2 rounded-md bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground"
+                  >
+                    Get Started Free
+                  </a>
+                </>
+              )}
             </div>
           </motion.div>
         )}
