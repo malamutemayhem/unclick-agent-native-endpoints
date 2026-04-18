@@ -271,7 +271,7 @@ const Dispatch = () => {
                   <div>
                     <h3 className="font-semibold text-heading text-sm">Session Start</h3>
                     <p className="mt-1 text-xs text-body">
-                      Agent calls <span className="font-mono text-primary">get_startup_context</span> â loads standing rules, recent sessions, hot facts
+                      Agent calls <span className="font-mono text-primary">load_memory</span> â loads standing rules, recent sessions, hot facts
                     </p>
                   </div>
                 </div>
@@ -303,7 +303,7 @@ const Dispatch = () => {
                   <div>
                     <h3 className="font-semibold text-heading text-sm">Session End</h3>
                     <p className="mt-1 text-xs text-body">
-                      Agent calls <span className="font-mono text-primary">write_session_summary</span> â next session picks up seamlessly
+                      Agent calls <span className="font-mono text-primary">save_session</span> â next session picks up seamlessly
                     </p>
                   </div>
                 </div>

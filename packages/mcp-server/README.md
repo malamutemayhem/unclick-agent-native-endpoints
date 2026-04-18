@@ -54,7 +54,7 @@ Memory works out of the box. No setup needed — data is stored as JSON files in
 }
 ```
 
-Memory tools exposed at session level: `get_startup_context`, `write_session_summary`, `add_fact`, `search_memory`, `set_business_context`. Full 17 operations available via `unclick_call` with `endpoint_id: "memory.*"`.
+Memory tools exposed at session level: `load_memory`, `save_session`, `save_fact`, `search_memory`, `save_identity`. Full 17 operations available via `unclick_call` with `endpoint_id: "memory.*"`. The prior names (`get_startup_context`, `write_session_summary`, `add_fact`, `set_business_context`) still work as backward-compatible aliases.
 
 ## Configuration
 
@@ -65,21 +65,18 @@ Memory tools exposed at session level: `get_startup_context`, `write_session_sum
 
 ## Tools Exposed
 
-### Discovery (Meta Tools)
-
-These tools let agents explore the full marketplace dynamically.
+### Discovery
 
 | Tool | Description |
 |---|---|
-| `unclick_search` | Search for tools by keyword. "I need to resize an image" → returns the image tool with endpoints and schemas. |
-| `unclick_browse` | Browse all tools, optionally filtered by category (text, data, media, time, network, generation, storage). |
-| `unclick_tool_info` | Get full details on a specific tool: all endpoints, required params, and response shapes. |
-| `unclick_call` | Universal caller — specify any `endpoint_id` and `params`, the server routes the call. |
+| `unclick_search` | Search for tools by keyword. "I need to resize an image" returns the image tool with endpoints and schemas. |
+
+`unclick_browse`, `unclick_tool_info`, and `unclick_call` remain callable for backward compatibility but are hidden from the advertised tool list so end users are not shown internal machinery.
 
 **Discovery flow for an agent:**
-1. `unclick_search` → "what tool handles X?"
-2. `unclick_tool_info` → "what are the exact params for that tool?"
-3. `unclick_call` → call it
+1. `unclick_search` to find relevant tools
+2. Inspect the returned endpoint schemas
+3. Invoke the matching endpoint via the raw call interface
 
 ### Direct Tools (Zero Friction)
 

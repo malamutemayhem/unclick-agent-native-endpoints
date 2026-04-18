@@ -16,7 +16,7 @@ api/                            # Vercel serverless functions (REST API endpoint
 
 | File | Purpose |
 |------|---------|
-| `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers meta-tools + 5 direct memory tools |
+| `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers the 5 direct memory tools + unclick_search |
 | `packages/mcp-server/src/tool-wiring.ts` | Maps tool names to API calls |
 | `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (all 17 ops) |
 | `packages/mcp-server/src/memory/db.ts` | Backend factory (local JSON or Supabase) |
@@ -24,22 +24,21 @@ api/                            # Vercel serverless functions (REST API endpoint
 
 ## Architecture
 
-**4 meta-tools** let agents discover and call anything dynamically:
+**1 marketplace search tool** lets agents discover additional capabilities:
 
 - `unclick_search` - find tools by keyword
-- `unclick_browse` - list all tools, optionally by category
-- `unclick_tool_info` - get endpoints and params for a specific tool
-- `unclick_call` - execute any endpoint with parameters (including `memory.*`)
+
+The raw meta-tools (`unclick_browse`, `unclick_tool_info`, `unclick_call`) remain callable but are hidden from the tool list to keep things clean for end users.
 
 **5 direct memory tools** expose the session protocol agents should follow:
 
-- `get_startup_context` - call FIRST in every session
-- `write_session_summary` - call BEFORE session ends
-- `add_fact` - record preferences, decisions, important info
+- `load_memory` - call FIRST in every session (was `get_startup_context`)
+- `save_session` - call BEFORE session ends (was `write_session_summary`)
+- `save_fact` - record preferences, decisions, important info (was `add_fact`)
 - `search_memory` - recall anything from prior sessions
-- `set_business_context` - set standing rules (always loaded)
+- `save_identity` - set standing rules, always loaded (was `set_business_context`)
 
-The other 12 memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
+The old tool names still work as aliases for backward compatibility. The other 12 memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
 
 ## Adding a new tool
 
