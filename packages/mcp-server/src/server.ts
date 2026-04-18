@@ -42,97 +42,14 @@ function formatToolSummary(tool: ToolDef): string {
 
 // ─── MCP Tool definitions ───────────────────────────────────────────────────
 
-const META_TOOLS = [
+// Only these 5 tools are advertised via ListTools. The 4 unclick_* meta tools
+// (search, browse, tool_info, call) remain callable for backward compat but
+// aren't exposed to reduce surface area and confusion.
+const VISIBLE_TOOLS = [
   {
-    name: "unclick_search",
+    name: "load_memory",
     description:
-      "Search the UnClick tool marketplace by keyword or description. " +
-      "Use this to discover which tools are available for a task. " +
-      "Example: 'I need to resize an image' → returns the image tool with its endpoints.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        query: {
-          type: "string",
-          description: "Search term — describe what you want to do",
-        },
-        category: {
-          type: "string",
-          enum: ["text", "data", "media", "time", "network", "generation", "storage", "platform"],
-          description: "Optional: filter by category",
-        },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "unclick_browse",
-    description:
-      "Browse all available UnClick tools, optionally filtered by category. " +
-      "Returns a list of tools with their slugs and descriptions.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        category: {
-          type: "string",
-          enum: ["text", "data", "media", "time", "network", "generation", "storage", "platform"],
-          description: "Optional: filter to a specific category",
-        },
-      },
-    },
-  },
-  {
-    name: "unclick_tool_info",
-    description:
-      "Get detailed information about a specific UnClick tool including all its endpoints, " +
-      "required parameters, and response shapes. Use this after unclick_search to understand " +
-      "exactly how to call a tool.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        slug: {
-          type: "string",
-          description:
-            "Tool slug, e.g. 'image', 'hash', 'csv', 'cron'. " +
-            "Available slugs: " + CATALOG.map((t) => t.slug).join(", "),
-        },
-      },
-      required: ["slug"],
-    },
-  },
-  {
-    name: "unclick_call",
-    description:
-      "Call any UnClick tool endpoint. Specify the endpoint ID and parameters. " +
-      "Use unclick_search or unclick_tool_info to discover endpoint IDs and required params. " +
-      "Example: endpoint_id='image.resize', params={image: '<base64>', width: 800, height: 600}",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        endpoint_id: {
-          type: "string",
-          description:
-            "Endpoint identifier, e.g. 'image.resize', 'hash.compute', 'csv.parse', 'cron.next'",
-        },
-        params: {
-          type: "object",
-          description: "Parameters for the endpoint. Use unclick_tool_info to see required params.",
-        },
-      },
-      required: ["endpoint_id", "params"],
-    },
-  },
-  // ── UnClick Memory (persistent cross-session memory) ─────────────────────
-  // These 5 tools implement the session-start / session-end protocol agents
-  // should follow. The other 12 memory operations are available via unclick_call
-  // with endpoint_id like "memory.add_fact", "memory.search_memory", etc.
-  {
-    name: "get_startup_context",
-    description:
-      "Load persistent UnClick Memory at session start. Returns business context (standing rules), " +
-      "recent session summaries, and hot facts. Call this FIRST in every new session to understand " +
-      "the user's ongoing projects, preferences, and open loops. Works zero-config locally, or with " +
-      "Supabase for cross-machine sync.",
+      "Loads your saved identity, preferences, and recent history. Always call this first. Without it, I won't know who you are or what we've discussed before.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -145,35 +62,13 @@ const META_TOOLS = [
     },
   },
   {
-    name: "write_session_summary",
+    name: "save_fact",
     description:
-      "Write a session summary at the end of a session. Critical for cross-session continuity. " +
-      "Call this BEFORE the session ends (when the user says goodbye, or context is running low). " +
-      "Include key decisions, open loops, and topics discussed.",
+      "Saves something important for future sessions, a preference, a decision, a contact, a technical detail. Anything worth remembering across conversations.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
-        summary: { type: "string", description: "Narrative of what happened - decisions, work completed, problems solved" },
-        topics: { type: "array", items: { type: "string" }, description: "Topic tags for searchability" },
-        open_loops: { type: "array", items: { type: "string" }, description: "Unfinished tasks or questions to carry forward" },
-        decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
-        platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
-        duration_minutes: { type: "number", description: "Approximate session duration" },
-      },
-      required: ["session_id", "summary"],
-    },
-  },
-  {
-    name: "add_fact",
-    description:
-      "Add a new atomic fact to UnClick Memory. One fact = one statement. " +
-      "Use when the user states a preference, makes a decision, or shares important info. " +
-      "Good: 'Team prefers Tailwind over CSS modules'. Bad: 'We talked about styling'.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        fact: { type: "string", description: "The fact - a single atomic statement" },
+        fact: { type: "string", description: "The fact, a single atomic statement" },
         category: {
           type: "string",
           description: "Category: preference, decision, technical, contact, project, general",
@@ -188,8 +83,7 @@ const META_TOOLS = [
   {
     name: "search_memory",
     description:
-      "Full-text search across UnClick Memory conversation logs. Use when you need to recall " +
-      "something specific from a previous session.",
+      "Searches everything saved about you, facts, past sessions, and identity info. Use when you need to recall something from a previous conversation.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -200,10 +94,9 @@ const META_TOOLS = [
     },
   },
   {
-    name: "set_business_context",
+    name: "save_identity",
     description:
-      "Add or update a standing rule in UnClick Memory (Layer 1). Business context is ALWAYS loaded " +
-      "at session start. Use for standing rules, client info, and preferences that are always relevant.",
+      "Updates your permanent profile, business name, role, standing rules, preferences. This loads at the start of every session.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -218,7 +111,35 @@ const META_TOOLS = [
       required: ["category", "key", "value"],
     },
   },
+  {
+    name: "save_session",
+    description:
+      "Saves a summary of this conversation, what we discussed, decisions made, open items. Available in your next session.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
+        summary: { type: "string", description: "Narrative of what happened, decisions, work completed, problems solved" },
+        topics: { type: "array", items: { type: "string" }, description: "Topic tags for searchability" },
+        open_loops: { type: "array", items: { type: "string" }, description: "Unfinished tasks or questions to carry forward" },
+        decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
+        platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
+        duration_minutes: { type: "number", description: "Approximate session duration" },
+      },
+      required: ["session_id", "summary"],
+    },
+  },
 ] as const;
+
+// Map the new visible tool names to the original MEMORY_HANDLERS keys. The
+// handler keys stay unchanged so memory.<op> routes via unclick_call still work.
+const MEMORY_TOOL_ALIASES: Record<string, string> = {
+  load_memory: "get_startup_context",
+  save_fact: "add_fact",
+  search_memory: "search_memory",
+  save_identity: "set_business_context",
+  save_session: "write_session_summary",
+};
 
 const DIRECT_TOOLS = [
   {
@@ -608,7 +529,7 @@ export function createServer(): Server {
   const server = new Server(
     {
       name: "UnClick",
-      version: "0.1.0",
+      version: "0.3.0",
       description: "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
       websiteUrl: "https://unclick.world",
       icons: [
@@ -624,10 +545,10 @@ export function createServer(): Server {
     }
   );
 
-  // LIST TOOLS — expose only the 4 meta tools; individual tools remain callable
-  // via unclick_call for backwards compat but aren't advertised to reduce noise.
+  // LIST TOOLS, expose only the 5 memory tools. The 4 unclick_* meta tools
+  // remain callable for backward compat but aren't advertised to reduce noise.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: [...META_TOOLS] };
+    return { tools: [...VISIBLE_TOOLS] };
   });
 
   // CALL TOOL
@@ -637,8 +558,12 @@ export function createServer(): Server {
 
     try {
       // ── UnClick Memory (direct tools + memory.* endpoints) ───────
-      if (MEMORY_HANDLERS[name]) {
-        const result = await MEMORY_HANDLERS[name](args);
+      // Accept both the new visible names (load_memory, save_fact, etc.) via
+      // MEMORY_TOOL_ALIASES and the original handler keys (get_startup_context,
+      // add_fact, etc.) for backward compat.
+      const memoryHandlerName = MEMORY_TOOL_ALIASES[name] ?? name;
+      if (MEMORY_HANDLERS[memoryHandlerName]) {
+        const result = await MEMORY_HANDLERS[memoryHandlerName](args);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
