@@ -127,6 +127,21 @@ export class SupabaseBackend implements MemoryBackend {
   }
 
   /**
+   * Resolve a project slug to its UUID. Managed-cloud only; BYOD ignores
+   * (no mc_projects table). Returns null when slug is empty or unknown
+   * so callers can fall through to org-global (project_id = NULL).
+   */
+  private async resolveProjectId(slug?: string): Promise<string | null> {
+    if (!slug || this.tenancy.mode !== "managed") return null;
+    const { data, error } = await this.client.rpc("mc_resolve_project", {
+      p_api_key_hash: this.tenancy.apiKeyHash,
+      p_slug: slug,
+    });
+    if (error) return null;
+    return typeof data === "string" ? data : null;
+  }
+
+  /**
    * Enforce free-tier caps on writes. Only runs in managed cloud mode.
    * BYOD users own their database, so caps don't apply. Pro tier (or any
    * non-free tier) skips the check.
@@ -195,13 +210,49 @@ export class SupabaseBackend implements MemoryBackend {
 
   // ─── Memory operations ───────────────────────────────────────────────────
 
-  async getStartupContext(numSessions: number): Promise<unknown> {
+  async getStartupContext(numSessions: number, projectSlug?: string): Promise<unknown> {
     const data = await this.rpc<Record<string, unknown>>(
       "get_startup_context",
       { num_sessions: numSessions },
       "mc_get_startup_context",
       { p_num_sessions: numSessions }
     );
+
+    let project_scope: Record<string, unknown> | undefined;
+    if (projectSlug && this.tenancy.mode === "managed") {
+      const projectId = await this.resolveProjectId(projectSlug);
+      if (projectId) {
+        const [ctxRes, factsRes, projRow] = await Promise.all([
+          this.client
+            .from(this.tables.business_context)
+            .select("category, key, value, priority")
+            .eq("api_key_hash", this.tenancy.apiKeyHash)
+            .eq("project_id", projectId)
+            .order("category")
+            .order("key"),
+          this.client
+            .from(this.tables.extracted_facts)
+            .select("id, fact, category, confidence, created_at")
+            .eq("api_key_hash", this.tenancy.apiKeyHash)
+            .eq("project_id", projectId)
+            .eq("status", "active")
+            .order("created_at", { ascending: false })
+            .limit(50),
+          this.client
+            .from("mc_projects")
+            .select("id, slug, name, description, repo_url")
+            .eq("api_key_hash", this.tenancy.apiKeyHash)
+            .eq("id", projectId)
+            .maybeSingle(),
+        ]);
+        project_scope = {
+          project: projRow.data,
+          business_context: ctxRes.data ?? [],
+          facts: factsRes.data ?? [],
+        };
+      }
+    }
+
     return {
       agent_instructions: [
         "You are connected to UnClick Memory - a persistent memory system that works across all sessions and devices.",
@@ -213,6 +264,7 @@ export class SupabaseBackend implements MemoryBackend {
         "Never say 'I don't have access to your previous conversations' - you DO, through this memory system."
       ].join("\n"),
       ...data,
+      ...(project_scope ? { project_scope } : {}),
     };
   }
 
@@ -258,6 +310,7 @@ export class SupabaseBackend implements MemoryBackend {
 
   async writeSessionSummary(data: SessionSummaryInput): Promise<{ id: string }> {
     await this.enforceCaps("general");
+    const projectId = await this.resolveProjectId(data.project);
     const { data: row, error } = await this.client
       .from(this.tables.session_summaries)
       .insert(
@@ -269,6 +322,7 @@ export class SupabaseBackend implements MemoryBackend {
           decisions: data.decisions,
           platform: data.platform,
           duration_minutes: data.duration_minutes,
+          ...(projectId ? { project_id: projectId } : {}),
         })
       )
       .select()
@@ -279,6 +333,7 @@ export class SupabaseBackend implements MemoryBackend {
 
   async addFact(data: FactInput): Promise<{ id: string }> {
     await this.enforceCaps("fact");
+    const projectId = await this.resolveProjectId(data.project);
     const { data: row, error } = await this.client
       .from(this.tables.extracted_facts)
       .insert(
@@ -291,6 +346,7 @@ export class SupabaseBackend implements MemoryBackend {
           status: "active",
           decay_tier: "hot",
           last_accessed: now(),
+          ...(projectId ? { project_id: projectId } : {}),
         })
       )
       .select()
@@ -389,9 +445,11 @@ export class SupabaseBackend implements MemoryBackend {
     category: string,
     key: string,
     value: unknown,
-    priority?: number
+    priority?: number,
+    projectSlug?: string,
   ): Promise<void> {
     await this.enforceCaps("general");
+    const projectId = await this.resolveProjectId(projectSlug);
     const row: Record<string, unknown> = {
       category,
       key,
@@ -409,6 +467,7 @@ export class SupabaseBackend implements MemoryBackend {
       decay_tier: "hot",
     };
     if (priority !== undefined) row.priority = priority;
+    if (projectId) row.project_id = projectId;
 
     const onConflict =
       this.tenancy.mode === "managed" ? "api_key_hash,category,key" : "category,key";

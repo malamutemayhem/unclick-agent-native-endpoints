@@ -25,6 +25,10 @@ import {
   AlertTriangle,
   Brain,
   ArrowRight,
+  Zap,
+  Heart,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 
 interface MemoryNudge {
@@ -129,6 +133,27 @@ interface DeviceRow {
   revoked_at: string | null;
 }
 
+interface BootSummary {
+  last_boot_at: string | null;
+  facts_loaded: number;
+  context_items_loaded: number;
+  sessions_loaded: number;
+  project_items_loaded: number;
+}
+
+interface ContextRow {
+  category: string;
+  key: string;
+}
+
+interface FactRow {
+  id: string;
+}
+
+interface SessionSummaryRow {
+  id: string;
+}
+
 interface ProfileData {
   user_id: string;
   email: string | null;
@@ -168,6 +193,10 @@ export default function AdminYou() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [bootSummary, setBootSummary] = useState<BootSummary | null>(null);
+  const [contextRows, setContextRows] = useState<ContextRow[]>([]);
+  const [factRows, setFactRows] = useState<FactRow[]>([]);
+  const [sessionRows, setSessionRows] = useState<SessionSummaryRow[]>([]);
 
   async function fetchProfile() {
     if (!session) return;
@@ -185,9 +214,13 @@ export default function AdminYou() {
     (async () => {
       try {
         const headers = { Authorization: `Bearer ${session.access_token}` };
-        const [profileRes, devicesRes] = await Promise.all([
+        const [profileRes, devicesRes, bootRes, contextRes, factsRes, sessionsRes] = await Promise.all([
           fetch("/api/memory-admin?action=admin_profile", { headers }),
           fetch("/api/memory-admin?action=auth_device_list", { headers }),
+          fetch("/api/memory-admin?action=admin_boot_summary", { headers }),
+          fetch("/api/memory-admin?action=business_context", { headers }),
+          fetch("/api/memory-admin?action=facts", { headers }),
+          fetch("/api/memory-admin?action=sessions&limit=1", { headers }),
         ]);
 
         if (!cancelled && profileRes.ok) {
@@ -196,6 +229,21 @@ export default function AdminYou() {
         if (!cancelled && devicesRes.ok) {
           const body = await devicesRes.json();
           setDevices(body.data ?? []);
+        }
+        if (!cancelled && bootRes.ok) {
+          setBootSummary(await bootRes.json());
+        }
+        if (!cancelled && contextRes.ok) {
+          const body = await contextRes.json();
+          setContextRows((body.data ?? []) as ContextRow[]);
+        }
+        if (!cancelled && factsRes.ok) {
+          const body = await factsRes.json();
+          setFactRows((body.data ?? []) as FactRow[]);
+        }
+        if (!cancelled && sessionsRes.ok) {
+          const body = await sessionsRes.json();
+          setSessionRows((body.data ?? []) as SessionSummaryRow[]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -275,6 +323,17 @@ export default function AdminYou() {
       {profile?.api_key?.prefix ? (
         <MemoryNudgeBanner apiKey={localStorage.getItem("unclick_api_key") ?? ""} />
       ) : null}
+
+      {!loading && (
+        <div className="mb-6 grid gap-4 lg:grid-cols-2">
+          <BootSequenceCard summary={bootSummary} />
+          <MemoryHealthCard
+            contextRows={contextRows}
+            factCount={factRows.length}
+            sessionCount={sessionRows.length}
+          />
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 py-12 text-[#666]">
@@ -485,6 +544,112 @@ export default function AdminYou() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function BootSequenceCard({ summary }: { summary: BootSummary | null }) {
+  const loaded = summary?.last_boot_at
+    ? timeAgo(summary.last_boot_at)
+    : "no load recorded yet";
+
+  return (
+    <div className="rounded-xl border border-[#61C1C4]/30 bg-[#111111] p-6">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+        <Zap className="h-4 w-4 text-[#61C1C4]" />
+        Last Boot Sequence
+      </h2>
+      <p className="mt-2 text-xs text-[#888]">
+        What your AI loaded at the most recent session start.
+      </p>
+
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <BootStat label="Facts" value={summary?.facts_loaded ?? 0} />
+        <BootStat label="Context" value={summary?.context_items_loaded ?? 0} />
+        <BootStat label="Sessions" value={summary?.sessions_loaded ?? 0} />
+      </div>
+
+      {(summary?.project_items_loaded ?? 0) > 0 && (
+        <p className="mt-3 text-[11px] text-[#aaa]">
+          + {summary?.project_items_loaded} project-scoped items
+        </p>
+      )}
+
+      <p className="mt-4 flex items-center gap-1 text-[11px] text-[#666]">
+        <Clock className="h-3 w-3" />
+        Loaded {loaded}
+      </p>
+    </div>
+  );
+}
+
+function BootStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-2xl font-semibold text-white">{value.toLocaleString()}</p>
+      <p className="mt-0.5 text-[11px] text-[#888]">{label}</p>
+    </div>
+  );
+}
+
+function MemoryHealthCard({
+  contextRows,
+  factCount,
+  sessionCount,
+}: {
+  contextRows: ContextRow[];
+  factCount: number;
+  sessionCount: number;
+}) {
+  const hasCategory = (cat: string) => contextRows.some((r) => r.category === cat);
+  const checks = [
+    { label: "Identity set", ok: hasCategory("identity"), to: "/admin/memory?tab=identity" },
+    { label: "Preferences set", ok: hasCategory("preference"), to: "/admin/memory?tab=identity" },
+    { label: "At least 5 facts", ok: factCount >= 5, to: "/admin/memory?tab=facts" },
+    { label: "A saved session", ok: sessionCount >= 1, to: "/admin/memory?tab=sessions" },
+    { label: "Standing rules", ok: hasCategory("standing_rule"), to: "/admin/memory?tab=identity" },
+    { label: "Repository context", ok: hasCategory("repository"), to: "/admin/projects" },
+  ];
+  const filled = checks.filter((c) => c.ok).length;
+  const pct = Math.round((filled / checks.length) * 100);
+
+  return (
+    <div className="rounded-xl border border-[#E2B93B]/30 bg-[#111111] p-6">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+        <Heart className="h-4 w-4 text-[#E2B93B]" />
+        Memory Health
+        <span className="ml-auto font-mono text-xs text-[#E2B93B]">{pct}%</span>
+      </h2>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full bg-[#E2B93B] transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <ul className="mt-4 space-y-2">
+        {checks.map((c) => (
+          <li key={c.label} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2">
+              {c.ok ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+              ) : (
+                <Circle className="h-3.5 w-3.5 text-[#555]" />
+              )}
+              <span className={c.ok ? "text-[#ccc]" : "text-[#888]"}>{c.label}</span>
+            </span>
+            {!c.ok && (
+              <Link
+                to={c.to}
+                className="text-[11px] text-[#E2B93B] underline-offset-2 hover:underline"
+              >
+                add
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

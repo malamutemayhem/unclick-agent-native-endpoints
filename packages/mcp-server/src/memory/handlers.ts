@@ -32,16 +32,55 @@ function bool(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
 
+/**
+ * Format any business_context entries with category="repository" as a clear
+ * Repository Context block so the agent reads them as first-class project
+ * knowledge rather than opaque JSON.
+ */
+function formatRepositoryContext(baseContext: unknown): string | null {
+  if (!baseContext || typeof baseContext !== "object") return null;
+  const bc = (baseContext as Record<string, unknown>).business_context;
+  if (!Array.isArray(bc)) return null;
+  const repoRows = bc.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === "object" && row !== null && (row as Record<string, unknown>).category === "repository",
+  );
+  if (repoRows.length === 0) return null;
+
+  const lines = ["## Repository Context"];
+  for (const row of repoRows) {
+    const key = String(row.key ?? "");
+    const raw = row.value;
+    const value = typeof raw === "string" ? raw : JSON.stringify(raw);
+    lines.push(`- ${key}: ${value}`);
+  }
+  return lines.join("\n");
+}
+
+const REPO_MAP_KEYS = [
+  "stack",
+  "deploy_branch",
+  "deploy_process",
+  "file_structure",
+  "constraints",
+  "gotchas",
+  "conventions",
+  "testing",
+] as const;
+
 export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> = {
   async get_startup_context(args) {
     const db = await getBackend();
     const slug = typeof args.agent_slug === "string" ? args.agent_slug : undefined;
     const id = typeof args.agent_id === "string" ? args.agent_id : undefined;
+    const projectSlug = str(args.project) || undefined;
 
     const [baseContext, resolved] = await Promise.all([
-      db.getStartupContext(num(args.num_sessions, 5)),
+      db.getStartupContext(num(args.num_sessions, 5), projectSlug),
       resolveAgent({ agent_slug: slug, agent_id: id }),
     ]);
+
+    const repoBlock = formatRepositoryContext(baseContext);
 
     // Optional: if the client passed the list of other tools in this session,
     // classify them and attach tool_guidance so the agent can nudge the user.
@@ -57,8 +96,10 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
     }
 
     if (!resolved) {
-      if (tool_guidance === undefined) return baseContext;
-      return { ...(baseContext as Record<string, unknown>), tool_guidance };
+      const out: Record<string, unknown> = { ...(baseContext as Record<string, unknown>) };
+      if (repoBlock) out.repository_context = repoBlock;
+      if (tool_guidance !== undefined) out.tool_guidance = tool_guidance;
+      return out;
     }
 
     const scoped = filterContextByLayers(baseContext, resolved.enabled_memory_layers);
@@ -77,6 +118,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       memory:
         scoped && typeof scoped === "object" ? scoped : { _raw: baseContext },
     };
+    if (repoBlock) result.repository_context = repoBlock;
     if (tool_guidance !== undefined) result.tool_guidance = tool_guidance;
     return result;
   },
@@ -116,6 +158,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       decisions: arr(args.decisions),
       platform: str(args.platform, "claude-code"),
       duration_minutes: typeof args.duration_minutes === "number" ? args.duration_minutes : undefined,
+      project: str(args.project) || undefined,
     });
   },
 
@@ -126,6 +169,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       category: str(args.category, "general"),
       confidence: num(args.confidence, 0.9),
       source_session_id: typeof args.source_session_id === "string" ? args.source_session_id : undefined,
+      project: str(args.project) || undefined,
     });
   },
 
@@ -179,8 +223,22 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       str(args.key),
       args.value,
       typeof args.priority === "number" ? args.priority : undefined,
+      str(args.project) || undefined,
     );
     return { set: true, category: str(args.category), key: str(args.key) };
+  },
+
+  async save_repo_map(args) {
+    const db = await getBackend();
+    const projectSlug = str(args.project) || undefined;
+    const written: string[] = [];
+    for (const key of REPO_MAP_KEYS) {
+      const raw = args[key];
+      if (typeof raw !== "string" || raw.trim().length === 0) continue;
+      await db.setBusinessContext("repository", key, raw, undefined, projectSlug);
+      written.push(key);
+    }
+    return { written, project: projectSlug ?? null };
   },
 
   async upsert_library_doc(args) {

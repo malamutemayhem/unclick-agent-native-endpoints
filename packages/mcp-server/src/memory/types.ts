@@ -10,6 +10,7 @@ export interface SessionSummaryInput {
   decisions: string[];
   platform: string;
   duration_minutes?: number;
+  project?: string;
 }
 
 export interface FactInput {
@@ -17,6 +18,7 @@ export interface FactInput {
   category: string;
   confidence: number;
   source_session_id?: string;
+  project?: string;
 }
 
 export interface ConversationInput {
@@ -24,6 +26,7 @@ export interface ConversationInput {
   role: string;
   content: string;
   has_code: boolean;
+  project?: string;
 }
 
 export interface CodeInput {
@@ -44,7 +47,7 @@ export interface LibraryDocInput {
 
 export interface MemoryBackend {
   /** Load startup context (business context + recent sessions + hot facts). */
-  getStartupContext(numSessions: number): Promise<unknown>;
+  getStartupContext(numSessions: number, projectSlug?: string): Promise<unknown>;
 
   /** Full-text search across conversation logs. */
   searchMemory(query: string, maxResults: number): Promise<unknown>;
@@ -83,7 +86,7 @@ export interface MemoryBackend {
   getBusinessContext(): Promise<unknown[]>;
 
   /** Set or update a business context entry. */
-  setBusinessContext(category: string, key: string, value: unknown, priority?: number): Promise<void>;
+  setBusinessContext(category: string, key: string, value: unknown, priority?: number, projectSlug?: string): Promise<void>;
 
   /** Create or update a knowledge library doc. */
   upsertLibraryDoc(data: LibraryDocInput): Promise<string>;

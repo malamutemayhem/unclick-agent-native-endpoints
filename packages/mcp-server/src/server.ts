@@ -146,6 +146,10 @@ const VISIBLE_TOOLS = [
           description: "Number of recent session summaries to load (1-20, default 5)",
           default: 5,
         },
+        project: {
+          type: "string",
+          description: "Project slug to load context for. Omit for org-global only.",
+        },
       },
     },
   },
@@ -166,6 +170,10 @@ const VISIBLE_TOOLS = [
         },
         confidence: { type: "number", minimum: 0, maximum: 1, default: 0.9 },
         source_session_id: { type: "string", description: "Session ID where this fact was learned" },
+        project: {
+          type: "string",
+          description: "Project slug to scope this fact to. Omit for org-global.",
+        },
       },
       required: ["fact"],
     },
@@ -202,6 +210,10 @@ const VISIBLE_TOOLS = [
         key: { type: "string", description: "Unique key within category (e.g. 'timezone', 'preferred_stack')" },
         value: { type: "string", description: "The value to store (plain text or JSON string)" },
         priority: { type: "number", description: "Priority for loading order (higher = loaded first)" },
+        project: {
+          type: "string",
+          description: "Project slug to scope this identity entry to. Omit for org-global.",
+        },
       },
       required: ["category", "key", "value"],
     },
@@ -222,6 +234,10 @@ const VISIBLE_TOOLS = [
         decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
         platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
         duration_minutes: { type: "number", description: "Approximate session duration" },
+        project: {
+          type: "string",
+          description: "Project slug to scope this session to. Omit for org-global.",
+        },
       },
       required: ["session_id", "summary"],
     },

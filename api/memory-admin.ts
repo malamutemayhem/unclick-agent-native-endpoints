@@ -1147,6 +1147,30 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+/**
+ * Resolve either a browser session JWT or a raw UnClick API key down to
+ * an api_key_hash. Browser admin pages send a supabase session token,
+ * while MCP or CLI callers send an api_key as Bearer. Returns null if
+ * neither resolves.
+ */
+async function resolveTenantAny(
+  req: VercelRequest,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  sb: SupabaseClient,
+): Promise<{ apiKeyHash: string } | null> {
+  const token = bearerFrom(req);
+  if (token && (token.startsWith("uc_") || token.startsWith("agt_"))) {
+    return { apiKeyHash: sha256hex(token) };
+  }
+  const tenant = await resolveSessionTenant(req, supabaseUrl, serviceRoleKey, sb);
+  if (tenant) return { apiKeyHash: tenant.apiKeyHash };
+  if (token) return { apiKeyHash: sha256hex(token) };
+  return null;
+}
+
+const PROJECT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -4298,6 +4322,252 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         results.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
         return res.status(200).json({ data: results.slice(0, limit * 2) });
+      }
+
+      // ── Projects CRUD ────────────────────────────────────────────────
+      case "project_list": {
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+        const { data, error } = await supabase
+          .from("mc_projects")
+          .select("*")
+          .eq("api_key_hash", tenant.apiKeyHash)
+          .order("is_default", { ascending: false })
+          .order("name", { ascending: true });
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "project_create": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const name = String(body.name ?? "").trim();
+        const slug = String(body.slug ?? "").trim().toLowerCase();
+        const description = typeof body.description === "string" ? body.description.trim() : null;
+        const repoUrl = typeof body.repo_url === "string" ? body.repo_url.trim() : null;
+
+        if (!name) return res.status(400).json({ error: "name required" });
+        if (!slug || slug.length < 2 || slug.length > 40 || !PROJECT_SLUG_RE.test(slug)) {
+          return res.status(400).json({
+            error: "slug must be 2-40 chars, lowercase alphanumeric with hyphens only",
+          });
+        }
+
+        const { count } = await supabase
+          .from("mc_projects")
+          .select("id", { count: "exact", head: true })
+          .eq("api_key_hash", tenant.apiKeyHash);
+        const isFirst = !count || count === 0;
+
+        const { data, error } = await supabase
+          .from("mc_projects")
+          .insert({
+            api_key_hash: tenant.apiKeyHash,
+            name,
+            slug,
+            description,
+            repo_url: repoUrl,
+            is_default: isFirst,
+          })
+          .select()
+          .single();
+        if (error) {
+          if (String(error.message).toLowerCase().includes("duplicate")) {
+            return res.status(409).json({ error: "slug already exists" });
+          }
+          throw error;
+        }
+        return res.status(200).json({ success: true, data });
+      }
+
+      case "project_update": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const id = String(body.id ?? "").trim();
+        if (!id) return res.status(400).json({ error: "id required" });
+
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (typeof body.name === "string" && body.name.trim()) updates.name = body.name.trim();
+        if (typeof body.description === "string") updates.description = body.description.trim() || null;
+        if (typeof body.repo_url === "string") updates.repo_url = body.repo_url.trim() || null;
+
+        const { error } = await supabase
+          .from("mc_projects")
+          .update(updates)
+          .eq("id", id)
+          .eq("api_key_hash", tenant.apiKeyHash);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "project_delete": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const id = String(body.id ?? "").trim();
+        if (!id) return res.status(400).json({ error: "id required" });
+
+        const { error } = await supabase
+          .from("mc_projects")
+          .delete()
+          .eq("id", id)
+          .eq("api_key_hash", tenant.apiKeyHash);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "project_set_default": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const id = String(body.id ?? "").trim();
+        if (!id) return res.status(400).json({ error: "id required" });
+
+        const clearRes = await supabase
+          .from("mc_projects")
+          .update({ is_default: false })
+          .eq("api_key_hash", tenant.apiKeyHash);
+        if (clearRes.error) throw clearRes.error;
+
+        const setRes = await supabase
+          .from("mc_projects")
+          .update({ is_default: true, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .eq("api_key_hash", tenant.apiKeyHash);
+        if (setRes.error) throw setRes.error;
+
+        return res.status(200).json({ success: true });
+      }
+
+      // ── Memory visibility: most recent load_memory snapshot ─────────
+      case "admin_boot_summary": {
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        let lastBootAt: string | null = null;
+        try {
+          const { data: evt } = await supabase
+            .from("mc_memory_load_events")
+            .select("created_at")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (evt?.created_at) lastBootAt = String(evt.created_at);
+        } catch {
+          // table may not exist; fall through to counts-only response
+        }
+
+        const [factsRes, contextRes, sessionsRes, projectsRes] = await Promise.all([
+          supabase
+            .from("mc_extracted_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .eq("status", "active"),
+          supabase
+            .from("mc_business_context")
+            .select("id", { count: "exact", head: true })
+            .eq("api_key_hash", tenant.apiKeyHash),
+          supabase
+            .from("mc_session_summaries")
+            .select("id, session_id, summary, created_at")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(5),
+          supabase
+            .from("mc_extracted_facts")
+            .select("project_id")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .eq("status", "active")
+            .not("project_id", "is", null),
+        ]);
+
+        const projectItems = (projectsRes.data ?? []).length;
+
+        return res.status(200).json({
+          last_boot_at: lastBootAt,
+          facts_loaded: factsRes.count ?? 0,
+          context_items_loaded: contextRes.count ?? 0,
+          sessions_loaded: sessionsRes.data?.length ?? 0,
+          project_items_loaded: projectItems,
+          recent_sessions: sessionsRes.data ?? [],
+        });
+      }
+
+      // ── Memory visibility: timeline of recent memory changes ────────
+      case "admin_memory_timeline": {
+        const tenant = await resolveTenantAny(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Not authenticated" });
+
+        const [factsRes, contextRes, sessionsRes] = await Promise.all([
+          supabase
+            .from("mc_extracted_facts")
+            .select("id, fact, category, created_at")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(20),
+          supabase
+            .from("mc_business_context")
+            .select("id, category, key, updated_at")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .order("updated_at", { ascending: false })
+            .limit(10),
+          supabase
+            .from("mc_session_summaries")
+            .select("id, session_id, summary, created_at")
+            .eq("api_key_hash", tenant.apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(10),
+        ]);
+
+        type TimelineItem = {
+          event_type: "fact_created" | "context_updated" | "session_saved";
+          id: string;
+          created_at: string;
+          summary: string;
+          category?: string;
+        };
+
+        const items: TimelineItem[] = [];
+        for (const row of factsRes.data ?? []) {
+          items.push({
+            event_type: "fact_created",
+            id: String(row.id),
+            created_at: String(row.created_at ?? ""),
+            summary: String(row.fact ?? ""),
+            category: typeof row.category === "string" ? row.category : undefined,
+          });
+        }
+        for (const row of contextRes.data ?? []) {
+          items.push({
+            event_type: "context_updated",
+            id: String(row.id),
+            created_at: String(row.updated_at ?? ""),
+            summary: `${row.category}.${row.key}`,
+            category: typeof row.category === "string" ? row.category : undefined,
+          });
+        }
+        for (const row of sessionsRes.data ?? []) {
+          items.push({
+            event_type: "session_saved",
+            id: String(row.id),
+            created_at: String(row.created_at ?? ""),
+            summary: String(row.summary ?? row.session_id ?? ""),
+          });
+        }
+
+        items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+        return res.status(200).json({ timeline: items.slice(0, 30) });
       }
 
       // ── Bug reports visible to the submitting api_key_hash ──────────

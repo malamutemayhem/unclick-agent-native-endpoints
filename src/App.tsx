@@ -48,6 +48,7 @@ import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
+import AdminProjects from "./pages/admin/AdminProjects.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 
 const queryClient = new QueryClient();
@@ -102,6 +103,7 @@ const App = () => (
           >
             <Route index element={<Navigate to="/admin/you" replace />} />
             <Route path="you" element={<AdminYou />} />
+            <Route path="projects" element={<AdminProjects />} />
             <Route path="memory" element={<AdminMemory />} />
             <Route path="keychain" element={<AdminKeychain />} />
             <Route path="tools" element={<AdminTools />} />

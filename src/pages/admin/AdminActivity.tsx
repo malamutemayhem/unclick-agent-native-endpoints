@@ -17,6 +17,9 @@ import {
   CheckCircle2,
   XCircle,
   Zap,
+  Brain,
+  Settings as SettingsIcon,
+  History,
 } from "lucide-react";
 
 interface MeteringEvent {
@@ -32,6 +35,14 @@ interface ConversationSession {
   session_id: string;
   message_count: number;
   last_message: string;
+}
+
+interface TimelineEvent {
+  event_type: "fact_created" | "context_updated" | "session_saved";
+  id: string;
+  created_at: string;
+  summary: string;
+  category?: string;
 }
 
 function timeAgo(iso: string): string {
@@ -61,6 +72,7 @@ export default function AdminActivity() {
   const { session } = useSession();
   const [events, setEvents] = useState<MeteringEvent[]>([]);
   const [sessions, setSessions] = useState<ConversationSession[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,13 +81,19 @@ export default function AdminActivity() {
 
     (async () => {
       try {
-        const res = await fetch("/api/memory-admin?action=admin_activity", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (!cancelled && res.ok) {
-          const body = await res.json();
+        const headers = { Authorization: `Bearer ${session.access_token}` };
+        const [activityRes, timelineRes] = await Promise.all([
+          fetch("/api/memory-admin?action=admin_activity", { headers }),
+          fetch("/api/memory-admin?action=admin_memory_timeline", { headers }),
+        ]);
+        if (!cancelled && activityRes.ok) {
+          const body = await activityRes.json();
           setEvents(body.metering_events ?? []);
           setSessions(body.conversation_sessions ?? []);
+        }
+        if (!cancelled && timelineRes.ok) {
+          const body = await timelineRes.json();
+          setTimeline((body.timeline ?? []) as TimelineEvent[]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -157,6 +175,21 @@ export default function AdminActivity() {
               sub={stats.avgMs > 0 ? `avg ${stats.avgMs}ms` : "no data"}
             />
           </div>
+
+          {/* Recent memory changes timeline */}
+          {timeline.length > 0 && (
+            <div className="mb-6">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                <History className="h-4 w-4 text-[#E2B93B]" />
+                Recent Memory Changes
+              </h2>
+              <ol className="space-y-1">
+                {timeline.slice(0, 15).map((ev) => (
+                  <MemoryTimelineItem key={`${ev.event_type}-${ev.id}`} ev={ev} />
+                ))}
+              </ol>
+            </div>
+          )}
 
           {/* Two-column layout: events + conversations */}
           <div className="grid gap-6 lg:grid-cols-5">
@@ -288,5 +321,46 @@ function StatCard({
       <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
       <p className="mt-0.5 text-[11px] text-[#555]">{sub}</p>
     </div>
+  );
+}
+
+function MemoryTimelineItem({ ev }: { ev: TimelineEvent }) {
+  const Icon =
+    ev.event_type === "fact_created"
+      ? Brain
+      : ev.event_type === "context_updated"
+        ? SettingsIcon
+        : Clock;
+  const label =
+    ev.event_type === "fact_created"
+      ? "New fact"
+      : ev.event_type === "context_updated"
+        ? "Context updated"
+        : "Session saved";
+  const accent =
+    ev.event_type === "fact_created"
+      ? "text-[#61C1C4]"
+      : ev.event_type === "context_updated"
+        ? "text-[#E2B93B]"
+        : "text-white";
+
+  return (
+    <li className="flex items-start justify-between gap-4 rounded-lg border border-white/[0.04] bg-[#111111] px-3 py-2">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${accent}`} />
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wider text-[#666]">
+            {label}
+            {ev.category ? (
+              <span className="ml-2 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] normal-case text-[#aaa]">
+                {ev.category}
+              </span>
+            ) : null}
+          </p>
+          <p className="truncate text-xs text-[#ccc]">{ev.summary || "(no summary)"}</p>
+        </div>
+      </div>
+      <span className="shrink-0 text-[10px] text-[#555]">{timeAgo(ev.created_at)}</span>
+    </li>
   );
 }

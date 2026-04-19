@@ -155,7 +155,7 @@ export class LocalBackend implements MemoryBackend {
     console.error(`UnClick Memory: local mode (data at ${DATA_DIR})`);
   }
 
-  async getStartupContext(numSessions: number): Promise<unknown> {
+  async getStartupContext(numSessions: number, _projectSlug?: string): Promise<unknown> {
     const bc = readTable<BusinessContextRow>("business_context")
       .filter((r) => r.decay_tier === "hot" || r.decay_tier === "warm")
       .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
@@ -363,7 +363,7 @@ export class LocalBackend implements MemoryBackend {
       .sort((a, b) => a.category.localeCompare(b.category) || a.key.localeCompare(b.key));
   }
 
-  async setBusinessContext(category: string, key: string, value: unknown, priority?: number): Promise<void> {
+  async setBusinessContext(category: string, key: string, value: unknown, priority?: number, _projectSlug?: string): Promise<void> {
     const rows = readTable<BusinessContextRow>("business_context");
     const existing = rows.find((r) => r.category === category && r.key === key);
     if (existing) {

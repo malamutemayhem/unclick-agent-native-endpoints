@@ -15,6 +15,7 @@ import { useSession, signOut } from "@/lib/auth";
 import AdminSearchBar from "@/components/admin/AdminSearchBar";
 import BugReportButton from "@/components/admin/BugReportButton";
 import MemoryHealthPill from "@/components/admin/MemoryHealthPill";
+import { ProjectProvider, useProject } from "@/lib/project-context";
 import {
   User,
   Brain,
@@ -25,16 +26,39 @@ import {
   LogOut,
   X,
   Menu,
+  FolderKanban,
 } from "lucide-react";
 
 const surfaces = [
   { path: "/admin/you", label: "You", icon: User },
+  { path: "/admin/projects", label: "Projects", icon: FolderKanban },
   { path: "/admin/memory", label: "Memory", icon: Brain },
   { path: "/admin/keychain", label: "Keychain", icon: KeyRound },
   { path: "/admin/tools", label: "Tools", icon: Wrench },
   { path: "/admin/activity", label: "Activity", icon: Activity },
   { path: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
+
+function ProjectSwitcher() {
+  const { projects, activeSlug, setActiveSlug } = useProject();
+  if (projects.length === 0) return null;
+  return (
+    <select
+      value={activeSlug ?? ""}
+      onChange={(e) => setActiveSlug(e.target.value || null)}
+      className="w-full rounded-md border border-white/[0.08] bg-[#111] px-2 py-1.5 text-xs text-[#ccc] focus:border-[#61C1C4] focus:outline-none"
+      aria-label="Active project"
+    >
+      <option value="">All Projects</option>
+      {projects.map((p) => (
+        <option key={p.id} value={p.slug}>
+          {p.name}
+          {p.is_default ? " (default)" : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function SurfaceLink({ path, label, icon: Icon, onClick }: {
   path: string;
@@ -61,6 +85,14 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
 }
 
 export default function AdminShell() {
+  return (
+    <ProjectProvider>
+      <AdminShellInner />
+    </ProjectProvider>
+  );
+}
+
+function AdminShellInner() {
   const { user } = useSession();
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -85,7 +117,11 @@ export default function AdminShell() {
           </Link>
         </div>
 
-        <nav className="mt-4 flex flex-1 flex-col gap-1 px-3">
+        <div className="px-3 pb-2 pt-3">
+          <ProjectSwitcher />
+        </div>
+
+        <nav className="mt-1 flex flex-1 flex-col gap-1 px-3">
           {surfaces.map((s) => (
             <SurfaceLink key={s.path} {...s} />
           ))}
@@ -164,6 +200,9 @@ export default function AdminShell() {
         <div className="fixed inset-x-0 top-14 z-30 border-b border-white/[0.06] bg-[#0A0A0A] p-3 md:hidden">
           <div className="mb-3">
             <AdminSearchBar />
+          </div>
+          <div className="mb-3">
+            <ProjectSwitcher />
           </div>
           <nav className="flex flex-col gap-1">
             {surfaces.map((s) => (
