@@ -154,7 +154,10 @@ const VISIBLE_TOOLS = [
     description:
       "Saves a new fact about the user for future sessions. Use this whenever the user " +
       "shares something worth remembering -- preferences, decisions, contact details, " +
-      "technical choices. Facts persist across all sessions and AI tools.",
+      "technical choices. Facts persist across all sessions and AI tools. " +
+      "Call this DURING the conversation whenever you learn something new. " +
+      "Triggers: user corrections, stated preferences, decisions, technical discoveries. " +
+      "Do not wait until session end.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -191,7 +194,9 @@ const VISIBLE_TOOLS = [
     description:
       "Saves or updates the user's identity information -- business name, role, standing " +
       "rules, preferences. This information loads at the start of every session. Use this " +
-      "when the user wants to change how every future session behaves.",
+      "when the user wants to change how every future session behaves. " +
+      "Call this when you learn stable context -- preferences, identity info, " +
+      "repository details, standing rules. Save immediately, don't batch.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -211,7 +216,9 @@ const VISIBLE_TOOLS = [
     description:
       "Saves a summary of the current session including decisions made, tasks completed, " +
       "and open items. Call this at the end of a session or when significant work is " +
-      "completed. The summary will be available in future sessions.",
+      "completed. The summary will be available in future sessions. " +
+      "Call at session end OR when a natural breakpoint occurs (topic change, " +
+      "major milestone). Can be called multiple times.",
     inputSchema: {
       type: "object" as const,
       properties: {

@@ -56,9 +56,22 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       tool_guidance = buildToolGuidance(detections, nudgeable);
     }
 
+    // Active memory directives: tells the agent to save as it learns,
+    // rather than batching everything until session end.
+    const activeMemoryRules = [
+      "ACTIVE MEMORY -- save as you go, do not wait until session end:",
+      "- When the user corrects you, call add_fact immediately with the correction.",
+      "- When the user states a preference, call set_business_context with category=preference.",
+      "- When a decision is made, call add_fact with category=decision.",
+      "- When you learn something new about the codebase, call set_business_context with category=repository.",
+      "- When a task is completed, note it. Don't batch saves -- save each item as it happens.",
+    ].join("\n");
+
     if (!resolved) {
-      if (tool_guidance === undefined) return baseContext;
-      return { ...(baseContext as Record<string, unknown>), tool_guidance };
+      const base = (baseContext ?? {}) as Record<string, unknown>;
+      const merged: Record<string, unknown> = { ...base, active_memory_rules: activeMemoryRules };
+      if (tool_guidance !== undefined) merged.tool_guidance = tool_guidance;
+      return merged;
     }
 
     const scoped = filterContextByLayers(baseContext, resolved.enabled_memory_layers);
@@ -76,6 +89,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       enabled_memory_layers: resolved.enabled_memory_layers,
       memory:
         scoped && typeof scoped === "object" ? scoped : { _raw: baseContext },
+      active_memory_rules: activeMemoryRules,
     };
     if (tool_guidance !== undefined) result.tool_guidance = tool_guidance;
     return result;

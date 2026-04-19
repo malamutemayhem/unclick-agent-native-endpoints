@@ -1,5 +1,5 @@
 /**
- * AdminYou - Identity surface (/admin/you)
+ * AdminAccount - Account surface (/admin/account)
  *
  * The Apple ID equivalent. Shows: user email, auth provider, linked
  * api_key info, paired devices (auth_devices), logout button.
@@ -81,7 +81,7 @@ function MemoryNudgeBanner({ apiKey }: { apiKey: string }) {
     ? "UnClick is installed but your AI hasn't checked in yet. Run the Connect command so your sessions can load memory automatically."
     : "Add your identity or a few facts so every AI session starts with context instead of from scratch.";
   const cta = !state.connected ? "Connect UnClick" : "Add memory";
-  const to = !state.connected ? "/memory/connect" : "/admin/memory?tab=identity";
+  const to = !state.connected ? "/memory/connect" : "/admin/memory/identity";
 
   const handleDismiss = () => {
     try {
@@ -158,7 +158,7 @@ function timeAgo(iso: string | null | undefined): string {
   return `${days}d ago`;
 }
 
-export default function AdminYou() {
+export default function AdminAccount() {
   const { session, user } = useSession();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -267,8 +267,8 @@ export default function AdminYou() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-white">You</h1>
-        <p className="mt-1 text-sm text-[#888]">Identity, accounts, and devices</p>
+        <h1 className="text-2xl font-semibold text-white">Account</h1>
+        <p className="mt-1 text-sm text-[#888]">Your login, API key, and devices</p>
       </div>
 
       <ClaimKeyBanner />

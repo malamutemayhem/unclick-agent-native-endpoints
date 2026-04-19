@@ -1,7 +1,7 @@
 /**
- * AdminActivity - Activity surface (/admin/activity)
+ * AdminTimeline - Timeline surface (/admin/memory/timeline)
  *
- * What the agent has done. Shows metering_events for the user's
+ * What changed in your memory and when. Shows metering_events for the user's
  * api_key grouped by day, recent mc_conversation_log sessions,
  * and usage stats summary (calls today, this week, this month).
  */
@@ -57,7 +57,7 @@ function isWithinDays(iso: string, days: number): boolean {
   return Date.now() - new Date(iso).getTime() < days * 86_400_000;
 }
 
-export default function AdminActivity() {
+export default function AdminTimeline() {
   const { session } = useSession();
   const [events, setEvents] = useState<MeteringEvent[]>([]);
   const [sessions, setSessions] = useState<ConversationSession[]>([]);
@@ -117,9 +117,13 @@ export default function AdminActivity() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-white">Activity</h1>
+        <h1 className="text-2xl font-semibold text-white">Timeline</h1>
         <p className="mt-1 text-sm text-[#888]">
-          Agent usage, API calls, and conversation history
+          What changed in your memory and when
+        </p>
+        <p className="mt-3 text-sm text-[#888]">
+          Every time your AI saves knowledge, writes a session summary, or
+          updates your identity, it shows up here.
         </p>
       </div>
 
