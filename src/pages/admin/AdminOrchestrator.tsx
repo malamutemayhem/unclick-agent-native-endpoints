@@ -280,7 +280,7 @@ function QuickLinksCard() {
           subtitle="One command to wire it up"
         />
         <LinkRow
-          to="/build"
+          to="/admin/build"
           icon={Hammer}
           title="Build Tasks"
           subtitle="Plan and track your work"

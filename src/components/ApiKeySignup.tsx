@@ -60,12 +60,13 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
     }
 
     try {
-      // Check if email already has a key
+      // Check if email already has a key.
+      // Don't filter by status -- any existing row will cause a constraint
+      // violation on insert, so we should catch it here regardless.
       const { data: existing, error: selectError } = await supabase
         .from("api_keys")
         .select("api_key")
         .eq("email", trimmed.toLowerCase())
-        .eq("status", "active")
         .maybeSingle();
 
       if (selectError) throw selectError;
@@ -87,7 +88,35 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
         .from("api_keys")
         .insert({ email: trimmed.toLowerCase(), api_key: newKey });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Constraint violation (duplicate email) -- the select above may have
+        // missed the row (race condition, or the row has a non-active status).
+        // Try one more lookup without the status filter.
+        const isDuplicate =
+          insertError.code === "23505" ||
+          (insertError.message ?? "").toLowerCase().includes("duplicate") ||
+          (insertError.message ?? "").toLowerCase().includes("unique");
+
+        if (isDuplicate) {
+          const { data: retry } = await supabase
+            .from("api_keys")
+            .select("api_key")
+            .eq("email", trimmed.toLowerCase())
+            .maybeSingle();
+
+          if (retry?.api_key) {
+            const key = retry.api_key as string;
+            localStorage.setItem(STORAGE_KEY, key);
+            localStorage.setItem(EMAIL_KEY, trimmed.toLowerCase());
+            setIsReturning(true);
+            setApiKey(key);
+            onKeyReady(key);
+            return;
+          }
+        }
+
+        throw insertError;
+      }
 
       localStorage.setItem(STORAGE_KEY, newKey);
       localStorage.setItem(EMAIL_KEY, trimmed.toLowerCase());
@@ -97,10 +126,16 @@ const ApiKeySignup = ({ onKeyReady }: ApiKeySignupProps) => {
     } catch (err) {
       // Surface the real reason to the console so we can diagnose in DevTools.
       console.error("[ApiKeySignup] signup failed", err);
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : "Something went wrong. Try again or email hello@unclick.world";
+
+      // Check if this is a duplicate/constraint error that slipped past our
+      // earlier handling -- show a friendly message instead of Postgres jargon.
+      const raw = err instanceof Error ? err.message ?? "" : "";
+      const isDuplicateErr =
+        raw.includes("duplicate") || raw.includes("unique") || raw.includes("23505");
+
+      const message = isDuplicateErr
+        ? "Looks like that email already has a key. Try again -- we'll pull it up for you."
+        : "Something went wrong. Try again or email hello@unclick.world";
       setError(message);
     } finally {
       setLoading(false);
