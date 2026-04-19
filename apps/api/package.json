@@ -35,6 +35,6 @@
     "drizzle-kit": "^0.30.4",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.4"
   }
 }
