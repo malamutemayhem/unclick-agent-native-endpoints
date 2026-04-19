@@ -41,14 +41,18 @@ import SignupPage from "./pages/Signup.tsx";
 import AuthCallbackPage from "./pages/AuthCallback.tsx";
 import RequireAuth from "./components/RequireAuth.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
-import AdminYou from "./pages/admin/AdminYou.tsx";
-import AdminMemory from "./pages/admin/AdminMemory.tsx";
+import AdminAccount from "./pages/admin/AdminAccount.tsx";
+import AdminKnowledge from "./pages/admin/AdminKnowledge.tsx";
+import AdminSessions from "./pages/admin/AdminSessions.tsx";
+import AdminIdentity from "./pages/admin/AdminIdentity.tsx";
+import AdminTimeline from "./pages/admin/AdminTimeline.tsx";
 import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
 import AdminTools from "./pages/admin/AdminTools.tsx";
-import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
 import AdminProjects from "./pages/admin/AdminProjects.tsx";
+import BrainMap from "./pages/admin/BrainMap.tsx";
+import AdminCodebase from "./pages/admin/AdminCodebase.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 
 const queryClient = new QueryClient();
@@ -86,7 +90,7 @@ const App = () => (
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
           {/* /memory/admin redirects to the new admin shell */}
-          <Route path="/memory/admin" element={<Navigate to="/admin/memory" replace />} />
+          <Route path="/memory/admin" element={<Navigate to="/admin/memory/map" replace />} />
           <Route path="/memory/setup" element={<MemorySetupPage />} />
           <Route path="/memory/connect" element={<MemoryConnectPage />} />
           <Route path="/memory/setup-guide" element={<MemorySetupGuidePage />} />
@@ -101,14 +105,23 @@ const App = () => (
               </RequireAuth>
             }
           >
-            <Route index element={<Navigate to="/admin/you" replace />} />
-            <Route path="you" element={<AdminYou />} />
-            <Route path="projects" element={<AdminProjects />} />
-            <Route path="memory" element={<AdminMemory />} />
+            <Route index element={<Navigate to="/admin/account" replace />} />
+            <Route path="account" element={<AdminAccount />} />
+            <Route path="memory/map" element={<BrainMap />} />
+            <Route path="memory/knowledge" element={<AdminKnowledge />} />
+            <Route path="memory/sessions" element={<AdminSessions />} />
+            <Route path="memory/identity" element={<AdminIdentity />} />
+            <Route path="memory/projects" element={<AdminProjects />} />
+            <Route path="memory/codebase" element={<AdminCodebase />} />
+            <Route path="memory/timeline" element={<AdminTimeline />} />
             <Route path="keychain" element={<AdminKeychain />} />
             <Route path="tools" element={<AdminTools />} />
-            <Route path="activity" element={<AdminActivity />} />
             <Route path="settings" element={<AdminSettings />} />
+            {/* Backward-compat redirects */}
+            <Route path="you" element={<Navigate to="/admin/account" replace />} />
+            <Route path="memory" element={<Navigate to="/admin/memory/map" replace />} />
+            <Route path="activity" element={<Navigate to="/admin/memory/timeline" replace />} />
+            <Route path="projects" element={<Navigate to="/admin/memory/projects" replace />} />
           </Route>
           {/* AdminAgents ships its own shell wrapper, so register it at the top level */}
           <Route path="/admin/agents" element={<AdminAgentsPage />} />
