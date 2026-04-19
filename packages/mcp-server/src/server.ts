@@ -42,19 +42,21 @@ function formatToolSummary(tool: ToolDef): string {
 
 // ─── MCP Tool definitions ───────────────────────────────────────────────────
 
-const META_TOOLS = [
+// Internal tools: still callable for backwards compatibility, but not advertised
+// to reduce noise in the tool list. Users who know the names can still invoke them.
+const INTERNAL_TOOLS = [
   {
     name: "unclick_search",
     description:
       "Search the UnClick tool marketplace by keyword or description. " +
       "Use this to discover which tools are available for a task. " +
-      "Example: 'I need to resize an image' → returns the image tool with its endpoints.",
+      "Example: 'I need to resize an image' returns the image tool with its endpoints.",
     inputSchema: {
       type: "object" as const,
       properties: {
         query: {
           type: "string",
-          description: "Search term — describe what you want to do",
+          description: "Search term -- describe what you want to do",
         },
         category: {
           type: "string",
@@ -122,17 +124,20 @@ const META_TOOLS = [
       required: ["endpoint_id", "params"],
     },
   },
-  // ── UnClick Memory (persistent cross-session memory) ─────────────────────
-  // These 5 tools implement the session-start / session-end protocol agents
-  // should follow. The other 12 memory operations are available via unclick_call
-  // with endpoint_id like "memory.add_fact", "memory.search_memory", etc.
+] as const;
+
+// Visible tools: the 5 core memory tools shown in the MCP tool list. These are
+// the only tools users see in their AI client. Old names (get_startup_context,
+// add_fact, write_session_summary, set_business_context) still work via
+// MEMORY_TOOL_ALIASES for backwards compatibility.
+const VISIBLE_TOOLS = [
   {
-    name: "get_startup_context",
+    name: "load_memory",
     description:
-      "Load persistent UnClick Memory at session start. Returns business context (standing rules), " +
-      "recent session summaries, and hot facts. Call this FIRST in every new session to understand " +
-      "the user's ongoing projects, preferences, and open loops. Works zero-config locally, or with " +
-      "Supabase for cross-machine sync.",
+      "Loads the user's identity, preferences, facts, and recent session history. " +
+      "Call this FIRST at the start of every session, before responding to the user " +
+      "or calling any other tool. Skipping this means you won't know who the user is " +
+      "or what they care about.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -145,35 +150,15 @@ const META_TOOLS = [
     },
   },
   {
-    name: "write_session_summary",
+    name: "save_fact",
     description:
-      "Write a session summary at the end of a session. Critical for cross-session continuity. " +
-      "Call this BEFORE the session ends (when the user says goodbye, or context is running low). " +
-      "Include key decisions, open loops, and topics discussed.",
+      "Saves a new fact about the user for future sessions. Use this whenever the user " +
+      "shares something worth remembering -- preferences, decisions, contact details, " +
+      "technical choices. Facts persist across all sessions and AI tools.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
-        summary: { type: "string", description: "Narrative of what happened - decisions, work completed, problems solved" },
-        topics: { type: "array", items: { type: "string" }, description: "Topic tags for searchability" },
-        open_loops: { type: "array", items: { type: "string" }, description: "Unfinished tasks or questions to carry forward" },
-        decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
-        platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
-        duration_minutes: { type: "number", description: "Approximate session duration" },
-      },
-      required: ["session_id", "summary"],
-    },
-  },
-  {
-    name: "add_fact",
-    description:
-      "Add a new atomic fact to UnClick Memory. One fact = one statement. " +
-      "Use when the user states a preference, makes a decision, or shares important info. " +
-      "Good: 'Team prefers Tailwind over CSS modules'. Bad: 'We talked about styling'.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        fact: { type: "string", description: "The fact - a single atomic statement" },
+        fact: { type: "string", description: "The fact -- a single atomic statement" },
         category: {
           type: "string",
           description: "Category: preference, decision, technical, contact, project, general",
@@ -188,8 +173,10 @@ const META_TOOLS = [
   {
     name: "search_memory",
     description:
-      "Full-text search across UnClick Memory conversation logs. Use when you need to recall " +
-      "something specific from a previous session.",
+      "Searches the user's stored facts and session history. Use this when the user " +
+      "asks about something from a previous session, references a past decision, or " +
+      "when you need context about a specific topic. Returns matching facts and session " +
+      "summaries.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -200,10 +187,11 @@ const META_TOOLS = [
     },
   },
   {
-    name: "set_business_context",
+    name: "save_identity",
     description:
-      "Add or update a standing rule in UnClick Memory (Layer 1). Business context is ALWAYS loaded " +
-      "at session start. Use for standing rules, client info, and preferences that are always relevant.",
+      "Saves or updates the user's identity information -- business name, role, standing " +
+      "rules, preferences. This information loads at the start of every session. Use this " +
+      "when the user wants to change how every future session behaves.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -218,7 +206,37 @@ const META_TOOLS = [
       required: ["category", "key", "value"],
     },
   },
+  {
+    name: "save_session",
+    description:
+      "Saves a summary of the current session including decisions made, tasks completed, " +
+      "and open items. Call this at the end of a session or when significant work is " +
+      "completed. The summary will be available in future sessions.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
+        summary: { type: "string", description: "Narrative of what happened: decisions, work completed, problems solved" },
+        topics: { type: "array", items: { type: "string" }, description: "Topic tags for searchability" },
+        open_loops: { type: "array", items: { type: "string" }, description: "Unfinished tasks or questions to carry forward" },
+        decisions: { type: "array", items: { type: "string" }, description: "Key decisions made during the session" },
+        platform: { type: "string", description: "Platform this session ran on", default: "claude-code" },
+        duration_minutes: { type: "number", description: "Approximate session duration" },
+      },
+      required: ["session_id", "summary"],
+    },
+  },
 ] as const;
+
+// Maps new visible tool names to the canonical MEMORY_HANDLERS keys.
+// Old names (get_startup_context, add_fact, etc.) still work directly.
+const MEMORY_TOOL_ALIASES: Record<string, string> = {
+  load_memory: "get_startup_context",
+  save_fact: "add_fact",
+  save_session: "write_session_summary",
+  save_identity: "set_business_context",
+  // search_memory keeps its name
+};
 
 const DIRECT_TOOLS = [
   {
@@ -401,7 +419,7 @@ const DIRECT_TOOLS = [
   },
   {
     name: "unclick_ip_parse",
-    description: "Parse an IP address — get decimal, binary, hex, and type (private/loopback/multicast).",
+    description: "Parse an IP address -- get decimal, binary, hex, and type (private/loopback/multicast).",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -608,7 +626,7 @@ export function createServer(): Server {
   const server = new Server(
     {
       name: "UnClick",
-      version: "0.1.0",
+      version: "1.0.0",
       description: "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
       websiteUrl: "https://unclick.world",
       icons: [
@@ -624,10 +642,12 @@ export function createServer(): Server {
     }
   );
 
-  // LIST TOOLS — expose only the 4 meta tools; individual tools remain callable
-  // via unclick_call for backwards compat but aren't advertised to reduce noise.
+  // LIST TOOLS: advertise only the 5 core memory tools. Internal tools
+  // (unclick_search, unclick_browse, unclick_tool_info, unclick_call) and the
+  // individual direct tools remain callable for backwards compatibility but
+  // aren't shown in the tool list to keep the surface minimal.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: [...META_TOOLS] };
+    return { tools: [...VISIBLE_TOOLS] };
   });
 
   // CALL TOOL
@@ -637,8 +657,12 @@ export function createServer(): Server {
 
     try {
       // ── UnClick Memory (direct tools + memory.* endpoints) ───────
-      if (MEMORY_HANDLERS[name]) {
-        const result = await MEMORY_HANDLERS[name](args);
+      // Resolve new tool names (load_memory, save_fact, etc.) to canonical
+      // handler keys (get_startup_context, add_fact, etc.). Old names still
+      // work unchanged.
+      const memoryKey = MEMORY_TOOL_ALIASES[name] ?? name;
+      if (MEMORY_HANDLERS[memoryKey]) {
+        const result = await MEMORY_HANDLERS[memoryKey](args);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -685,7 +709,7 @@ export function createServer(): Server {
         for (const [cat, tools] of Object.entries(byCategory)) {
           lines.push(`## ${cat.toUpperCase()}`);
           for (const tool of tools) {
-            lines.push(`- **${tool.name}** (\`${tool.slug}\`) — ${tool.description}`);
+            lines.push(`- **${tool.name}** (\`${tool.slug}\`) -- ${tool.description}`);
           }
           lines.push("");
         }
@@ -726,7 +750,7 @@ export function createServer(): Server {
         ];
 
         for (const ep of tool.endpoints) {
-          lines.push(`### \`${ep.id}\` — ${ep.name}`);
+          lines.push(`### \`${ep.id}\` -- ${ep.name}`);
           lines.push(ep.description);
           lines.push(`**Method:** ${ep.method}  |  **Path:** ${ep.path}`);
           lines.push(`**Input Schema:**`);
@@ -855,6 +879,6 @@ export async function startServer(): Promise<void> {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // Server is running — errors go to stderr so they don't corrupt the MCP stream
+  // Server is running -- errors go to stderr so they don't corrupt the MCP stream
   process.stderr.write("UnClick MCP server running on stdio\n");
 }
