@@ -1,0 +1,51 @@
+{
+  "_comment": "Copy this file to seed-vault-plan.local.json and fill in real values. The .local.json suffix is gitignored.",
+  "api_key": "uc_REPLACE_ME",
+  "api_base": "https://unclick.world",
+  "credentials": [
+    {
+      "platform": "github",
+      "label":    "default",
+      "values":   { "api_key": "ghp_REPLACE" }
+    },
+    {
+      "platform": "anthropic",
+      "label":    "claude-code",
+      "values":   { "api_key": "sk-ant-api03-REPLACE" }
+    },
+    {
+      "platform": "google-gemini",
+      "values":   { "api_key": "AIzaSy_REPLACE" }
+    },
+    {
+      "platform": "google-workspace",
+      "values": {
+        "client_id":     "REPLACE.apps.googleusercontent.com",
+        "client_secret": "GOCSPX-REPLACE",
+        "refresh_token": "REPLACE"
+      }
+    },
+    {
+      "platform": "microsoft-graph",
+      "values": {
+        "tenant_id":     "REPLACE",
+        "client_id":     "REPLACE",
+        "client_secret": "REPLACE"
+      }
+    },
+    {
+      "platform": "npm",
+      "label":    "publish",
+      "values":   { "api_key": "npm_REPLACE" }
+    },
+    {
+      "platform": "supabase",
+      "values": {
+        "access_token":      "sbp_REPLACE",
+        "publishable_key":   "sb_publishable_REPLACE",
+        "secret_key":        "sb_secret_REPLACE",
+        "service_role_key":  "eyJREPLACE"
+      }
+    }
+  ]
+}
