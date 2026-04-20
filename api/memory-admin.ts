@@ -281,20 +281,23 @@ async function resolveSessionTenant(
   req: VercelRequest,
   supabaseUrl: string,
   serviceRoleKey: string,
-  sb: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sb: SupabaseClient<any, any, any, any, any>,
 ): Promise<{ userId: string; email: string | null; apiKeyHash: string; tier: string } | null> {
   const user = await resolveSessionUser(req, supabaseUrl, serviceRoleKey);
   if (!user) return null;
 
   // New shape: key_hash column from Phase 1 keychain_mvp migration
-  const { data: newRow, error: newErr } = await sb
+  const newQ = await sb
     .from("api_keys")
     .select("key_hash, tier")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
+  const newRow = newQ.data as { key_hash?: string | null; tier?: string | null } | null;
+  const newErr = newQ.error;
 
-  if (!newErr && newRow?.key_hash) {
+  if (!newErr && newRow && newRow.key_hash) {
     return {
       userId: user.id,
       email: user.email,
@@ -305,14 +308,15 @@ async function resolveSessionTenant(
 
   // Old shape fallback: api_key plaintext column, compute hash
   try {
-    const { data: oldRow } = await sb
+    const oldQ = await sb
       .from("api_keys")
       .select("api_key, status")
       .eq("user_id", user.id)
       .limit(1)
       .maybeSingle();
+    const oldRow = oldQ.data as { api_key?: string | null; status?: string | null } | null;
 
-    if (oldRow?.api_key) {
+    if (oldRow && oldRow.api_key) {
       return {
         userId: user.id,
         email: user.email,
@@ -2298,7 +2302,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           autoload_method: string | null;
         };
 
-        const rows = (recent ?? []) as Row[];
+        const rows = (recent ?? []) as unknown as Row[];
         const current = rows.filter((r) => r.created_at >= windowStart);
         const previous = rows.filter(
           (r) => r.created_at < windowStart && r.created_at >= prevWindowStart
@@ -2400,7 +2404,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           autoload_method: string | null;
         };
 
-        const rows = (data ?? []) as Row[];
+        const rows = (data ?? []) as unknown as Row[];
         const missed = rows.filter((r) => {
           if (!r.first_tool) return false;
           const neverLoaded = !r.context_loaded;
