@@ -2,14 +2,19 @@
  * UnClick Credentials API
  * Vercel serverless function - serves GET and POST for platform credentials.
  *
- * GET  /api/credentials?platform=xero
+ * GET  /api/credentials?platform=xero[&label=foo]
  *   Authorization: Bearer <unclick_api_key>
  *   Returns decrypted credential fields for the platform.
+ *   If label is omitted, returns the default (NULL-label) row, falling
+ *   back to the first labeled row.
  *   Used by vault-bridge.ts in the MCP server (UNCLICK_API_KEY env var).
  *
  * POST /api/credentials
- *   Body: { platform: string, credentials: Record<string, string>, api_key: string }
+ *   Body: { platform: string, credentials: Record<string, string>,
+ *           api_key: string, label?: string }
  *   Encrypts and stores credentials in Supabase user_credentials table.
+ *   Upserts on (api_key_hash, platform_slug, label) — pass different
+ *   labels to store multiple credentials for the same platform.
  *   Used by Connect.tsx for bot_token / api_key flows (no OAuth exchange needed).
  *
  * Encryption: AES-256-GCM with PBKDF2 key derived from the user's API key.
@@ -114,12 +119,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authHeader = req.headers.authorization ?? "";
     const apiKey     = authHeader.replace(/^Bearer\s+/i, "").trim();
     const platform   = String(req.query.platform ?? "").trim();
+    const label      = typeof req.query.label === "string" ? req.query.label.trim() : "";
 
     if (!apiKey)   return res.status(401).json({ error: "Authorization header required." });
     if (!platform) return res.status(400).json({ error: "platform query param required." });
 
     const apiKeyHash = sha256hex(apiKey);
-    const tableUrl   = `${supabaseUrl}/rest/v1/user_credentials?api_key_hash=eq.${encodeURIComponent(apiKeyHash)}&platform_slug=eq.${encodeURIComponent(platform)}&select=*`;
+    // Label handling:
+    //   - If caller passed ?label=foo, filter to exactly that row.
+    //   - If no label passed, prefer the row with NULL label (the "default"),
+    //     otherwise fall back to the first row.
+    const labelFilter = label
+      ? `&label=eq.${encodeURIComponent(label)}`
+      : "";
+    const tableUrl   = `${supabaseUrl}/rest/v1/user_credentials?api_key_hash=eq.${encodeURIComponent(apiKeyHash)}&platform_slug=eq.${encodeURIComponent(platform)}${labelFilter}&select=*&order=label.asc.nullsfirst`;
 
     const { ok, data } = await supabaseFetch(tableUrl, "GET", supabaseHeaders(serviceRoleKey));
     if (!ok) return res.status(502).json({ error: "Supabase lookup failed." });
@@ -127,7 +140,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rows = data as Array<Record<string, unknown>>;
     if (!rows || rows.length === 0) {
       return res.status(404).json({
-        error:     `No credentials stored for platform "${platform}".`,
+        error:     label
+          ? `No credentials stored for platform "${platform}" with label "${label}".`
+          : `No credentials stored for platform "${platform}".`,
         setup_url: `https://unclick.world/connect/${platform}`,
       });
     }
@@ -155,9 +170,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       platform:    string;
       credentials: Record<string, string>;
       api_key:     string;
+      label?:      string;
     };
 
-    const { platform, credentials, api_key } = body ?? {};
+    const { platform, credentials, api_key, label } = body ?? {};
     if (!platform)    return res.status(400).json({ error: "platform is required." });
     if (!credentials) return res.status(400).json({ error: "credentials is required." });
     if (!api_key)     return res.status(400).json({ error: "api_key is required." });
@@ -172,9 +188,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const plaintext  = JSON.stringify(credentials);
     const { iv, authTag, ciphertext } = encrypt(plaintext, key);
 
+    // Label normalization: empty string → null (treat "no label" uniformly).
+    const normalizedLabel = label && label.trim() ? label.trim() : null;
+
     const row = {
       api_key_hash:    sha256hex(api_key),
       platform_slug:   platform,
+      label:           normalizedLabel,
       encrypted_data:  ciphertext,
       encryption_iv:   iv,
       encryption_tag:  authTag,
@@ -182,10 +202,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updated_at:      new Date().toISOString(),
     };
 
-    const tableUrl = `${supabaseUrl}/rest/v1/user_credentials`;
+    // Upsert on the (api_key_hash, platform_slug, label) unique index.
+    // PostgREST requires the explicit `on_conflict` param to know which
+    // constraint to merge on; without it, Prefer=merge-duplicates falls back
+    // to the PK and every insert 409s (the bug that blocked the original
+    // vault seed). The index is declared NULLS NOT DISTINCT so a NULL label
+    // behaves as a single distinct "default" value — see migration
+    // 20260420040000_user_credentials_label.sql.
+    const tableUrl = `${supabaseUrl}/rest/v1/user_credentials?on_conflict=api_key_hash,platform_slug,label`;
     const headers  = {
       ...supabaseHeaders(serviceRoleKey),
-      // Upsert on (api_key_hash, platform_slug) unique constraint
       Prefer: "resolution=merge-duplicates,return=representation",
     };
 
@@ -197,7 +223,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       success:  true,
       platform,
-      message:  `${platform} credentials stored successfully.`,
+      label:    normalizedLabel,
+      message:  normalizedLabel
+        ? `${platform} credentials stored successfully (label: ${normalizedLabel}).`
+        : `${platform} credentials stored successfully.`,
     });
   }
 
