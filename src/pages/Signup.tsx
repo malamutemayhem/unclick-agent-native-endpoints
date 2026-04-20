@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Check } from "lucide-react";
 import { signInWithMagicLink, signInWithOAuth, useSession } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 
 export default function SignupPage() {
   useCanonical("https://unclick.world/signup");
@@ -48,6 +49,7 @@ export default function SignupPage() {
       return;
     }
     setBusy("magic");
+    track("signup_started", { method: "magic" });
     try {
       await signInWithMagicLink(trimmed);
       setSent(true);
@@ -61,6 +63,7 @@ export default function SignupPage() {
   async function handleOAuth(provider: "google" | "azure") {
     setError("");
     setBusy(provider);
+    track("signup_started", { method: provider });
     try {
       await signInWithOAuth(provider);
     } catch (err) {

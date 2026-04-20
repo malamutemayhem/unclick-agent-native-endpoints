@@ -11,11 +11,12 @@
  * sends ?error=...&error_description=... which we surface inline.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useSession } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 import { Loader2 } from "lucide-react";
 
 export default function AuthCallbackPage() {
@@ -25,9 +26,25 @@ export default function AuthCallbackPage() {
 
   const urlError = params.get("error_description") || params.get("error");
   const [timedOut, setTimedOut] = useState(false);
+  const tracked = useRef(false);
 
   useEffect(() => {
     if (!loading && session) {
+      // Fire auth_success to Umami exactly once per callback landing.
+      // new_user inferred by comparing created_at with last_sign_in_at:
+      // if they're within 10s of each other, this is a first-time
+      // signup; otherwise it's a returning login.
+      if (!tracked.current) {
+        tracked.current = true;
+        const user = session.user;
+        const created = user?.created_at ? Date.parse(user.created_at) : 0;
+        const lastSignIn = user?.last_sign_in_at ? Date.parse(user.last_sign_in_at) : 0;
+        const newUser =
+          created > 0 && lastSignIn > 0 && Math.abs(lastSignIn - created) < 10_000;
+        const provider =
+          (user?.app_metadata as { provider?: string } | undefined)?.provider ?? "unknown";
+        track("auth_success", { new_user: newUser, provider });
+      }
       navigate("/admin", { replace: true });
     }
   }, [loading, session, navigate]);

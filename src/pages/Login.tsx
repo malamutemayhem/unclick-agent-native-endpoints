@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Check } from "lucide-react";
 import { signInWithMagicLink, signInWithOAuth, useSession } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 import { useEffect } from "react";
 
 export default function LoginPage() {
@@ -44,6 +45,7 @@ export default function LoginPage() {
       return;
     }
     setBusy("magic");
+    track("login_started", { method: "magic" });
     try {
       await signInWithMagicLink(trimmed);
       setSent(true);
@@ -57,6 +59,7 @@ export default function LoginPage() {
   async function handleOAuth(provider: "google" | "azure") {
     setError("");
     setBusy(provider);
+    track("login_started", { method: provider });
     try {
       await signInWithOAuth(provider);
       // Redirect happens via Supabase. Nothing else to do here.
