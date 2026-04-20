@@ -129,6 +129,7 @@ import {
 import {
   listVercelDeployments, getVercelDeployment,
   listVercelProjects, getVercelDomain, getVercelEnv,
+  createVercelEnv, deleteVercelEnv, createVercelDeployment,
 } from "./vercel-tool.js";
 
 import {
@@ -2116,6 +2117,65 @@ export const ADDITIONAL_TOOLS = [
         api_key: { type: "string" },
       },
       required: ["projectId"],
+    },
+  },
+  {
+    name: "vercel_create_env",
+    description:
+      "Create (or upsert) an environment variable on a Vercel project. Target defaults to production, preview, and development. Use type='plain' for non-secret values, 'encrypted' or 'sensitive' for secrets.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project_id: { type: "string" },
+        key: { type: "string" },
+        value: { type: "string" },
+        target: {
+          type: "string",
+          description: "CSV of environments: 'production,preview,development'. Defaults to all three.",
+        },
+        type: {
+          type: "string",
+          description: "plain | encrypted | sensitive | secret | system. Defaults to plain.",
+        },
+        git_branch: { type: "string" },
+        comment: { type: "string" },
+        upsert: { type: "boolean", description: "Overwrite existing value for same key/target. Default true." },
+        team_id: { type: "string" },
+        api_key: { type: "string" },
+      },
+      required: ["project_id", "key", "value"],
+    },
+  },
+  {
+    name: "vercel_delete_env",
+    description: "Delete a Vercel environment variable by its env id (get ids from vercel_get_env).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project_id: { type: "string" },
+        env_id: { type: "string" },
+        team_id: { type: "string" },
+        api_key: { type: "string" },
+      },
+      required: ["project_id", "env_id"],
+    },
+  },
+  {
+    name: "vercel_create_deployment",
+    description:
+      "Create a Vercel deployment. Pass deployment_id to redeploy an existing commit, or project_id + git_ref to deploy fresh from git. Set force_new=true to skip the build cache (needed after env var changes or when serverless function surfaces change).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        deployment_id: { type: "string", description: "Redeploy the git source of this existing deployment." },
+        project_id: { type: "string", description: "Deploy fresh from the project's linked git repo." },
+        git_ref: { type: "string", description: "Branch or SHA to deploy. Defaults to 'main'." },
+        target: { type: "string", description: "'production' (default) or 'preview'." },
+        force_new: { type: "boolean", description: "Skip build cache. Default false." },
+        name: { type: "string" },
+        team_id: { type: "string" },
+        api_key: { type: "string" },
+      },
     },
   },
 
@@ -11165,6 +11225,9 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   vercel_list_projects: (args) => listVercelProjects(args),
   vercel_get_domain:    (args) => getVercelDomain(args),
   vercel_get_env:       (args) => getVercelEnv(args),
+  vercel_create_env:    (args) => createVercelEnv(args),
+  vercel_delete_env:    (args) => deleteVercelEnv(args),
+  vercel_create_deployment:(args) => createVercelDeployment(args),
 
   // toggl-tool.ts
   toggl_time_entries:   (args) => getTogglTimeEntries(args),
