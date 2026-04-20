@@ -3098,6 +3098,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
+      case "admin_profile": {
+        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
+        if (!tenant) return res.status(401).json({ error: "Unauthorized" });
+
+        const { data: keyRow } = await supabase
+          .from("api_keys")
+          .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+          .eq("key_hash", tenant.apiKeyHash)
+          .maybeSingle();
+
+        const apiKey = keyRow
+          ? {
+              id: keyRow.id as string,
+              prefix: (keyRow.key_prefix ?? "") as string,
+              label: (keyRow.label ?? "") as string,
+              tier: (keyRow.tier ?? "free") as string,
+              is_active: Boolean(keyRow.is_active),
+              usage_count: Number(keyRow.usage_count ?? 0),
+              last_used_at: (keyRow.last_used_at ?? null) as string | null,
+              created_at: keyRow.created_at as string,
+            }
+          : null;
+
+        const tier = apiKey ? apiKey.tier : tenant.tier ?? null;
+
+        return res.status(200).json({
+          user_id: tenant.userId,
+          email: tenant.email,
+          tier,
+          needs_key: !apiKey,
+          api_key: apiKey,
+        });
+      }
+
       case "admin_tools": {
         const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
         if (!tenant) return res.status(401).json({ error: "Not signed in" });
