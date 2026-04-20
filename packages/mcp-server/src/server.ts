@@ -639,6 +639,34 @@ export function createServer(): Server {
     },
     {
       capabilities: { tools: {} },
+      // Instructions are surfaced to the client on the MCP `initialize` response
+      // and most Claude surfaces (Desktop, web, Code, Cowork) inject them into
+      // the system/tool context. This is how we tell every connected agent:
+      // "load the user's memory before you answer." Without this, `load_memory`
+      // is just another tool in a list and the agent rarely calls it first.
+      instructions: [
+        "UnClick is this user's cross-session memory and agent toolbelt.",
+        "",
+        "ASSUME INTERRUPTION. Your context may reset between messages or sessions.",
+        "This MCP is the authoritative store for the user's durable facts,",
+        "preferences, decisions, and work-in-progress. Treat native model memory",
+        "as a volatile supplement only.",
+        "",
+        "ALWAYS call `load_memory` before responding to the user's first message",
+        "in any new session or after any apparent context reset. Do this even if",
+        "the user's first message looks trivial — personal facts (name, timezone,",
+        "projects, preferences, open loops) change how you should answer almost",
+        "every question.",
+        "",
+        "AS YOU WORK: use `save_fact` to persist new durable facts the user shares",
+        "(identity, preferences, tools, family, business, decisions). Use",
+        "`save_session` at natural checkpoints to record what you did, what's open,",
+        "and what the next step is — so the next agent (or next-you) can resume",
+        "without re-asking.",
+        "",
+        "Never ask the user to 'catch you up' on things they've already told",
+        "UnClick. Load first, then act.",
+      ].join("\n"),
     }
   );
 
