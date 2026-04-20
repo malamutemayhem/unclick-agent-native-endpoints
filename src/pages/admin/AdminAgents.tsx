@@ -20,7 +20,13 @@ import {
   X,
   Check,
 } from "lucide-react";
-import { AGENT_TEMPLATES, MEMORY_LAYERS, type MemoryLayerKey } from "./agentTemplates";
+import {
+  AGENT_TEMPLATES,
+  CREW_CATEGORIES,
+  MEMORY_LAYERS,
+  type AgentTemplate,
+  type MemoryLayerKey,
+} from "./agentTemplates";
 
 interface Agent {
   id: string;
@@ -56,11 +62,26 @@ interface AgentDetail {
 const ROLE_OPTIONS = [
   { value: "researcher", label: "Researcher" },
   { value: "developer", label: "Developer" },
+  { value: "architect", label: "Architect" },
+  { value: "qa_engineer", label: "QA Engineer" },
+  { value: "security_officer", label: "Security Officer" },
+  { value: "designer", label: "Designer" },
+  { value: "ceo", label: "CEO" },
+  { value: "cto", label: "CTO" },
   { value: "writer", label: "Writer" },
+  { value: "finance_lead", label: "Finance Lead" },
+  { value: "legal_advisor", label: "Legal Advisor" },
   { value: "organiser", label: "Organiser" },
+  { value: "customer_advocate", label: "Customer Advocate" },
+  { value: "devils_advocate", label: "Devil's Advocate" },
   { value: "general", label: "General" },
   { value: "custom", label: "Custom" },
 ];
+
+// Role slug -> Lucide icon, used to render an agent's icon when no avatar URL is set.
+const ROLE_ICON_MAP = new Map(
+  AGENT_TEMPLATES.map((t) => [t.role, t.icon] as const),
+);
 
 function getApiKey(): string {
   if (typeof window === "undefined") return "";
@@ -122,7 +143,7 @@ export default function AdminAgentsPage() {
   const defaultAgent = useMemo(() => agents.find((a) => a.is_default), [agents]);
   const noDefaultWarning = agents.length > 0 && !defaultAgent;
 
-  const handleCreate = async (template: (typeof AGENT_TEMPLATES)[number] | null) => {
+  const handleCreate = async (template: AgentTemplate | null) => {
     setShowTemplates(false);
     try {
       const body = template
@@ -295,102 +316,107 @@ export default function AdminAgentsPage() {
         <p className="text-xs text-muted-foreground">Loading agents...</p>
       ) : (
         <ul className="space-y-3">
-          {agents.map((agent) => (
-            <li
-              key={agent.id}
-              className="rounded-xl border border-border/40 bg-card/20 p-5 transition-colors hover:border-border/60"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    {agent.avatar_url ? (
-                      <img
-                        src={agent.avatar_url}
-                        alt={agent.name}
-                        className="h-10 w-10 rounded-xl object-cover"
-                      />
-                    ) : (
-                      <Bot className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-heading">{agent.name}</h3>
-                      {agent.is_default && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
-                          <Star className="h-3 w-3" /> default
-                        </span>
+          {agents.map((agent) => {
+            const RoleIcon = ROLE_ICON_MAP.get(agent.role);
+            return (
+              <li
+                key={agent.id}
+                className="rounded-xl border border-border/40 bg-card/20 p-5 transition-colors hover:border-border/60"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      {agent.avatar_url ? (
+                        <img
+                          src={agent.avatar_url}
+                          alt={agent.name}
+                          className="h-10 w-10 rounded-xl object-cover"
+                        />
+                      ) : RoleIcon ? (
+                        <RoleIcon className="h-5 w-5" />
+                      ) : (
+                        <Bot className="h-5 w-5" />
                       )}
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] ${
-                          agent.is_active
-                            ? "border-primary/30 bg-primary/10 text-primary"
-                            : "border-border/50 bg-card/40 text-muted-foreground"
-                        }`}
-                      >
-                        {agent.is_active ? "active" : "inactive"}
-                      </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-body">
-                      {agent.description ?? "No description"}
-                    </p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      Tools: {agent.tool_count === 0 ? "all" : agent.tool_count} ·
-                      Memory:{" "}
-                      {agent.memory_layer_count === 0
-                        ? "all layers"
-                        : `${agent.memory_layer_count} of ${MEMORY_LAYERS.length}`}{" "}
-                      · Role: {agent.role}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-heading">{agent.name}</h3>
+                        {agent.is_default && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                            <Star className="h-3 w-3" /> default
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] ${
+                            agent.is_active
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/50 bg-card/40 text-muted-foreground"
+                          }`}
+                        >
+                          {agent.is_active ? "active" : "inactive"}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-body">
+                        {agent.description ?? "No description"}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        Tools: {agent.tool_count === 0 ? "all" : agent.tool_count} ·
+                        Memory:{" "}
+                        {agent.memory_layer_count === 0
+                          ? "all layers"
+                          : `${agent.memory_layer_count} of ${MEMORY_LAYERS.length}`}{" "}
+                        · Role: {agent.role}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {!agent.is_default && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!agent.is_default && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetDefault(agent.id)}
+                        title="Make default"
+                        className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-amber-400"
+                      >
+                        <Star className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => handleSetDefault(agent.id)}
-                      title="Make default"
-                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-amber-400"
+                      onClick={() => openEditor(agent.id)}
+                      title="Edit"
+                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
                     >
-                      <Star className="h-3.5 w-3.5" />
+                      <Pencil className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => openEditor(agent.id)}
-                    title="Edit"
-                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDuplicate(agent.id)}
-                    title="Duplicate"
-                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(agent)}
-                    title={agent.is_active ? "Disable" : "Enable"}
-                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    <Power className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(agent.id)}
-                    title="Delete"
-                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-rose-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicate(agent.id)}
+                      title="Duplicate"
+                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(agent)}
+                      title={agent.is_active ? "Disable" : "Enable"}
+                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Power className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(agent.id)}
+                      title="Delete"
+                      className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-rose-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -418,7 +444,7 @@ function TemplatePicker({
   onPick,
   onClose,
 }: {
-  onPick: (template: (typeof AGENT_TEMPLATES)[number] | null) => void;
+  onPick: (template: AgentTemplate | null) => void;
   onClose: () => void;
 }) {
   return (
@@ -427,10 +453,10 @@ function TemplatePicker({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-xl border border-border/40 bg-card p-6 shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-border/40 bg-card shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between">
+        <div className="flex items-start justify-between border-b border-border/40 p-6">
           <div>
             <h2 className="text-lg font-semibold text-heading">Start from a template</h2>
             <p className="mt-1 text-xs text-body">
@@ -447,36 +473,68 @@ function TemplatePicker({
           </button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {AGENT_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.role}
-              type="button"
-              onClick={() => onPick(tpl)}
-              className="rounded-lg border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-heading">{tpl.name}</span>
-                <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-                  {tpl.role}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-body">{tpl.description}</p>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => onPick(null)}
-            className="rounded-lg border border-dashed border-border/50 bg-card/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-heading">Custom</span>
-              <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-                blank
-              </span>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-5">
+            {CREW_CATEGORIES.map((cat) => {
+              const members = AGENT_TEMPLATES.filter((t) => t.category === cat.key);
+              if (members.length === 0) return null;
+              return (
+                <div key={cat.key}>
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {cat.label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70">{cat.hint}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {members.map((tpl) => {
+                      const Icon = tpl.icon;
+                      return (
+                        <button
+                          key={tpl.role}
+                          type="button"
+                          onClick={() => onPick(tpl)}
+                          className="rounded-lg border border-border/40 bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <span className="text-sm font-semibold text-heading">{tpl.name}</span>
+                            <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                              {tpl.role}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-xs text-body">{tpl.description}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Start blank
+              </p>
+              <button
+                type="button"
+                onClick={() => onPick(null)}
+                className="w-full rounded-lg border border-dashed border-border/50 bg-card/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-heading">Custom</span>
+                  <span className="rounded-full border border-border/40 bg-card/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    blank
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-body">
+                  Start from scratch and define everything yourself.
+                </p>
+              </button>
             </div>
-            <p className="mt-1 text-xs text-body">Start from scratch and define everything yourself.</p>
-          </button>
+          </div>
         </div>
       </div>
     </div>
