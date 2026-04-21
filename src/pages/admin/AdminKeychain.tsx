@@ -24,6 +24,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useSession } from "@/lib/auth";
 import {
   AlertTriangle,
@@ -35,6 +36,7 @@ import {
   KeyRound,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
   RotateCw,
   Shield,
@@ -149,6 +151,7 @@ export default function AdminKeychain() {
   const [rotateTarget, setRotateTarget] = useState<Credential | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Credential | null>(null);
   const [auditOpen, setAuditOpen]       = useState(false);
+  const [starterOpen, setStarterOpen]   = useState(false);
 
   // Audit log (only fetched when drawer opens)
   const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
@@ -389,12 +392,15 @@ export default function AdminKeychain() {
           <KeyRound className="mx-auto h-8 w-8 text-[#333]" />
           <p className="mt-3 text-sm text-[#666]">No credentials stored</p>
           <p className="mt-1 text-xs text-[#444]">
-            Connect a platform via{" "}
-            <a href="/backstagepass" className="text-[#E2B93B] underline-offset-2 hover:underline">
-              BackstagePass
-            </a>{" "}
-            or the MCP server to see it here
+            Connect a platform via the MCP server, or add one manually below.
           </p>
+          <button
+            onClick={() => setStarterOpen(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-3 py-2 text-xs font-semibold text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add starter credentials
+          </button>
         </div>
       ) : (
         <div className="space-y-6">
@@ -601,6 +607,61 @@ export default function AdminKeychain() {
           loading={auditLoading}
           onClose={() => setAuditOpen(false)}
         />
+      )}
+
+      {/* Starter credentials picker */}
+      {starterOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setStarterOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#111111] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Add a credential</h3>
+              <button
+                onClick={() => setStarterOpen(false)}
+                className="rounded-md p-1 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 text-xs text-[#666]">
+              Choose a platform to connect. You can also add any platform via the MCP server.
+            </p>
+            <div className="space-y-1.5">
+              {([
+                { slug: "slack",    name: "Slack",    desc: "Messages and channels" },
+                { slug: "shopify",  name: "Shopify",  desc: "Store and orders" },
+                { slug: "xero",     name: "Xero",     desc: "Accounting and invoices" },
+                { slug: "discord",  name: "Discord",  desc: "Servers and messages" },
+                { slug: "telegram", name: "Telegram", desc: "Bots and channels" },
+                { slug: "reddit",   name: "Reddit",   desc: "Posts and comments" },
+              ] as const).map(({ slug, name, desc }) => (
+                <Link
+                  key={slug}
+                  to={`/connect/${slug}`}
+                  onClick={() => setStarterOpen(false)}
+                  className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 transition-colors hover:border-[#E2B93B]/30 hover:bg-[#E2B93B]/5"
+                >
+                  <div>
+                    <p className="text-xs font-medium text-white">{name}</p>
+                    <p className="text-[11px] text-[#555]">{desc}</p>
+                  </div>
+                  <Plus className="h-3.5 w-3.5 shrink-0 text-[#555]" />
+                </Link>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-[11px] text-[#444]">
+              More platforms available via{" "}
+              <Link to="/backstagepass" className="text-[#E2B93B] hover:underline" onClick={() => setStarterOpen(false)}>
+                BackstagePass
+              </Link>
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
