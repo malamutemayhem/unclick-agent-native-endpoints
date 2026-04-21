@@ -118,6 +118,7 @@ export async function updateItem(
     on_fail_comment?: string;
     time_ms?: number;
     cost_usd?: number;
+    evidence_ref?: string;
   }
 ): Promise<void> {
   await supaFetch(

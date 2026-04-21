@@ -22,6 +22,7 @@ import {
   updateRunStatus,
   computeVerdictSummary,
 } from "../packages/testpass/src/run-manager.js";
+import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
 import * as path from "node:path";
 import * as url from "node:url";
@@ -160,10 +161,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await seedPendingItems(config, runId, pack, profile, evidenceRef);
 
-    return json(res, 201, { run_id: runId, evidence_ref: evidenceRef ?? null });
+    // Run deterministic checks inline. Agent checks (check_type: agent)
+    // with no registered handler are left pending for a future runner.
+    if (body.target.url) {
+      try {
+        await runDeterministicChecks(config, runId, body.target.url, pack, profile);
+      } catch (err) {
+        console.error(`TestPass deterministic run failed for ${runId}:`, (err as Error).message);
+      }
+    }
+
+    // Finalize: any item still pending means we're waiting on the agent runner.
+    const summary = await computeVerdictSummary(config, runId);
+    const isDone  = summary.pending === 0;
+    await updateRunStatus(
+      config,
+      runId,
+      isDone ? (summary.fail > 0 ? "failed" : "complete") : "running",
+      summary,
+    );
+
+    return json(res, 201, { run_id: runId, evidence_ref: evidenceRef ?? null, summary });
   }
 
-  // Complete a specific run (called by the deterministic runner in Chunk 3)
+  // Complete a specific run (called when agent checks land after Chunk 4+)
   if (req.method === "POST" && action === "complete_run") {
     const body = req.body as { run_id?: string };
     if (!body.run_id) return json(res, 400, { error: "run_id required" });

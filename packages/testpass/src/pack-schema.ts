@@ -24,7 +24,7 @@ export const PackSchema = z.object({
   extends: z.string().optional(),
   include: z.array(z.string()).optional(),
   exclude: z.array(z.string()).optional(),
-  overrides: z.record(z.string(), z.partial(PackItemSchema.omit({ id: true }))).optional(),
+  overrides: z.record(z.string(), PackItemSchema.omit({ id: true }).partial()).optional(),
   items: z.array(PackItemSchema).min(1),
 });
 
