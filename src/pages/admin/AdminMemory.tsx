@@ -45,24 +45,57 @@ export default function AdminMemoryPage() {
   const { session, loading: sessionLoading } = useSession();
   const accessToken = session?.access_token ?? "";
 
+  // Admin gate: only admin emails (ADMIN_EMAILS env on the backend) can
+  // load the memory surface. Everyone else sees a friendly "admin-only"
+  // card instead of firing memory fetches that would 401 in the console.
+  // `null` = not yet determined (still loading the admin_profile call).
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (!accessToken) {
       setStorageLoading(false);
+      setIsAdmin(null);
       return;
     }
+    let cancelled = false;
     (async () => {
+      // Resolve the admin flag FIRST. admin_profile is also the
+      // endpoint that auto-provisions an api_keys row if one is missing
+      // (see #63), so by the time we fire admin_memory_activity below
+      // the tenant hash exists.
+      let admin = false;
+      try {
+        const profileRes = await fetch("/api/memory-admin?action=admin_profile", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (profileRes.ok) {
+          const profile = (await profileRes.json()) as { is_admin?: boolean };
+          admin = Boolean(profile.is_admin);
+        }
+      } catch {
+        admin = false;
+      }
+      if (cancelled) return;
+      setIsAdmin(admin);
+
+      if (!admin) {
+        setStorageLoading(false);
+        return;
+      }
+
       try {
         const res = await fetch("/api/memory-admin?action=admin_memory_activity", {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (res.ok) {
           const body = await res.json();
-          setStorage(body.storage ?? null);
+          if (!cancelled) setStorage(body.storage ?? null);
         }
       } finally {
-        setStorageLoading(false);
+        if (!cancelled) setStorageLoading(false);
       }
     })();
+    return () => { cancelled = true; };
   }, [accessToken]);
 
   const setTab = (tab: TabId) => {
@@ -83,6 +116,29 @@ export default function AdminMemoryPage() {
         <p className="text-sm text-white/70">Sign in to see what UnClick remembers about you.</p>
         <p className="mt-2 text-xs text-white/50">
           Memory is scoped to your account; sign in from <a href="/login" className="text-[#61C1C4] underline">/login</a> to continue.
+        </p>
+      </div>
+    );
+  }
+
+  // Still resolving the admin flag. Brief spinner instead of a flash
+  // of admin-only content before the gate settles.
+  if (isAdmin === null) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-8 text-center">
+        <p className="text-sm text-white/70">Loading your memory workspace...</p>
+      </div>
+    );
+  }
+
+  // Non-admin: no memory fetches fire, no 401 console noise, friendly
+  // message on the page.
+  if (!isAdmin) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-8 text-center">
+        <p className="text-sm text-white/70">Memory is not available on this account yet.</p>
+        <p className="mt-2 text-xs text-white/50">
+          Your account settings and API key are on <a href="/admin/you" className="text-[#61C1C4] underline">/admin/you</a>.
         </p>
       </div>
     );

@@ -207,11 +207,12 @@ export default function AdminYou() {
     (async () => {
       try {
         const headers = { Authorization: `Bearer ${session.access_token}` };
-        const [profileRes, devicesRes] = await Promise.all([
-          fetch("/api/memory-admin?action=admin_profile", { headers }),
-          fetch("/api/memory-admin?action=auth_device_list", { headers }),
-        ]);
-
+        // Serialize admin_profile BEFORE auth_device_list. admin_profile
+        // is the endpoint that auto-provisions an api_keys row on first
+        // visit; auth_device_list needs that row to exist or it 401s.
+        // Racing them via Promise.all caused auth_device_list to lose
+        // the race for brand-new signups and fire a 401 in the console.
+        const profileRes = await fetch("/api/memory-admin?action=admin_profile", { headers });
         if (!cancelled && profileRes.ok) {
           const body = (await profileRes.json()) as ProfileData & {
             generated_api_key?: string | null;
@@ -252,9 +253,18 @@ export default function AdminYou() {
             } catch { /* ignore */ }
           }
         }
-        if (!cancelled && devicesRes.ok) {
-          const body = await devicesRes.json();
-          setDevices(body.data ?? []);
+        // Only fire auth_device_list after admin_profile has returned, so
+        // the auto-provisioned api_keys row definitely exists.
+        if (!cancelled) {
+          try {
+            const devicesRes = await fetch("/api/memory-admin?action=auth_device_list", { headers });
+            if (!cancelled && devicesRes.ok) {
+              const body = await devicesRes.json();
+              setDevices(body.data ?? []);
+            }
+          } catch {
+            // Network errors are non-fatal for the devices card.
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
