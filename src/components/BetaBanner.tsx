@@ -46,21 +46,19 @@ export default function BetaBanner() {
       className="fixed inset-x-0 top-0 z-[70] flex items-center justify-center gap-2 border-b border-[#61C1C4]/20 bg-[#0D1A1A] px-4"
       style={{ height: BANNER_H_PX }}
     >
-      <span className="text-[11px] leading-none text-[#888]" aria-hidden>
-        &#9888;
-      </span>
       <p className="text-[12px] leading-none text-[#999]">
-        <span className="font-medium text-[#ccc]">UnClick is in beta</span>
-        {" - "}
+        <span className="mr-1" aria-hidden>&#9889;</span>
+        <span className="font-medium text-[#ccc]">UnClick is in Beta.</span>
+        {" Free to try while we polish. "}
         <Link to={ctaHref} className="text-[#61C1C4] transition-colors hover:text-[#7dd4d7]">
           {ctaLabel}
         </Link>
-        {" - "}
+        {". Spotted a bug? "}
         <a
           href="mailto:bugs@unclick.world?subject=UnClick%20Beta%20Bug%20Report"
           className="text-[#61C1C4] transition-colors hover:text-[#7dd4d7]"
         >
-          report a bug
+          Tell us.
         </a>
       </p>
 
