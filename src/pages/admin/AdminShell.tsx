@@ -73,7 +73,7 @@ export default function AdminShell() {
   return (
     <div className="flex min-h-screen bg-[#0A0A0A] text-[#ccc]">
       {/* ── Desktop sidebar (md+) ──────────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-white/[0.06] bg-[#0A0A0A] md:flex">
+      <aside className="fixed left-0 z-40 hidden w-56 flex-col border-r border-white/[0.06] bg-[#0A0A0A] md:flex" style={{ top: "var(--bbn-h, 0px)", bottom: 0 }}>
         <div className="flex h-14 items-center px-5">
           <Link to="/">
             <img
@@ -123,7 +123,7 @@ export default function AdminShell() {
       </aside>
 
       {/* ── Desktop top bar (md+) with global search ───────────── */}
-      <header className="fixed inset-x-0 top-0 z-30 hidden h-14 items-center border-b border-white/[0.06] bg-[#0A0A0A] md:flex md:pl-56">
+      <header className="fixed inset-x-0 z-30 hidden h-14 items-center border-b border-white/[0.06] bg-[#0A0A0A] md:flex md:pl-56" style={{ top: "var(--bbn-h, 0px)" }}>
         <div className="flex flex-1 items-center gap-3 px-4 lg:px-8">
           <div className="flex-1">
             <AdminSearchBar />
@@ -133,7 +133,7 @@ export default function AdminShell() {
       </header>
 
       {/* ── Mobile/tablet top bar (<md) ────────────────────── */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0A0A0A] px-4 md:hidden">
+      <header className="fixed inset-x-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0A0A0A] px-4 md:hidden" style={{ top: "var(--bbn-h, 0px)" }}>
         <Link to="/">
           <img
             src="/logo-wordmark.svg"
@@ -161,7 +161,7 @@ export default function AdminShell() {
 
       {/* Mobile nav drawer */}
       {mobileNavOpen && (
-        <div className="fixed inset-x-0 top-14 z-30 border-b border-white/[0.06] bg-[#0A0A0A] p-3 md:hidden">
+        <div className="fixed inset-x-0 z-30 border-b border-white/[0.06] bg-[#0A0A0A] p-3 md:hidden" style={{ top: "calc(var(--bbn-h, 0px) + 56px)" }}>
           <div className="mb-3">
             <AdminSearchBar />
           </div>
@@ -186,7 +186,7 @@ export default function AdminShell() {
       )}
 
       {/* ── Main content ────────────────────────────────── */}
-      <main className="min-h-screen flex-1 pt-14 md:ml-56 md:pt-14">
+      <main className="min-h-screen flex-1 md:ml-56" style={{ paddingTop: "calc(var(--bbn-h, 0px) + 56px)" }}>
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
           <Outlet />
         </div>

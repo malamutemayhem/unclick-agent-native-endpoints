@@ -39,6 +39,7 @@ import LoginPage from "./pages/Login.tsx";
 import SignupPage from "./pages/Signup.tsx";
 import AuthCallbackPage from "./pages/AuthCallback.tsx";
 import RequireAuth from "./components/RequireAuth.tsx";
+import BetaBanner from "./components/BetaBanner.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
 import AdminYou from "./pages/admin/AdminYou.tsx";
 import AdminMemory from "./pages/admin/AdminMemory.tsx";
@@ -58,6 +59,7 @@ const App = () => (
       <Sonner />
       <Analytics />
       <BrowserRouter>
+        <BetaBanner />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/docs" element={<DocsPage />} />

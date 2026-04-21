@@ -24,7 +24,7 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
+    <nav className="fixed left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md" style={{ top: "var(--bbn-h, 0px)" }}>
       <div className="container mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6">
         <Link to="/" className="shrink-0">
           <img src="/logo-wordmark.svg" alt="UnClick" style={{ height: "3.3rem" }} className="w-auto pt-2 pb-[3px]" />
