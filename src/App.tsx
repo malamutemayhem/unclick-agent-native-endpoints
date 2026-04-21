@@ -50,6 +50,9 @@ import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
+import { initPostHog } from "./lib/posthog.ts";
+
+initPostHog();
 
 const queryClient = new QueryClient();
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { posthog } from "./posthog";
 
 export async function signInWithMagicLink(email: string) {
   return supabase.auth.signInWithOtp({
@@ -29,6 +30,7 @@ export async function signOut() {
   } catch {
     // localStorage can be unavailable in private-mode / SSR; ignore.
   }
+  posthog.reset();
   return supabase.auth.signOut();
 }
 

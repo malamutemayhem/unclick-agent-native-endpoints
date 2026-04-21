@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Check } from "lucide-react";
 import { signInWithMagicLink, signInWithOAuth, useSession } from "@/lib/auth";
+import { posthog } from "@/lib/posthog";
 import { useEffect } from "react";
 
 export default function LoginPage() {
@@ -47,8 +48,10 @@ export default function LoginPage() {
     try {
       await signInWithMagicLink(trimmed);
       setSent(true);
+      // TODO(posthog-migration): remove umami call once PostHog validated
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).umami?.track("signin", { method: "magic_link" });
+      posthog.capture("signin_started", { method: "magic_link" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -59,8 +62,10 @@ export default function LoginPage() {
   async function handleOAuth(provider: "google" | "azure") {
     setError("");
     setBusy(provider);
+    // TODO(posthog-migration): remove umami call once PostHog validated
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).umami?.track("signin", { method: provider });
+    posthog.capture("signin_started", { method: provider });
     try {
       await signInWithOAuth(provider);
       // Redirect happens via Supabase. Nothing else to do here.

@@ -17,6 +17,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useSession } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { posthog } from "@/lib/posthog";
 import { Loader2 } from "lucide-react";
 
 export default function AuthCallbackPage() {
@@ -34,14 +35,21 @@ export default function AuthCallbackPage() {
       const method = provider === "email" ? "magic_link" : provider;
       const createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
       const isNewUser = createdAt > 0 && Date.now() - createdAt < 60_000;
+      posthog.identify(user.id, {
+        email: user.email,
+        provider,
+        created_at: user.created_at,
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const track = (window as any).umami?.track;
-      if (track) {
-        if (isNewUser) {
-          track("new_user_signup", { method, email: user.email });
-        } else {
-          track("returning_user_signin", { method });
-        }
+      if (isNewUser) {
+        // TODO(posthog-migration): remove umami call once PostHog validated
+        track?.("new_user_signup", { method, email: user.email });
+        posthog.capture("signup_completed", { method, email: user.email });
+      } else {
+        // TODO(posthog-migration): remove umami call once PostHog validated
+        track?.("returning_user_signin", { method });
+        posthog.capture("signin_completed", { method });
       }
       // Check if MFA is required before entering the admin shell
       void (async () => {
