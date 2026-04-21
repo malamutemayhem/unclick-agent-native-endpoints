@@ -2177,6 +2177,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ data: data ?? [] });
       }
 
+      case "auth_device_list": {
+        // Alias for list_devices that normalises the row shape for the
+        // /admin/you page, which expects device_id / device_name /
+        // paired_at / last_seen_at rather than the raw memory_devices
+        // column names.
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("memory_devices")
+          .select("id, device_fingerprint, label, first_seen, last_seen")
+          .eq("api_key_hash", apiKeyHash)
+          .order("last_seen", { ascending: false });
+        if (error) throw error;
+        const mapped = (data ?? []).map((d) => ({
+          id:           d.id as string,
+          device_id:    (d.device_fingerprint ?? "") as string,
+          device_name:  (d.label ?? null) as string | null,
+          paired_at:    (d.first_seen ?? d.last_seen ?? new Date(0).toISOString()) as string,
+          last_seen_at: (d.last_seen ?? new Date(0).toISOString()) as string,
+        }));
+        return res.status(200).json({ data: mapped });
+      }
+
+      case "auth_device_revoke": {
+        // Same delete semantics as remove_device but takes the device
+        // id in a POST body to match the /admin/you Revoke button.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const body = req.body as { device_id?: string };
+        const fp = (body?.device_id ?? "").trim();
+        if (!fp) return res.status(400).json({ error: "device_id required" });
+        const { error } = await supabase
+          .from("memory_devices")
+          .delete()
+          .eq("api_key_hash", apiKeyHash)
+          .eq("device_fingerprint", fp);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
       case "admin_check_connection": {
         // Lightweight check used by the Connect page to verify that Claude Code
         // (or any MCP client) has handshaken with this user's API key recently.
@@ -3139,36 +3180,134 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_profile": {
-        const tenant = await resolveSessionTenant(req, supabaseUrl, supabaseKey, supabase);
-        if (!tenant) return res.status(401).json({ error: "Unauthorized" });
+        // Resolve the signed-in user via their Supabase session JWT. Unlike
+        // resolveSessionTenant, this does not require an existing api_keys
+        // row - we may be creating the first one right now.
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-        const { data: keyRow } = await supabase
+        // Look up an existing api_keys row for this user.
+        let keyRow = (await supabase
           .from("api_keys")
           .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
-          .eq("key_hash", tenant.apiKeyHash)
-          .maybeSingle();
+          .eq("user_id", user.id)
+          .maybeSingle()).data as
+          | {
+              id: string;
+              key_prefix: string | null;
+              label: string | null;
+              tier: string | null;
+              is_active: boolean | null;
+              usage_count: number | null;
+              last_used_at: string | null;
+              created_at: string;
+            }
+          | null;
+
+        // Auto-provision on first access. The signed-in email proves
+        // ownership (Supabase verified it via magic-link / OAuth), so
+        // we mint a uc_* key and link it to user.id the first time
+        // /admin/you loads. The raw key is returned exactly once, under
+        // `generated_api_key`, so the frontend can surface it behind
+        // the reveal UI. Subsequent calls only return the prefix.
+        let generatedApiKey: string | null = null;
+        if (!keyRow) {
+          const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
+          const keyHash = sha256hex(rawKey);
+          const keyPrefix = rawKey.slice(0, 8);
+          const insertRes = await supabase
+            .from("api_keys")
+            .insert({
+              user_id:   user.id,
+              key_hash:  keyHash,
+              key_prefix: keyPrefix,
+              label:     "auto-provisioned",
+              tier:      "free",
+              is_active: true,
+              usage_count: 0,
+            })
+            .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+            .maybeSingle();
+
+          if (insertRes.error) {
+            // If a concurrent request created the row (unique conflict on
+            // user_id), re-read instead of failing.
+            const retry = await supabase
+              .from("api_keys")
+              .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+              .eq("user_id", user.id)
+              .maybeSingle();
+            keyRow = retry.data as typeof keyRow;
+          } else {
+            keyRow = insertRes.data as typeof keyRow;
+            generatedApiKey = rawKey;
+          }
+        }
 
         const apiKey = keyRow
           ? {
-              id: keyRow.id as string,
-              prefix: (keyRow.key_prefix ?? "") as string,
-              label: (keyRow.label ?? "") as string,
-              tier: (keyRow.tier ?? "free") as string,
+              id: keyRow.id,
+              prefix: keyRow.key_prefix ?? "",
+              label:  keyRow.label ?? "",
+              tier:   keyRow.tier ?? "free",
               is_active: Boolean(keyRow.is_active),
               usage_count: Number(keyRow.usage_count ?? 0),
-              last_used_at: (keyRow.last_used_at ?? null) as string | null,
-              created_at: keyRow.created_at as string,
+              last_used_at: keyRow.last_used_at ?? null,
+              created_at: keyRow.created_at,
             }
           : null;
 
-        const tier = apiKey ? apiKey.tier : tenant.tier ?? null;
-
         return res.status(200).json({
-          user_id: tenant.userId,
-          email: tenant.email,
-          tier,
+          user_id: user.id,
+          email:   user.email,
+          tier:    apiKey ? apiKey.tier : "free",
           needs_key: !apiKey,
           api_key: apiKey,
+          generated_api_key: generatedApiKey,
+        });
+      }
+
+      case "generate_api_key": {
+        // Explicit on-demand provisioning. Idempotent: if the signed-in
+        // user already has an api_keys row, return the existing prefix
+        // without regenerating. If not, mint a uc_* key and link to the
+        // user. Returns the raw key exactly once on creation.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+        const existing = (await supabase
+          .from("api_keys")
+          .select("id, key_prefix, tier")
+          .eq("user_id", user.id)
+          .maybeSingle()).data as { id: string; key_prefix: string | null; tier: string | null } | null;
+
+        if (existing) {
+          return res.status(200).json({
+            api_key: null,
+            prefix:  existing.key_prefix ?? "",
+            tier:    existing.tier ?? "free",
+            already_provisioned: true,
+          });
+        }
+
+        const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
+        const { error } = await supabase.from("api_keys").insert({
+          user_id:   user.id,
+          key_hash:  sha256hex(rawKey),
+          key_prefix: rawKey.slice(0, 8),
+          label:     "default",
+          tier:      "free",
+          is_active: true,
+          usage_count: 0,
+        });
+        if (error) return res.status(500).json({ error: error.message });
+
+        return res.status(200).json({
+          api_key: rawKey,
+          prefix:  rawKey.slice(0, 8),
+          tier:    "free",
+          already_provisioned: false,
         });
       }
 
