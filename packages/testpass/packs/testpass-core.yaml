@@ -1,0 +1,142 @@
+id: testpass-core
+name: TestPass Core v0
+version: 0.1.0
+description: >
+  Baseline conformance checks for MCP servers. Covers JSON-RPC 2.0
+  wire-protocol correctness (deterministic) and MCP lifecycle compliance
+  (agent-assisted). No LLM calls required for the RPC items.
+
+items:
+  # JSON-RPC 2.0 baseline - deterministic (no LLM needed)
+  - id: RPC-001
+    title: Request must include jsonrpc field set to "2.0"
+    category: json-rpc
+    severity: critical
+    check_type: deterministic
+    description: Every request object must contain the field "jsonrpc" with the exact string value "2.0".
+    expected: { field: jsonrpc, value: "2.0" }
+    on_fail: Server is not JSON-RPC 2.0 compliant. Verify the framework sets jsonrpc correctly.
+    tags: [wire-protocol, mandatory]
+    profiles: [smoke, standard, deep]
+
+  - id: RPC-002
+    title: Request must include an id field (non-null for requests expecting a response)
+    category: json-rpc
+    severity: high
+    check_type: deterministic
+    description: Request objects that expect a response must carry an id (string, number, or null). Notifications omit id.
+    on_fail: Missing id causes client correlation failures.
+    tags: [wire-protocol, mandatory]
+    profiles: [smoke, standard, deep]
+
+  - id: RPC-003
+    title: Error response must include code and message fields
+    category: json-rpc
+    severity: high
+    check_type: deterministic
+    description: When a method call fails, the error object must contain integer code and string message.
+    expected: { error_shape: { code: integer, message: string } }
+    on_fail: Clients cannot reliably detect or classify errors without a conformant error object.
+    tags: [wire-protocol, error-handling]
+    profiles: [smoke, standard, deep]
+
+  - id: RPC-004
+    title: Method not found returns error code -32601
+    category: json-rpc
+    severity: high
+    check_type: deterministic
+    description: Calling a method that does not exist must return error code -32601 (Method not found).
+    expected: { error_code: -32601 }
+    on_fail: Non-standard error codes break generic JSON-RPC client error handling.
+    tags: [wire-protocol, error-handling]
+    profiles: [smoke, standard, deep]
+
+  - id: RPC-005
+    title: Batch requests return an array of responses
+    category: json-rpc
+    severity: medium
+    check_type: deterministic
+    description: A JSON array of request objects must be handled as a batch and return a JSON array of response objects.
+    on_fail: Batch support is optional per spec but must not crash the server.
+    tags: [wire-protocol, batch]
+    profiles: [standard, deep]
+
+  - id: RPC-006
+    title: Notification (no id) must not return a response
+    category: json-rpc
+    severity: medium
+    check_type: deterministic
+    description: A request object without an id field is a notification. The server must not return a response object.
+    on_fail: Returning a response to a notification wastes bandwidth and may confuse clients.
+    tags: [wire-protocol, notifications]
+    profiles: [standard, deep]
+
+  # MCP lifecycle - agent-assisted
+  - id: MCP-001
+    title: Server responds to initialize with a valid InitializeResult
+    category: mcp-lifecycle
+    severity: critical
+    check_type: agent
+    description: >
+      Call the initialize method with a valid ClientInfo and ProtocolVersion.
+      The server must respond with serverInfo, protocolVersion, and capabilities.
+    on_fail: Without a valid InitializeResult the MCP handshake cannot complete.
+    tags: [lifecycle, handshake]
+    profiles: [smoke, standard, deep]
+
+  - id: MCP-002
+    title: Server returns non-empty instructions in InitializeResult
+    category: mcp-lifecycle
+    severity: medium
+    check_type: agent
+    description: InitializeResult.instructions should be a non-empty string describing server capabilities and usage.
+    on_fail: Missing instructions means agents cannot self-orient without external documentation.
+    tags: [lifecycle, documentation]
+    profiles: [standard, deep]
+
+  - id: MCP-003
+    title: Server declares at least one capability in InitializeResult
+    category: mcp-lifecycle
+    severity: high
+    check_type: agent
+    description: InitializeResult.capabilities must declare at least one of tools, resources, or prompts.
+    on_fail: A server with no declared capabilities provides no value to the agent.
+    tags: [lifecycle, capabilities]
+    profiles: [smoke, standard, deep]
+
+  - id: MCP-004
+    title: Server accepts and does not error on initialized notification
+    category: mcp-lifecycle
+    severity: high
+    check_type: agent
+    description: >
+      After initialize, the client must send the initialized notification.
+      The server must not return an error or close the connection.
+    on_fail: Rejecting the initialized notification breaks spec-compliant clients.
+    tags: [lifecycle, handshake]
+    profiles: [smoke, standard, deep]
+
+  - id: MCP-005
+    title: Server responds to ping with an empty result
+    category: mcp-lifecycle
+    severity: medium
+    check_type: agent
+    description: The ping method must return an empty result object {} within 5 seconds.
+    expected: { max_latency_ms: 5000 }
+    on_fail: Slow or missing ping breaks liveness probes in agent frameworks.
+    tags: [lifecycle, health]
+    profiles: [standard, deep]
+
+  - id: MCP-006
+    title: Unknown method returns error, does not crash server
+    category: mcp-lifecycle
+    severity: high
+    check_type: agent
+    description: >
+      Calling a method name not in the server's declared tools/resources/prompts
+      must return a JSON-RPC error (code -32601) and leave the server alive for
+      subsequent calls.
+    expected: { error_code: -32601 }
+    on_fail: A crash on unknown methods makes the server unusable after the first agent exploration call.
+    tags: [lifecycle, resilience, error-handling]
+    profiles: [smoke, standard, deep]
