@@ -1,7 +1,11 @@
 /**
  * UnClick Stripe webhook handler
  *
- * Vercel serverless function at POST /api/stripe/webhook.
+ * Vercel serverless function at POST /api/webhook. This is the
+ * canonical path Stripe is configured to hit (webhook endpoint
+ * we_1TOY4YPSP3ulIuLuhdsRipRw, name unclick-world-prod, subscribed
+ * to 93 events). Keep this path stable; Stripe's webhook config is
+ * managed out-of-band.
  *
  * Scope (scaffold only):
  *   1. Verify the Stripe-Signature header using the shared whsec_ secret.
