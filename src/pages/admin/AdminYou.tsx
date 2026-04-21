@@ -6,7 +6,7 @@
  * ClaimKeyBanner is shown if the user has an unclaimed localStorage key.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
@@ -21,11 +21,20 @@ import {
   Clock,
   Copy,
   Check,
-  Plus,
+  Eye,
+  EyeOff,
   AlertTriangle,
   Brain,
   ArrowRight,
 } from "lucide-react";
+
+// Mask a value like BackstagePass: first 4 chars + 8 bullets + last 4.
+// Short values collapse to plain bullets so the length cannot be leaked.
+function maskValue(v: string): string {
+  if (!v) return "";
+  if (v.length <= 8) return "\u2022".repeat(Math.max(v.length, 4));
+  return `${v.slice(0, 4)}${"\u2022".repeat(8)}${v.slice(-4)}`;
+}
 
 interface MemoryNudge {
   connected: boolean;
@@ -159,27 +168,34 @@ function timeAgo(iso: string | null | undefined): string {
 }
 
 export default function AdminYou() {
-  const { session, user } = useSession();
+  // Destructure `loading` so the page can wait for the Supabase session
+  // restore to resolve before showing a "not signed in" empty state or
+  // firing any fetches. Fixes the brief confusion-on-load flicker.
+  const { session, user, loading: sessionLoading } = useSession();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
-  async function fetchProfile() {
-    if (!session) return;
-    const headers = { Authorization: `Bearer ${session.access_token}` };
-    const profileRes = await fetch("/api/memory-admin?action=admin_profile", { headers });
-    if (profileRes.ok) {
-      setProfile(await profileRes.json());
-    }
-  }
+  // `generatedKey` holds the raw uc_* value that is ONLY available once:
+  // either auto-provisioned on first /admin/you load, or returned by an
+  // explicit generate/rotate call. After the reveal timer expires or the
+  // user reloads the page, only the prefix remains (the backend stores
+  // key_hash, not plaintext). The state holds the value in memory only.
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [keyRevealed, setKeyRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const revealTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    // Wait for Supabase to confirm the session state before firing
+    // fetches. If there is no session and no load is pending, route to
+    // login instead of calling a 401-guaranteed endpoint.
+    if (sessionLoading) return;
+    if (!session) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     (async () => {
@@ -191,7 +207,22 @@ export default function AdminYou() {
         ]);
 
         if (!cancelled && profileRes.ok) {
-          setProfile(await profileRes.json());
+          const body = (await profileRes.json()) as ProfileData & {
+            generated_api_key?: string | null;
+          };
+          setProfile({
+            user_id:   body.user_id,
+            email:     body.email,
+            tier:      body.tier,
+            needs_key: body.needs_key,
+            api_key:   body.api_key,
+          });
+          // Auto-provisioned on first load: the raw key is here once.
+          // Surface it behind the reveal toggle, default to masked.
+          if (body.generated_api_key) {
+            setGeneratedKey(body.generated_api_key);
+            setKeyRevealed(false);
+          }
         }
         if (!cancelled && devicesRes.ok) {
           const body = await devicesRes.json();
@@ -203,40 +234,36 @@ export default function AdminYou() {
     })();
 
     return () => { cancelled = true; };
-  }, [session]);
+  }, [session, sessionLoading]);
 
-  async function handleGenerateKey() {
-    if (!session) return;
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const res = await fetch("/api/memory-admin?action=generate_api_key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setGenError(body.error ?? "Failed to generate key");
-        return;
-      }
-      setGeneratedKey(body.api_key);
-      localStorage.setItem("unclick_api_key", body.api_key);
-      await fetchProfile();
-    } catch {
-      setGenError("Network error - please try again");
-    } finally {
-      setGenerating(false);
+  // Auto-clear the revealed api_key 60 seconds after reveal, and also
+  // forget the raw key entirely so it does not linger in React state.
+  useEffect(() => {
+    if (!keyRevealed) return;
+    if (revealTimerRef.current !== null) {
+      window.clearTimeout(revealTimerRef.current);
     }
-  }
+    revealTimerRef.current = window.setTimeout(() => {
+      setKeyRevealed(false);
+      setGeneratedKey(null);
+    }, 60_000);
+    return () => {
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
+  }, [keyRevealed]);
 
   async function handleCopyKey() {
     if (!generatedKey) return;
-    await navigator.clipboard.writeText(generatedKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(generatedKey);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2_000);
+    } catch {
+      // Browser can block clipboard writes in some contexts; fail silent.
+    }
   }
 
   async function handleLogout() {
@@ -276,10 +303,22 @@ export default function AdminYou() {
         <MemoryNudgeBanner apiKey={localStorage.getItem("unclick_api_key") ?? ""} />
       ) : null}
 
-      {loading ? (
+      {sessionLoading || loading ? (
         <div className="flex items-center gap-2 py-12 text-[#666]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Loading profile...</span>
+          <span className="text-sm">
+            {sessionLoading ? "Checking your session..." : "Loading profile..."}
+          </span>
+        </div>
+      ) : !session ? (
+        <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-8 text-center">
+          <p className="text-sm text-white/70">You are not signed in.</p>
+          <Link
+            to="/login"
+            className="mt-4 inline-flex items-center gap-1 rounded-md bg-[#61C1C4] px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+          >
+            Go to sign in <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -343,15 +382,27 @@ export default function AdminYou() {
                 <div className="rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 p-3">
                   <div className="flex items-start gap-2 text-xs text-[#E2B93B]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>Save this key now. You won't see it again.</span>
+                    <span>Save this key now. It auto-hides in 60 seconds and you will not be able to see it again after that.</span>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <code className="min-w-0 flex-1 truncate rounded bg-[#0A0A0A] px-3 py-2 font-mono text-xs text-white">
-                      {generatedKey}
+                      {keyRevealed ? generatedKey : maskValue(generatedKey)}
                     </code>
+                    <button
+                      onClick={() => setKeyRevealed((v) => !v)}
+                      className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.04] p-2 text-white transition-colors hover:bg-white/[0.08]"
+                      title={keyRevealed ? "Hide key" : "Reveal key"}
+                    >
+                      {keyRevealed ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                     <button
                       onClick={handleCopyKey}
                       className="shrink-0 rounded-md border border-white/[0.08] bg-white/[0.04] p-2 text-white transition-colors hover:bg-white/[0.08]"
+                      title="Copy key to clipboard"
                     >
                       {copied ? (
                         <Check className="h-3.5 w-3.5 text-green-400" />
@@ -367,7 +418,7 @@ export default function AdminYou() {
                     Connect UnClick to your AI agent. Go to your agent's MCP settings and add this as a Remote MCP Server:
                   </p>
                   <code className="block bg-black/30 rounded px-3 py-2 text-xs text-white/60 break-all">
-                    https://unclick.world/api/mcp?key={generatedKey}
+                    https://unclick.world/api/mcp?key={keyRevealed ? generatedKey : maskValue(generatedKey)}
                   </code>
                   <p className="text-xs text-white/40 mt-2">
                     Once connected, your agent loads your memory at the start of every conversation.
@@ -407,38 +458,10 @@ export default function AdminYou() {
                   </span>
                 </div>
               </div>
-            ) : profile?.needs_key ? (
-              <div className="mt-4 space-y-3">
-                <div className="rounded-lg border border-dashed border-white/[0.08] p-4 text-center">
-                  <p className="text-xs text-[#666]">
-                    No API key linked to your account.
-                  </p>
-                </div>
-                {genError && (
-                  <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
-                    {genError}
-                  </div>
-                )}
-                <button
-                  onClick={handleGenerateKey}
-                  disabled={generating}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-4 py-2.5 text-sm font-medium text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20 disabled:opacity-50"
-                >
-                  {generating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  {generating ? "Generating..." : "Generate API Key"}
-                </button>
-              </div>
             ) : (
               <div className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-4 text-center">
                 <p className="text-xs text-[#666]">
-                  No API key linked. Use the banner above to claim your key, or{" "}
-                  <a href="/#install" className="text-[#E2B93B] underline-offset-2 hover:underline">
-                    get started
-                  </a>.
+                  Preparing your API key. Refresh this page if it does not appear within a few seconds.
                 </p>
               </div>
             )}
