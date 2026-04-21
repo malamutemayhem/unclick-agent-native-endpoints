@@ -3257,6 +3257,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           : null;
 
+        // Derive is_admin from the ADMIN_EMAILS env var. Comma-separated
+        // list, case-insensitive trim-equal. Fixes the 401 console noise
+        // on /admin/memory for non-admin signers by giving the frontend
+        // a clean role flag to gate admin-only surfaces behind.
+        const adminEmailsRaw = process.env.ADMIN_EMAILS ?? "";
+        const adminEmails = adminEmailsRaw
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean);
+        const isAdmin = user.email
+          ? adminEmails.includes(user.email.toLowerCase())
+          : false;
+
         return res.status(200).json({
           user_id: user.id,
           email:   user.email,
@@ -3264,6 +3277,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           needs_key: !apiKey,
           api_key: apiKey,
           generated_api_key: generatedApiKey,
+          is_admin: isAdmin,
         });
       }
 
