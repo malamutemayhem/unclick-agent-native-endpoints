@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
 import AdminSearchBar from "@/components/admin/AdminSearchBar";
 import BugReportButton from "@/components/admin/BugReportButton";
@@ -25,16 +25,13 @@ import {
   LogOut,
   X,
   Menu,
+  Bot,
+  ChevronRight,
+  ChevronDown,
+  FileText,
+  Clock,
+  Fingerprint,
 } from "lucide-react";
-
-const surfaces = [
-  { path: "/admin/you", label: "You", icon: User },
-  { path: "/admin/memory", label: "Memory", icon: Brain },
-  { path: "/admin/keychain", label: "Keychain (BackstagePass)", icon: KeyRound },
-  { path: "/admin/tools", label: "Tools", icon: Wrench },
-  { path: "/admin/activity", label: "Activity", icon: Activity },
-  { path: "/admin/settings", label: "Settings", icon: Settings },
-] as const;
 
 function SurfaceLink({ path, label, icon: Icon, onClick }: {
   path: string;
@@ -60,6 +57,59 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
   );
 }
 
+const MEMORY_TABS = [
+  { id: "facts",    label: "Facts",    icon: FileText   },
+  { id: "sessions", label: "Sessions", icon: Clock      },
+  { id: "identity", label: "Identity", icon: Fingerprint },
+] as const;
+
+function MemoryNavItem({ onClick }: { onClick?: () => void }) {
+  const location = useLocation();
+  const isMemory = location.pathname === "/admin/memory";
+  const activeTab = new URLSearchParams(location.search).get("tab") ?? "facts";
+
+  return (
+    <div>
+      <NavLink
+        to="/admin/memory"
+        onClick={onClick}
+        className={({ isActive }) =>
+          `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+            isActive
+              ? "bg-[#61C1C4]/10 text-[#61C1C4]"
+              : "text-[#888] hover:bg-white/[0.04] hover:text-[#ccc]"
+          }`
+        }
+      >
+        <Brain className="h-4 w-4 shrink-0" />
+        <span className="flex-1">Memory</span>
+        {isMemory
+          ? <ChevronDown className="h-3 w-3 shrink-0" />
+          : <ChevronRight className="h-3 w-3 shrink-0" />}
+      </NavLink>
+      {isMemory && (
+        <div className="ml-7 mt-0.5 flex flex-col gap-0.5">
+          {MEMORY_TABS.map(({ id, label, icon: Icon }) => (
+            <Link
+              key={id}
+              to={`/admin/memory?tab=${id}`}
+              onClick={onClick}
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === id
+                  ? "bg-[#61C1C4]/10 text-[#61C1C4]"
+                  : "text-[#666] hover:bg-white/[0.04] hover:text-[#aaa]"
+              }`}
+            >
+              <Icon className="h-3 w-3 shrink-0" />
+              {label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminShell() {
   const { user } = useSession();
   const navigate = useNavigate();
@@ -68,6 +118,20 @@ export default function AdminShell() {
   async function handleLogout() {
     await signOut();
     navigate("/login", { replace: true });
+  }
+
+  function SidebarNav({ onLinkClick }: { onLinkClick?: () => void }) {
+    return (
+      <>
+        <SurfaceLink path="/admin/you"      label="You"                      icon={User}    onClick={onLinkClick} />
+        <MemoryNavItem onClick={onLinkClick} />
+        <SurfaceLink path="/admin/keychain" label="Keychain (BackstagePass)" icon={KeyRound} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/tools"    label="Tools"                    icon={Wrench}   onClick={onLinkClick} />
+        <SurfaceLink path="/admin/activity" label="Activity"                 icon={Activity} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/agents"   label="Agents"                   icon={Bot}      onClick={onLinkClick} />
+        <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings} onClick={onLinkClick} />
+      </>
+    );
   }
 
   return (
@@ -85,10 +149,8 @@ export default function AdminShell() {
           </Link>
         </div>
 
-        <nav className="mt-4 flex flex-1 flex-col gap-1 px-3">
-          {surfaces.map((s) => (
-            <SurfaceLink key={s.path} {...s} />
-          ))}
+        <nav className="mt-4 flex flex-1 flex-col gap-1 overflow-y-auto px-3">
+          <SidebarNav />
           <a
             href="/memory"
             className="text-white/30 hover:text-white/50 text-xs block px-3 py-2"
@@ -166,13 +228,7 @@ export default function AdminShell() {
             <AdminSearchBar />
           </div>
           <nav className="flex flex-col gap-1">
-            {surfaces.map((s) => (
-              <SurfaceLink
-                key={s.path}
-                {...s}
-                onClick={() => setMobileNavOpen(false)}
-              />
-            ))}
+            <SidebarNav onLinkClick={() => setMobileNavOpen(false)} />
           </nav>
           <div className="mt-3 border-t border-white/[0.06] pt-3">
             <BugReportButton />
