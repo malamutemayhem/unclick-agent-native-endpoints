@@ -16,6 +16,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useSession } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
 
 export default function AuthCallbackPage() {
@@ -42,7 +43,15 @@ export default function AuthCallbackPage() {
           track("returning_user_signin", { method });
         }
       }
-      navigate("/admin", { replace: true });
+      // Check if MFA is required before entering the admin shell
+      void (async () => {
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+          navigate("/auth/verify-mfa", { replace: true });
+        } else {
+          navigate("/admin", { replace: true });
+        }
+      })();
     }
   }, [loading, session, navigate]);
 

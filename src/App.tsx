@@ -38,6 +38,7 @@ import InstallRecoverPage from "./pages/InstallRecover.tsx";
 import LoginPage from "./pages/Login.tsx";
 import SignupPage from "./pages/Signup.tsx";
 import AuthCallbackPage from "./pages/AuthCallback.tsx";
+import VerifyMfaPage from "./pages/VerifyMfa.tsx";
 import RequireAuth from "./components/RequireAuth.tsx";
 import BetaBanner from "./components/BetaBanner.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
@@ -115,6 +116,7 @@ const App = () => (
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/auth/verify-mfa" element={<VerifyMfaPage />} />
           <Route path="/organiser" element={<OrganiserPage />} />
           <Route path="/dispatch" element={<DispatchPage />} />
           <Route path="/crews" element={<CrewsPage />} />
