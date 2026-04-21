@@ -186,6 +186,8 @@ export default function AdminYou() {
   const [keyRevealed, setKeyRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const revealTimerRef = useRef<number | null>(null);
+  const [reissuing, setReissuing] = useState(false);
+  const [reissueError, setReissueError] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -297,6 +299,31 @@ export default function AdminYou() {
       window.setTimeout(() => setCopied(false), 2_000);
     } catch {
       // Browser can block clipboard writes in some contexts; fail silent.
+    }
+  }
+
+  async function handleReissueKey() {
+    if (!session) return;
+    setReissuing(true);
+    setReissueError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=reset_api_key", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        setReissueError(body.error ?? "Failed to re-issue key");
+        return;
+      }
+      const body = await res.json() as { api_key: string };
+      try { localStorage.setItem("unclick_api_key", body.api_key); } catch { /* ignore */ }
+      setGeneratedKey(body.api_key);
+      setKeyRevealed(false);
+    } catch (e) {
+      setReissueError((e as Error).message);
+    } finally {
+      setReissuing(false);
     }
   }
 
@@ -490,6 +517,21 @@ export default function AdminYou() {
                   <span className="text-xs text-white">
                     {timeAgo(profile.api_key.last_used_at)}
                   </span>
+                </div>
+                <div className="border-t border-white/[0.06] pt-3">
+                  <p className="mb-2 text-[11px] text-[#666]">
+                    Key not visible? Your browser may have cleared it. Re-issuing generates a new key and invalidates the old one - any BackstagePass encrypted credentials will need to be re-saved.
+                  </p>
+                  {reissueError && (
+                    <p className="mb-2 text-[11px] text-red-400">{reissueError}</p>
+                  )}
+                  <button
+                    onClick={handleReissueKey}
+                    disabled={reissuing}
+                    className="w-full rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                  >
+                    {reissuing ? "Re-issuing..." : "Re-issue API Key"}
+                  </button>
                 </div>
               </div>
             ) : (

@@ -3354,6 +3354,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
+      case "reset_api_key": {
+        // Re-issue a new uc_* key for the signed-in user. Invalidates
+        // the old key immediately (hash replaced). BackstagePass
+        // encrypted credentials become unreadable until re-saved.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+        const existing = (await supabase
+          .from("api_keys")
+          .select("id, tier")
+          .eq("user_id", user.id)
+          .maybeSingle()).data as { id: string; tier: string | null } | null;
+
+        if (!existing) return res.status(404).json({ error: "No API key to reset" });
+
+        const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
+        const { error: updateError } = await supabase
+          .from("api_keys")
+          .update({
+            key_hash:    sha256hex(rawKey),
+            key_prefix:  rawKey.slice(0, 8),
+            usage_count: 0,
+          })
+          .eq("id", existing.id);
+        if (updateError) return res.status(500).json({ error: updateError.message });
+
+        return res.status(200).json({
+          api_key: rawKey,
+          prefix:  rawKey.slice(0, 8),
+          tier:    existing.tier ?? "free",
+        });
+      }
+
       case "delete_account": {
         // Self-serve account deletion. The signed-in user is the ONLY
         // user that can trigger this - there is no admin-impersonation
