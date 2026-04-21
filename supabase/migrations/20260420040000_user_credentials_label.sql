@@ -1,3 +1,10 @@
+-- REQUIRES POSTGRES 15+ (uses NULLS NOT DISTINCT on the unique index below).
+-- Supabase production has been PG15+ since late 2023, so this is safe in
+-- prod and in any recent Supabase hosted project. Local developers running
+-- an older Supabase CLI against a PG14 or earlier instance will get a
+-- syntax error at the CREATE UNIQUE INDEX statement. Upgrade PG or update
+-- the CLI image.
+--
 -- Extend user_credentials with an optional `label` column so a single user
 -- can store multiple credentials for the same platform (e.g. two Anthropic
 -- keys: one for claude-code, one for bailey-plex-3).
