@@ -41,6 +41,7 @@ import {
   Trash2,
   X,
   XCircle,
+  Zap,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -120,6 +121,8 @@ export default function AdminKeychain() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<Record<string, string>>({});
   const [revealing, setRevealing]     = useState<Record<string, boolean>>({});
+  const [testing, setTesting]         = useState<Record<string, boolean>>({});
+  const [testResult, setTestResult]   = useState<Record<string, { ok: boolean | null; message: string; testedAt: string }>>({});
 
   // Modals
   const [editTarget, setEditTarget]     = useState<Credential | null>(null);
@@ -208,6 +211,60 @@ export default function AdminKeychain() {
       const { [cred.id]: _gone, ...rest } = p;
       return rest;
     });
+  }
+
+  async function handleTestConnection(cred: Credential) {
+    const apiKey = readLocalApiKey();
+    if (!apiKey) {
+      setTestResult((p) => ({
+        ...p,
+        [cred.id]: {
+          ok:       false,
+          message:  "No UnClick API key in this browser. Visit /admin/you to claim or regenerate.",
+          testedAt: new Date().toISOString(),
+        },
+      }));
+      return;
+    }
+    setTesting((p) => ({ ...p, [cred.id]: true }));
+    try {
+      const res = await fetch("/api/backstagepass?action=testConnection", {
+        method:  "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body:    JSON.stringify({ id: cred.id, api_key: apiKey }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTestResult((p) => ({
+          ...p,
+          [cred.id]: {
+            ok:       false,
+            message:  body.error ?? `Test failed with ${res.status}`,
+            testedAt: new Date().toISOString(),
+          },
+        }));
+      } else {
+        setTestResult((p) => ({
+          ...p,
+          [cred.id]: {
+            ok:       body.ok ?? null,
+            message:  body.message ?? "",
+            testedAt: body.tested_at ?? new Date().toISOString(),
+          },
+        }));
+      }
+    } catch (err) {
+      setTestResult((p) => ({
+        ...p,
+        [cred.id]: {
+          ok:       false,
+          message:  err instanceof Error ? err.message : "Test failed",
+          testedAt: new Date().toISOString(),
+        },
+      }));
+    } finally {
+      setTesting((p) => ({ ...p, [cred.id]: false }));
+    }
   }
 
   async function copyToClipboard(field: string, value: string) {
@@ -371,6 +428,18 @@ export default function AdminKeychain() {
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            onClick={() => void handleTestConnection(cred)}
+                            disabled={testing[cred.id]}
+                            className="rounded-md p-1.5 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40"
+                            title="Test connection"
+                          >
+                            {testing[cred.id] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Zap className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <button
                             onClick={() => setRotateTarget(cred)}
                             className="rounded-md p-1.5 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white"
                             title="Rotate values"
@@ -389,6 +458,21 @@ export default function AdminKeychain() {
 
                       {errMsg && (
                         <p className="mt-3 text-[11px] text-red-400">{errMsg}</p>
+                      )}
+
+                      {testResult[cred.id] && (
+                        <p
+                          className={`mt-3 text-[11px] ${
+                            testResult[cred.id].ok === true
+                              ? "text-green-400"
+                              : testResult[cred.id].ok === false
+                                ? "text-red-400"
+                                : "text-[#888]"
+                          }`}
+                        >
+                          {testResult[cred.id].ok === true ? "Connection OK. " : testResult[cred.id].ok === false ? "Connection failed. " : ""}
+                          {testResult[cred.id].message}
+                        </p>
                       )}
 
                       {isOpen && plaintext && (

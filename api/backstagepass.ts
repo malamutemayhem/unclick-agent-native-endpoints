@@ -102,6 +102,44 @@ function decrypt(
   ]).toString("utf8");
 }
 
+// ─── Connection probes ───────────────────────────────────────────────────
+//
+// Lightweight authenticated GET per platform. The action=testConnection
+// handler decrypts the stored credential, looks up the probe by platform
+// slug, and makes one outbound request with a short timeout. Only a small
+// curated set is supported initially. Platforms not in the map return an
+// "untestable" response (ok=null) rather than throwing.
+//
+// To add a new platform: identify a cheap authenticated read endpoint on
+// that provider (typically /me, /user, /models, /whoami) and add an entry
+// here. Keep the request boring: GET, minimal headers, no body.
+const PLATFORM_PROBES: Record<string, {
+  url:           string;
+  buildHeaders: (values: Record<string, string>) => Record<string, string>;
+}> = {
+  github: {
+    url: "https://api.github.com/user",
+    buildHeaders: (v) => ({
+      Authorization: `Bearer ${v.api_key ?? v.token ?? ""}`,
+      Accept:        "application/vnd.github+json",
+      "User-Agent":  "unclick-backstagepass",
+    }),
+  },
+  anthropic: {
+    url: "https://api.anthropic.com/v1/models",
+    buildHeaders: (v) => ({
+      "x-api-key":         v.api_key ?? "",
+      "anthropic-version": "2023-06-01",
+    }),
+  },
+  openai: {
+    url: "https://api.openai.com/v1/models",
+    buildHeaders: (v) => ({
+      Authorization: `Bearer ${v.api_key ?? ""}`,
+    }),
+  },
+};
+
 // ─── Supabase REST helper ────────────────────────────────────────
 
 function supaHeaders(serviceRoleKey: string): Record<string, string> {
@@ -416,6 +454,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       label:    (row.label as string) ?? null,
       values,
     });
+  }
+
+  if (action === "testConnection") {
+    const id     = typeof body.id === "string" ? body.id : "";
+    const apiKey = typeof body.api_key === "string" ? body.api_key : "";
+    if (!id)     return res.status(400).json({ error: "id is required." });
+    if (!apiKey) return res.status(400).json({ error: "api_key is required." });
+
+    if (sha256hex(apiKey) !== tenant.apiKeyHash) {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "test_connection", credentialId: id, success: false,
+        metadata: { reason: "api_key_mismatch" },
+      });
+      return res.status(403).json({ error: "UnClick API key does not match the signed-in user." });
+    }
+
+    const row = await fetchOwnedRow(id);
+    if (!row) {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "test_connection", credentialId: id, success: false,
+        metadata: { reason: "not_found" },
+      });
+      return res.status(404).json({ error: "Credential not found." });
+    }
+
+    const platform = row.platform_slug as string;
+    const probe = PLATFORM_PROBES[platform];
+    if (!probe) {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "test_connection", credentialId: id,
+        platformSlug: platform, label: (row.label as string) ?? null,
+        success: false, metadata: { reason: "platform_untestable" },
+      });
+      return res.status(200).json({
+        ok:         null,
+        platform,
+        tested_at:  new Date().toISOString(),
+        message:    `Connection testing is not yet supported for ${platform}.`,
+      });
+    }
+
+    let values: Record<string, string>;
+    try {
+      const salt = Buffer.from(row.encryption_salt as string, "hex");
+      const key  = deriveKey(apiKey, salt);
+      const pt   = decrypt(
+        row.encryption_iv  as string,
+        row.encryption_tag as string,
+        row.encrypted_data as string,
+        key,
+      );
+      values = JSON.parse(pt) as Record<string, string>;
+    } catch {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "test_connection", credentialId: id,
+        platformSlug: platform, label: (row.label as string) ?? null,
+        success: false, metadata: { reason: "decrypt_failed" },
+      });
+      return res.status(500).json({ error: "Failed to decrypt credential." });
+    }
+
+    const testedAt = new Date().toISOString();
+    let ok = false;
+    let status = 0;
+    let message = "";
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5_000);
+      const probeRes = await fetch(probe.url, {
+        method:  "GET",
+        headers: probe.buildHeaders(values),
+        signal:  controller.signal,
+      });
+      clearTimeout(timer);
+      status  = probeRes.status;
+      ok      = probeRes.ok;
+      message = ok ? "Authenticated request succeeded." : `Platform returned ${probeRes.status}.`;
+    } catch (err) {
+      message = err instanceof Error && err.name === "AbortError"
+        ? "Probe timed out after 5s."
+        : `Probe failed: ${err instanceof Error ? err.message : "unknown error"}`;
+    }
+
+    // Touch last_tested_at so the list view can surface test freshness.
+    supaFetch(
+      `${supabaseUrl}/rest/v1/user_credentials?id=eq.${encodeURIComponent(id)}`,
+      "PATCH",
+      supaHeaders(serviceRoleKey),
+      { is_valid: ok, last_tested_at: testedAt },
+    ).catch(() => { /* ignore */ });
+
+    await writeAudit({
+      supabaseUrl, serviceRoleKey, tenant, req,
+      action: "test_connection", credentialId: id,
+      platformSlug: platform, label: (row.label as string) ?? null,
+      success: ok, metadata: { status },
+    });
+
+    return res.status(200).json({ ok, status, platform, tested_at: testedAt, message });
   }
 
   if (action === "update") {
