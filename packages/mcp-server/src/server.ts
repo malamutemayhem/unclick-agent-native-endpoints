@@ -10,6 +10,41 @@ import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
 
+// ─── Umami tool-usage tracking ──────────────────────────────────────────────
+//
+// Fires a fire-and-forget event to the self-hosted Umami instance every time
+// an agent actually invokes a tool. Lets Chris see which tools get used.
+// No-ops silently if UMAMI_WEBSITE_ID is not set (e.g. dev / local runs).
+// Never awaited so it cannot slow or break a tool call even if Umami is down.
+function trackToolCall(toolName: string): void {
+  const websiteId = process.env.UMAMI_WEBSITE_ID;
+  if (!websiteId) return;
+  const umamiUrl = process.env.UMAMI_URL ?? "https://analytics.unclick.world";
+  try {
+    void fetch(`${umamiUrl}/api/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "unclick-mcp-server/1.0",
+      },
+      body: JSON.stringify({
+        type: "event",
+        payload: {
+          website:  websiteId,
+          hostname: "unclick.world",
+          url:      "/api/mcp",
+          name:     "tool_call",
+          data:     { tool_name: toolName },
+        },
+      }),
+    }).catch(() => {
+      // swallow network / TLS errors
+    });
+  } catch {
+    // swallow synchronous errors (e.g. malformed env)
+  }
+}
+
 // ─── Search helper ──────────────────────────────────────────────────────────
 
 function searchTools(query: string, category?: string): ToolDef[] {
@@ -682,6 +717,9 @@ export function createServer(): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
     const args = (rawArgs ?? {}) as Record<string, unknown>;
+
+    // Fire-and-forget Umami event for tool-usage stats. Never awaited.
+    trackToolCall(name);
 
     try {
       // ── UnClick Memory (direct tools + memory.* endpoints) ───────
