@@ -371,7 +371,7 @@ async function resolveApiKeyHash(
   const user = await resolveSessionUser(req, supabaseUrl, serviceRoleKey);
   if (!user) return null;
 
-  const qUrl = `${supabaseUrl}/rest/v1/api_keys?user_id=eq.${encodeURIComponent(user.id)}&select=key_hash,api_key&limit=1`;
+  const qUrl = `${supabaseUrl}/rest/v1/api_keys?user_id=eq.${encodeURIComponent(user.id)}&select=key_hash&limit=1`;
   try {
     const apiRes = await fetch(qUrl, {
       headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
@@ -379,11 +379,10 @@ async function resolveApiKeyHash(
     if (!apiRes.ok) return null;
     const rows = (await apiRes.json().catch(() => [])) as Array<{
       key_hash?: string | null;
-      api_key?: string | null;
     }>;
     const row = rows[0];
     if (!row) return null;
-    return row.key_hash ?? (row.api_key ? sha256hex(row.api_key) : null);
+    return row.key_hash ?? null;
   } catch {
     return null;
   }
@@ -2223,9 +2222,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // (or any MCP client) has handshaken with this user's API key recently.
         // Returns whether the api key resolves to a configured account, fact
         // count, and last activity timestamp.
-        const apiKey = String(req.query.api_key ?? "").trim() || bearerFrom(req);
-        if (!apiKey) return res.status(400).json({ error: "api_key required" });
-        const apiKeyHash = sha256hex(apiKey);
+        //
+        // Auth paths (checked in order):
+        //   1. ?api_key= query param: raw uc_* key, hash directly.
+        //   2. Bearer uc_*/agt_*: raw api key in header, hash directly.
+        //   3. Bearer Supabase JWT: resolve user -> look up api_key_hash from api_keys.
+        //      Allows the admin UI to check connection status without the raw key
+        //      being present in localStorage (e.g., after a browser clear).
+        const rawKeyParam = String(req.query.api_key ?? "").trim();
+        let apiKeyHash: string | null = null;
+        if (rawKeyParam) {
+          apiKeyHash = sha256hex(rawKeyParam);
+        } else {
+          const bearer = bearerFrom(req);
+          if (bearer) {
+            if (bearer.startsWith("uc_") || bearer.startsWith("agt_")) {
+              apiKeyHash = sha256hex(bearer);
+            } else {
+              // Supabase JWT path: resolve user and look up their api_key_hash.
+              apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+            }
+          }
+        }
+        if (!apiKeyHash) {
+          return res.status(200).json({
+            connected: false, configured: false, has_context: false,
+            context_count: 0, fact_count: 0, last_session: null,
+            last_session_platform: null, last_used_at: null,
+          });
+        }
 
         const { data: cfg } = await supabase
           .from("memory_configs")

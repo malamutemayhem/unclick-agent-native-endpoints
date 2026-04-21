@@ -21,6 +21,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -98,6 +99,7 @@ function formatRelative(iso: string | null): string {
 
 export default function AdminSettings() {
   const { toast } = useToast();
+  const { session } = useSession();
   const [apiKey] = useState<string>(getApiKey);
   const [platform, setPlatform] = useState<Platform>(getStoredPlatform);
 
@@ -125,14 +127,15 @@ export default function AdminSettings() {
   }, [platform]);
 
   useEffect(() => {
-    if (!apiKey) {
+    const effectiveToken = apiKey || session?.access_token || "";
+    if (!effectiveToken) {
       setLoadingConnection(false);
       setSettingsLoaded(true);
       return;
     }
     let cancelled = false;
     (async () => {
-      const authHeader = { Authorization: `Bearer ${apiKey}` };
+      const authHeader = { Authorization: `Bearer ${effectiveToken}` };
       try {
         const [connRes, settingsRes, bcRes] = await Promise.all([
           fetch("/api/memory-admin?action=admin_check_connection", { headers: authHeader }),
@@ -169,7 +172,7 @@ export default function AdminSettings() {
     return () => {
       cancelled = true;
     };
-  }, [apiKey]);
+  }, [apiKey, session?.access_token]);
 
   const handleAutoloadChange = async (next: boolean) => {
     if (!apiKey) {
