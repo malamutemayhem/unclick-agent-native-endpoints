@@ -217,11 +217,33 @@ export default function AdminYou() {
             needs_key: body.needs_key,
             api_key:   body.api_key,
           });
-          // Auto-provisioned on first load: the raw key is here once.
-          // Surface it behind the reveal toggle, default to masked.
+          // Two paths land here.
+          //
+          // 1. Fresh auto-provision on first visit: the backend returns the
+          //    raw uc_* value in body.generated_api_key. Persist it to
+          //    localStorage so the reveal card still works after a page
+          //    reload. The signOut handler clears localStorage (#61), so
+          //    this cached copy only survives while the user stays signed
+          //    in on this browser.
+          //
+          // 2. Return visit: body.generated_api_key is null because the
+          //    api_keys row already exists. Recover the raw value from
+          //    localStorage if present AND if its prefix matches what the
+          //    backend now claims (guards against a stale key left over
+          //    from a rotation). Either way the reveal card will render
+          //    masked-by-default so the user can click the eye to copy.
           if (body.generated_api_key) {
+            try { localStorage.setItem("unclick_api_key", body.generated_api_key); } catch { /* ignore */ }
             setGeneratedKey(body.generated_api_key);
             setKeyRevealed(false);
+          } else if (body.api_key?.prefix) {
+            try {
+              const cached = localStorage.getItem("unclick_api_key");
+              if (cached && cached.startsWith(body.api_key.prefix)) {
+                setGeneratedKey(cached);
+                setKeyRevealed(false);
+              }
+            } catch { /* ignore */ }
           }
         }
         if (!cancelled && devicesRes.ok) {
@@ -236,8 +258,10 @@ export default function AdminYou() {
     return () => { cancelled = true; };
   }, [session, sessionLoading]);
 
-  // Auto-clear the revealed api_key 60 seconds after reveal, and also
-  // forget the raw key entirely so it does not linger in React state.
+  // Re-mask the api_key 60 seconds after the user reveals it. The raw
+  // value stays in generatedKey state (and in localStorage) so the user
+  // can click the eye again to reveal a second time. Only the rendered
+  // view flips back to masked - nothing is dropped.
   useEffect(() => {
     if (!keyRevealed) return;
     if (revealTimerRef.current !== null) {
@@ -245,7 +269,6 @@ export default function AdminYou() {
     }
     revealTimerRef.current = window.setTimeout(() => {
       setKeyRevealed(false);
-      setGeneratedKey(null);
     }, 60_000);
     return () => {
       if (revealTimerRef.current !== null) {
@@ -382,7 +405,7 @@ export default function AdminYou() {
                 <div className="rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 p-3">
                   <div className="flex items-start gap-2 text-xs text-[#E2B93B]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>Save this key now. It auto-hides in 60 seconds and you will not be able to see it again after that.</span>
+                    <span>Your UnClick API key. Click the eye to reveal, then copy it into your MCP client. The revealed view auto-hides after 60 seconds; click the eye again to re-reveal. Signing out clears the local copy.</span>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <code className="min-w-0 flex-1 truncate rounded bg-[#0A0A0A] px-3 py-2 font-mono text-xs text-white">
