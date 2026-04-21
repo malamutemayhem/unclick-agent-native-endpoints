@@ -2125,6 +2125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         const fp = (body?.device_fingerprint ?? "").trim();
         if (!fp) return res.status(400).json({ error: "device_fingerprint required" });
+        if (/^169\.254\./.test(fp)) return res.status(400).json({ error: "link-local addresses cannot be paired" });
         const mode = body?.storage_mode === "cloud" ? "cloud" : "local";
 
         const { error: upErr } = await supabase
@@ -2189,13 +2190,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", apiKeyHash)
           .order("last_seen", { ascending: false });
         if (error) throw error;
-        const mapped = (data ?? []).map((d) => ({
-          id:           d.id as string,
-          device_id:    (d.device_fingerprint ?? "") as string,
-          device_name:  (d.label ?? null) as string | null,
-          paired_at:    (d.first_seen ?? d.last_seen ?? new Date(0).toISOString()) as string,
-          last_seen_at: (d.last_seen ?? new Date(0).toISOString()) as string,
-        }));
+        const LINK_LOCAL_RE = /^169\.254\./;
+        const mapped = (data ?? [])
+          .filter((d) => !LINK_LOCAL_RE.test((d.device_fingerprint ?? "") as string))
+          .map((d) => ({
+            id:           d.id as string,
+            device_id:    (d.device_fingerprint ?? "") as string,
+            device_name:  (d.label ?? null) as string | null,
+            paired_at:    (d.first_seen ?? d.last_seen ?? new Date(0).toISOString()) as string,
+            last_seen_at: (d.last_seen ?? new Date(0).toISOString()) as string,
+          }));
         return res.status(200).json({ data: mapped });
       }
 
