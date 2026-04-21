@@ -331,6 +331,64 @@ async function resolveSessionTenant(
   return null;
 }
 
+// ─── Effective api_key_hash resolver ─────────────────────────────────────
+//
+// Security model (fixes #60):
+//
+// This endpoint is reached from two distinct auth contexts:
+//
+//   1. Web UI (browsers signed in to unclick.world). The session carries
+//      a Supabase JWT in the Authorization header. The UnClick api_key
+//      is owned by the signed-in user and lives server-side in the
+//      api_keys table. We look it up by session.user.id and derive the
+//      tenant hash there. The client never supplies the api_key value
+//      on this path, so a stale localStorage key from a previous user
+//      cannot route the request to the wrong tenant.
+//
+//   2. Agent (off-site MCP clients). The Authorization header is a
+//      raw uc_* / agt_* UnClick api_key. We hash it directly. There is
+//      no Supabase session on this path.
+//
+// Paths are mutually exclusive: the first byte-level prefix check tells
+// us which one applies. The old "hash whatever came in the Bearer"
+// pattern is replaced site-wide.
+async function resolveApiKeyHash(
+  req: VercelRequest,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<string | null> {
+  const token = bearerFrom(req);
+  if (!token) return null;
+
+  // Agent path: raw api_key, trust as-is and hash directly.
+  if (token.startsWith("uc_") || token.startsWith("agt_")) {
+    return sha256hex(token);
+  }
+
+  // Web UI path: Supabase session JWT. Resolve the signed-in user and
+  // look up that user's api_keys row server-side. Never use a client
+  // supplied value for the tenant hash on this path.
+  const user = await resolveSessionUser(req, supabaseUrl, serviceRoleKey);
+  if (!user) return null;
+
+  const qUrl = `${supabaseUrl}/rest/v1/api_keys?user_id=eq.${encodeURIComponent(user.id)}&select=key_hash,api_key&limit=1`;
+  try {
+    const apiRes = await fetch(qUrl, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
+    if (!apiRes.ok) return null;
+    const rows = (await apiRes.json().catch(() => [])) as Array<{
+      key_hash?: string | null;
+      api_key?: string | null;
+    }>;
+    const row = rows[0];
+    if (!row) return null;
+    return row.key_hash ?? (row.api_key ? sha256hex(row.api_key) : null);
+  } catch {
+    return null;
+  }
+}
+
 // ─── Setup guide content ────────────────────────────────────────────────────
 //
 // Static, client-specific instructions for maximising memory auto-load
@@ -1185,9 +1243,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "status": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const [bc, lib, sessions, facts, convos, code] = await Promise.all([
           supabase.from("mc_business_context").select("id", { count: "exact", head: true }).eq("api_key_hash", apiKeyHash),
@@ -1231,9 +1288,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "business_context": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const { data, error } = await supabase
           .from("mc_business_context")
@@ -1247,9 +1303,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "sessions": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const limit = parseInt(req.query.limit as string) || 20;
 
         const { data, error } = await supabase
@@ -1264,9 +1319,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "facts": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const query = req.query.query as string;
         const showAll = req.query.show_all === "true";
@@ -1297,9 +1351,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "library": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const { data, error } = await supabase
           .from("mc_knowledge_library")
@@ -1313,9 +1366,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "library_doc": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const slug = req.query.slug as string;
         if (!slug) return res.status(400).json({ error: "slug parameter required" });
 
@@ -1339,9 +1391,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "conversations": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const sessionId = req.query.session_id as string;
 
         if (!sessionId) {
@@ -1386,9 +1437,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "code": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const sessionId = req.query.session_id as string;
 
         let q = supabase
@@ -1423,9 +1473,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "delete_fact": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const factId = req.body?.fact_id || req.query.fact_id;
         if (!factId) return res.status(400).json({ error: "fact_id required" });
 
@@ -1441,9 +1490,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "delete_session": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const sessionId = req.body?.session_id || req.query.session_id;
         if (!sessionId) return res.status(400).json({ error: "session_id required" });
 
@@ -1459,9 +1507,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "update_business_context": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { category, key, value, priority } = req.body ?? {};
         if (!category || !key || value === undefined) {
           return res.status(400).json({ error: "category, key, and value required" });
@@ -1489,9 +1536,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Agent profile actions ────────────────────────────────────────
       case "admin_agents_list": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         let q = supabase
           .from("agents")
@@ -1540,11 +1586,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_agent_get": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const agentId = String(req.query.agent_id ?? "").trim();
         if (!agentId) return res.status(400).json({ error: "agent_id required" });
-        const apiKeyHash = sha256hex(apiKey);
 
         const { data: agent, error: aErr } = await supabase
           .from("agents")
@@ -1572,9 +1617,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_create": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = (req.body ?? {}) as {
           name?: string;
@@ -1618,9 +1662,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_update": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = (req.body ?? {}) as {
           agent_id?: string;
@@ -1670,9 +1713,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_delete": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const agentId = String(req.body?.agent_id ?? req.query.agent_id ?? "").trim();
         if (!agentId) return res.status(400).json({ error: "agent_id required" });
 
@@ -1687,9 +1729,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_tools_update": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = (req.body ?? {}) as { agent_id?: string; connector_ids?: unknown };
         const agentId = (body.agent_id ?? "").trim();
@@ -1726,9 +1767,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_memory_update": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = (req.body ?? {}) as {
           agent_id?: string;
@@ -1771,9 +1811,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_agent_duplicate": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const agentId = String(req.body?.agent_id ?? "").trim();
         if (!agentId) return res.status(400).json({ error: "agent_id required" });
 
@@ -1852,9 +1891,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_agent_activity": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const agentId = String(req.query.agent_id ?? "").trim();
 
         let q = supabase
@@ -1874,9 +1912,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Called by the MCP server to resolve which agent profile to use for a
         // session. With agent_slug or agent_id, returns that agent. Otherwise
         // returns the user's default agent. Returns null when no agents exist.
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const slug = String(req.query.agent_slug ?? "").trim();
         const id = String(req.query.agent_id ?? "").trim();
 
@@ -2031,9 +2068,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "config": {
-        // MCP server calls this at startup.
+        // MCP server calls this at startup. This action decrypts the
+        // user's stored Supabase service_role key using a key derived
+        // from the raw api_key, so it REQUIRES a uc_/agt_ Bearer and
+        // explicitly rejects Supabase session JWTs (which cannot
+        // reconstruct the raw api_key).
         const apiKey = bearerFrom(req);
         if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        if (!apiKey.startsWith("uc_") && !apiKey.startsWith("agt_")) {
+          return res.status(401).json({ error: "uc_* / agt_* api_key required on this action" });
+        }
         const { data, error } = await supabase
           .from("memory_configs")
           .select("*")
@@ -2072,8 +2116,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "device_check": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const body = req.body as {
           device_fingerprint?: string;
           label?: string;
@@ -2083,7 +2127,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const fp = (body?.device_fingerprint ?? "").trim();
         if (!fp) return res.status(400).json({ error: "device_fingerprint required" });
         const mode = body?.storage_mode === "cloud" ? "cloud" : "local";
-        const apiKeyHash = sha256hex(apiKey);
 
         const { error: upErr } = await supabase
           .from("memory_devices")
@@ -2123,12 +2166,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "list_devices": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { data, error } = await supabase
           .from("memory_devices")
           .select("*")
-          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("api_key_hash", apiKeyHash)
           .order("last_seen", { ascending: false });
         if (error) throw error;
         return res.status(200).json({ data: data ?? [] });
@@ -2229,12 +2272,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Tenant settings (per-API-key key/value store) ───────────────
       case "tenant_settings_get": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { data, error } = await supabase
           .from("tenant_settings")
           .select("key,value")
-          .eq("api_key_hash", sha256hex(apiKey));
+          .eq("api_key_hash", apiKeyHash);
         if (error) throw error;
         const settings: Record<string, unknown> = {};
         for (const row of data ?? []) {
@@ -2245,8 +2288,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "tenant_settings_set": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { key, value } = (req.body ?? {}) as { key?: string; value?: unknown };
         if (!key) return res.status(400).json({ error: "key required" });
         if (value === undefined) return res.status(400).json({ error: "value required" });
@@ -2254,7 +2297,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from("tenant_settings")
           .upsert(
             {
-              api_key_hash: sha256hex(apiKey),
+              api_key_hash: apiKeyHash,
               key,
               value,
               updated_at: new Date().toISOString(),
@@ -2268,9 +2311,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Admin: load metrics (rolling 7-day window + per-client / per-method
       //    breakdown + trend vs. prior week) ──────────────────────────────
       case "admin_memory_load_metrics": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const now = Date.now();
         const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
@@ -2375,9 +2417,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Admin: sessions in the last 24h where context was never loaded
       //    before the first tool call ───────────────────────────────────
       case "admin_missed_context_alerts": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -2449,8 +2490,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_generate_config": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const platform = String(req.query.platform ?? "claude-code");
         const validPlatforms = ["claude-code", "cursor", "windsurf", "copilot"];
         if (!validPlatforms.includes(platform)) {
@@ -2551,13 +2592,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Called by the MCP server at session start. Throttles warnings to
         // once per tool per 24h and returns detection count for escalation.
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const body = req.body as { tool?: string; platform?: string };
         const tool = (body?.tool ?? "").trim();
         if (!tool) return res.status(400).json({ error: "tool required" });
         const platform = body?.platform?.trim() || null;
-        const apiKeyHash = sha256hex(apiKey);
 
         const { data: existing, error: qErr } = await supabase
           .from("conflict_detections")
@@ -2852,11 +2892,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "remove_device": {
         if (req.method !== "DELETE") return res.status(405).json({ error: "DELETE required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const fp = String(req.query.fingerprint ?? "").trim();
         if (!fp) return res.status(400).json({ error: "fingerprint required" });
-        const apiKeyHash = sha256hex(apiKey);
 
         if (req.query.dismiss === "1") {
           const { error } = await supabase
@@ -2880,9 +2919,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Phase 4: Admin dashboard actions ───────────────────────────────
 
       case "admin_business_context": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const tenant = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const tenant = apiKeyHash;
         const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
         switch (method) {
@@ -2967,9 +3006,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_sessions": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
         if (method === "transcript") {
@@ -2997,9 +3035,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_library": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const method = (req.body?.method ?? req.query.method ?? "list") as string;
 
         if (method === "view") {
@@ -3039,9 +3076,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_memory_activity": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         // Facts by day (last 30 days)
         const { data: allFacts } = await supabase
@@ -3222,9 +3258,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Tool awareness ───────────────────────────────────────────────
       case "tool_detect": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = req.body as {
           detections?: Array<{
@@ -3323,12 +3358,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_tool_scan": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { data, error } = await supabase
           .from("tool_detections")
           .select("tool_name,tool_category,classification,last_detected_at,first_detected_at,nudge_dismissed,last_nudged_at")
-          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("api_key_hash", apiKeyHash)
           .order("last_detected_at", { ascending: false });
         if (error) throw error;
 
@@ -3360,8 +3395,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "dismiss_tool_nudge": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const body = req.body as { tool_name?: string; dismissed?: boolean };
         const toolName = String(body?.tool_name ?? "").trim();
         if (!toolName) return res.status(400).json({ error: "tool_name required" });
@@ -3369,7 +3404,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { error } = await supabase
           .from("tool_detections")
           .update({ nudge_dismissed: dismissed })
-          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("api_key_hash", apiKeyHash)
           .eq("tool_name", toolName);
         if (error) throw error;
         return res.status(200).json({ success: true });
@@ -3377,9 +3412,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_fact_add": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = req.body ?? {};
         const fact = typeof body.fact === "string" ? body.fact.trim() : "";
@@ -3416,9 +3450,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_context_apply_template": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const template = String(req.body?.template ?? "").trim().toLowerCase();
         const templates: Record<string, Array<{ category: string; key: string; value: string }>> = {
@@ -3498,9 +3531,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "admin_session_preview": {
         // Dry-run of get_startup_context so the admin UI can show users what
         // their AI actually sees at the start of every session.
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const [ctxRes, factsRes, sessionsRes] = await Promise.all([
           supabase
@@ -3537,9 +3569,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Guard with a body.confirm === "DELETE" phrase so a typo or a
         // mis-fired fetch cannot wipe a user's data.
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const confirm = String(req.body?.confirm ?? "").trim();
         if (confirm !== "DELETE") {
@@ -3576,9 +3607,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "admin_export_all": {
         // Full portable snapshot of the user's memory. Users can download this
         // and move to another memory backend if they ever want to leave.
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const [ctx, facts, sessions, library] = await Promise.all([
           supabase
@@ -3687,9 +3717,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Build Desk admin actions ─────────────────────────────────────
       case "admin_build_tasks": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const method = String(req.query.method ?? req.body?.method ?? "list").trim();
 
         switch (method) {
@@ -3804,9 +3833,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_build_workers": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const method = String(req.query.method ?? req.body?.method ?? "list").trim();
 
         switch (method) {
@@ -3906,9 +3934,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_build_dispatch": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { task_id, worker_id, payload_json } = req.body ?? {};
         if (!task_id || !worker_id) {
           return res.status(400).json({ error: "task_id and worker_id required" });
@@ -3962,9 +3989,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Tenant auto-load settings ───────────────────────────────────
       case "admin_get_autoload_settings": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const { data, error } = await supabase
           .from("tenant_settings")
@@ -3985,9 +4011,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Tenant settings (AI chat feature flags) ─────────────────────
       case "tenant_settings": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const hash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const hash = apiKeyHash;
         const envEnabled = process.env.AI_CHAT_ENABLED === "true";
 
         if (req.method === "POST") {
@@ -4077,9 +4103,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_update_autoload_settings": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const body = req.body ?? {};
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -4165,8 +4190,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Channels orchestrator ─────────────────────────────────────────
       case "admin_channel_send": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const body = req.body as { session_id?: string; content?: string };
         const sessionId = (body?.session_id ?? "").trim();
         const content = (body?.content ?? "").toString();
@@ -4176,7 +4201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data, error } = await supabase
           .from("chat_messages")
           .insert({
-            api_key_hash: sha256hex(apiKey),
+            api_key_hash: apiKeyHash,
             session_id: sessionId,
             role: "user",
             content,
@@ -4194,8 +4219,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_channel_poll": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const sessionId = String(req.query.session_id ?? "").trim();
         const after = String(req.query.after ?? "").trim();
         if (!sessionId) return res.status(400).json({ error: "session_id required" });
@@ -4203,7 +4228,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let q = supabase
           .from("chat_messages")
           .select("*")
-          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("api_key_hash", apiKeyHash)
           .eq("session_id", sessionId)
           .order("created_at", { ascending: true })
           .limit(200);
@@ -4216,12 +4241,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_channel_status": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const { data, error } = await supabase
           .from("channel_status")
           .select("last_seen, client_info")
-          .eq("api_key_hash", sha256hex(apiKey))
+          .eq("api_key_hash", apiKeyHash)
           .maybeSingle();
         if (error) throw error;
 
@@ -4238,8 +4263,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_channel_heartbeat": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const body = req.body as { client_info?: string };
         const clientInfo = (body?.client_info ?? "").toString().slice(0, 500);
 
@@ -4247,7 +4272,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from("channel_status")
           .upsert(
             {
-              api_key_hash: sha256hex(apiKey),
+              api_key_hash: apiKeyHash,
               client_info: clientInfo || null,
               last_seen: new Date().toISOString(),
             },
@@ -4260,9 +4285,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Global admin spotlight search across facts/sessions/context ──
       case "admin_search": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
         const query = String(req.query.query ?? "").trim();
         if (!query) return res.status(200).json({ data: [] });
@@ -4340,9 +4364,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Bug reports visible to the submitting api_key_hash ──────────
       case "admin_bug_reports": {
-        const apiKey = bearerFrom(req);
-        if (!apiKey) return res.status(401).json({ error: "Authorization header required" });
-        const apiKeyHash = sha256hex(apiKey);
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
 
         const { data, error } = await supabase

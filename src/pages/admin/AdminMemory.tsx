@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Brain } from "lucide-react";
+import { useSession } from "@/lib/auth";
 import StorageBar from "./memory/StorageBar";
 import ContextTab from "./memory/ContextTab";
 import FactsTab from "./memory/FactsTab";
@@ -36,17 +37,23 @@ export default function AdminMemoryPage() {
   } | null>(null);
   const [storageLoading, setStorageLoading] = useState(true);
 
-  const apiKey = useMemo(() => localStorage.getItem("unclick_api_key") ?? "", []);
+  // Use the Supabase session access token as the Bearer for all
+  // /api/memory-admin calls. The backend now resolves the tenant
+  // api_key_hash server-side from the session user, so a stale
+  // localStorage.unclick_api_key from a prior user cannot impersonate
+  // the current signer. See issue #60.
+  const { session, loading: sessionLoading } = useSession();
+  const accessToken = session?.access_token ?? "";
 
   useEffect(() => {
-    if (!apiKey) {
+    if (!accessToken) {
       setStorageLoading(false);
       return;
     }
     (async () => {
       try {
         const res = await fetch("/api/memory-admin?action=admin_memory_activity", {
-          headers: { Authorization: `Bearer ${apiKey}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (res.ok) {
           const body = await res.json();
@@ -56,19 +63,26 @@ export default function AdminMemoryPage() {
         setStorageLoading(false);
       }
     })();
-  }, [apiKey]);
+  }, [accessToken]);
 
   const setTab = (tab: TabId) => {
     setSearchParams({ tab });
   };
 
-  if (!apiKey) {
+  if (sessionLoading) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-8 text-center">
-        <p className="text-sm text-white/70">No API key found for this session.</p>
+        <p className="text-sm text-white/70">Loading your session...</p>
+      </div>
+    );
+  }
+
+  if (!accessToken) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-8 text-center">
+        <p className="text-sm text-white/70">Sign in to see what UnClick remembers about you.</p>
         <p className="mt-2 text-xs text-white/50">
-          Sign in or grab a free key from the homepage, then come back to see what UnClick
-          remembers about you.
+          Memory is scoped to your account; sign in from <a href="/login" className="text-[#61C1C4] underline">/login</a> to continue.
         </p>
       </div>
     );
@@ -117,7 +131,7 @@ export default function AdminMemoryPage() {
               What UnClick remembers about you. Preferences, decisions, contacts, technical details.
               These appear here automatically as you use UnClick. You can also add them manually.
             </p>
-            <FactsTab apiKey={apiKey} />
+            <FactsTab apiKey={accessToken} />
           </div>
         )}
         {activeTab === "sessions" && (
@@ -126,7 +140,7 @@ export default function AdminMemoryPage() {
               What happened in past conversations. Summaries, decisions made, open loops.
               New sessions read the most recent ones so your agent picks up where you left off.
             </p>
-            <SessionsTab apiKey={apiKey} />
+            <SessionsTab apiKey={accessToken} />
           </div>
         )}
         {activeTab === "identity" && (
@@ -137,7 +151,7 @@ export default function AdminMemoryPage() {
                 Think of it as your AI's permanent instructions.
               </p>
             </div>
-            <ContextTab apiKey={apiKey} />
+            <ContextTab apiKey={accessToken} />
           </div>
         )}
     </>

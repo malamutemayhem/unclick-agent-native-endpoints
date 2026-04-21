@@ -21,6 +21,14 @@ export async function signInWithOAuth(provider: "google" | "azure") {
 }
 
 export async function signOut() {
+  // Clear the UnClick api_key from localStorage on sign-out so the next
+  // user on this browser does not inherit the previous user's key. See
+  // issue #60 (cross-tenant memory leak via stale localStorage key).
+  try {
+    localStorage.removeItem("unclick_api_key");
+  } catch {
+    // localStorage can be unavailable in private-mode / SSR; ignore.
+  }
   return supabase.auth.signOut();
 }
 
