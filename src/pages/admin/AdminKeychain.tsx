@@ -23,7 +23,7 @@
  * Backend: /api/backstagepass?action={list,reveal,update,delete,audit}
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "@/lib/auth";
 import {
   AlertTriangle,
@@ -117,6 +117,13 @@ export default function AdminKeychain() {
   // we keep plaintext here until they hide it or the auto-clear timer
   // fires. Never persisted anywhere.
   const [revealed, setRevealed]       = useState<Record<string, Record<string, string>>>({});
+  // Per-credential reveal timestamp (ms since epoch). Used by the single
+  // interval below to auto-clear an entry exactly 60s after it was
+  // revealed, independent of any other reveal or hide happening in
+  // between.
+  const [revealedAt, setRevealedAt]   = useState<Record<string, number>>({});
+  const revealedAtRef                 = useRef<Record<string, number>>({});
+  revealedAtRef.current               = revealedAt;
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<Record<string, string>>({});
   const [revealing, setRevealing]     = useState<Record<string, boolean>>({});
@@ -157,21 +164,32 @@ export default function AdminKeychain() {
 
   useEffect(() => { void fetchList(); }, [fetchList]);
 
-  // Auto-clear revealed plaintext after 60s per row. We track a set of
-  // scheduled timeouts so hiding a row manually cancels its timer.
+  // Auto-clear revealed plaintext 60s after each individual reveal.
+  // A single interval reads the latest revealedAt map via ref and
+  // evicts entries whose absolute timestamp has aged past 60s. This
+  // avoids the previous bug where revealing a second credential would
+  // reset the timer for an already-revealed one.
   useEffect(() => {
-    const timers: number[] = [];
-    for (const id of Object.keys(revealed)) {
-      const t = window.setTimeout(() => {
-        setRevealed((prev) => {
-          const { [id]: _gone, ...rest } = prev;
-          return rest;
-        });
-      }, 60_000);
-      timers.push(t);
-    }
-    return () => { for (const t of timers) window.clearTimeout(t); };
-  }, [revealed]);
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      const expired: string[] = [];
+      for (const [id, at] of Object.entries(revealedAtRef.current)) {
+        if (now - at >= 60_000) expired.push(id);
+      }
+      if (expired.length === 0) return;
+      setRevealed((prev) => {
+        const next = { ...prev };
+        for (const id of expired) delete next[id];
+        return next;
+      });
+      setRevealedAt((prev) => {
+        const next = { ...prev };
+        for (const id of expired) delete next[id];
+        return next;
+      });
+    }, 5_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   async function handleReveal(cred: Credential) {
     const apiKey = readLocalApiKey();
@@ -193,6 +211,7 @@ export default function AdminKeychain() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? `Reveal failed with ${res.status}`);
       setRevealed((p) => ({ ...p, [cred.id]: body.values ?? {} }));
+      setRevealedAt((p) => ({ ...p, [cred.id]: Date.now() }));
     } catch (err) {
       setRevealError((p) => ({
         ...p,
@@ -205,6 +224,10 @@ export default function AdminKeychain() {
 
   function handleHide(cred: Credential) {
     setRevealed((p) => {
+      const { [cred.id]: _gone, ...rest } = p;
+      return rest;
+    });
+    setRevealedAt((p) => {
       const { [cred.id]: _gone, ...rest } = p;
       return rest;
     });

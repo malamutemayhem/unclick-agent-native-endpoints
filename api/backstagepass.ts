@@ -21,9 +21,11 @@
  * that decrypts or re-encrypts. List and metadata-only update (label
  * change) only need factor 1.
  *
- * Every action writes a row to `backstagepass_audit` — success or
- * failure. Failed reveals are especially worth logging because they
- * are the primary signal of a compromised session.
+ * The mutating actions (reveal, update, delete) write a row to
+ * `backstagepass_audit` on success or failure. The read-only actions
+ * (list, audit) do not write audit rows to avoid log spam. Failed
+ * reveals are especially worth logging because they are the primary
+ * signal of a compromised session.
  *
  * CORS is strict — unclick.world only. Admin surface should never
  * talk to this from a preview/3p origin.
@@ -67,6 +69,18 @@ const SALT_BYTES        = 32;
 
 function sha256hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+// Constant-time comparison of two equal-length hex-encoded hashes.
+// Used for proof-of-possession checks so callers cannot learn the
+// stored hash via response timing.
+function hashesEqual(aHex: string, bHex: string): boolean {
+  if (aHex.length !== bHex.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(aHex, "hex"), Buffer.from(bHex, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 function deriveKey(apiKey: string, salt: Buffer): Buffer {
@@ -351,7 +365,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Proof-of-possession: the submitted api_key must hash to the same
     // value stored for this user. Prevents a session hijack from
     // converting directly into a plaintext credential dump.
-    if (sha256hex(apiKey) !== tenant.apiKeyHash) {
+    if (!hashesEqual(sha256hex(apiKey), tenant.apiKeyHash)) {
       await writeAudit({
         supabaseUrl, serviceRoleKey, tenant, req,
         action: "reveal", credentialId: id, success: false,
@@ -446,7 +460,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!apiKey) {
         return res.status(400).json({ error: "api_key is required to change credential values." });
       }
-      if (sha256hex(apiKey) !== tenant.apiKeyHash) {
+      if (!hashesEqual(sha256hex(apiKey), tenant.apiKeyHash)) {
         await writeAudit({
           supabaseUrl, serviceRoleKey, tenant, req,
           action: "update_values", credentialId: id, success: false,
