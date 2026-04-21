@@ -44,12 +44,14 @@ export default function AuthCallbackPage() {
         }
       }
       // Check if MFA is required before entering the admin shell
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
-        navigate("/auth/verify-mfa", { replace: true });
-      } else {
-        navigate("/admin", { replace: true });
-      }
+      void (async () => {
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+          navigate("/auth/verify-mfa", { replace: true });
+        } else {
+          navigate("/admin", { replace: true });
+        }
+      })();
     }
   }, [loading, session, navigate]);
 
