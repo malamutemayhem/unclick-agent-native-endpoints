@@ -51,6 +51,8 @@ export default function SignupPage() {
     try {
       await signInWithMagicLink(trimmed);
       setSent(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).umami?.track("signup", { method: "magic_link" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -61,6 +63,8 @@ export default function SignupPage() {
   async function handleOAuth(provider: "google" | "azure") {
     setError("");
     setBusy(provider);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).umami?.track("signup", { method: provider });
     try {
       await signInWithOAuth(provider);
     } catch (err) {

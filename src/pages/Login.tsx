@@ -47,6 +47,8 @@ export default function LoginPage() {
     try {
       await signInWithMagicLink(trimmed);
       setSent(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).umami?.track("signin", { method: "magic_link" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -57,6 +59,8 @@ export default function LoginPage() {
   async function handleOAuth(provider: "google" | "azure") {
     setError("");
     setBusy(provider);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).umami?.track("signin", { method: provider });
     try {
       await signInWithOAuth(provider);
       // Redirect happens via Supabase. Nothing else to do here.

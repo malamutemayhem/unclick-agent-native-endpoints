@@ -28,6 +28,20 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     if (!loading && session) {
+      const user = session.user;
+      const provider = user.app_metadata?.provider ?? "unknown";
+      const method = provider === "email" ? "magic_link" : provider;
+      const createdAt = user.created_at ? new Date(user.created_at).getTime() : 0;
+      const isNewUser = createdAt > 0 && Date.now() - createdAt < 60_000;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const track = (window as any).umami?.track;
+      if (track) {
+        if (isNewUser) {
+          track("new_user_signup", { method, email: user.email });
+        } else {
+          track("returning_user_signin", { method });
+        }
+      }
       navigate("/admin", { replace: true });
     }
   }, [loading, session, navigate]);
