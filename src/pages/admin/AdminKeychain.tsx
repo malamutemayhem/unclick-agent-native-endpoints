@@ -39,12 +39,62 @@ import {
   Plus,
   RefreshCw,
   RotateCw,
+  Search,
   Shield,
   Trash2,
   X,
   XCircle,
   Zap,
 } from "lucide-react";
+
+// ─── Platform catalog ─────────────────────────────────────────────
+
+const PLATFORMS = [
+  // AI / LLM
+  { slug: "anthropic",  name: "Anthropic",   category: "AI",           desc: "Claude models" },
+  { slug: "openai",     name: "OpenAI",       category: "AI",           desc: "GPT and Assistants" },
+  { slug: "google-ai",  name: "Google AI",    category: "AI",           desc: "Gemini models" },
+  { slug: "cohere",     name: "Cohere",       category: "AI",           desc: "Command models" },
+  { slug: "mistral",    name: "Mistral",      category: "AI",           desc: "Mistral models" },
+  { slug: "groq",       name: "Groq",         category: "AI",           desc: "Fast inference" },
+  { slug: "perplexity", name: "Perplexity",   category: "AI",           desc: "Search + AI" },
+  // Dev Tools
+  { slug: "github",     name: "GitHub",       category: "Dev Tools",    desc: "Repos and CI" },
+  { slug: "gitlab",     name: "GitLab",       category: "Dev Tools",    desc: "Repos and pipelines" },
+  { slug: "linear",     name: "Linear",       category: "Dev Tools",    desc: "Issues and projects" },
+  { slug: "jira",       name: "Jira",         category: "Dev Tools",    desc: "Issue tracking" },
+  { slug: "confluence", name: "Confluence",   category: "Dev Tools",    desc: "Docs and wikis" },
+  { slug: "asana",      name: "Asana",        category: "Dev Tools",    desc: "Tasks and projects" },
+  { slug: "figma",      name: "Figma",        category: "Dev Tools",    desc: "Design files" },
+  // Cloud
+  { slug: "supabase",   name: "Supabase",     category: "Cloud",        desc: "Database and auth" },
+  { slug: "vercel",     name: "Vercel",        category: "Cloud",        desc: "Deployments" },
+  { slug: "cloudflare", name: "Cloudflare",   category: "Cloud",        desc: "DNS and edge" },
+  { slug: "aws",        name: "AWS",          category: "Cloud",        desc: "Amazon cloud" },
+  { slug: "gcp",        name: "GCP",          category: "Cloud",        desc: "Google cloud" },
+  { slug: "azure",      name: "Azure",        category: "Cloud",        desc: "Microsoft cloud" },
+  // Payments / Finance
+  { slug: "stripe",     name: "Stripe",       category: "Payments",     desc: "Payments and billing" },
+  { slug: "shopify",    name: "Shopify",      category: "Payments",     desc: "Store and orders" },
+  { slug: "xero",       name: "Xero",         category: "Payments",     desc: "Accounting" },
+  { slug: "paypal",     name: "PayPal",       category: "Payments",     desc: "Payments" },
+  // Analytics / Marketing
+  { slug: "posthog",    name: "PostHog",      category: "Analytics",    desc: "Product analytics" },
+  { slug: "mixpanel",   name: "Mixpanel",     category: "Analytics",    desc: "Event analytics" },
+  { slug: "hubspot",    name: "HubSpot",      category: "Analytics",    desc: "CRM and marketing" },
+  { slug: "mailchimp",  name: "Mailchimp",    category: "Analytics",    desc: "Email campaigns" },
+  { slug: "sendgrid",   name: "SendGrid",     category: "Analytics",    desc: "Transactional email" },
+  // Comms / Social
+  { slug: "slack",      name: "Slack",        category: "Comms",        desc: "Messages and channels" },
+  { slug: "discord",    name: "Discord",      category: "Comms",        desc: "Servers and messages" },
+  { slug: "telegram",   name: "Telegram",     category: "Comms",        desc: "Bots and channels" },
+  { slug: "twilio",     name: "Twilio",       category: "Comms",        desc: "SMS and voice" },
+  { slug: "reddit",     name: "Reddit",       category: "Comms",        desc: "Posts and comments" },
+  // Data / Productivity
+  { slug: "notion",     name: "Notion",       category: "Productivity", desc: "Docs and databases" },
+  { slug: "airtable",   name: "Airtable",     category: "Productivity", desc: "Structured data" },
+  { slug: "zapier",     name: "Zapier",       category: "Productivity", desc: "Workflow automation" },
+] as const;
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -152,6 +202,13 @@ export default function AdminKeychain() {
   const [deleteTarget, setDeleteTarget] = useState<Credential | null>(null);
   const [auditOpen, setAuditOpen]       = useState(false);
   const [starterOpen, setStarterOpen]   = useState(false);
+  const [addMode, setAddMode]           = useState<"browse" | "manual">("browse");
+  const [platformSearch, setPlatformSearch] = useState("");
+  const [manualPlatform, setManualPlatform] = useState("");
+  const [manualLabel, setManualLabel]   = useState("");
+  const [manualKV, setManualKV]         = useState<{ key: string; value: string }[]>([{ key: "", value: "" }]);
+  const [adding, setAdding]             = useState(false);
+  const [addError, setAddError]         = useState<string | null>(null);
 
   // Audit log (only fetched when drawer opens)
   const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
@@ -182,6 +239,49 @@ export default function AdminKeychain() {
   }, [session, authHeader]);
 
   useEffect(() => { void fetchList(); }, [fetchList]);
+
+  function resetAddModal() {
+    setAddMode("browse");
+    setPlatformSearch("");
+    setManualPlatform("");
+    setManualLabel("");
+    setManualKV([{ key: "", value: "" }]);
+    setAddError(null);
+    setAdding(false);
+  }
+
+  async function handleManualAdd() {
+    const apiKey = readLocalApiKey();
+    if (!apiKey) {
+      setAddError("Your API key is not cached in this browser. Re-issue it from the You page first.");
+      return;
+    }
+    const slug = manualPlatform.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!slug) { setAddError("Platform name is required."); return; }
+    const values: Record<string, string> = {};
+    for (const { key, value } of manualKV) {
+      if (key.trim()) values[key.trim()] = value;
+    }
+    if (Object.keys(values).length === 0) { setAddError("At least one key-value pair is required."); return; }
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/backstagepass?action=add", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: slug, label: manualLabel.trim() || null, api_key: apiKey, values }),
+      });
+      const body = await res.json() as { error?: string };
+      if (!res.ok) { setAddError(body.error ?? "Failed to add credential."); return; }
+      setStarterOpen(false);
+      resetAddModal();
+      await fetchList();
+    } catch (e) {
+      setAddError((e as Error).message);
+    } finally {
+      setAdding(false);
+    }
+  }
 
   // Auto-clear revealed plaintext 60s after each individual reveal.
   // A single interval reads the latest revealedAt map via ref and
@@ -392,7 +492,7 @@ export default function AdminKeychain() {
           <KeyRound className="mx-auto h-8 w-8 text-[#333]" />
           <p className="mt-3 text-sm text-[#666]">No credentials stored</p>
           <p className="mt-1 text-xs text-[#444]">
-            Connect a platform via the MCP server, or add one manually below.
+            Connect a platform or add credentials manually.
           </p>
           <button
             onClick={() => setStarterOpen(true)}
@@ -609,57 +709,176 @@ export default function AdminKeychain() {
         />
       )}
 
-      {/* Starter credentials picker */}
+      {/* Add credential modal */}
       {starterOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setStarterOpen(false)}
+          onClick={() => { setStarterOpen(false); resetAddModal(); }}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#111111] p-5"
+            className="flex w-full max-w-md flex-col rounded-xl border border-white/[0.08] bg-[#111111]"
+            style={{ maxHeight: "85vh" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-4">
               <h3 className="text-sm font-semibold text-white">Add a credential</h3>
               <button
-                onClick={() => setStarterOpen(false)}
+                onClick={() => { setStarterOpen(false); resetAddModal(); }}
                 className="rounded-md p-1 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="mb-4 text-xs text-[#666]">
-              Choose a platform to connect. You can also add any platform via the MCP server.
-            </p>
-            <div className="space-y-1.5">
-              {([
-                { slug: "slack",    name: "Slack",    desc: "Messages and channels" },
-                { slug: "shopify",  name: "Shopify",  desc: "Store and orders" },
-                { slug: "xero",     name: "Xero",     desc: "Accounting and invoices" },
-                { slug: "discord",  name: "Discord",  desc: "Servers and messages" },
-                { slug: "telegram", name: "Telegram", desc: "Bots and channels" },
-                { slug: "reddit",   name: "Reddit",   desc: "Posts and comments" },
-              ] as const).map(({ slug, name, desc }) => (
-                <Link
-                  key={slug}
-                  to={`/connect/${slug}`}
-                  onClick={() => setStarterOpen(false)}
-                  className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 transition-colors hover:border-[#E2B93B]/30 hover:bg-[#E2B93B]/5"
+
+            {/* Mode tabs */}
+            <div className="flex shrink-0 border-b border-white/[0.06]">
+              {(["browse", "manual"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => { setAddMode(mode); setAddError(null); }}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                    addMode === mode
+                      ? "border-b-2 border-[#61C1C4] text-[#61C1C4]"
+                      : "text-[#666] hover:text-[#aaa]"
+                  }`}
                 >
-                  <div>
-                    <p className="text-xs font-medium text-white">{name}</p>
-                    <p className="text-[11px] text-[#555]">{desc}</p>
-                  </div>
-                  <Plus className="h-3.5 w-3.5 shrink-0 text-[#555]" />
-                </Link>
+                  {mode === "browse" ? "Browse Platforms" : "Add Manually"}
+                </button>
               ))}
             </div>
-            <p className="mt-4 text-center text-[11px] text-[#444]">
-              More platforms available via{" "}
-              <Link to="/backstagepass" className="text-[#E2B93B] hover:underline" onClick={() => setStarterOpen(false)}>
-                BackstagePass
-              </Link>
-            </p>
+
+            {/* Browse mode */}
+            {addMode === "browse" && (
+              <>
+                <div className="shrink-0 px-4 pt-3 pb-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#555]" />
+                    <input
+                      type="text"
+                      placeholder="Search platforms..."
+                      value={platformSearch}
+                      onChange={(e) => setPlatformSearch(e.target.value)}
+                      className="w-full rounded-md border border-white/[0.08] bg-black/30 py-2 pl-8 pr-3 text-xs text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto px-4 pb-4">
+                  <div className="space-y-1">
+                    {PLATFORMS.filter(
+                      (p) =>
+                        !platformSearch ||
+                        p.name.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        p.category.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        p.desc.toLowerCase().includes(platformSearch.toLowerCase()),
+                    ).map(({ slug, name, desc }) => (
+                      <Link
+                        key={slug}
+                        to={`/connect/${slug}`}
+                        onClick={() => { setStarterOpen(false); resetAddModal(); }}
+                        className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 transition-colors hover:border-[#E2B93B]/30 hover:bg-[#E2B93B]/5"
+                      >
+                        <div>
+                          <p className="text-xs font-medium text-white">{name}</p>
+                          <p className="text-[11px] text-[#555]">{desc}</p>
+                        </div>
+                        <Plus className="h-3.5 w-3.5 shrink-0 text-[#555]" />
+                      </Link>
+                    ))}
+                    {PLATFORMS.filter(
+                      (p) =>
+                        !platformSearch ||
+                        p.name.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        p.category.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        p.desc.toLowerCase().includes(platformSearch.toLowerCase()),
+                    ).length === 0 && (
+                      <p className="py-6 text-center text-xs text-[#555]">No platforms match "{platformSearch}"</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Manual mode */}
+            {addMode === "manual" && (
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {!readLocalApiKey() && (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg border border-[#E2B93B]/20 bg-[#E2B93B]/5 p-3 text-xs text-[#E2B93B]">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Your API key is not cached in this browser. Go to <Link to="/admin/you" className="underline" onClick={() => { setStarterOpen(false); resetAddModal(); }}>You</Link> and re-issue it first.</span>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] text-[#888]">Platform name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. GitHub, My Custom API"
+                      value={manualPlatform}
+                      onChange={(e) => setManualPlatform(e.target.value)}
+                      className="w-full rounded-md border border-white/[0.08] bg-black/30 px-3 py-2 text-xs text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] text-[#888]">Label (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. personal, work"
+                      value={manualLabel}
+                      onChange={(e) => setManualLabel(e.target.value)}
+                      className="w-full rounded-md border border-white/[0.08] bg-black/30 px-3 py-2 text-xs text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="text-[11px] text-[#888]">Key-value pairs</label>
+                      <button
+                        onClick={() => setManualKV((prev) => [...prev, { key: "", value: "" }])}
+                        className="text-[11px] text-[#61C1C4] hover:underline"
+                      >
+                        + Add field
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {manualKV.map((pair, idx) => (
+                        <div key={idx} className="flex gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="key"
+                            value={pair.key}
+                            onChange={(e) => setManualKV((prev) => prev.map((p, i) => i === idx ? { ...p, key: e.target.value } : p))}
+                            className="w-2/5 rounded-md border border-white/[0.08] bg-black/30 px-2 py-1.5 font-mono text-[11px] text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
+                          />
+                          <input
+                            type="password"
+                            placeholder="value"
+                            value={pair.value}
+                            onChange={(e) => setManualKV((prev) => prev.map((p, i) => i === idx ? { ...p, value: e.target.value } : p))}
+                            className="min-w-0 flex-1 rounded-md border border-white/[0.08] bg-black/30 px-2 py-1.5 font-mono text-[11px] text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
+                          />
+                          {manualKV.length > 1 && (
+                            <button
+                              onClick={() => setManualKV((prev) => prev.filter((_, i) => i !== idx))}
+                              className="rounded-md p-1.5 text-[#555] hover:text-red-400"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {addError && <p className="text-[11px] text-red-400">{addError}</p>}
+                  <button
+                    onClick={handleManualAdd}
+                    disabled={adding || !readLocalApiKey()}
+                    className="w-full rounded-md border border-[#61C1C4]/30 bg-[#61C1C4]/10 py-2 text-xs font-semibold text-[#61C1C4] transition-colors hover:bg-[#61C1C4]/20 disabled:opacity-50"
+                  >
+                    {adding ? "Saving..." : "Save Encrypted Credential"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

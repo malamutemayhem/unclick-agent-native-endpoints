@@ -315,11 +315,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Server credentials not configured." });
   }
 
-  const tenant = await resolveTenant(req, supabaseUrl, serviceRoleKey);
-  if (!tenant) return res.status(401).json({ error: "Not signed in." });
-
   const action = String(req.query.action ?? "").trim();
   const body   = (req.body ?? {}) as Record<string, unknown>;
+
+  const tenant = await resolveTenant(req, supabaseUrl, serviceRoleKey);
+  if (!tenant) {
+    // `list` can gracefully return empty when the user has a valid session
+    // but no api_keys row yet (e.g. navigated here before visiting /admin/you).
+    if (req.method === "GET" && action === "list") {
+      const authHeader = req.headers.authorization ?? "";
+      const token      = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (token && !token.startsWith("uc_") && !token.startsWith("agt_")) {
+        const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+          headers: { apikey: serviceRoleKey, Authorization: `Bearer ${token}` },
+        });
+        if (userRes.ok) return res.status(200).json({ data: [] });
+      }
+    }
+    return res.status(401).json({ error: "Not signed in." });
+  }
 
   // ── GET actions ─────────────────────────────────────────────────
 
@@ -691,6 +705,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     return res.status(200).json({ id, deleted: true });
+  }
+
+  if (action === "add") {
+    if (req.method !== "POST") return res.status(405).json({ error: "POST required." });
+    const platform = typeof body.platform === "string" ? body.platform.trim().toLowerCase() : "";
+    const label    = typeof body.label    === "string" ? body.label.trim()                  : null;
+    const apiKey   = typeof body.api_key  === "string" ? body.api_key.trim()                : "";
+    const values   = typeof body.values   === "object" && body.values !== null
+      ? (body.values as Record<string, string>)
+      : null;
+
+    if (!platform)  return res.status(400).json({ error: "platform is required." });
+    if (!apiKey)    return res.status(400).json({ error: "api_key is required for encryption." });
+    if (!values || Object.keys(values).length === 0) {
+      return res.status(400).json({ error: "values must be a non-empty object." });
+    }
+    if (!hashesEqual(sha256hex(apiKey), tenant.apiKeyHash)) {
+      return res.status(403).json({ error: "api_key does not match your account." });
+    }
+
+    const salt      = crypto.randomBytes(SALT_BYTES);
+    const encKey    = deriveKey(apiKey, salt);
+    const plaintext = JSON.stringify(values);
+    const enc       = encrypt(plaintext, encKey);
+
+    const { ok, data, status } = await supaFetch(
+      `${supabaseUrl}/rest/v1/user_credentials`,
+      "POST",
+      { ...supaHeaders(serviceRoleKey), Prefer: "return=representation" },
+      {
+        api_key_hash:     tenant.apiKeyHash,
+        platform_slug:    platform,
+        label:            label || null,
+        encrypted_data:   enc.ciphertext,
+        encryption_iv:    enc.iv,
+        encryption_tag:   enc.authTag,
+        encryption_salt:  salt.toString("hex"),
+        is_valid:         true,
+        last_rotated_at:  new Date().toISOString(),
+      },
+    );
+
+    await writeAudit({
+      supabaseUrl, serviceRoleKey, tenant, req,
+      action: "add",
+      credentialId: ok ? ((data as Array<{ id: string }>)[0]?.id ?? null) : null,
+      platformSlug: platform,
+      label: label || null,
+      success: ok,
+      metadata: ok ? {} : { status },
+    });
+
+    if (!ok) return res.status(502).json({ error: "Failed to store credential." });
+    const row = (data as Array<{ id: string }>)[0];
+    return res.status(201).json({ id: row.id, platform, label: label || null, added: true });
   }
 
   return res.status(400).json({ error: `Unknown action: ${action || "(empty)"}` });
