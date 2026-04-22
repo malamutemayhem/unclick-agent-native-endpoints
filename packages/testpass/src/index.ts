@@ -4,4 +4,9 @@ export * from "./probe.js";
 export * from "./run-manager.js";
 export * from "./runner/deterministic.js";
 export * from "./runner/agent.js";
+export {
+  generateHtmlReport,
+  generateJsonReport,
+  generateMarkdownFixList,
+} from "./reporter.js";
 export type * from "./types.js";

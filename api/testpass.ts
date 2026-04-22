@@ -25,6 +25,11 @@ import {
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
+import {
+  generateHtmlReport,
+  generateJsonReport,
+  generateMarkdownFixList,
+} from "../packages/testpass/src/reporter.js";
 import * as path from "node:path";
 import * as url from "node:url";
 import type { RunTarget, RunProfile } from "../packages/testpass/src/types.js";
@@ -37,10 +42,35 @@ const CORS = {
   "Access-Control-Allow-Headers": "Authorization,Content-Type",
 };
 
+function applyCors(res: VercelResponse) {
+  Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
+}
+
 function json(res: VercelResponse, status: number, body: unknown) {
   res.status(status).setHeader("Content-Type", "application/json");
-  Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
+  applyCors(res);
   res.end(JSON.stringify(body));
+}
+
+function text(res: VercelResponse, status: number, contentType: string, body: string) {
+  res.status(status).setHeader("Content-Type", contentType);
+  applyCors(res);
+  res.end(body);
+}
+
+async function ensureRunOwnership(
+  supabaseUrl: string,
+  serviceKey: string,
+  runId: string,
+  actorUserId: string
+): Promise<boolean> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=id&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+  );
+  if (!r.ok) return false;
+  const rows = (await r.json()) as Array<{ id: string }>;
+  return rows.length > 0;
 }
 
 async function getActorUserId(
@@ -114,6 +144,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await getRunWithItems(supabaseUrl, serviceKey, runId, actorUserId);
     if (!data.run) return json(res, 404, { error: "Run not found" });
     return json(res, 200, data);
+  }
+
+  if (req.method === "GET" && action === "report_html") {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    if (!(await ensureRunOwnership(supabaseUrl, serviceKey, runId, actorUserId))) {
+      return json(res, 404, { error: "Run not found" });
+    }
+    const html = await generateHtmlReport(config, runId);
+    return text(res, 200, "text/html; charset=utf-8", html);
+  }
+
+  if (req.method === "GET" && action === "report_json") {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    if (!(await ensureRunOwnership(supabaseUrl, serviceKey, runId, actorUserId))) {
+      return json(res, 404, { error: "Run not found" });
+    }
+    const body = await generateJsonReport(config, runId);
+    return json(res, 200, body);
+  }
+
+  if (req.method === "GET" && action === "report_md") {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    if (!(await ensureRunOwnership(supabaseUrl, serviceKey, runId, actorUserId))) {
+      return json(res, 404, { error: "Run not found" });
+    }
+    const md = await generateMarkdownFixList(config, runId);
+    return text(res, 200, "text/markdown; charset=utf-8", md);
   }
 
   if (req.method === "POST" && action === "start_run") {
