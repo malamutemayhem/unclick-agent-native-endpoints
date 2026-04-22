@@ -1,0 +1,206 @@
+id: anti-stomp-v0
+name: Anti-Stomp v0
+version: 0.1.0
+description: >
+  QC checks that detect when one agent's work silently undid another agent's.
+  Covers deleted files, removed routes/nav items, orphaned components,
+  stranded restructure branches, and PR archaeology hygiene.
+  Target: code repos with git history. Run with base and head refs set in GitContext.
+
+items:
+  # ─── Deletion audit ───────────────────────────────────────────────────────
+
+  - id: DELETE-001
+    title: Files deleted without rationale
+    category: deletion-audit
+    severity: high
+    check_type: deterministic
+    description: >
+      Run `git diff --name-only --diff-filter=D <base>..<head>` and filter for
+      files under src/pages/, src/components/, src/admin/, packages/*/src/, or api/.
+      Fail if any such file is not mentioned by name or filepath in the PR body.
+    expected:
+      verify:
+        type: shell
+        command: "git diff --name-only --diff-filter=D {base}..{head}"
+      monitored_paths:
+        - src/pages/
+        - src/components/
+        - src/admin/
+        - api/
+      monitored_glob: "packages/*/src/"
+    on_fail: >
+      Add a 'Deletions' section to the PR body listing each deleted file with
+      a one-line rationale.
+    tags: [deletion, pr-hygiene, anti-stomp]
+    profiles: [smoke, standard, deep]
+
+  - id: DELETE-002
+    title: Routes removed from router without rationale
+    category: deletion-audit
+    severity: high
+    check_type: deterministic
+    description: >
+      Locate the router config file (src/App.tsx or src/routes.tsx). Diff it
+      between base and head. Fail if any <Route path=...> element is removed
+      without explicit mention of the path value in the PR body.
+    expected:
+      verify:
+        type: shell
+        command: "git diff {base}..{head} -- src/App.tsx src/routes.tsx"
+      route_patterns:
+        - "<Route"
+        - "path="
+    on_fail: >
+      Confirm each removed route is intentional in PR body, or restore.
+    tags: [routing, deletion, pr-hygiene, anti-stomp]
+    profiles: [standard, deep]
+
+  # ─── Orphan audit ─────────────────────────────────────────────────────────
+
+  - id: ORPHAN-001
+    title: Stranded components with no imports
+    category: orphan-audit
+    severity: medium
+    check_type: deterministic
+    description: >
+      For each .tsx/.ts file under src/components/ and src/pages/ at HEAD,
+      grep the whole repo for references to the component name. Files with zero
+      references outside themselves are orphaned. Skip files marked
+      `// @entrypoint` or living under __tests__/.
+    expected:
+      verify:
+        type: shell
+        command: "git ls-tree -r --name-only {head} -- src/components/ src/pages/"
+      skip_patterns:
+        - __tests__/
+        - .test.
+        - .spec.
+      skip_comment: "// @entrypoint"
+    on_fail: >
+      Either delete, re-wire, or add `// @entrypoint` comment to each orphaned file.
+    tags: [orphan, cleanup, anti-stomp]
+    profiles: [standard, deep]
+
+  - id: ORPHAN-002
+    title: Abandoned restructure branches
+    category: orphan-audit
+    severity: medium
+    check_type: deterministic
+    description: >
+      Run `git branch -a --sort=-committerdate | head -30`. Filter for branches
+      containing "restructure", "refactor", "redesign", or "restore" that are
+      not merged into main. Flag each unmerged branch with its last commit date.
+    expected:
+      verify:
+        type: shell
+        command: "git branch -a --sort=-committerdate"
+      restructure_keywords:
+        - restructure
+        - refactor
+        - redesign
+        - restore
+      head_limit: 30
+    on_fail: >
+      Document in abandoned-branches.md, cherry-pick salvageable commits, or delete.
+    tags: [orphan, branches, anti-stomp]
+    profiles: [deep]
+
+  # ─── Surface audit ────────────────────────────────────────────────────────
+
+  - id: SURFACE-001
+    title: Per-surface design memory cross-check
+    category: surface-audit
+    severity: low
+    check_type: deterministic
+    description: >
+      Optional. For each file matching .auto-memory/project-*-ui.md, parse the
+      "Current structure" section and grep the code at HEAD for each listed
+      tab/section name. Skip entirely if no memory files exist.
+    expected:
+      verify:
+        type: shell
+        command: "git ls-tree -r --name-only {head} -- .auto-memory/"
+      section_header: "Current structure"
+      optional: true
+    on_fail: >
+      Either restore the missing item or update the memory file with rationale.
+    tags: [surface, design-memory, optional, anti-stomp]
+    profiles: [deep]
+
+  - id: SURFACE-002
+    title: Navigation tree diff
+    category: surface-audit
+    severity: medium
+    check_type: deterministic
+    description: >
+      Identify the nav config file by grepping for NavLink or SidebarNav in
+      src/pages/admin/AdminShell.tsx or src/components/Sidebar.tsx. Diff it
+      between base and head. Fail if any nav items were removed without explicit
+      mention in the PR body.
+    expected:
+      verify:
+        type: shell
+        command: "git diff {base}..{head} -- src/pages/admin/AdminShell.tsx src/components/Sidebar.tsx"
+      nav_patterns:
+        - NavLink
+        - SidebarNav
+        - sidebar-item
+    on_fail: >
+      Mention removed nav items in PR body with 1-line rationale each.
+    tags: [navigation, deletion, pr-hygiene, anti-stomp]
+    profiles: [standard, deep]
+
+  # ─── Import audit ─────────────────────────────────────────────────────────
+
+  - id: IMPORT-001
+    title: Component usage collapse
+    category: import-audit
+    severity: medium
+    check_type: deterministic
+    description: >
+      For each .tsx/.ts component file changed in the PR, compare the count of
+      files that reference the component name at base vs head. If the count goes
+      from N>0 to 0 and the file is not mentioned in the PR body as intentionally
+      retired, flag it.
+    expected:
+      verify:
+        type: shell
+        command: "git diff --name-only {base}..{head}"
+      component_dirs:
+        - src/components/
+        - src/pages/
+    on_fail: >
+      Confirm intentional retirement in PR body, or restore imports.
+    tags: [imports, orphan, anti-stomp]
+    profiles: [standard, deep]
+
+  # ─── PR hygiene ───────────────────────────────────────────────────────────
+
+  - id: AUDIT-001
+    title: Restore/reorg PRs must include archaeology
+    category: pr-hygiene
+    severity: high
+    check_type: deterministic
+    description: >
+      When the PR title contains "restore", "reorg", "refactor", "fix nav", or
+      "sidebar", check the PR body for a section titled "Archaeology" or
+      "Pre-restore audit". Fail if the section is missing.
+    expected:
+      verify:
+        type: pr_body
+      trigger_keywords:
+        - restore
+        - reorg
+        - refactor
+        - fix nav
+        - sidebar
+      required_sections:
+        - Archaeology
+        - "Pre-restore audit"
+    on_fail: >
+      Add an 'Archaeology' section to the PR body with output from:
+      `git log --all --diff-filter=D --name-only --pretty=format: -- '<target>/*' | sort -u`
+      and a short disposition per item (restore/archive/ignore).
+    tags: [pr-hygiene, archaeology, anti-stomp]
+    profiles: [smoke, standard, deep]
