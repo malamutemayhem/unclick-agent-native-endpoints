@@ -49,7 +49,6 @@ import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
-import AdminBuild from "./pages/admin/AdminBuild.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 import { initPostHog } from "./lib/posthog.ts";
 
@@ -115,7 +114,6 @@ const App = () => (
             <Route path="activity" element={<AdminActivity />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="agents" element={<AdminAgentsPage />} />
-            <Route path="build"  element={<AdminBuild />} />
           </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />
