@@ -26,7 +26,7 @@ import { runDeterministicChecks } from "../packages/testpass/src/runner/determin
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
 import { runMultiPass } from "../packages/testpass/src/runner/controller.js";
 import { healFailedChecks } from "../packages/testpass/src/runner/healer.js";
-import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
+import { loadPackFromFile, loadPackFromYaml, packToJsonb } from "../packages/testpass/src/pack-loader.js";
 import * as path from "node:path";
 import * as url from "node:url";
 import type { RunTarget, RunProfile } from "../packages/testpass/src/types.js";
@@ -220,6 +220,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     return json(res, 201, { run_id: runId, evidence_ref: evidenceRef ?? null, summary });
+  }
+
+  if (req.method === "POST" && action === "save_pack") {
+    const body = req.body as { pack_id?: string; yaml?: string };
+    if (!body.pack_id) return json(res, 400, { error: "pack_id required" });
+    if (!body.yaml) return json(res, 400, { error: "yaml required" });
+
+    let pack;
+    try {
+      pack = loadPackFromYaml(body.yaml);
+    } catch (err) {
+      return json(res, 422, { error: `Invalid pack: ${(err as Error).message}` });
+    }
+
+    const upsert = await fetch(`${supabaseUrl}/rest/v1/testpass_packs?on_conflict=slug`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify({
+        slug: body.pack_id,
+        name: pack.name,
+        version: pack.version,
+        description: pack.description ?? "",
+        yaml: packToJsonb(pack),
+        owner_user_id: actorUserId,
+      }),
+    });
+    if (!upsert.ok) {
+      const text = await upsert.text();
+      return json(res, 500, { error: `save_pack failed: ${text}` });
+    }
+    return json(res, 200, { ok: true, pack_id: body.pack_id });
+  }
+
+  if (req.method === "POST" && action === "edit_item") {
+    const body = req.body as {
+      run_id?: string;
+      item_id?: string;
+      verdict?: string;
+      notes?: string;
+    };
+    if (!body.run_id) return json(res, 400, { error: "run_id required" });
+    if (!body.item_id) return json(res, 400, { error: "item_id required" });
+    const verdictMap: Record<string, string> = { pass: "check", fail: "fail", na: "na" };
+    const dbVerdict = verdictMap[body.verdict ?? ""];
+    if (!dbVerdict) return json(res, 400, { error: "verdict must be pass|fail|na" });
+
+    // Confirm the run belongs to the caller before mutating items.
+    const ownerCheck = await fetch(
+      `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${body.run_id}&actor_user_id=eq.${actorUserId}&select=id&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    );
+    const ownerRows = (await ownerCheck.json()) as Array<{ id: string }>;
+    if (!ownerRows[0]) return json(res, 404, { error: "Run not found" });
+
+    const patch: Record<string, unknown> = { verdict: dbVerdict };
+    if (typeof body.notes === "string") patch.on_fail_comment = body.notes;
+
+    const upd = await fetch(
+      `${supabaseUrl}/rest/v1/testpass_items?id=eq.${body.item_id}&run_id=eq.${body.run_id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify(patch),
+      }
+    );
+    if (!upd.ok) {
+      const text = await upd.text();
+      return json(res, 500, { error: `edit_item failed: ${text}` });
+    }
+    const rows = (await upd.json()) as unknown[];
+    const item = rows[0];
+    if (!item) return json(res, 404, { error: "Item not found" });
+    return json(res, 200, { item });
   }
 
   if (req.method === "POST" && action === "heal") {

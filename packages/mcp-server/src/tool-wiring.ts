@@ -748,7 +748,7 @@ import {
 } from "./convertkit-tool.js";
 
 // ─── TestPass ─────────────────────────────────────────────────────────────────
-import { testpassRun, testpassStatus } from "./testpass-tool.js";
+import { testpassRun, testpassStatus, testpassSavePack, testpassEditItem } from "./testpass-tool.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
@@ -11083,6 +11083,32 @@ export const ADDITIONAL_TOOLS = [
       required: ["run_id"],
     },
   },
+  {
+    name: "testpass_save_pack",
+    description: "Save a TestPass pack YAML definition for the caller. Creates or updates the pack identified by pack_id.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pack_id: { type: "string", description: "Unique slug for the pack (e.g. 'my-mcp-pack')" },
+        yaml: { type: "string", description: "Full pack definition as a YAML string" },
+      },
+      required: ["pack_id", "yaml"],
+    },
+  },
+  {
+    name: "testpass_edit_item",
+    description: "Override the verdict and optional notes for a single check item in a TestPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run the item belongs to" },
+        item_id: { type: "string", description: "The testpass_items row id (uuid)" },
+        verdict: { type: "string", enum: ["pass", "fail", "na"], description: "New verdict" },
+        notes: { type: "string", description: "Optional reviewer notes" },
+      },
+      required: ["run_id", "item_id", "verdict"],
+    },
+  },
 
 ] as const;
 
@@ -12193,6 +12219,8 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   togetherai_list_models:     (args) => togetherai_list_models(args),
 
   // testpass-tool.ts
-  testpass_run:    (args) => testpassRun(args),
-  testpass_status: (args) => testpassStatus(args),
+  testpass_run:       (args) => testpassRun(args),
+  testpass_status:    (args) => testpassStatus(args),
+  testpass_save_pack: (args) => testpassSavePack(args),
+  testpass_edit_item: (args) => testpassEditItem(args),
 };

@@ -57,3 +57,55 @@ export async function testpassStatus(args: Record<string, unknown>): Promise<unk
   if (!res.ok) return { error: `testpass status failed (HTTP ${res.status})`, body };
   return body;
 }
+
+export async function testpassSavePack(args: Record<string, unknown>): Promise<unknown> {
+  const packId = String(args.pack_id ?? "");
+  const yaml = String(args.yaml ?? "");
+  if (!packId) return { error: "pack_id is required" };
+  if (!yaml) return { error: "yaml is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(`${API_BASE}/api/testpass?action=save_pack`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ pack_id: packId, yaml }),
+  });
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass save_pack failed (HTTP ${res.status})`, body };
+  return body;
+}
+
+export async function testpassEditItem(args: Record<string, unknown>): Promise<unknown> {
+  const runId = String(args.run_id ?? "");
+  const itemId = String(args.item_id ?? "");
+  const verdict = String(args.verdict ?? "");
+  const notes = args.notes;
+  if (!runId) return { error: "run_id is required" };
+  if (!itemId) return { error: "item_id is required" };
+  if (!["pass", "fail", "na"].includes(verdict)) {
+    return { error: "verdict must be pass|fail|na" };
+  }
+
+  const payload: Record<string, unknown> = { run_id: runId, item_id: itemId, verdict };
+  if (typeof notes === "string") payload.notes = notes;
+
+  const apiKey = getApiKey();
+  const res = await fetch(`${API_BASE}/api/testpass?action=edit_item`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass edit_item failed (HTTP ${res.status})`, body };
+  return body;
+}
