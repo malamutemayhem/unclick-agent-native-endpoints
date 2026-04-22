@@ -168,6 +168,7 @@ const INTERNAL_TOOLS = [
 const VISIBLE_TOOLS = [
   {
     name: "load_memory",
+    title: "Load memory",
     description:
       "Loads the user's identity, preferences, facts, and recent session history. " +
       "Call this FIRST at the start of every session, before responding to the user " +
@@ -186,6 +187,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "save_fact",
+    title: "Remember a fact",
     description:
       "Saves a new fact about the user for future sessions. Use this whenever the user " +
       "shares something worth remembering -- preferences, decisions, contact details, " +
@@ -207,6 +209,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "search_memory",
+    title: "Search memory",
     description:
       "Searches the user's stored facts and session history. Use this when the user " +
       "asks about something from a previous session, references a past decision, or " +
@@ -223,6 +226,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "save_identity",
+    title: "Save my identity",
     description:
       "Saves or updates the user's identity information -- business name, role, standing " +
       "rules, preferences. This information loads at the start of every session. Use this " +
@@ -243,6 +247,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "save_session",
+    title: "Save this session",
     description:
       "Saves a summary of the current session including decisions made, tasks completed, " +
       "and open items. Call this at the end of a session or when significant work is " +
