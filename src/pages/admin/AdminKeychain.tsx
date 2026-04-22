@@ -214,6 +214,13 @@ export default function AdminKeychain() {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
 
+  // Bulk export modal
+  const [exportOpen, setExportOpen]         = useState(false);
+  const [exportPassword, setExportPassword] = useState("");
+  const [exportConfirm, setExportConfirm]   = useState("");
+  const [exporting, setExporting]           = useState(false);
+  const [exportError, setExportError]       = useState<string | null>(null);
+
   const authHeader = useMemo(
     () => (session ? { Authorization: `Bearer ${session.access_token}` } : {}),
     [session],
@@ -429,6 +436,63 @@ export default function AdminKeychain() {
     }
   }
 
+  async function handleBulkExport() {
+    const apiKey = readLocalApiKey();
+    if (!apiKey) {
+      setExportError("No UnClick API key in this browser. Visit /admin/you to claim or regenerate.");
+      return;
+    }
+    if (exportPassword.length < 12) {
+      setExportError("Password must be at least 12 characters.");
+      return;
+    }
+    if (exportPassword !== exportConfirm) {
+      setExportError("Passwords do not match.");
+      return;
+    }
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/backstagepass?action=bulk_export", {
+        method:  "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body:    JSON.stringify({ api_key: apiKey, password: exportPassword }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `Export failed with ${res.status}`);
+      }
+      const blob     = await res.blob();
+      const url      = URL.createObjectURL(blob);
+      const anchor   = document.createElement("a");
+      const filename = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
+        ?? `unclick-vault-${new Date().toISOString().slice(0, 10)}.enc`;
+      anchor.href     = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportOpen(false);
+      setExportPassword("");
+      setExportConfirm("");
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function exportPasswordStrength(pw: string): { label: string; color: string } {
+    if (pw.length < 12) return { label: "Weak",   color: "bg-red-500" };
+    const hasUpper  = /[A-Z]/.test(pw);
+    const hasLower  = /[a-z]/.test(pw);
+    const hasDigit  = /[0-9]/.test(pw);
+    const hasSymbol = /[^A-Za-z0-9]/.test(pw);
+    const variety   = [hasUpper, hasLower, hasDigit, hasSymbol].filter(Boolean).length;
+    if (pw.length >= 16 && variety >= 3) return { label: "Strong", color: "bg-green-500" };
+    if (pw.length >= 12 && variety >= 2) return { label: "Good",   color: "bg-[#E2B93B]" };
+    return { label: "Weak", color: "bg-red-500" };
+  }
+
   const grouped = credentials.reduce<Record<string, Credential[]>>((acc, cred) => {
     const cat = cred.connector?.category ?? "Other";
     if (!acc[cat]) acc[cat] = [];
@@ -446,6 +510,12 @@ export default function AdminKeychain() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => { setExportOpen(true); setExportPassword(""); setExportConfirm(""); setExportError(null); }}
+            className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] transition-colors hover:border-[#E2B93B]/20 hover:text-[#E2B93B]"
+          >
+            Export all credentials
+          </button>
           <button
             onClick={openAudit}
             className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] transition-colors hover:border-[#E2B93B]/20 hover:text-[#E2B93B]"
@@ -708,6 +778,76 @@ export default function AdminKeychain() {
           onClose={() => setAuditOpen(false)}
         />
       )}
+
+      {/* Export vault modal */}
+      {exportOpen && (() => {
+        const pw       = exportPassword;
+        const strength = exportPasswordStrength(pw);
+        const canDownload = pw.length >= 12 && pw === exportConfirm;
+        return (
+          <ModalShell title="Export vault" onClose={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}>
+            <p className="mb-4 text-xs text-[#888]">
+              Download an encrypted backup of all your credentials. Set a password to protect the file.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-[11px] text-[#888]">Vault password</label>
+                <input
+                  type="password"
+                  value={exportPassword}
+                  onChange={(e) => setExportPassword(e.target.value)}
+                  minLength={12}
+                  placeholder="Min 12 characters"
+                  className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white placeholder:text-[#444] focus:border-[#E2B93B]/40 focus:outline-none"
+                  autoFocus
+                />
+                {pw.length > 0 && (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="h-1 flex-1 rounded-full bg-white/[0.08]">
+                      <div
+                        className={`h-1 rounded-full transition-all ${strength.color} ${
+                          strength.label === "Strong" ? "w-full" : strength.label === "Good" ? "w-2/3" : "w-1/3"
+                        }`}
+                      />
+                    </div>
+                    <span className={`text-[10px] font-medium ${
+                      strength.label === "Strong" ? "text-green-400" : strength.label === "Good" ? "text-[#E2B93B]" : "text-red-400"
+                    }`}>
+                      {strength.label}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] text-[#888]">Confirm password</label>
+                <input
+                  type="password"
+                  value={exportConfirm}
+                  onChange={(e) => setExportConfirm(e.target.value)}
+                  placeholder="Re-enter password"
+                  className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white placeholder:text-[#444] focus:border-[#E2B93B]/40 focus:outline-none"
+                />
+              </div>
+            </div>
+            {exportError && <p className="mt-2 text-[11px] text-red-400">{exportError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}
+                className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleBulkExport()}
+                disabled={!canDownload || exporting}
+                className="rounded-lg bg-[#E2B93B] px-3 py-2 text-xs font-medium text-black hover:bg-[#E2B93B]/90 disabled:opacity-50"
+              >
+                {exporting ? "Downloading..." : "Download"}
+              </button>
+            </div>
+          </ModalShell>
+        );
+      })()}
 
       {/* Add credential modal */}
       {starterOpen && (

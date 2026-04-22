@@ -762,5 +762,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(201).json({ id: row.id, platform, label: label || null, added: true });
   }
 
+  if (action === "bulk_export") {
+    const apiKey   = typeof body.api_key  === "string" ? body.api_key  : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!apiKey)   return res.status(400).json({ error: "api_key is required." });
+    if (!password) return res.status(400).json({ error: "password is required." });
+
+    if (!hashesEqual(sha256hex(apiKey), tenant.apiKeyHash)) {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "bulk_export", success: false,
+        metadata: { reason: "api_key_mismatch" },
+      });
+      return res.status(403).json({ error: "UnClick API key does not match the signed-in user." });
+    }
+
+    const listUrl = `${supabaseUrl}/rest/v1/user_credentials`
+      + `?api_key_hash=eq.${encodeURIComponent(tenant.apiKeyHash)}`
+      + `&select=id,platform_slug,label,encrypted_data,encryption_iv,encryption_tag,encryption_salt`;
+    const { ok: listOk, data: listData } = await supaFetch(listUrl, "GET", supaHeaders(serviceRoleKey));
+    if (!listOk) {
+      await writeAudit({
+        supabaseUrl, serviceRoleKey, tenant, req,
+        action: "bulk_export", success: false,
+        metadata: { reason: "list_failed" },
+      });
+      return res.status(502).json({ error: "Vault lookup failed." });
+    }
+
+    const rows = (listData as Array<Record<string, unknown>>) ?? [];
+    const exportedCredentials: Array<{ platform: string; label: string | null; values: Record<string, string> }> = [];
+
+    for (const row of rows) {
+      let values: Record<string, string>;
+      try {
+        const salt = Buffer.from(row.encryption_salt as string, "hex");
+        const key  = deriveKey(apiKey, salt);
+        const pt   = decrypt(
+          row.encryption_iv  as string,
+          row.encryption_tag as string,
+          row.encrypted_data as string,
+          key,
+        );
+        values = JSON.parse(pt) as Record<string, string>;
+      } catch {
+        await writeAudit({
+          supabaseUrl, serviceRoleKey, tenant, req,
+          action: "bulk_export", success: false,
+          metadata: { reason: "decrypt_failed", credential_id: row.id },
+        });
+        return res.status(500).json({ error: "Failed to decrypt one or more credentials." });
+      }
+      exportedCredentials.push({
+        platform: row.platform_slug as string,
+        label:    (row.label as string | null) ?? null,
+        values,
+      });
+    }
+
+    const vault = {
+      version:     1,
+      exported_at: new Date().toISOString(),
+      credentials: exportedCredentials,
+    };
+
+    const vaultJson = JSON.stringify(vault);
+    const exportSalt = crypto.randomBytes(SALT_BYTES);
+    const exportKey  = deriveKey(password, exportSalt);
+    const enc        = encrypt(vaultJson, exportKey);
+
+    // Binary format: [4-byte magic "UNV1"] + [32-byte salt] + [12-byte IV] + [ciphertext+authTag]
+    const magic      = Buffer.from("UNV1", "utf8");
+    const ivBuf      = Buffer.from(enc.iv, "hex");
+    const authTagBuf = Buffer.from(enc.authTag, "hex");
+    const cipherBuf  = Buffer.from(enc.ciphertext, "hex");
+    const blob       = Buffer.concat([magic, exportSalt, ivBuf, cipherBuf, authTagBuf]);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+    await writeAudit({
+      supabaseUrl, serviceRoleKey, tenant, req,
+      action: "bulk_export", success: true,
+      metadata: { credential_count: exportedCredentials.length },
+    });
+
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="unclick-vault-${timestamp}.enc"`);
+    return res.status(200).send(blob);
+  }
+
   return res.status(400).json({ error: `Unknown action: ${action || "(empty)"}` });
 }
