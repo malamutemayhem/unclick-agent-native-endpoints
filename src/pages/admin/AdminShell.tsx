@@ -9,7 +9,7 @@
  * Each surface is extractable as a native app later.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
 import AdminSearchBar from "@/components/admin/AdminSearchBar";
@@ -117,9 +117,25 @@ function MemoryNavItem({ onClick }: { onClick?: () => void }) {
 }
 
 export default function AdminShell() {
-  const { user } = useSession();
+  const { user, session } = useSession();
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) return;
+    let cancelled = false;
+    fetch("/api/memory-admin?action=admin_profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setIsAdmin(Boolean(body.is_admin));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [session?.access_token]);
 
   async function handleLogout() {
     await signOut();
@@ -135,7 +151,7 @@ export default function AdminShell() {
         <SurfaceLink path="/admin/tools"    label="Tools"                    icon={Wrench}   onClick={onLinkClick} />
         <SurfaceLink path="/admin/activity" label="Activity"                 icon={Activity} onClick={onLinkClick} />
         <SurfaceLink path="/admin/agents"    label="Agents"                   icon={Bot}       onClick={onLinkClick} />
-        <SurfaceLink path="/admin/analytics" label="Analytics"               icon={BarChart3} onClick={onLinkClick} />
+        {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"               icon={BarChart3} onClick={onLinkClick} />}
         <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
       </>
     );
