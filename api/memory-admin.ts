@@ -4728,6 +4728,221 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ data: data ?? [] });
       }
 
+      // ── Crews Phase B actions ────────────────────────────────────────────
+
+      case "list_agents": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        // Inject tenant into session so RLS works (service_role bypasses RLS, so we
+        // filter manually instead).
+        await supabase.rpc("set_config", {
+          setting: "request.jwt.claims",
+          value: JSON.stringify({ api_key_hash: apiKeyHash }),
+          is_local: true,
+        }).catch(() => null);
+
+        const category = typeof req.query.category === "string" ? req.query.category : null;
+        const search = typeof req.query.search === "string" ? req.query.search.trim() : null;
+
+        let q = supabase
+          .from("mc_agents")
+          .select("id,slug,name,category,hook,description,tool_tags,icon,colour_token,is_system,source_agent_id,api_key_hash")
+          .or(`is_system.eq.true,api_key_hash.eq.${apiKeyHash}`)
+          .order("is_system", { ascending: false })
+          .order("name");
+
+        if (category) q = q.eq("category", category);
+        if (search) q = q.or(`name.ilike.%${search}%,hook.ilike.%${search}%`);
+
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "clone_agent": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { slug } = req.body ?? {};
+        if (!slug) return res.status(400).json({ error: "slug required" });
+
+        const { data: src, error: srcErr } = await supabase
+          .from("mc_agents")
+          .select("*")
+          .eq("slug", slug)
+          .eq("is_system", true)
+          .maybeSingle();
+        if (srcErr) throw srcErr;
+        if (!src) return res.status(404).json({ error: "System agent not found" });
+
+        const cloneSlug = `${slug}-${apiKeyHash.slice(0, 8)}`;
+        const { data: clone, error: insertErr } = await supabase
+          .from("mc_agents")
+          .insert({
+            slug: cloneSlug,
+            api_key_hash: apiKeyHash,
+            name: src.name,
+            category: src.category,
+            hook: src.hook,
+            description: src.description,
+            tool_tags: src.tool_tags,
+            icon: src.icon,
+            colour_token: src.colour_token,
+            seed_prompt: src.seed_prompt,
+            memory_scope_shared: src.memory_scope_shared,
+            memory_scope_private: src.memory_scope_private,
+            subspecialty_tags: src.subspecialty_tags,
+            disclaimer: src.disclaimer,
+            is_system: false,
+            source_agent_id: src.id,
+          })
+          .select()
+          .single();
+        if (insertErr) throw insertErr;
+        return res.status(201).json({ data: clone });
+      }
+
+      case "update_agent": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { id, ...patch } = req.body ?? {};
+        if (!id) return res.status(400).json({ error: "id required" });
+
+        const allowed = ["name","category","hook","description","tool_tags","icon","colour_token","seed_prompt","memory_scope_shared","memory_scope_private","subspecialty_tags","disclaimer"];
+        const filtered: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const k of allowed) {
+          if (k in patch) filtered[k] = patch[k];
+        }
+
+        const { data, error } = await supabase
+          .from("mc_agents")
+          .update(filtered)
+          .eq("id", id)
+          .eq("api_key_hash", apiKeyHash)
+          .select()
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: "Agent not found or not owned by you" });
+        return res.status(200).json({ data });
+      }
+
+      case "create_agent": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { slug, name, category, hook, description, tool_tags, icon, colour_token, seed_prompt, memory_scope_shared, memory_scope_private, subspecialty_tags, disclaimer } = req.body ?? {};
+        if (!slug || !name || !category) return res.status(400).json({ error: "slug, name, category required" });
+
+        const { data, error } = await supabase
+          .from("mc_agents")
+          .insert({
+            slug,
+            api_key_hash: apiKeyHash,
+            name,
+            category,
+            hook: hook ?? "",
+            description: description ?? "",
+            tool_tags: tool_tags ?? [],
+            icon: icon ?? "",
+            colour_token: colour_token ?? "",
+            seed_prompt: seed_prompt ?? null,
+            memory_scope_shared: memory_scope_shared ?? [],
+            memory_scope_private: memory_scope_private ?? [],
+            subspecialty_tags: subspecialty_tags ?? [],
+            disclaimer: disclaimer ?? null,
+            is_system: false,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return res.status(201).json({ data });
+      }
+
+      case "list_crews": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { data, error } = await supabase
+          .from("mc_crews")
+          .select("id,name,description,template,agent_ids,created_at,updated_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
+      }
+
+      case "create_crew": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { name, description, template, agent_ids } = req.body ?? {};
+        if (!name || !template) return res.status(400).json({ error: "name and template required" });
+
+        const { data, error } = await supabase
+          .from("mc_crews")
+          .insert({
+            api_key_hash: apiKeyHash,
+            name,
+            description: description ?? "",
+            template,
+            agent_ids: agent_ids ?? [],
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return res.status(201).json({ data });
+      }
+
+      case "update_crew": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { id: crewId, ...crewPatch } = req.body ?? {};
+        if (!crewId) return res.status(400).json({ error: "id required" });
+
+        const crewAllowed = ["name","description","template","agent_ids"];
+        const crewFiltered: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const k of crewAllowed) {
+          if (k in crewPatch) crewFiltered[k] = crewPatch[k];
+        }
+
+        const { data: crewData, error: crewErr } = await supabase
+          .from("mc_crews")
+          .update(crewFiltered)
+          .eq("id", crewId)
+          .eq("api_key_hash", apiKeyHash)
+          .select()
+          .maybeSingle();
+        if (crewErr) throw crewErr;
+        if (!crewData) return res.status(404).json({ error: "Crew not found or not owned by you" });
+        return res.status(200).json({ data: crewData });
+      }
+
+      case "delete_crew": {
+        if (req.method !== "POST" && req.method !== "DELETE") return res.status(405).json({ error: "POST or DELETE required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const deleteId = (req.body?.id ?? req.query.id) as string;
+        if (!deleteId) return res.status(400).json({ error: "id required" });
+
+        const { error: deleteErr, count } = await supabase
+          .from("mc_crews")
+          .delete({ count: "exact" })
+          .eq("id", deleteId)
+          .eq("api_key_hash", apiKeyHash);
+        if (deleteErr) throw deleteErr;
+        if (!count) return res.status(404).json({ error: "Crew not found or not owned by you" });
+        return res.status(200).json({ success: true });
+      }
+
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }

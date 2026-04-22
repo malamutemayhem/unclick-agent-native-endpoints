@@ -27,6 +27,21 @@ export interface MockAgent {
   is_system: true;
 }
 
+export interface Agent {
+  id: string;
+  slug: string;
+  name: string;
+  category: AgentCategory;
+  hook: string;
+  description: string;
+  tool_tags: string[];
+  icon: string;
+  colour_token: string;
+  is_system: boolean;
+  source_agent_id: string | null;
+  api_key_hash: string | null;
+}
+
 export interface CrewTemplate {
   slug: string;
   name: string;
