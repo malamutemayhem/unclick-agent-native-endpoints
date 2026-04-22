@@ -1,0 +1,96 @@
+name: TestPass
+description: Run a TestPass pack against an MCP server and surface verdict outputs.
+
+inputs:
+  token:
+    description: Supabase JWT used as Bearer token against /api/testpass-run.
+    required: true
+  pack_id:
+    description: Slug of the TestPass pack to run (e.g. testpass-core).
+    required: false
+    default: testpass-core
+  profile:
+    description: Run profile. One of smoke, standard, deep.
+    required: false
+    default: smoke
+  server_url:
+    description: Optional target MCP server URL to probe and test.
+    required: false
+    default: ""
+  api_url:
+    description: TestPass API endpoint.
+    required: false
+    default: https://unclick.ai/api/testpass-run
+
+outputs:
+  run_id:
+    description: UUID of the created TestPass run.
+    value: ${{ steps.call.outputs.run_id }}
+  status:
+    description: Run status (running, complete, failed).
+    value: ${{ steps.call.outputs.status }}
+  pass_rate:
+    description: Fraction of decided checks that passed (0-1).
+    value: ${{ steps.call.outputs.pass_rate }}
+  fail_count:
+    description: Number of failed checks in the run.
+    value: ${{ steps.call.outputs.fail_count }}
+  total:
+    description: Total checks in the run.
+    value: ${{ steps.call.outputs.total }}
+  response:
+    description: Raw JSON response from the API.
+    value: ${{ steps.call.outputs.response }}
+
+runs:
+  using: composite
+  steps:
+    - id: call
+      shell: bash
+      env:
+        TESTPASS_TOKEN: ${{ inputs.token }}
+        PACK_ID: ${{ inputs.pack_id }}
+        PROFILE: ${{ inputs.profile }}
+        SERVER_URL: ${{ inputs.server_url }}
+        API_URL: ${{ inputs.api_url }}
+      run: |
+        set -euo pipefail
+
+        payload=$(jq -n \
+          --arg pack_id "$PACK_ID" \
+          --arg profile "$PROFILE" \
+          --arg server_url "$SERVER_URL" \
+          '{pack_id: $pack_id, profile: $profile} + (if $server_url == "" then {} else {server_url: $server_url} end)')
+
+        http_code=$(curl -sS -o response.json -w "%{http_code}" \
+          -X POST "$API_URL" \
+          -H "Authorization: Bearer $TESTPASS_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "$payload")
+
+        echo "HTTP $http_code"
+        cat response.json
+        echo
+
+        if [ "$http_code" -ge 400 ]; then
+          echo "TestPass API call failed with status $http_code" >&2
+          exit 1
+        fi
+
+        run_id=$(jq -r '.run_id // ""' response.json)
+        status=$(jq -r '.status // ""' response.json)
+        pass_rate=$(jq -r '.verdict_summary.pass_rate // 0' response.json)
+        fail_count=$(jq -r '.verdict_summary.fail // 0' response.json)
+        total=$(jq -r '.verdict_summary.total // 0' response.json)
+        response=$(jq -c '.' response.json)
+
+        {
+          echo "run_id=$run_id"
+          echo "status=$status"
+          echo "pass_rate=$pass_rate"
+          echo "fail_count=$fail_count"
+          echo "total=$total"
+          echo "response<<TESTPASS_EOF"
+          echo "$response"
+          echo "TESTPASS_EOF"
+        } >> "$GITHUB_OUTPUT"

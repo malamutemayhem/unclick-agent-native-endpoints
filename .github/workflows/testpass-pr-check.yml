@@ -1,0 +1,103 @@
+name: TestPass PR Check
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pack_id:
+        description: Slug of the TestPass pack to run.
+        required: false
+        default: testpass-core
+      profile:
+        description: Run profile (smoke, standard, deep).
+        required: false
+        default: smoke
+      server_url:
+        description: Optional target MCP server URL.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  testpass:
+    name: TestPass smoke run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run TestPass
+        id: testpass
+        uses: ./.github/actions/testpass
+        with:
+          token: ${{ secrets.TESTPASS_TOKEN }}
+          pack_id: ${{ inputs.pack_id || 'testpass-core' }}
+          profile: ${{ inputs.profile || 'smoke' }}
+          server_url: ${{ inputs.server_url || '' }}
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          RUN_ID: ${{ steps.testpass.outputs.run_id }}
+          STATUS: ${{ steps.testpass.outputs.status }}
+          PASS_RATE: ${{ steps.testpass.outputs.pass_rate }}
+          FAIL_COUNT: ${{ steps.testpass.outputs.fail_count }}
+          TOTAL: ${{ steps.testpass.outputs.total }}
+          RESPONSE: ${{ steps.testpass.outputs.response }}
+        with:
+          script: |
+            const runId = process.env.RUN_ID || '(unknown)';
+            const status = process.env.STATUS || 'unknown';
+            const passRateRaw = parseFloat(process.env.PASS_RATE || '0');
+            const passRate = Number.isFinite(passRateRaw) ? passRateRaw : 0;
+            const failCount = parseInt(process.env.FAIL_COUNT || '0', 10) || 0;
+            const total = parseInt(process.env.TOTAL || '0', 10) || 0;
+
+            let summary = {};
+            try { summary = JSON.parse(process.env.RESPONSE || '{}').verdict_summary || {}; }
+            catch { summary = {}; }
+
+            const statusEmoji =
+              status === 'complete' && failCount === 0 ? ':white_check_mark: PASS' :
+              status === 'failed' || failCount > 0    ? ':x: FAIL' :
+              status === 'running'                     ? ':hourglass_flowing_sand: RUNNING' :
+              ':grey_question: UNKNOWN';
+
+            const cell = (label, n) => `| ${label} | ${n ?? 0} |`;
+            const pct = (passRate * 100).toFixed(1);
+
+            const body = [
+              `### TestPass: ${statusEmoji}`,
+              ``,
+              `**Run:** \`${runId}\``,
+              `**Status:** \`${status}\``,
+              `**Pass rate:** ${pct}%`,
+              ``,
+              `| Verdict | Count |`,
+              `| --- | ---: |`,
+              cell(':white_check_mark: check', summary.check),
+              cell(':x: fail', summary.fail),
+              cell(':grey_question: other', summary.other),
+              cell(':heavy_minus_sign: n/a', summary.na),
+              cell(':hourglass: pending', summary.pending),
+              cell('**total**', total),
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Fail job if checks failed
+        if: ${{ steps.testpass.outputs.fail_count != '0' }}
+        shell: bash
+        run: |
+          echo "TestPass reported ${{ steps.testpass.outputs.fail_count }} failed checks" >&2
+          exit 1
