@@ -747,6 +747,9 @@ import {
   ckListSequences, ckListTags, ckTagSubscriber,
 } from "./convertkit-tool.js";
 
+// ─── TestPass ─────────────────────────────────────────────────────────────────
+import { testpassRun, testpassStatus } from "./testpass-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11055,6 +11058,32 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── testpass-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "testpass_run",
+    description: "Trigger a TestPass QC run against a target MCP server. Validates protocol compliance, handshake, and runtime behaviour.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        target_url: { type: "string", description: "URL of the MCP server to test (e.g. https://example.com/mcp)." },
+        pack_id: { type: "string", description: "Pack slug to run. Default: testpass-core." },
+        profile: { type: "string", enum: ["smoke", "standard", "deep"], description: "Depth of the run. Default: smoke." },
+      },
+      required: ["target_url"],
+    },
+  },
+  {
+    name: "testpass_status",
+    description: "Get the current status of a TestPass run, including verdict summary and fail count.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "UUID of the TestPass run." },
+      },
+      required: ["run_id"],
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12162,4 +12191,8 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   togetherai_completion:      (args) => togetherai_completion(args),
   togetherai_create_embedding:(args) => togetherai_create_embedding(args),
   togetherai_list_models:     (args) => togetherai_list_models(args),
+
+  // testpass-tool.ts
+  testpass_run:         (args) => testpassRun(args),
+  testpass_status:      (args) => testpassStatus(args),
 };

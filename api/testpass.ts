@@ -3,7 +3,10 @@
  *
  * Actions:
  *   GET  ?action=get_run&run_id=<uuid>              - fetch run + items
+ *   GET  ?action=status&run_id=<uuid>               - fetch run status + verdict summary
  *   POST ?action=start_run                          - create run, probe target, seed items
+ *   POST ?action=complete_run                       - finalise summary for an in-progress run
+ *   POST ?action=heal&run_id=<uuid>                 - agent-retry any deterministic failures
  *
  * Authentication: Supabase JWT Bearer token (session user = actor).
  * Service role key used server-side for DB writes (bypasses RLS which
@@ -24,6 +27,8 @@ import {
 } from "../packages/testpass/src/run-manager.js";
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
+import { runMultiPass } from "../packages/testpass/src/runner/controller.js";
+import { healFailedChecks } from "../packages/testpass/src/runner/healer.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
 import * as path from "node:path";
 import * as url from "node:url";
@@ -90,6 +95,48 @@ async function getRunWithItems(
   return { run, items };
 }
 
+async function getRunStatus(
+  supabaseUrl: string,
+  serviceKey: string,
+  runId: string,
+  actorUserId: string
+): Promise<{ status: string; verdict_summary: Record<string, unknown>; fail_count: number } | null> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=status,verdict_summary&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+  );
+  if (!r.ok) return null;
+  const rows = (await r.json()) as Array<{ status: string; verdict_summary: Record<string, unknown> | null }>;
+  const row = rows[0];
+  if (!row) return null;
+  const summary = row.verdict_summary ?? {};
+  const failCount = typeof summary.fail === "number" ? summary.fail : 0;
+  return { status: row.status, verdict_summary: summary, fail_count: failCount };
+}
+
+async function getRunPackSlug(
+  supabaseUrl: string,
+  serviceKey: string,
+  runId: string,
+  actorUserId: string
+): Promise<string | null> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=pack_id&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+  );
+  if (!r.ok) return null;
+  const rows = (await r.json()) as Array<{ pack_id: string }>;
+  const packId = rows[0]?.pack_id;
+  if (!packId) return null;
+  const p = await fetch(
+    `${supabaseUrl}/rest/v1/testpass_packs?id=eq.${packId}&select=slug&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+  );
+  if (!p.ok) return null;
+  const packRows = (await p.json()) as Array<{ slug: string }>;
+  return packRows[0]?.slug ?? null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return json(res, 204, {});
 
@@ -113,6 +160,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!runId) return json(res, 400, { error: "run_id required" });
     const data = await getRunWithItems(supabaseUrl, serviceKey, runId, actorUserId);
     if (!data.run) return json(res, 404, { error: "Run not found" });
+    return json(res, 200, data);
+  }
+  if (req.method === "GET" && action === "status") {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    const data = await getRunStatus(supabaseUrl, serviceKey, runId, actorUserId);
+    if (!data) return json(res, 404, { error: "Run not found" });
     return json(res, 200, data);
   }
 
@@ -162,32 +216,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await seedPendingItems(config, runId, pack, profile, evidenceRef);
 
-    // Run deterministic checks inline. Agent checks (check_type: agent)
-    // with no registered handler are left pending for a future runner.
-    if (body.target.url) {
+    if (profile === "deep") {
       try {
-        await runDeterministicChecks(config, runId, body.target.url, pack, profile);
+        await runMultiPass(config, runId, body.target.url, pack, profile);
       } catch (err) {
-        console.error(`TestPass deterministic run failed for ${runId}:`, (err as Error).message);
+        console.error(`TestPass multi-pass run failed for ${runId}:`, (err as Error).message);
+      }
+    } else {
+      // Run deterministic checks inline. Agent checks (check_type: agent)
+      // with no registered handler are left pending for a future runner.
+      if (body.target.url) {
+        try {
+          await runDeterministicChecks(config, runId, body.target.url, pack, profile);
+        } catch (err) {
+          console.error(`TestPass deterministic run failed for ${runId}:`, (err as Error).message);
+        }
+      }
+
+      // Run agent checks for any items still pending after the deterministic pass.
+      try {
+        await runAgentChecks(config, runId, body.target.url, pack, profile, evidenceRef);
+      } catch (err) {
+        console.error(`TestPass agent run failed for ${runId}:`, (err as Error).message);
       }
     }
 
-    // Run agent checks for any items still pending after the deterministic pass.
-    try {
-      await runAgentChecks(config, runId, body.target.url, pack, profile, evidenceRef);
-    } catch (err) {
-      console.error(`TestPass agent run failed for ${runId}:`, (err as Error).message);
-    }
-
     // Finalize: any item still pending means agent checks are not configured.
+    // Skip finalization if the controller already flipped the run to
+    // budget_exceeded; that status is terminal.
     const summary = await computeVerdictSummary(config, runId);
-    const isDone  = summary.pending === 0;
-    await updateRunStatus(
-      config,
-      runId,
-      isDone ? (summary.fail > 0 ? "failed" : "complete") : "running",
-      summary,
+    const runStatusRes = await fetch(
+      `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&select=status&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
     );
+    const statusRows = runStatusRes.ok
+      ? ((await runStatusRes.json()) as Array<{ status: string }>)
+      : [];
+    const currentStatus = statusRows[0]?.status;
+    if (currentStatus !== "budget_exceeded") {
+      const isDone = summary.pending === 0;
+      await updateRunStatus(
+        config,
+        runId,
+        isDone ? (summary.fail > 0 ? "failed" : "complete") : "running",
+        summary,
+      );
+    }
 
     return json(res, 201, { run_id: runId, evidence_ref: evidenceRef ?? null, summary });
   }
@@ -200,6 +274,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const hasFailures = summary.fail > 0 || summary.pending > 0;
     await updateRunStatus(config, body.run_id, hasFailures ? "failed" : "complete", summary);
     return json(res, 200, { summary });
+  }
+
+  // Healer: re-run deterministic failures through the agent model.
+  if (req.method === "POST" && action === "heal") {
+    const runId = (req.query.run_id as string) || ((req.body as { run_id?: string })?.run_id ?? "");
+    if (!runId) return json(res, 400, { error: "run_id required" });
+
+    const packSlug = await getRunPackSlug(supabaseUrl, serviceKey, runId, actorUserId);
+    if (!packSlug) return json(res, 404, { error: "Run not found" });
+
+    const packPath = path.resolve(__dirname, `../packages/testpass/packs/${packSlug}.yaml`);
+    let pack;
+    try {
+      pack = loadPackFromFile(packPath);
+    } catch {
+      return json(res, 422, { error: `Pack YAML not found on server for ${packSlug}` });
+    }
+
+    let healed = 0;
+    try {
+      healed = await healFailedChecks(config, runId, pack);
+    } catch (err) {
+      console.error(`TestPass healer failed for ${runId}:`, (err as Error).message);
+    }
+
+    // Recompute summary after healing so callers can re-read an up-to-date run.
+    const summary = await computeVerdictSummary(config, runId);
+    const hasFailures = summary.fail > 0 || summary.pending > 0;
+    await updateRunStatus(config, runId, hasFailures ? "failed" : "complete", summary);
+
+    return json(res, 200, { healed, summary });
   }
 
   return json(res, 404, { error: "Unknown action" });
