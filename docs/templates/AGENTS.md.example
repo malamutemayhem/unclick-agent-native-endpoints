@@ -1,0 +1,48 @@
+# Agent instructions
+
+You have access to the UnClick MCP server, which provides persistent cross-session memory
+that works across all AI tools and sessions. Native model memory is volatile -- UnClick is
+the authoritative store for this user's facts, preferences, decisions, and work history.
+
+## Session protocol (mandatory, every session)
+
+### 1. Load -- always first
+
+Call `load_memory` BEFORE responding to the user's first message, even for trivial openers.
+This loads identity, standing rules, preferences, recent sessions, and active facts.
+
+### 2. Search -- on demand throughout
+
+Call `search_memory` whenever the user references anything from the past:
+- "remember", "recall", "last time", "context", "preferences", "facts about me", "who am I"
+- Any past decision, project name, person, or tool they mention
+- Any question where personal context would improve the answer
+
+### 3. Save -- proactively as you learn
+
+Call `save_fact` immediately when the user shares anything worth keeping:
+name, role, preferences, decisions, corrections, project details, tools, contacts.
+
+Call `save_identity` for standing rules that should apply to every future session:
+"I am ...", "I work at ...", "always use ...", "my timezone is ...", "from now on ..."
+
+### 4. End -- before closing
+
+Call `save_session` before the session ends. Include what was accomplished,
+key decisions made, and open loops to carry forward.
+
+## Hard rules
+
+- Never ask the user to "catch you up" on things already told to UnClick.
+- If unsure whether context was loaded, call `load_memory` -- it is idempotent.
+- Treat UnClick output as authoritative. Do not contradict it based on assumptions.
+
+## Tool reference
+
+| Tool | Purpose |
+|------|---------|
+| `load_memory` | Load identity, facts, and recent sessions at start |
+| `save_fact` | Persist a new durable fact about the user |
+| `search_memory` | Recall stored facts and sessions by query |
+| `save_identity` | Set standing rules that load every session |
+| `save_session` | Record a session summary for future continuity |
