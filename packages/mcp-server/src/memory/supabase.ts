@@ -217,6 +217,24 @@ export class SupabaseBackend implements MemoryBackend {
   }
 
   async searchMemory(query: string, maxResults: number): Promise<unknown> {
+    // Attempt hybrid RRF search (keyword + vector). Falls back to keyword-only
+    // when OPENAI_API_KEY is absent or the hybrid RPC isn't deployed yet.
+    try {
+      const { embedText } = await import("./embeddings.js");
+      const embedding = await embedText(query);
+      if (embedding) {
+        const results = await this.rpc(
+          "search_memory_hybrid",
+          { search_query: query, query_embedding: embedding, max_results: maxResults },
+          "mc_search_memory_hybrid",
+          { p_search_query: query, p_query_embedding: embedding, p_max_results: maxResults }
+        );
+        return results;
+      }
+    } catch (err) {
+      console.error("[search_memory] hybrid search failed, falling back to keyword:", err);
+    }
+
     return this.rpc(
       "search_memory",
       { search_query: query, max_results: maxResults },
