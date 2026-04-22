@@ -23,6 +23,7 @@ import {
   computeVerdictSummary,
 } from "../packages/testpass/src/run-manager.js";
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
+import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
 import * as path from "node:path";
 import * as url from "node:url";
@@ -171,7 +172,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Finalize: any item still pending means we're waiting on the agent runner.
+    // Run agent checks for any items still pending after the deterministic pass.
+    try {
+      await runAgentChecks(config, runId, body.target.url, pack, profile, evidenceRef);
+    } catch (err) {
+      console.error(`TestPass agent run failed for ${runId}:`, (err as Error).message);
+    }
+
+    // Finalize: any item still pending means agent checks are not configured.
     const summary = await computeVerdictSummary(config, runId);
     const isDone  = summary.pending === 0;
     await updateRunStatus(

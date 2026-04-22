@@ -32,6 +32,8 @@ import {
   FileText,
   Clock,
   Fingerprint,
+  Sparkles,
+  BookOpen,
 } from "lucide-react";
 
 function SurfaceLink({ path, label, icon: Icon, onClick }: {
@@ -59,15 +61,18 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
 }
 
 const MEMORY_TABS = [
-  { id: "facts",    label: "Facts",    icon: FileText   },
-  { id: "sessions", label: "Sessions", icon: Clock      },
-  { id: "identity", label: "Identity", icon: Fingerprint },
+  { id: "brain-map", label: "Brain Map", icon: Sparkles   },
+  { id: "facts",     label: "Facts",     icon: FileText   },
+  { id: "sessions",  label: "Sessions",  icon: Clock      },
+  { id: "library",   label: "Library",   icon: BookOpen   },
+  { id: "activity",  label: "Activity",  icon: Activity   },
+  { id: "identity",  label: "Identity",  icon: Fingerprint },
 ] as const;
 
 function MemoryNavItem({ onClick }: { onClick?: () => void }) {
   const location = useLocation();
   const isMemory = location.pathname === "/admin/memory";
-  const activeTab = new URLSearchParams(location.search).get("tab") ?? "facts";
+  const activeTab = new URLSearchParams(location.search).get("tab") ?? "brain-map";
 
   return (
     <div>
