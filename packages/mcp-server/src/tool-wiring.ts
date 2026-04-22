@@ -747,6 +747,9 @@ import {
   ckListSequences, ckListTags, ckTagSubscriber,
 } from "./convertkit-tool.js";
 
+// ─── TestPass ─────────────────────────────────────────────────────────────────
+import { testpassRun, testpassStatus } from "./testpass-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11055,6 +11058,32 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── testpass-tool.ts ────────────────────────────────────────────────────────
+  {
+    name: "testpass_run",
+    description: "Start a TestPass run against an MCP server. Seeds deterministic and agent checks from the given pack and returns the run id plus an initial verdict summary.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        target_url: { type: "string", description: "HTTP URL of the MCP server to test" },
+        pack_id: { type: "string", description: "Pack slug (default: testpass-core)" },
+        profile: { type: "string", enum: ["smoke", "standard", "deep"], description: "Run profile (default: smoke)" },
+      },
+      required: ["target_url"],
+    },
+  },
+  {
+    name: "testpass_status",
+    description: "Fetch the current status, verdict summary, and fail count for a TestPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The TestPass run id returned by testpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12162,4 +12191,8 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   togetherai_completion:      (args) => togetherai_completion(args),
   togetherai_create_embedding:(args) => togetherai_create_embedding(args),
   togetherai_list_models:     (args) => togetherai_list_models(args),
+
+  // testpass-tool.ts
+  testpass_run:    (args) => testpassRun(args),
+  testpass_status: (args) => testpassStatus(args),
 };

@@ -1,0 +1,59 @@
+/**
+ * testpass-tool - MCP handlers for starting TestPass runs and polling status.
+ *
+ * Both handlers call back into the UnClick Vercel API (/api/testpass) using
+ * the caller's UNCLICK_API_KEY as the Bearer token. The API resolves the
+ * caller's user id from that token and enforces actor_user_id scoping.
+ */
+
+const API_BASE = (process.env.UNCLICK_API_URL ?? "https://unclick.world").replace(/\/$/, "");
+
+function getApiKey(): string {
+  const key = process.env.UNCLICK_API_KEY?.trim();
+  if (!key) {
+    throw new Error("UNCLICK_API_KEY env var is not set. Get your install config at https://unclick.world");
+  }
+  return key;
+}
+
+export async function testpassRun(args: Record<string, unknown>): Promise<unknown> {
+  const targetUrl = String(args.target_url ?? "");
+  const packId = String(args.pack_id ?? "testpass-core");
+  const profile = String(args.profile ?? "smoke");
+  if (!targetUrl) return { error: "target_url is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(`${API_BASE}/api/testpass?action=start_run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      pack_slug: packId,
+      target: { type: "mcp", url: targetUrl },
+      profile,
+    }),
+  });
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass start_run failed (HTTP ${res.status})`, body };
+  return body;
+}
+
+export async function testpassStatus(args: Record<string, unknown>): Promise<unknown> {
+  const runId = String(args.run_id ?? "");
+  if (!runId) return { error: "run_id is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${API_BASE}/api/testpass?action=status&run_id=${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass status failed (HTTP ${res.status})`, body };
+  return body;
+}

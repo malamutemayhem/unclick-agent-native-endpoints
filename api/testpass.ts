@@ -24,6 +24,8 @@ import {
 } from "../packages/testpass/src/run-manager.js";
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
+import { runMultiPass } from "../packages/testpass/src/runner/controller.js";
+import { healFailedChecks } from "../packages/testpass/src/runner/healer.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
 import * as path from "node:path";
 import * as url from "node:url";
@@ -116,6 +118,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 200, data);
   }
 
+  if (req.method === "GET" && action === "status") {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    const r = await fetch(
+      `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=status,verdict_summary&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    );
+    const rows = (await r.json()) as Array<{
+      status: string;
+      verdict_summary: { fail?: number } | null;
+    }>;
+    const row = rows[0];
+    if (!row) return json(res, 404, { error: "Run not found" });
+    return json(res, 200, {
+      status: row.status,
+      verdict_summary: row.verdict_summary ?? {},
+      fail_count: row.verdict_summary?.fail ?? 0,
+    });
+  }
+
   if (req.method === "POST" && action === "start_run") {
     const body = req.body as {
       pack_slug?: string;
@@ -162,21 +184,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await seedPendingItems(config, runId, pack, profile, evidenceRef);
 
-    // Run deterministic checks inline. Agent checks (check_type: agent)
-    // with no registered handler are left pending for a future runner.
-    if (body.target.url) {
+    if (profile === "deep") {
       try {
-        await runDeterministicChecks(config, runId, body.target.url, pack, profile);
+        await runMultiPass(config, runId, body.target.url, pack, "deep");
       } catch (err) {
-        console.error(`TestPass deterministic run failed for ${runId}:`, (err as Error).message);
+        console.error(`TestPass multi-pass run failed for ${runId}:`, (err as Error).message);
       }
-    }
+    } else {
+      // Run deterministic checks inline. Agent checks (check_type: agent)
+      // with no registered handler are left pending for a future runner.
+      if (body.target.url) {
+        try {
+          await runDeterministicChecks(config, runId, body.target.url, pack, profile);
+        } catch (err) {
+          console.error(`TestPass deterministic run failed for ${runId}:`, (err as Error).message);
+        }
+      }
 
-    // Run agent checks for any items still pending after the deterministic pass.
-    try {
-      await runAgentChecks(config, runId, body.target.url, pack, profile, evidenceRef);
-    } catch (err) {
-      console.error(`TestPass agent run failed for ${runId}:`, (err as Error).message);
+      // Run agent checks for any items still pending after the deterministic pass.
+      try {
+        await runAgentChecks(config, runId, body.target.url, pack, profile, evidenceRef);
+      } catch (err) {
+        console.error(`TestPass agent run failed for ${runId}:`, (err as Error).message);
+      }
     }
 
     // Finalize: any item still pending means agent checks are not configured.
@@ -190,6 +220,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     return json(res, 201, { run_id: runId, evidence_ref: evidenceRef ?? null, summary });
+  }
+
+  if (req.method === "POST" && action === "heal") {
+    const body = req.body as { run_id?: string; pack_slug?: string };
+    if (!body.run_id) return json(res, 400, { error: "run_id required" });
+    if (!body.pack_slug) return json(res, 400, { error: "pack_slug required" });
+
+    const packPath = path.resolve(__dirname, `../packages/testpass/packs/${body.pack_slug}.yaml`);
+    let pack;
+    try {
+      pack = loadPackFromFile(packPath);
+    } catch {
+      return json(res, 422, { error: `Pack YAML not found on server for '${body.pack_slug}'` });
+    }
+
+    let healed = 0;
+    try {
+      healed = await healFailedChecks(config, body.run_id, pack);
+    } catch (err) {
+      console.error(`TestPass heal failed for ${body.run_id}:`, (err as Error).message);
+    }
+
+    const summary = await computeVerdictSummary(config, body.run_id);
+    const isDone = summary.pending === 0;
+    await updateRunStatus(
+      config,
+      body.run_id,
+      isDone ? (summary.fail > 0 ? "failed" : "complete") : "running",
+      summary,
+    );
+    return json(res, 200, { healed, summary });
   }
 
   // Complete a specific run (called when agent checks land after Chunk 4+)
