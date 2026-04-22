@@ -170,10 +170,13 @@ const VISIBLE_TOOLS = [
     name: "load_memory",
     title: "Load memory",
     description:
-      "Loads the user's identity, preferences, facts, and recent session history. " +
-      "Call this FIRST at the start of every session, before responding to the user " +
-      "or calling any other tool. Skipping this means you won't know who the user is " +
-      "or what they care about.",
+      "Loads the user's identity, preferences, facts, and recent session history from persistent cross-session storage. " +
+      "Use IMMEDIATELY at the start of every session -- before responding to the user's first message, before calling any other tool. " +
+      "Trigger even when the opening message looks trivial: keywords like 'remember', 'recall', 'context', 'profile', " +
+      "'facts about me', 'who am I', 'last time', 'preferences', 'pick up where we left off' all signal stored context exists. " +
+      "Also trigger after any context reset or tool reconnect, or any time you are unsure whether context was loaded this session. " +
+      "Do NOT skip because the first message is simple -- personal facts change how almost every answer should be framed. " +
+      "Do NOT trigger for pure factual lookups (capitals, math, definitions) that require no personal context.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -189,9 +192,14 @@ const VISIBLE_TOOLS = [
     name: "save_fact",
     title: "Remember a fact",
     description:
-      "Saves a new fact about the user for future sessions. Use this whenever the user " +
-      "shares something worth remembering -- preferences, decisions, contact details, " +
-      "technical choices. Facts persist across all sessions and AI tools.",
+      "Saves a new persistent fact about the user that will be available in all future sessions across every AI tool. " +
+      "Use whenever the user shares anything worth keeping -- even if they don't explicitly ask: 'capture', 'noted', " +
+      "'remember this', 'log', 'store', 'don't forget', or any preference, decision, correction, contact, project detail, " +
+      "technical choice, or personal detail the user mentions. " +
+      "Also trigger proactively when the user corrects you (save the correction immediately), " +
+      "reveals a preference by rejecting something, or names a person/tool/project for the first time. " +
+      "Do NOT trigger for transient values (today's weather, one-off calculations, temporary state that won't matter next session). " +
+      "Do NOT trigger for facts already confirmed stored earlier in this session.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -211,10 +219,14 @@ const VISIBLE_TOOLS = [
     name: "search_memory",
     title: "Search memory",
     description:
-      "Searches the user's stored facts and session history. Use this when the user " +
-      "asks about something from a previous session, references a past decision, or " +
-      "when you need context about a specific topic. Returns matching facts and session " +
-      "summaries.",
+      "Searches the user's stored facts and session history using hybrid semantic + keyword retrieval. " +
+      "Use whenever the user asks about anything that might be stored: 'remember', 'recall', 'do you know', " +
+      "'what did I say about', 'last time', 'context', 'profile', 'facts about me', 'who am I', 'my preferences', " +
+      "'what have I told you', or when you need background on a topic before answering. " +
+      "Trigger even when the user doesn't explicitly say 'search' -- if the question involves past decisions, " +
+      "preferences, project details, or named people and tools, check memory first. " +
+      "Do NOT trigger for one-shot math, translations, definitions, or questions with no plausible stored context. " +
+      "Do NOT trigger if load_memory was just called and already returned the relevant context.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -228,9 +240,13 @@ const VISIBLE_TOOLS = [
     name: "save_identity",
     title: "Save my identity",
     description:
-      "Saves or updates the user's identity information -- business name, role, standing " +
-      "rules, preferences. This information loads at the start of every session. Use this " +
-      "when the user wants to change how every future session behaves.",
+      "Saves or updates a standing rule or identity entry that loads at the start of every future session. " +
+      "Use whenever the user states or updates something about themselves or how they want every session to behave: " +
+      "'my name', 'my role', 'I am', 'I work at', 'my preferences', 'I always', 'from now on', 'always remember', " +
+      "'my timezone', 'my stack', 'my workflow', 'call me', or any other standing rule or identity anchor. " +
+      "Unlike save_fact (session-scoped context), save_identity is for rules and identity that should govern every future session. " +
+      "Do NOT trigger for one-time facts about a specific task or project (use save_fact instead). " +
+      "Do NOT trigger for information the user explicitly says is temporary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -249,9 +265,14 @@ const VISIBLE_TOOLS = [
     name: "save_session",
     title: "Save this session",
     description:
-      "Saves a summary of the current session including decisions made, tasks completed, " +
-      "and open items. Call this at the end of a session or when significant work is " +
-      "completed. The summary will be available in future sessions.",
+      "Saves a structured summary of the current session so the next session can resume without re-asking. " +
+      "Use at the end of every meaningful session -- even if the user doesn't ask: 'summary', 'wrap-up', " +
+      "'end of session', 'recap', 'we're done', 'see you next time', 'close out', or whenever significant " +
+      "work was completed, decisions were made, or open loops exist that need carrying forward. " +
+      "Also trigger at natural checkpoints mid-session when a major phase completes. " +
+      "Include: what was accomplished, key decisions made, open loops or next steps. " +
+      "Do NOT trigger after trivial exchanges (single Q&A, quick lookups) with nothing worth carrying forward. " +
+      "Do NOT trigger if the session has already been saved with no new work done since.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -685,27 +706,26 @@ export function createServer(): Server {
       // "load the user's memory before you answer." Without this, `load_memory`
       // is just another tool in a list and the agent rarely calls it first.
       instructions: [
-        "UnClick is this user's cross-session memory and agent toolbelt.",
+        "UnClick is this user's persistent memory and toolbelt -- durable across",
+        "every AI session, tool, and device. Native model memory is volatile;",
+        "this MCP is the authoritative store.",
         "",
-        "ASSUME INTERRUPTION. Your context may reset between messages or sessions.",
-        "This MCP is the authoritative store for the user's durable facts,",
-        "preferences, decisions, and work-in-progress. Treat native model memory",
-        "as a volatile supplement only.",
+        "MANDATORY SESSION PROTOCOL (four steps, every session):",
+        "  1. LOAD   -- call `load_memory` BEFORE your first response, even for",
+        "               trivial messages. Personal facts change how you should",
+        "               answer almost every question.",
+        "  2. SEARCH -- call `search_memory` when the user says 'remember',",
+        "               'recall', 'last time', 'context', 'preferences',",
+        "               'facts about me', 'who am I', or references any past work.",
+        "  3. SAVE   -- call `save_fact` the moment the user shares anything",
+        "               worth keeping: name, preferences, decisions, corrections.",
+        "               Use `save_identity` for standing rules that apply every",
+        "               session (role, timezone, stack, workflow).",
+        "  4. END    -- call `save_session` before closing. Record decisions made,",
+        "               tasks completed, and open loops so the next session can",
+        "               resume without re-asking.",
         "",
-        "ALWAYS call `load_memory` before responding to the user's first message",
-        "in any new session or after any apparent context reset. Do this even if",
-        "the user's first message looks trivial — personal facts (name, timezone,",
-        "projects, preferences, open loops) change how you should answer almost",
-        "every question.",
-        "",
-        "AS YOU WORK: use `save_fact` to persist new durable facts the user shares",
-        "(identity, preferences, tools, family, business, decisions). Use",
-        "`save_session` at natural checkpoints to record what you did, what's open,",
-        "and what the next step is — so the next agent (or next-you) can resume",
-        "without re-asking.",
-        "",
-        "Never ask the user to 'catch you up' on things they've already told",
-        "UnClick. Load first, then act.",
+        "Never ask the user to 'catch you up' -- load first, then act.",
       ].join("\n"),
     }
   );

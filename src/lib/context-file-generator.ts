@@ -53,9 +53,16 @@ function buildClaudeMd(input: ContextFileInput): string {
   }
 
   lines.push("## Memory");
-  lines.push("- Always call load_memory at session start");
+  lines.push("- Always call load_memory at session start, before responding to the first message");
+  lines.push("- Call search_memory when the user references anything from the past");
   lines.push("- Save facts and preferences as you learn them -- don't wait until session end");
-  lines.push("- When I correct you, save the correction immediately");
+  lines.push("- When I correct you, call save_fact immediately with the correction");
+  lines.push("- Call save_session before closing any substantive session");
+  lines.push("- Never ask me to catch you up on things I've already told UnClick");
+  lines.push("");
+  lines.push("## Skills");
+  lines.push("- Use the `unclick-memory` skill (in .claude/skills/unclick-memory/SKILL.md) for");
+  lines.push("  the full session protocol including load, search, save, and end steps");
   lines.push("");
 
   return lines.join("\n");

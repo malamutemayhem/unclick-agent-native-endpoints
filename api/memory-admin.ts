@@ -414,25 +414,39 @@ interface SetupGuide {
 
 const AGENTS_MD_CONTENT = `# Agent instructions
 
-You have access to the UnClick MCP server, which exposes persistent cross-session memory.
+You have access to the UnClick MCP server, which provides persistent cross-session memory
+that works across all AI tools and sessions. Native model memory is volatile -- UnClick is
+the authoritative store for this user's facts, preferences, decisions, and work history.
 
-## At session start
+## Session protocol (four steps, every session)
 
-ALWAYS call \`get_startup_context\` before doing anything else. This loads:
-- Business context (standing rules)
-- Recent session summaries
-- Active extracted facts
-- Knowledge library index
+### 1. Load -- always first
 
-## During the session
+Call \`load_memory\` BEFORE responding to the user's first message, even for trivial openers.
+This loads identity, standing rules, preferences, recent sessions, and active facts.
 
-Use \`add_fact\` to record preferences, decisions, and important info worth remembering.
-Use \`search_memory\` to recall anything from prior sessions.
-Use \`set_business_context\` to set standing rules the user wants applied every session.
+### 2. Search -- on demand throughout
 
-## Before ending the session
+Call \`search_memory\` whenever the user references anything from the past:
+- "remember", "recall", "last time", "context", "preferences", "facts about me", "who am I"
+- Any past decision, project name, person, or tool they mention
 
-Call \`write_session_summary\` with a concise recap of what was accomplished and what is outstanding.
+### 3. Save -- proactively as you learn
+
+Call \`save_fact\` immediately when the user shares anything worth keeping:
+name, role, preferences, decisions, corrections, project details, tools, contacts.
+
+Call \`save_identity\` for standing rules that apply every future session.
+
+### 4. End -- before closing
+
+Call \`save_session\` before the session ends with what was accomplished,
+key decisions, and open loops.
+
+## Hard rules
+
+- Never ask the user to "catch you up" on things already told to UnClick.
+- If unsure whether context was loaded, call \`load_memory\` -- it is idempotent.
 `;
 
 const CLAUDE_DESKTOP_CONFIG = `{
@@ -451,42 +465,54 @@ const CURSORRULES_CONTENT = `# UnClick memory protocol
 
 The UnClick MCP server provides persistent cross-session memory.
 
-At the start of every session, call the \`get_startup_context\` tool before doing anything else. It returns business context, recent session summaries, and active facts.
+At the start of every session, call \`load_memory\` before doing anything else.
+It returns standing rules, recent session summaries, and active facts.
 
-Record durable preferences, decisions, or facts with \`add_fact\`. Recall with \`search_memory\`. Before ending a session, call \`write_session_summary\`.
+Record durable preferences, decisions, or facts with \`save_fact\`.
+Recall anything from prior sessions with \`search_memory\`.
+Set standing rules that apply every session with \`save_identity\`.
+Before ending a session, call \`save_session\`.
+Never ask the user to catch you up -- load first, then act.
 `;
 
 const WINDSURFRULES_CONTENT = `# UnClick memory protocol
 
 The UnClick MCP server provides persistent cross-session memory.
 
-At the start of every session, call the \`get_startup_context\` tool before doing anything else. It returns business context, recent session summaries, and active facts.
+At the start of every session, call \`load_memory\` before doing anything else.
+It returns standing rules, recent session summaries, and active facts.
 
-Record durable preferences, decisions, or facts with \`add_fact\`. Recall with \`search_memory\`. Before ending a session, call \`write_session_summary\`.
+Record durable preferences, decisions, or facts with \`save_fact\`.
+Recall anything from prior sessions with \`search_memory\`.
+Set standing rules that apply every session with \`save_identity\`.
+Before ending a session, call \`save_session\`.
+Never ask the user to catch you up -- load first, then act.
 `;
 
 const COWORK_SKILL_CONFIG = `---
 name: session-bootstrap
-description: Loads UnClick persistent memory at session start. Always invoke before other work.
+description: Loads UnClick persistent memory at session start and applies the full session protocol. TRIGGER at the very start of every session and every new conversation -- even before the user says anything substantive. Also trigger whenever the user says "remember", "recall", "context", "preferences", "facts about me", "who am I", or references past work.
 ---
 
 # Session bootstrap
 
-Call the UnClick MCP tool \`get_startup_context\` immediately. Treat its output as authoritative context for this session.
+Call the UnClick MCP tool \`load_memory\` immediately. Treat its output as authoritative context for this session.
 
 If the tool is unavailable, note this and continue. Do not fabricate prior context.
+
+During the session: call \`save_fact\` for anything worth keeping, \`search_memory\` to recall past context.
+Before closing: call \`save_session\` to record what was done and what is open.
 `;
 
 const CUSTOM_CLIENT_SNIPPET = `// Pseudo-code for a custom MCP client.
-// On session start, call get_startup_context before any user-triggered work.
+// On session start, call load_memory before any user-triggered work.
 
 async function onSessionStart(mcpClient) {
   // 1. If your client honours the MCP \`instructions\` field, the UnClick
-  //    server will tell you to call get_startup_context automatically.
-  //    Enable the "auto-load" setting in the UnClick admin to turn this on.
+  //    server will tell the agent to call load_memory automatically.
 
   // 2. Otherwise, call the tool directly:
-  const ctx = await mcpClient.callTool("get_startup_context", {});
+  const ctx = await mcpClient.callTool("load_memory", {});
   systemPrompt.push(ctx.content);
 
   // 3. Optional: subscribe to resources for background updates.
@@ -513,14 +539,21 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
         code_snippet: AGENTS_MD_CONTENT,
       },
       {
-        title: "Verify get_startup_context is in the tool list",
+        title: "Verify load_memory is in the tool list",
         description:
-          "Run /mcp inside Claude Code. You should see the UnClick server and the 5 direct memory tools, including get_startup_context.",
+          "Run /mcp inside Claude Code. You should see the UnClick server and the 5 direct memory tools: load_memory, save_fact, search_memory, save_identity, and save_session.",
+      },
+      {
+        title: "Optional: pause Claude's native memory",
+        description:
+          "For best results, go to Claude Settings > Capabilities > Memory and pause native Claude memory for this project. " +
+          "Native memory and UnClick can coexist, but pausing native memory ensures UnClick is the sole authoritative store -- " +
+          "preventing conflicts where Claude summarises outdated native context instead of loading from UnClick.",
       },
       {
         title: "Test by starting a fresh session",
         description:
-          "Start a new Claude Code session in the repo. The first turn should call get_startup_context and show context loaded before doing other work.",
+          "Start a new Claude Code session in the repo. The first turn should call load_memory and show context loaded before doing other work.",
       },
     ],
     config_file: { filename: "AGENTS.md", content: AGENTS_MD_CONTENT },
@@ -533,7 +566,7 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
     auto_load_method: "MCP instructions field plus resources subscription",
     reliability: "Medium-High",
     reliability_notes:
-      "Claude Desktop honours the MCP instructions field in most recent versions, which is enough to auto-call get_startup_context. Subscribing to memory://context/full as a resource is a belt-and-braces backup.",
+      "Claude Desktop honours the MCP instructions field in most recent versions, which is enough to auto-call load_memory. Subscribing to memory://context/full as a resource is a belt-and-braces backup.",
     setup_steps: [
       {
         title: "Add UnClick to claude_desktop_config.json",
@@ -544,7 +577,13 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
       {
         title: "Enable auto-load in the UnClick admin",
         description:
-          "Turn on auto-load so the server sends its instructions field. Claude Desktop will then call get_startup_context on session start.",
+          "Turn on auto-load so the server sends its instructions field. Claude Desktop will then call load_memory on session start.",
+      },
+      {
+        title: "Optional: pause Claude's native memory",
+        description:
+          "Go to Claude Settings > Capabilities > Memory and pause native Claude memory. " +
+          "This ensures UnClick is the sole authoritative store and prevents conflicts with Claude's own memory summaries.",
       },
       {
         title: "Optional: subscribe to the memory context resource",
@@ -562,7 +601,7 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
     auto_load_method: ".cursorrules file plus tool description reminders",
     reliability: "Medium",
     reliability_notes:
-      "Cursor supports MCP tools but not prompts or resources. Auto-load relies on .cursorrules text telling the agent to call get_startup_context. Some sessions may skip the call if the rules file is terse.",
+      "Cursor supports MCP tools but not prompts or resources. Auto-load relies on .cursorrules text telling the agent to call load_memory. Some sessions may skip the call if the rules file is terse.",
     setup_steps: [
       {
         title: "Add the UnClick MCP server to Cursor",
@@ -573,13 +612,13 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
       {
         title: "Create .cursorrules at the project root",
         description:
-          "Cursor reads .cursorrules on every session. This is the main hook that persuades the agent to call get_startup_context.",
+          "Cursor reads .cursorrules on every session. This is the main hook that persuades the agent to call load_memory.",
         code_snippet: CURSORRULES_CONTENT,
       },
       {
-        title: "Verify the tool appears in Cursor's MCP panel",
+        title: "Verify the tools appear in Cursor's MCP panel",
         description:
-          "Open the MCP panel and confirm get_startup_context, add_fact, search_memory, write_session_summary, and set_business_context are listed.",
+          "Open the MCP panel and confirm load_memory, save_fact, search_memory, save_identity, and save_session are listed.",
       },
     ],
     config_file: { filename: ".cursorrules", content: CURSORRULES_CONTENT },
@@ -603,13 +642,13 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
       {
         title: "Create .windsurfrules at the project root",
         description:
-          "This file is read at the start of every session. It is the most reliable way to get Windsurf to call get_startup_context.",
+          "This file is read at the start of every session. It is the most reliable way to get Windsurf to call load_memory.",
         code_snippet: WINDSURFRULES_CONTENT,
       },
       {
         title: "Verify the tool is active",
         description:
-          "Start a fresh session and confirm the first action is a call to get_startup_context.",
+          "Start a fresh session and confirm the first action is a call to load_memory.",
       },
     ],
     config_file: { filename: ".windsurfrules", content: WINDSURFRULES_CONTENT },

@@ -1,0 +1,27 @@
+# [Your Project Name]
+
+## Memory
+
+This project uses UnClick for persistent cross-session memory via MCP.
+
+Always call `load_memory` at the start of every session, before responding to the user's first message.
+Save new facts with `save_fact` as they come up -- don't batch until session end.
+When the user corrects you, call `save_fact` immediately with the correction.
+Call `save_session` before closing out any substantive session.
+
+## Standing rules
+
+<!-- Add project-specific standing rules here. These supplement what's stored in UnClick. -->
+<!-- Example: -->
+<!-- - Always write TypeScript, never JavaScript -->
+<!-- - Run npm run build before every commit -->
+<!-- - Branch off main; never push directly to main -->
+
+## MCP setup
+
+The UnClick MCP server must be connected for memory to work.
+Install: npx -y @unclick/mcp-server
+Env: UNCLICK_API_KEY=uc_your_api_key_here
+
+To verify: run `/mcp` in Claude Code. You should see `load_memory`, `save_fact`,
+`search_memory`, `save_identity`, and `save_session` in the tool list.
