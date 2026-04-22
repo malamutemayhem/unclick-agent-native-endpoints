@@ -17,6 +17,9 @@ import {
   CheckCircle2,
   XCircle,
   Zap,
+  UserPlus,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 
 interface MeteringEvent {
@@ -32,6 +35,15 @@ interface ConversationSession {
   session_id: string;
   message_count: number;
   last_message: string;
+}
+
+interface SignupUser {
+  id: string;
+  email: string | null;
+  provider: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  confirmed: boolean;
 }
 
 function timeAgo(iso: string): string {
@@ -62,6 +74,10 @@ export default function AdminActivity() {
   const [events, setEvents] = useState<MeteringEvent[]>([]);
   const [sessions, setSessions] = useState<ConversationSession[]>([]);
   const [loading, setLoading] = useState(true);
+  // Admin-only recent signups. Hidden when the API returns 403 — non-admins
+  // never see the card exists, admins see a live list from auth.users.
+  const [signups, setSignups] = useState<SignupUser[] | null>(null);
+  const [signupsLoading, setSignupsLoading] = useState(true);
 
   useEffect(() => {
     if (!session) return;
@@ -79,6 +95,29 @@ export default function AdminActivity() {
         }
       } finally {
         if (!cancelled) setLoading(false);
+      }
+    })();
+
+    // Separately probe the superadmin-only recent signups endpoint. A 403
+    // means "not an admin" → hide the widget silently. Any other failure
+    // also hides it so we never leak half-rendered scaffolding.
+    (async () => {
+      try {
+        const res = await fetch("/api/admin-users?action=admin_recent_signups", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!cancelled) {
+          if (res.ok) {
+            const body = await res.json();
+            setSignups(body.users ?? []);
+          } else {
+            setSignups(null);
+          }
+        }
+      } catch {
+        if (!cancelled) setSignups(null);
+      } finally {
+        if (!cancelled) setSignupsLoading(false);
       }
     })();
 
@@ -262,6 +301,72 @@ export default function AdminActivity() {
               )}
             </div>
           </div>
+
+          {/* Admin-only: Recent signups. Hidden for non-admins (API
+              returns 403 → signups stays null). */}
+          {!signupsLoading && signups !== null && (
+            <div className="mt-8">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                <UserPlus className="h-4 w-4 text-[#E2B93B]" />
+                Recent Signups
+                <span className="ml-1 rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-[#888]">
+                  admin only
+                </span>
+              </h2>
+
+              {signups.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/[0.08] bg-[#111111] p-6 text-center">
+                  <p className="text-xs text-[#666]">No signups yet</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#111111]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-white/[0.06] text-[10px] uppercase tracking-wider text-[#666]">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Email</th>
+                        <th className="px-3 py-2 font-medium">Provider</th>
+                        <th className="px-3 py-2 font-medium">Confirmed</th>
+                        <th className="px-3 py-2 font-medium">Signed up</th>
+                        <th className="px-3 py-2 font-medium">Last seen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.04]">
+                      {signups.slice(0, 50).map((u) => (
+                        <tr key={u.id} className="hover:bg-white/[0.02]">
+                          <td className="px-3 py-2 font-mono text-[11px] text-white">
+                            {u.email ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-[#888]">{u.provider}</td>
+                          <td className="px-3 py-2">
+                            {u.confirmed ? (
+                              <span className="flex items-center gap-1 text-green-400">
+                                <ShieldCheck className="h-3 w-3" /> yes
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-amber-400">
+                                <ShieldAlert className="h-3 w-3" /> pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-[#888]">
+                            {timeAgo(u.created_at)}
+                          </td>
+                          <td className="px-3 py-2 text-[#666]">
+                            {u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : "never"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {signups.length > 50 && (
+                    <p className="border-t border-white/[0.04] py-2 text-center text-[10px] text-[#555]">
+                      +{signups.length - 50} more
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
