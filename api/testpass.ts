@@ -3,7 +3,11 @@
  *
  * Actions:
  *   GET  ?action=get_run&run_id=<uuid>              - fetch run + items
+ *   GET  ?action=report_html&run_id=<uuid>          - self-contained HTML report
+ *   GET  ?action=report_json&run_id=<uuid>          - JSON dump of run + items
+ *   GET  ?action=report_md&run_id=<uuid>            - Markdown fix-list grouped by severity
  *   POST ?action=start_run                          - create run, probe target, seed items
+ *   POST ?action=complete_run                       - recompute verdict + finalize status
  *
  * Authentication: Supabase JWT Bearer token (session user = actor).
  * Service role key used server-side for DB writes (bypasses RLS which
@@ -22,6 +26,11 @@ import {
   updateRunStatus,
   computeVerdictSummary,
 } from "../packages/testpass/src/run-manager.js";
+import {
+  generateHtmlReport,
+  generateJsonReport,
+  generateMarkdownFixList,
+} from "../packages/testpass/src/reporter.js";
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
 import { runMultiPass } from "../packages/testpass/src/runner/controller.js";
@@ -43,6 +52,12 @@ function json(res: VercelResponse, status: number, body: unknown) {
   res.status(status).setHeader("Content-Type", "application/json");
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   res.end(JSON.stringify(body));
+}
+
+function raw(res: VercelResponse, status: number, contentType: string, body: string) {
+  res.status(status).setHeader("Content-Type", contentType);
+  Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
+  res.end(body);
 }
 
 async function getActorUserId(
@@ -69,6 +84,21 @@ async function getPackIdBySlug(
   if (!r.ok) return null;
   const rows = (await r.json()) as Array<{ id: string }>;
   return rows[0]?.id ?? null;
+}
+
+async function assertRunOwnership(
+  supabaseUrl: string,
+  serviceKey: string,
+  runId: string,
+  actorUserId: string
+): Promise<boolean> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/testpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=id&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+  );
+  if (!r.ok) return false;
+  const rows = (await r.json()) as Array<{ id: string }>;
+  return rows.length > 0;
 }
 
 async function getRunWithItems(
@@ -136,6 +166,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       verdict_summary: row.verdict_summary ?? {},
       fail_count: row.verdict_summary?.fail ?? 0,
     });
+  }
+
+  if (req.method === "GET" && (action === "report_html" || action === "report_json" || action === "report_md")) {
+    const runId = req.query.run_id as string;
+    if (!runId) return json(res, 400, { error: "run_id required" });
+    const owns = await assertRunOwnership(supabaseUrl, serviceKey, runId, actorUserId);
+    if (!owns) return json(res, 404, { error: "Run not found" });
+
+    try {
+      if (action === "report_html") {
+        const html = await generateHtmlReport(config, runId);
+        return raw(res, 200, "text/html; charset=utf-8", html);
+      }
+      if (action === "report_json") {
+        const body = await generateJsonReport(config, runId);
+        return json(res, 200, body);
+      }
+      const md = await generateMarkdownFixList(config, runId);
+      return raw(res, 200, "text/markdown; charset=utf-8", md);
+    } catch (err) {
+      return json(res, 500, { error: (err as Error).message });
+    }
   }
 
   if (req.method === "POST" && action === "start_run") {
