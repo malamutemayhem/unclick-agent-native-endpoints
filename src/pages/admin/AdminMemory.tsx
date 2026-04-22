@@ -3,14 +3,20 @@ import { useSearchParams } from "react-router-dom";
 import { Brain } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import StorageBar from "./memory/StorageBar";
+import BrainMap from "./BrainMap";
 import ContextTab from "./memory/ContextTab";
 import FactsTab from "./memory/FactsTab";
 import SessionsTab from "./memory/SessionsTab";
+import LibraryTab from "./memory/LibraryTab";
+import MemoryActivityTab from "./memory/MemoryActivityTab";
 
 const TABS = [
-  { id: "facts", label: "Facts" },
-  { id: "sessions", label: "Sessions" },
-  { id: "identity", label: "Identity" },
+  { id: "brain-map", label: "Brain Map" },
+  { id: "facts",     label: "Facts"     },
+  { id: "sessions",  label: "Sessions"  },
+  { id: "library",   label: "Library"   },
+  { id: "activity",  label: "Activity"  },
+  { id: "identity",  label: "Identity"  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -18,8 +24,9 @@ type TabId = (typeof TABS)[number]["id"];
 // Back-compat for existing deep links that used ?tab=context
 function resolveTab(param: string | null): TabId {
   if (param === "context") return "identity";
-  if (param === "facts" || param === "sessions" || param === "identity") return param;
-  return "facts";
+  const valid: TabId[] = ["brain-map", "facts", "sessions", "library", "activity", "identity"];
+  if (valid.includes(param as TabId)) return param as TabId;
+  return "brain-map";
 }
 
 export default function AdminMemoryPage() {
@@ -181,6 +188,7 @@ export default function AdminMemoryPage() {
         </div>
 
         {/* Tab content */}
+        {activeTab === "brain-map" && <BrainMap />}
         {activeTab === "facts" && (
           <div>
             <p className="mb-4 text-sm text-white/60">
@@ -197,6 +205,24 @@ export default function AdminMemoryPage() {
               New sessions read the most recent ones so your agent picks up where you left off.
             </p>
             <SessionsTab apiKey={accessToken} />
+          </div>
+        )}
+        {activeTab === "library" && (
+          <div>
+            <p className="mb-4 text-sm text-white/60">
+              Knowledge documents stored by your agent. Reference material, guides, and notes
+              that get loaded on demand via search.
+            </p>
+            <LibraryTab apiKey={accessToken} />
+          </div>
+        )}
+        {activeTab === "activity" && (
+          <div>
+            <p className="mb-4 text-sm text-white/60">
+              Memory activity over time. Fact growth, storage breakdown, decay signals,
+              and most-accessed items.
+            </p>
+            <MemoryActivityTab apiKey={accessToken} />
           </div>
         )}
         {activeTab === "identity" && (
