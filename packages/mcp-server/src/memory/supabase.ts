@@ -17,14 +17,54 @@
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import type {
   MemoryBackend,
   SessionSummaryInput,
   FactInput,
+  InvalidateFactInput,
   ConversationInput,
   CodeInput,
   LibraryDocInput,
 } from "./types.js";
+
+function contentHash(text: string): string {
+  return createHash("sha256").update(text.toLowerCase().trim(), "utf8").digest("hex");
+}
+
+async function extractAtomicFacts(text: string): Promise<string[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [text];
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              'Extract 3-10 atomic facts from the following text. Each fact must be a single, self-contained statement. Return ONLY a JSON object: {"facts": ["fact1", "fact2", ...]}',
+          },
+          { role: "user", content: text.slice(0, 4000) },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 600,
+      }),
+    });
+    if (!res.ok) return [text];
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = data.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { facts?: unknown[] };
+    if (Array.isArray(parsed.facts) && parsed.facts.length > 0) {
+      return (parsed.facts as unknown[]).map(String).filter(Boolean);
+    }
+    return [text];
+  } catch {
+    return [text];
+  }
+}
 
 export type Tenancy =
   | { mode: "byod" }
@@ -216,18 +256,18 @@ export class SupabaseBackend implements MemoryBackend {
     };
   }
 
-  async searchMemory(query: string, maxResults: number): Promise<unknown> {
-    // Attempt hybrid RRF search (keyword + vector). Falls back to keyword-only
-    // when OPENAI_API_KEY is absent or the hybrid RPC isn't deployed yet.
+  async searchMemory(query: string, maxResults: number, asOf?: string): Promise<unknown> {
+    // Attempt hybrid RRF search (keyword + vector) with bi-temporal filter.
+    // Falls back to keyword-only when OPENAI_API_KEY absent or RPC not deployed.
     try {
       const { embedText } = await import("./embeddings.js");
       const embedding = await embedText(query);
       if (embedding) {
         const results = await this.rpc(
           "search_memory_hybrid",
-          { search_query: query, query_embedding: embedding, max_results: maxResults },
+          { search_query: query, query_embedding: embedding, max_results: maxResults, as_of: asOf ?? null },
           "mc_search_memory_hybrid",
-          { p_search_query: query, p_query_embedding: embedding, p_max_results: maxResults }
+          { p_search_query: query, p_query_embedding: embedding, p_max_results: maxResults, p_as_of: asOf ?? null }
         );
         return results;
       }
@@ -296,7 +336,29 @@ export class SupabaseBackend implements MemoryBackend {
   }
 
   async addFact(data: FactInput): Promise<{ id: string }> {
+    // preserve_as_blob: write raw body to canonical_docs, then extract+store atomic facts
+    if (data.preserve_as_blob) {
+      return this.saveBlob(data);
+    }
+
     await this.enforceCaps("fact");
+
+    const hash = contentHash(data.fact);
+
+    // Exact-hash dedup: if a live fact with this hash already exists, return it
+    const dupTable = this.tables.extracted_facts;
+    let dupQuery = this.client
+      .from(dupTable)
+      .select("id")
+      .eq("content_hash", hash)
+      .is("invalidated_at", null)
+      .limit(1);
+    if (this.tenancy.mode === "managed") {
+      dupQuery = dupQuery.eq("api_key_hash", this.tenancy.apiKeyHash);
+    }
+    const { data: existing } = await dupQuery.maybeSingle();
+    if (existing) return { id: (existing as { id: string }).id };
+
     const { data: row, error } = await this.client
       .from(this.tables.extracted_facts)
       .insert(
@@ -309,12 +371,120 @@ export class SupabaseBackend implements MemoryBackend {
           status: "active",
           decay_tier: "hot",
           last_accessed: now(),
+          content_hash: hash,
+          valid_from: data.valid_from ?? now(),
+          recorded_at: now(),
+          extractor_id: data.extractor_id ?? "manual",
+          prompt_version: data.prompt_version ?? null,
+          model_id: data.model_id ?? null,
         })
       )
       .select()
       .single();
     if (error) throw error;
+
+    // Append audit row (fire-and-forget; never blocks the main insert)
+    this.writeFactAudit(row.id, "insert", { category: data.category }).catch(() => {});
+
     return { id: row.id };
+  }
+
+  private async saveBlob(data: FactInput): Promise<{ id: string; fact_ids?: string[] }> {
+    await this.enforceCaps("general");
+
+    const hash = contentHash(data.fact);
+    const docTable = this.tenancy.mode === "managed" ? "mc_canonical_docs" : "canonical_docs";
+
+    // Upsert canonical_doc (idempotent by content_hash)
+    let docId: string;
+    {
+      let q = this.client.from(docTable).select("id").eq("content_hash", hash).limit(1);
+      if (this.tenancy.mode === "managed") {
+        q = q.eq("api_key_hash", this.tenancy.apiKeyHash);
+      }
+      const { data: existing } = await q.maybeSingle();
+      if (existing) {
+        docId = (existing as { id: string }).id;
+      } else {
+        const insertRow =
+          this.tenancy.mode === "managed"
+            ? { api_key_hash: this.tenancy.apiKeyHash, title: data.category, body: data.fact, content_hash: hash }
+            : { title: data.category, body: data.fact, content_hash: hash };
+        const { data: doc, error } = await this.client.from(docTable).insert(insertRow).select().single();
+        if (error) throw error;
+        docId = (doc as { id: string }).id;
+      }
+    }
+
+    // Extract atomic facts (minimal extractor; Chunk 4 replaces with full pipeline)
+    const atomicFacts = await extractAtomicFacts(data.fact);
+    const factIds: string[] = [];
+
+    for (const factText of atomicFacts) {
+      const factHash = contentHash(factText);
+
+      // Skip if already live
+      let dupQ = this.client
+        .from(this.tables.extracted_facts)
+        .select("id")
+        .eq("content_hash", factHash)
+        .is("invalidated_at", null)
+        .limit(1);
+      if (this.tenancy.mode === "managed") {
+        dupQ = dupQ.eq("api_key_hash", this.tenancy.apiKeyHash);
+      }
+      const { data: dup } = await dupQ.maybeSingle();
+      if (dup) {
+        factIds.push((dup as { id: string }).id);
+        continue;
+      }
+
+      const { data: frow, error: ferr } = await this.client
+        .from(this.tables.extracted_facts)
+        .insert(
+          this.withTenancy({
+            fact: factText,
+            category: data.category,
+            confidence: Math.max(0, data.confidence - 0.05), // slight confidence discount
+            source_session_id: data.source_session_id ?? null,
+            source_type: "auto_extract",
+            status: "active",
+            decay_tier: "hot",
+            last_accessed: now(),
+            content_hash: factHash,
+            valid_from: now(),
+            recorded_at: now(),
+            extractor_id: "auto-extract-v1",
+            derived_from_doc_id: docId,
+          })
+        )
+        .select()
+        .single();
+      if (ferr && (ferr as { code?: string }).code !== "23505") throw ferr;
+      if (!ferr && frow) factIds.push((frow as { id: string }).id);
+    }
+
+    return { id: docId, fact_ids: factIds };
+  }
+
+  private async writeFactAudit(
+    factId: string,
+    op: "insert" | "update" | "invalidate",
+    payload: Record<string, unknown>
+  ): Promise<void> {
+    const auditTable = this.tenancy.mode === "managed" ? "mc_facts_audit" : "facts_audit";
+    await this.client.from(auditTable).insert({ fact_id: factId, op, payload, actor: "agent", at: now() });
+  }
+
+  async invalidateFact(input: InvalidateFactInput): Promise<{ invalidated_at: string }> {
+    const result = await this.rpc<Array<{ invalidated_at: string }>>(
+      "invalidate_fact",
+      { p_fact_id: input.fact_id, p_reason: input.reason ?? null, p_session_id: input.session_id ?? null },
+      "mc_invalidate_fact",
+      { p_fact_id: input.fact_id, p_reason: input.reason ?? null, p_session_id: input.session_id ?? null }
+    );
+    const row = Array.isArray(result) ? result[0] : (result as { invalidated_at: string });
+    return { invalidated_at: row.invalidated_at };
   }
 
   async supersedeFact(

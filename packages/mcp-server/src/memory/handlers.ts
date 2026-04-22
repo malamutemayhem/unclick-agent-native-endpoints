@@ -83,7 +83,8 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
 
   async search_memory(args) {
     const db = await getBackend();
-    return db.searchMemory(str(args.query), num(args.max_results, 10));
+    const asOf = typeof args.as_of === "string" ? args.as_of : undefined;
+    return db.searchMemory(str(args.query), num(args.max_results, 10), asOf);
   },
 
   async search_facts(args) {
@@ -126,6 +127,11 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       category: str(args.category, "general"),
       confidence: num(args.confidence, 0.9),
       source_session_id: typeof args.source_session_id === "string" ? args.source_session_id : undefined,
+      valid_from: typeof args.valid_from === "string" ? args.valid_from : undefined,
+      extractor_id: typeof args.extractor_id === "string" ? args.extractor_id : undefined,
+      prompt_version: typeof args.prompt_version === "string" ? args.prompt_version : undefined,
+      model_id: typeof args.model_id === "string" ? args.model_id : undefined,
+      preserve_as_blob: typeof args.preserve_as_blob === "boolean" ? args.preserve_as_blob : false,
     });
   },
 
@@ -203,5 +209,14 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
   async memory_status() {
     const db = await getBackend();
     return db.getMemoryStatus();
+  },
+
+  async invalidate_fact(args) {
+    const db = await getBackend();
+    return db.invalidateFact({
+      fact_id: str(args.fact_id),
+      reason: typeof args.reason === "string" ? args.reason : undefined,
+      session_id: typeof args.session_id === "string" ? args.session_id : undefined,
+    });
   },
 };

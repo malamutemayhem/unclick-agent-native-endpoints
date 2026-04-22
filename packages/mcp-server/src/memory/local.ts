@@ -16,6 +16,7 @@ import type {
   MemoryBackend,
   SessionSummaryInput,
   FactInput,
+  InvalidateFactInput,
   ConversationInput,
   CodeInput,
   LibraryDocInput,
@@ -504,5 +505,9 @@ export class LocalBackend implements MemoryBackend {
       table_counts: counts,
       fact_decay_tiers: tiers,
     };
+  }
+
+  async invalidateFact(_input: InvalidateFactInput): Promise<{ invalidated_at: string }> {
+    throw new Error("invalidate_fact is not supported in local (zero-config) mode. Connect to Supabase to use this feature.");
   }
 }

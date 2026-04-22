@@ -22,7 +22,7 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "tsx --test src/memory/__tests__/hybrid-search.test.ts",
+    "test": "tsx --test src/memory/__tests__/hybrid-search.test.ts src/memory/__tests__/bitemporal.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

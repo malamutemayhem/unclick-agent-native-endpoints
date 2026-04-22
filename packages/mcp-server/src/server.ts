@@ -211,6 +211,7 @@ const VISIBLE_TOOLS = [
         },
         confidence: { type: "number", minimum: 0, maximum: 1, default: 0.9 },
         source_session_id: { type: "string", description: "Session ID where this fact was learned" },
+        preserve_as_blob: { type: "boolean", description: "If true, stores as a blob and extracts atomic facts via LLM instead of saving fact text directly" },
       },
       required: ["fact"],
     },
@@ -232,6 +233,7 @@ const VISIBLE_TOOLS = [
       properties: {
         query: { type: "string", description: "Search query" },
         max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
+        as_of: { type: "string", description: "ISO 8601 timestamp for point-in-time queries (returns facts valid at that moment)" },
       },
       required: ["query"],
     },
@@ -287,6 +289,24 @@ const VISIBLE_TOOLS = [
       required: ["session_id", "summary"],
     },
   },
+  {
+    name: "invalidate_fact",
+    title: "Invalidate a fact",
+    description:
+      "Marks a stored fact as no longer valid. Use this when the user corrects a fact, " +
+      "says something has changed, or explicitly asks to forget something. Does NOT delete " +
+      "the fact -- preserves history. Requires the fact_id from a prior save_fact or " +
+      "search_memory result. Do NOT use for new information -- use save_fact instead.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        fact_id: { type: "string", description: "UUID of the fact to invalidate" },
+        reason: { type: "string", description: "Why the fact is no longer valid (optional but recommended)" },
+        session_id: { type: "string", description: "Current session ID for the audit log" },
+      },
+      required: ["fact_id"],
+    },
+  },
 ] as const;
 
 // Maps new visible tool names to the canonical MEMORY_HANDLERS keys.
@@ -296,7 +316,7 @@ const MEMORY_TOOL_ALIASES: Record<string, string> = {
   save_fact: "add_fact",
   save_session: "write_session_summary",
   save_identity: "set_business_context",
-  // search_memory keeps its name
+  // search_memory and invalidate_fact keep their names
 };
 
 const DIRECT_TOOLS = [

@@ -17,6 +17,18 @@ export interface FactInput {
   category: string;
   confidence: number;
   source_session_id?: string;
+  // Bi-temporal + provenance (Chunk 2)
+  valid_from?: string;
+  extractor_id?: string;
+  prompt_version?: string;
+  model_id?: string;
+  preserve_as_blob?: boolean;
+}
+
+export interface InvalidateFactInput {
+  fact_id: string;
+  reason?: string;
+  session_id?: string;
 }
 
 export interface ConversationInput {
@@ -46,8 +58,8 @@ export interface MemoryBackend {
   /** Load startup context (business context + recent sessions + hot facts). */
   getStartupContext(numSessions: number): Promise<unknown>;
 
-  /** Full-text search across conversation logs. */
-  searchMemory(query: string, maxResults: number): Promise<unknown>;
+  /** Full-text / hybrid search across facts and session summaries. */
+  searchMemory(query: string, maxResults: number, asOf?: string): Promise<unknown>;
 
   /** Search extracted facts. */
   searchFacts(query: string): Promise<unknown>;
@@ -93,4 +105,7 @@ export interface MemoryBackend {
 
   /** Get memory usage stats. */
   getMemoryStatus(): Promise<unknown>;
+
+  /** Mark a fact as invalidated (does not delete it). Writes an audit row. */
+  invalidateFact(input: InvalidateFactInput): Promise<{ invalidated_at: string }>;
 }
