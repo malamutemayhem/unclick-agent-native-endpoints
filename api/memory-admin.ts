@@ -93,6 +93,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { runCouncilEngine } from "../src/lib/crews/engine";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -4941,6 +4942,99 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (deleteErr) throw deleteErr;
         if (!count) return res.status(404).json({ error: "Crew not found or not owned by you" });
         return res.status(200).json({ success: true });
+      }
+
+      // ─── Phase C: Crew run actions ─────────────────────────────────────────
+
+      case "start_crew_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        if (!process.env.ANTHROPIC_API_KEY) {
+          return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured in Vercel env." });
+        }
+        const { crew_id, task_prompt, token_budget } = (req.body ?? {}) as {
+          crew_id?: string;
+          task_prompt?: string;
+          token_budget?: number;
+        };
+        if (!crew_id || !task_prompt?.trim()) {
+          return res.status(400).json({ error: "crew_id and task_prompt required" });
+        }
+        const { data: runRow, error: runErr } = await supabase
+          .from("mc_crew_runs")
+          .insert({
+            api_key_hash: apiKeyHash,
+            crew_id,
+            task_prompt: task_prompt.trim(),
+            token_budget: token_budget ?? 150000,
+            status: "pending",
+          })
+          .select()
+          .single();
+        if (runErr) throw runErr;
+        // Respond immediately - engine runs after response, Vercel keeps function alive
+        res.status(202).json({ run_id: runRow.id });
+        await runCouncilEngine({
+          runId: runRow.id,
+          crewId: crew_id,
+          apiKeyHash,
+          taskPrompt: task_prompt.trim(),
+          tokenBudget: token_budget ?? 150000,
+          supabaseUrl,
+          serviceRoleKey: supabaseKey,
+        }).catch((e: Error) => console.error("Council engine error:", e.message));
+        return;
+      }
+
+      case "get_run": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const runId = String(
+          req.query.run_id ?? (req.body as { run_id?: string })?.run_id ?? ""
+        ).trim();
+        if (!runId) return res.status(400).json({ error: "run_id required" });
+        const [runRes, msgsRes] = await Promise.all([
+          supabase
+            .from("mc_crew_runs")
+            .select("*")
+            .eq("id", runId)
+            .eq("api_key_hash", apiKeyHash)
+            .maybeSingle(),
+          supabase
+            .from("mc_run_messages")
+            .select("*")
+            .eq("run_id", runId)
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at"),
+        ]);
+        if (runRes.error) throw runRes.error;
+        if (!runRes.data) return res.status(404).json({ error: "Run not found" });
+        return res.status(200).json({ run: runRes.data, messages: msgsRes.data ?? [] });
+      }
+
+      case "list_runs": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const crewId =
+          String(req.query.crew_id ?? (req.body as { crew_id?: string })?.crew_id ?? "").trim() ||
+          null;
+        const limit = Math.min(
+          Number(req.query.limit ?? (req.body as { limit?: number })?.limit ?? 50),
+          100
+        );
+        let q = supabase
+          .from("mc_crew_runs")
+          .select(
+            "id,crew_id,task_prompt,status,tokens_used,result_artifact,started_at,completed_at,created_at"
+          )
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (crewId) q = q.eq("crew_id", crewId);
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ data: data ?? [] });
       }
 
       default:
