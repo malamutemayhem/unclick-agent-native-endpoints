@@ -27,6 +27,8 @@ import {
   Menu,
   Bot,
   BarChart3,
+  Code2,
+  Terminal,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -150,8 +152,10 @@ export default function AdminShell() {
         <SurfaceLink path="/admin/keychain" label="Keychain (BackstagePass)" icon={KeyRound} onClick={onLinkClick} />
         <SurfaceLink path="/admin/tools"    label="Tools"                    icon={Wrench}   onClick={onLinkClick} />
         <SurfaceLink path="/admin/activity" label="Activity"                 icon={Activity} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/agents"    label="Agents"                   icon={Bot}       onClick={onLinkClick} />
-        {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"               icon={BarChart3} onClick={onLinkClick} />}
+        <SurfaceLink path="/admin/agents"       label="Agents"        icon={Bot}       onClick={onLinkClick} />
+        <SurfaceLink path="/admin/codebase"    label="Codebase"      icon={Code2}     onClick={onLinkClick} />
+        <SurfaceLink path="/admin/orchestrator" label="Orchestrator"  icon={Terminal}  onClick={onLinkClick} />
+        {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
         <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
       </>
     );
