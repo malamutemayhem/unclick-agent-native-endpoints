@@ -23,6 +23,7 @@
     "@ai-sdk/google": "^3.0.64",
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/react": "^3.0.170",
+    "@anthropic-ai/sdk": "^0.90.0",
     "@hookform/resolvers": "^3.10.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@radix-ui/react-accordion": "^1.2.11",

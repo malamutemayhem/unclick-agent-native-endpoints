@@ -8,7 +8,7 @@ export type Severity = PackItem["severity"];
 export type Verdict = "check" | "na" | "fail" | "other" | "pending";
 export type RunProfile = "smoke" | "standard" | "deep";
 export type RunStatus = "running" | "complete" | "failed" | "budget_exceeded";
-export type EvidenceKind = "tool_list" | "snapshot" | "screenshot" | "http_trace" | "log";
+export type EvidenceKind = "tool_list" | "snapshot" | "screenshot" | "http_trace" | "log" | "agent_verdict";
 
 export interface RunTarget {
   type: "mcp" | "url" | "git";
