@@ -94,6 +94,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runCouncilEngine } from "../src/lib/crews/engine";
+import { emitSignal } from "../src/lib/signals/emit";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -5040,7 +5041,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           tokenBudget: token_budget ?? 150000,
           supabaseUrl,
           serviceRoleKey: supabaseKey,
-        }).catch((e: Error) => console.error("Council engine error:", e.message));
+        })
+          .then(() => {
+            void emitSignal({
+              apiKeyHash,
+              tool: "crews",
+              action: "run_complete",
+              severity: "info",
+              summary: "Crew run finished",
+              deepLink: `/admin/crews/runs/${runRow.id}`,
+            });
+          })
+          .catch((e: Error) => {
+            console.error("Council engine error:", e.message);
+            void emitSignal({
+              apiKeyHash,
+              tool: "crews",
+              action: "run_failed",
+              severity: "critical",
+              summary: `Crew run failed: ${e.message}`,
+              deepLink: `/admin/crews/runs/${runRow.id}`,
+            });
+          });
         return;
       }
 
@@ -5201,6 +5223,172 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const engineBody = (await engineRes.json().catch(() => ({}))) as Record<string, unknown>;
         if (!engineRes.ok) return res.status(engineRes.status).json(engineBody);
         return res.status(200).json({ run_id: engineBody.run_id });
+      }
+
+      // ─── Signals Phase 1: notifications hub ───────────────────────────────
+
+      case "list_signals": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const body = (req.body ?? {}) as { limit?: number; tool?: string; unread_only?: boolean };
+        const limit = Math.min(Number(body.limit ?? req.query.limit ?? 50), 200);
+        const unreadOnly = body.unread_only === true || req.query.unread_only === "1";
+        const toolFilter = (body.tool ?? req.query.tool ?? "") as string;
+        let q = supabase
+          .from("mc_signals")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (toolFilter) q = q.eq("tool", toolFilter);
+        if (unreadOnly) q = q.is("read_at", null);
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ signals: data ?? [] });
+      }
+
+      case "mark_signal_read": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { signal_id, read_via } = (req.body ?? {}) as { signal_id?: string; read_via?: string };
+        if (!signal_id) return res.status(400).json({ error: "signal_id required" });
+        const { error } = await supabase
+          .from("mc_signals")
+          .update({ read_at: new Date().toISOString(), read_via: read_via ?? "ui" })
+          .eq("id", signal_id)
+          .eq("api_key_hash", apiKeyHash);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "mark_all_read": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("mc_signals")
+          .update({ read_at: new Date().toISOString(), read_via: "dismiss" })
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null)
+          .select("id");
+        if (error) throw error;
+        return res.status(200).json({ updated: data?.length ?? 0 });
+      }
+
+      case "get_signal_preferences": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("mc_signal_preferences")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          return res.status(200).json({
+            preferences: {
+              api_key_hash: apiKeyHash,
+              email_enabled: false,
+              email_address: null,
+              phone_push_enabled: true,
+              telegram_enabled: false,
+              telegram_chat_id: null,
+              quiet_hours_start: null,
+              quiet_hours_end: null,
+              min_severity: "info",
+              per_tool_overrides: {},
+            },
+          });
+        }
+        return res.status(200).json({ preferences: data });
+      }
+
+      case "update_signal_preferences": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const allowed = [
+          "email_enabled",
+          "email_address",
+          "phone_push_enabled",
+          "telegram_enabled",
+          "telegram_chat_id",
+          "quiet_hours_start",
+          "quiet_hours_end",
+          "min_severity",
+          "per_tool_overrides",
+        ];
+        const patch: Record<string, unknown> = {
+          api_key_hash: apiKeyHash,
+          updated_at: new Date().toISOString(),
+        };
+        for (const k of allowed) {
+          if (k in body) patch[k] = body[k];
+        }
+        const { data, error } = await supabase
+          .from("mc_signal_preferences")
+          .upsert(patch, { onConflict: "api_key_hash" })
+          .select()
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ preferences: data });
+      }
+
+      case "check_signals": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { count: totalUnread } = await supabase
+          .from("mc_signals")
+          .select("id", { count: "exact", head: true })
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null);
+
+        const { data: rows, error: fetchErr } = await supabase
+          .from("mc_signals")
+          .select("id, tool, action, severity, summary, deep_link, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (fetchErr) throw fetchErr;
+
+        const signals = rows ?? [];
+        if (signals.length > 0) {
+          const ids = signals.map((s) => s.id);
+          const { error: updateErr } = await supabase
+            .from("mc_signals")
+            .update({ read_at: new Date().toISOString(), read_via: "agent" })
+            .in("id", ids)
+            .eq("api_key_hash", apiKeyHash);
+          if (updateErr) throw updateErr;
+        }
+
+        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, info: 0 };
+        const byTool: Record<string, number> = {};
+        for (const s of signals) {
+          if (s.severity in bySeverity) bySeverity[s.severity]++;
+          byTool[s.tool] = (byTool[s.tool] ?? 0) + 1;
+        }
+        const parts: string[] = [];
+        if (bySeverity.critical > 0) parts.push(`${bySeverity.critical} critical`);
+        if (bySeverity.action_needed > 0) parts.push(`${bySeverity.action_needed} needing action`);
+        if (bySeverity.info > 0) parts.push(`${bySeverity.info} info`);
+        const toolList = Object.entries(byTool)
+          .map(([t, c]) => `${c} from ${t}`)
+          .join(", ");
+        const narrative_hint =
+          signals.length === 0
+            ? "No new signals. User is caught up."
+            : `${signals.length} new signal${signals.length === 1 ? "" : "s"}${parts.length ? ` (${parts.join(", ")})` : ""}${toolList ? `: ${toolList}` : ""}.`;
+
+        return res.status(200).json({
+          unread_count: totalUnread ?? signals.length,
+          signals,
+          narrative_hint,
+        });
       }
 
       default:

@@ -27,6 +27,7 @@ import {
   Menu,
   Bot,
   BarChart3,
+  Bell,
   Code2,
   Terminal,
   ChevronRight,
@@ -44,11 +45,12 @@ import {
   ScrollText,
 } from "lucide-react";
 
-function SurfaceLink({ path, label, icon: Icon, onClick }: {
+function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
   path: string;
   label: string;
   icon: typeof User;
   onClick?: () => void;
+  badge?: number;
 }) {
   return (
     <NavLink
@@ -63,7 +65,12 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
       }
     >
       <Icon className="h-4 w-4 shrink-0" />
-      <span>{label}</span>
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -184,6 +191,7 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [signalsUnread, setSignalsUnread] = useState(0);
 
   useEffect(() => {
     const token = session?.access_token;
@@ -198,6 +206,29 @@ export default function AdminShell() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) return;
+    let cancelled = false;
+
+    async function fetchUnread() {
+      try {
+        const res = await fetch("/api/memory-admin?action=list_signals", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 100, unread_only: true }),
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setSignalsUnread((body.signals ?? []).length);
+      } catch {}
+    }
+
+    void fetchUnread();
+    const id = setInterval(fetchUnread, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [session?.access_token]);
 
   async function handleLogout() {
@@ -216,6 +247,8 @@ export default function AdminShell() {
         <SurfaceLink path="/admin/agents"       label="Agents"        icon={Bot}          onClick={onLinkClick} />
         <SurfaceLink path="/admin/crews"        label="Crews"         icon={UsersIcon}    onClick={onLinkClick} />
         <SurfaceLink path="/admin/testpass"     label="TestPass"      icon={FlaskConical} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
+        {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
         <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
         {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}
       </>
