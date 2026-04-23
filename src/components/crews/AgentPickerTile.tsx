@@ -1,5 +1,5 @@
-import type { MockAgent } from "@/types/crews";
-import { Plus, X } from "lucide-react";
+import type { Agent } from "@/types/crews";
+import { Plus, X, Copy } from "lucide-react";
 
 const COLOUR_MAP: Record<string, string> = {
   "crew-exec":     "#61C1C4",
@@ -12,15 +12,17 @@ const COLOUR_MAP: Record<string, string> = {
 };
 
 interface AgentPickerTileProps {
-  agent: MockAgent;
+  agent: Agent;
   mode: "pick" | "selected";
-  onAdd?: (agent: MockAgent) => void;
-  onRemove?: (agent: MockAgent) => void;
+  onAdd?: (agent: Agent) => void;
+  onRemove?: (agent: Agent) => void;
+  onClone?: (agent: Agent) => void;
   disabled?: boolean;
+  cloning?: boolean;
 }
 
 export default function AgentPickerTile({
-  agent, mode, onAdd, onRemove, disabled,
+  agent, mode, onAdd, onRemove, onClone, disabled, cloning,
 }: AgentPickerTileProps) {
   const colour = COLOUR_MAP[agent.colour_token] ?? "#61C1C4";
   return (
@@ -41,6 +43,17 @@ export default function AgentPickerTile({
         <p className="truncate text-xs font-medium text-[#ddd]">{agent.name}</p>
         <p className="truncate text-[10px] text-[#666]">{agent.hook}</p>
       </div>
+      {mode === "pick" && agent.is_system && onClone && (
+        <button
+          type="button"
+          onClick={() => onClone(agent)}
+          disabled={cloning}
+          className="shrink-0 rounded-md p-1 text-[#555] transition-colors hover:bg-amber-500/10 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+          title="Clone to edit"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+      )}
       {mode === "pick" && onAdd && (
         <button
           type="button"

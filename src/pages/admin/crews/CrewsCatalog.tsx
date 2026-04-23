@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CrewsNav from "@/components/crews/CrewsNav";
 import TemplateCard from "@/components/crews/TemplateCard";
 import { CREW_TEMPLATES } from "@/data/mockCrewTemplates";
 import { STARTER_CREWS } from "@/data/starterCrews";
-import { MOCK_AGENTS } from "@/data/mockAgents";
-import type { CrewTemplate } from "@/types/crews";
+import type { CrewTemplate, Agent } from "@/types/crews";
+import { useSession } from "@/lib/auth";
 import { Play, Sparkles } from "lucide-react";
 
 const COLOUR_MAP: Record<string, string> = {
@@ -20,7 +20,27 @@ const COLOUR_MAP: Record<string, string> = {
 
 export default function CrewsCatalog() {
   const navigate = useNavigate();
+  const { session } = useSession();
   const [copied, setCopied] = useState<string | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+
+  const authHeader = useMemo(() => {
+    if (!session) return null;
+    return { Authorization: `Bearer ${session.access_token}` };
+  }, [session]);
+
+  const loadAgents = useCallback(async () => {
+    if (!authHeader) return;
+    try {
+      const res = await fetch("/api/memory-admin?action=list_agents", { headers: authHeader });
+      const body = await res.json() as { data?: Agent[] };
+      if (body.data) setAgents(body.data);
+    } catch {
+      // silent - starter crew badges degrade gracefully
+    }
+  }, [authHeader]);
+
+  useEffect(() => { void loadAgents(); }, [loadAgents]);
 
   function handleSelectTemplate(template: CrewTemplate) {
     navigate(`/admin/crews/new?template=${template.slug}`);
@@ -50,9 +70,9 @@ export default function CrewsCatalog() {
         <div className="grid gap-4 sm:grid-cols-2">
           {STARTER_CREWS.map((crew) => {
             const template = CREW_TEMPLATES.find((t) => t.slug === crew.template_slug);
-            const agents = crew.agent_slugs
-              .map((slug) => MOCK_AGENTS.find((a) => a.slug === slug))
-              .filter(Boolean) as typeof MOCK_AGENTS;
+            const crewAgents = crew.agent_slugs
+              .map((slug) => agents.find((a) => a.slug === slug))
+              .filter(Boolean) as Agent[];
             return (
               <div
                 key={crew.id}
@@ -61,7 +81,7 @@ export default function CrewsCatalog() {
                 <h3 className="mb-1 text-sm font-semibold text-[#eee]">{crew.name}</h3>
                 <p className="mb-3 text-xs text-[#777]">{crew.description}</p>
                 <div className="mb-3 flex flex-wrap gap-1.5">
-                  {agents.map((agent) => {
+                  {crewAgents.map((agent) => {
                     const colour = COLOUR_MAP[agent.colour_token] ?? "#61C1C4";
                     return (
                       <span
