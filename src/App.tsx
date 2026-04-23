@@ -53,6 +53,9 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics.tsx";
 import AdminCodebase from "./pages/admin/AdminCodebase.tsx";
 import AdminOrchestratorPage from "./pages/admin/AdminOrchestrator.tsx";
 import AdminTestPass from "./pages/admin/AdminTestPass.tsx";
+import TestPassCatalog from "./pages/admin/testpass/TestPassCatalog.tsx";
+import NewRunWizard from "./pages/admin/testpass/NewRunWizard.tsx";
+import RunDetail from "./pages/admin/testpass/RunDetail.tsx";
 import CrewsCatalog from "./pages/admin/crews/CrewsCatalog.tsx";
 import CrewComposer from "./pages/admin/crews/CrewComposer.tsx";
 import CrewsRuns from "./pages/admin/crews/CrewsRuns.tsx";
@@ -126,7 +129,10 @@ const App = () => (
             <Route path="analytics"      element={<AdminAnalytics />} />
             <Route path="codebase"       element={<AdminCodebase />} />
             <Route path="orchestrator"   element={<AdminOrchestratorPage />} />
-            <Route path="testpass"       element={<AdminTestPass />} />
+            <Route path="testpass"              element={<TestPassCatalog />} />
+            <Route path="testpass/new"          element={<NewRunWizard />} />
+            <Route path="testpass/runs/:id"     element={<RunDetail />} />
+            <Route path="testpass/packs/:id/edit" element={<AdminTestPass />} />
             <Route path="crews"          element={<CrewsCatalog />} />
             <Route path="crews/new"      element={<CrewComposer />} />
             <Route path="crews/:id/edit" element={<CrewComposer />} />

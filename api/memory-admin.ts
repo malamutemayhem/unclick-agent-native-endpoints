@@ -5037,6 +5037,115 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ data: data ?? [] });
       }
 
+      // ─── TestPass run management (Phase 9A visual UI) ─────────────────────
+
+      case "list_testpass_runs": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const limit = Math.min(Number(req.query.limit ?? req.body?.limit ?? 50), 100);
+        const targetFilter = (req.query.target ?? req.body?.target ?? "") as string;
+        let q = supabase
+          .from("testpass_runs")
+          .select("id, pack_id, pack_name, target, profile, started_at, completed_at, status, verdict_summary")
+          .eq("actor_user_id", user.id)
+          .order("started_at", { ascending: false })
+          .limit(limit);
+        if (targetFilter) q = q.ilike("target->>url", `%${targetFilter}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ runs: data ?? [] });
+      }
+
+      case "list_testpass_packs": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("testpass_packs")
+          .select("id, slug, name, version, description, yaml")
+          .or(`owner_user_id.is.null,owner_user_id.eq.${user.id}`)
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        const packs = (data ?? []).map((p) => {
+          const yamlData = (p.yaml ?? {}) as Record<string, unknown>;
+          const items = Array.isArray(yamlData.items) ? yamlData.items : [];
+          const category = (yamlData.category as string | undefined) ?? "general";
+          return {
+            id: p.id,
+            slug: p.slug,
+            name: p.name,
+            description: p.description,
+            check_count: items.length,
+            category,
+            is_system: !p.yaml || Object.keys(p.yaml as object).length === 0,
+          };
+        });
+        return res.status(200).json({ packs });
+      }
+
+      case "get_testpass_run": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const runId = (req.query.run_id ?? req.body?.run_id ?? "") as string;
+        if (!runId) return res.status(400).json({ error: "run_id required" });
+        const [runRes, itemsRes] = await Promise.all([
+          supabase
+            .from("testpass_runs")
+            .select("*")
+            .eq("id", runId)
+            .eq("actor_user_id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("testpass_items")
+            .select("*")
+            .eq("run_id", runId)
+            .order("created_at", { ascending: true }),
+        ]);
+        if (runRes.error) throw runRes.error;
+        if (!runRes.data) return res.status(404).json({ error: "Run not found" });
+        if (itemsRes.error) throw itemsRes.error;
+        return res.status(200).json({ run: runRes.data, items: itemsRes.data ?? [] });
+      }
+
+      case "start_testpass_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const { pack_id, target, depth } = (req.body ?? {}) as {
+          pack_id?: string;
+          target?: string;
+          depth?: string;
+        };
+        if (!pack_id) return res.status(400).json({ error: "pack_id required" });
+        if (!target) return res.status(400).json({ error: "target required" });
+        const profile = (["smoke", "standard", "deep"].includes(depth ?? "") ? depth : "standard") as string;
+        const { data: pack } = await supabase
+          .from("testpass_packs")
+          .select("slug, name")
+          .eq("id", pack_id)
+          .maybeSingle();
+        if (!pack) return res.status(404).json({ error: "Pack not found" });
+        const host = req.headers.host ?? "localhost:3000";
+        const proto = host.includes("localhost") ? "http" : "https";
+        const engineRes = await fetch(`${proto}://${host}/api/testpass`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: req.headers.authorization ?? "",
+          },
+          body: JSON.stringify({
+            action: "run",
+            target_url: target,
+            profile,
+            pack_slug: pack.slug,
+            pack_id,
+            pack_name: pack.name,
+          }),
+        });
+        const engineBody = (await engineRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!engineRes.ok) return res.status(engineRes.status).json(engineBody);
+        return res.status(200).json({ run_id: engineBody.run_id });
+      }
+
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
