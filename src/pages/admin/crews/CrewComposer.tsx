@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import CrewsNav from "@/components/crews/CrewsNav";
 import AgentPickerTile from "@/components/crews/AgentPickerTile";
 import { AGENT_CATEGORIES } from "@/data/mockAgents";
 import { CREW_TEMPLATES } from "@/data/mockCrewTemplates";
 import type { Agent } from "@/types/crews";
 import { useSession } from "@/lib/auth";
-import { Search, Save, Users } from "lucide-react";
+import { Search, Save, Users, Play } from "lucide-react";
 
 const MAX_HATS = 9;
 const MIN_HATS = 3;
@@ -14,6 +14,7 @@ const MIN_HATS = 3;
 export default function CrewComposer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { id: editCrewId } = useParams<{ id?: string }>();
   const { session } = useSession();
   const initialTemplate = searchParams.get("template") ?? CREW_TEMPLATES[0].slug;
 
@@ -22,9 +23,12 @@ export default function CrewComposer() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [crewName, setCrewName] = useState("");
+  const [taskPrompt, setTaskPrompt] = useState("");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [savedCrewId, setSavedCrewId] = useState<string | null>(editCrewId ?? null);
   const [cloning, setCloning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,8 +95,8 @@ export default function CrewComposer() {
     }
   }
 
-  async function handleSave() {
-    if (!authHeader || selected.length < MIN_HATS || !crewName.trim()) return;
+  async function saveCrew(): Promise<string | null> {
+    if (!authHeader || selected.length < MIN_HATS || !crewName.trim()) return null;
     setSaving(true);
     setError(null);
     try {
@@ -105,16 +109,52 @@ export default function CrewComposer() {
           agent_ids: selected.map((a) => a.id),
         }),
       });
-      const body = await res.json() as { data?: { id: string }; error?: string };
+      const body = (await res.json()) as { data?: { id: string }; error?: string };
       if (body.data?.id) {
-        navigate(`/admin/crews/${body.data.id}`);
-      } else {
-        setError(body.error ?? "Save failed.");
+        setSavedCrewId(body.data.id);
+        return body.data.id;
       }
+      setError(body.error ?? "Save failed.");
+      return null;
     } catch {
       setError("Save failed.");
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    const id = await saveCrew();
+    if (id) navigate(`/admin/crews/${id}`);
+  }
+
+  async function handleRun() {
+    if (!authHeader) return;
+    if (!taskPrompt.trim()) {
+      setError("Enter a task prompt before running.");
+      return;
+    }
+    const crewId = savedCrewId ?? editCrewId ?? (await saveCrew());
+    if (!crewId) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=start_crew_run", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ crew_id: crewId, task_prompt: taskPrompt.trim() }),
+      });
+      const body = (await res.json()) as { run_id?: string; error?: string };
+      if (body.run_id) {
+        navigate(`/admin/crews/runs/${body.run_id}`);
+      } else {
+        setError(body.error ?? "Failed to start run.");
+      }
+    } catch {
+      setError("Failed to start run.");
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -262,18 +302,37 @@ export default function CrewComposer() {
             </div>
           )}
 
-          <div className="mt-4 border-t border-white/[0.06] pt-4">
+          <div className="mt-4 border-t border-white/[0.06] pt-4 space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-[#aaa]">Task prompt</span>
+              <textarea
+                value={taskPrompt}
+                onChange={(e) => setTaskPrompt(e.target.value)}
+                placeholder="What do you want the crew to decide or analyse?"
+                rows={3}
+                className="w-full resize-none rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-[#eee] placeholder-[#444] focus:border-[#61C1C4]/40 focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleRun()}
+              disabled={!canSave || running || saving}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#61C1C4] py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Play className="h-4 w-4" />
+              {running ? "Starting..." : "Run this crew"}
+            </button>
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={!canSave || saving}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#61C1C4] py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!canSave || saving || running}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.03] py-2 text-sm font-semibold text-[#ccc] transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Save className="h-4 w-4" />
               {saving ? "Saving..." : "Save crew"}
             </button>
             {!canSave && selected.length > 0 && (
-              <p className="mt-1.5 text-center text-[10px] text-[#555]">
+              <p className="text-center text-[10px] text-[#555]">
                 {!crewName.trim()
                   ? "Enter a crew name to save."
                   : selected.length < MIN_HATS

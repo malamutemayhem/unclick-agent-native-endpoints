@@ -57,6 +57,7 @@ import CrewsCatalog from "./pages/admin/crews/CrewsCatalog.tsx";
 import CrewComposer from "./pages/admin/crews/CrewComposer.tsx";
 import CrewsRuns from "./pages/admin/crews/CrewsRuns.tsx";
 import CrewsSettings from "./pages/admin/crews/CrewsSettings.tsx";
+import CrewRun from "./pages/admin/crews/CrewRun.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 import { initPostHog } from "./lib/posthog.ts";
 
@@ -129,8 +130,9 @@ const App = () => (
             <Route path="crews"          element={<CrewsCatalog />} />
             <Route path="crews/new"      element={<CrewComposer />} />
             <Route path="crews/:id/edit" element={<CrewComposer />} />
-            <Route path="crews/runs"     element={<CrewsRuns />} />
-            <Route path="crews/settings" element={<CrewsSettings />} />
+            <Route path="crews/runs"          element={<CrewsRuns />} />
+            <Route path="crews/runs/:runId"  element={<CrewRun />} />
+            <Route path="crews/settings"      element={<CrewsSettings />} />
           </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />
