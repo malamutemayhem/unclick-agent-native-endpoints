@@ -41,9 +41,9 @@ export default function VantaWavesBackground({ children }: Props) {
         scaleMobile: 1.00,
         color: 0x0a0a0a,
         shininess: 11.00,
-        waveHeight: 8.00,
+        waveHeight: 5.00,
         waveSpeed: 0.65,
-        zoom: 1.37,
+        zoom: 0.85,
         THREE,
       });
     });
