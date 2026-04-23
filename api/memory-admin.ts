@@ -3430,25 +3430,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "delete_account": {
         // Self-serve account deletion. The signed-in user is the ONLY
-        // user that can trigger this - there is no admin-impersonation
-        // path and no body / query param that targets another user.
+        // user that can trigger this - no admin-impersonation path,
+        // no body/query param targeting another user.
         //
         // Order of operations:
-        //
-        //   1. Audit the attempt to backstagepass_audit BEFORE any
-        //      delete fires, so partial failures still leave a record.
-        //   2. Delete rows keyed by api_key_hash across the mc_* /
-        //      keychain tables (no FK to auth.users, so these do NOT
-        //      cascade when the auth row is removed).
-        //   3. Call supabase.auth.admin.deleteUser() which removes the
-        //      auth.users row and cascades to any table with a FK to
-        //      it (profiles, customers, accounts, assets, jobs, etc.
-        //      all use ON DELETE CASCADE per their migrations).
-        //
-        // If step 3 fails the user still has their auth identity but
-        // their api_key_hash data is gone - better than the other way
-        // round. Step 2 failures are swallowed so we always reach step
-        // 3 and at least detach the auth identity.
+        //   1. Resolve user + api_key_hash (idempotency: return 200 if
+        //      already deleted).
+        //   2. Write to account_deletions_audit BEFORE any destructive
+        //      step so partial failures leave a trail.
+        //   3. Delete all api_key_hash-scoped rows in dependency order
+        //      (children before parents). Collect per-table row counts
+        //      and errors rather than silently swallowing.
+        //   4. Call auth.admin.deleteUser() to remove the auth.users row
+        //      and cascade to FK-linked tables (ON DELETE CASCADE).
+        //   5. Clean up the now-orphaned api_keys row (user_id FK is
+        //      ON DELETE SET NULL so it survives step 4).
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
         if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -3460,8 +3456,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .maybeSingle()).data as { key_hash?: string | null } | null;
         const apiKeyHash = keyRow?.key_hash ?? null;
 
-        // Audit BEFORE any destructive op so even a partial failure
-        // leaves a trail Chris can inspect.
+        // Idempotency: if a previous deletion removed the api_keys link
+        // already, return a benign response without re-attempting.
+        if (!keyRow && !apiKeyHash) {
+          const { error: idempotentAuthErr } = await supabase.auth.admin.deleteUser(user.id);
+          if (idempotentAuthErr && idempotentAuthErr.message?.toLowerCase().includes("not found")) {
+            return res.status(200).json({ success: true, already_deleted: true });
+          }
+        }
+
+        // Pre-deletion audit record (captured before any delete fires).
+        try {
+          await supabase.from("account_deletions_audit").insert({
+            api_key_hash:  apiKeyHash,
+            email:         user.email,
+            reason:        "user_self_delete",
+            tables_affected: [],
+            rows_deleted:  {},
+          });
+        } catch { /* audit failure must not block deletion */ }
+
+        // Also write to backstagepass_audit for backward compatibility.
         try {
           await supabase.from("backstagepass_audit").insert({
             api_key_hash: apiKeyHash,
@@ -3471,56 +3486,98 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             user_agent:   clientUa(req),
             metadata:     { user_id: user.id, email: user.email },
           });
-        } catch {
-          // Do not block the delete if audit write fails.
-        }
+        } catch { /* swallow */ }
 
-        // Delete api_key_hash-scoped rows. These tables do not carry a
-        // FK to auth.users so auth.admin.deleteUser cascade will not
-        // reach them. Swallow individual table errors so one bad drop
-        // does not leave the account half-alive.
-        if (apiKeyHash) {
-          const hashTables = [
-            "mc_business_context",
-            "mc_code_dumps",
-            "mc_conversation_log",
-            "mc_extracted_facts",
-            "mc_knowledge_library",
-            "mc_knowledge_library_history",
-            "mc_session_summaries",
-            "memory_configs",
-            "memory_devices",
-            "tenant_settings",
-            "tool_detections",
-            "tool_usage_events",
-            "user_credentials",
-            "platform_credentials",
-            "agent_trace",
-          ];
-          for (const table of hashTables) {
-            try {
-              await supabase.from(table).delete().eq("api_key_hash", apiKeyHash);
-            } catch { /* per-table swallow */ }
-          }
-          // metering_events uses the column name `key_hash`, not `api_key_hash`.
+        // Per-step tracking. Errors are collected, not thrown, so we
+        // always reach auth.admin.deleteUser regardless of table errors.
+        const rowsDeleted: Record<string, number> = {};
+        const stepErrors: Record<string, string>  = {};
+
+        async function delByHash(table: string, col = "api_key_hash") {
+          if (!apiKeyHash) return;
           try {
-            await supabase.from("metering_events").delete().eq("key_hash", apiKeyHash);
-          } catch { /* swallow */ }
+            const { count, error } = await supabase
+              .from(table)
+              .delete({ count: "exact" })
+              .eq(col, apiKeyHash);
+            rowsDeleted[table] = count ?? 0;
+            if (error) stepErrors[table] = error.message;
+          } catch (e) {
+            stepErrors[table] = String(e);
+            rowsDeleted[table] = 0;
+          }
         }
 
-        // Finally detach the auth identity. Supabase admin API cleans
-        // up auth.identities and any outstanding session tokens.
-        // Cascade FKs handle profiles / accounts / customers / jobs /
-        // etc. Any table added in the future with a user_id FK and
-        // ON DELETE CASCADE gets cleaned automatically.
+        if (apiKeyHash) {
+          // Delete children before parents to respect FK order.
+          // mc_run_messages -> mc_crew_runs -> mc_crews
+          await delByHash("mc_run_messages");
+          await delByHash("mc_crew_runs");
+          await delByHash("mc_crews");
+          // mc_facts_audit cascades from mc_extracted_facts (ON DELETE CASCADE),
+          // but delete explicitly for clear row accounting.
+          await delByHash("mc_facts_audit");
+          await delByHash("mc_extracted_facts");
+          await delByHash("mc_session_summaries");
+          await delByHash("mc_conversation_log");
+          await delByHash("mc_code_dumps");
+          await delByHash("mc_business_context");
+          await delByHash("mc_knowledge_library");
+          await delByHash("mc_knowledge_library_history");
+          await delByHash("mc_canonical_docs");
+          // User-specific agents only (is_system = false). System agents are
+          // shared across tenants and must not be deleted here.
+          try {
+            const { count, error } = await supabase
+              .from("mc_agents")
+              .delete({ count: "exact" })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("is_system", false);
+            rowsDeleted["mc_agents"] = count ?? 0;
+            if (error) stepErrors["mc_agents"] = error.message;
+          } catch (e) {
+            stepErrors["mc_agents"] = String(e);
+            rowsDeleted["mc_agents"] = 0;
+          }
+          // Config / credential layer.
+          await delByHash("memory_configs");
+          await delByHash("memory_devices");
+          await delByHash("tenant_settings");
+          await delByHash("tool_detections");
+          await delByHash("tool_usage_events");
+          await delByHash("user_credentials");
+          await delByHash("platform_credentials");
+          await delByHash("agent_trace");
+          // metering_events uses "key_hash", not "api_key_hash".
+          await delByHash("metering_events", "key_hash");
+        }
+
+        // Remove the auth.users row. auth.admin.deleteUser requires the
+        // service_role key (SUPABASE_SERVICE_ROLE_KEY must be set).
         const { error: authErr } = await supabase.auth.admin.deleteUser(user.id);
         if (authErr) {
           return res.status(500).json({
-            error: `auth.users delete failed: ${authErr.message}. api_key_hash data was already purged.`,
+            error:        `auth.users delete failed: ${authErr.message}`,
+            step:         "auth_user",
+            step_errors:  stepErrors,
+            rows_deleted: rowsDeleted,
           });
         }
 
-        return res.status(200).json({ success: true });
+        // api_keys.user_id has ON DELETE SET NULL so the row survives
+        // auth deletion. Clean it up now that the cascade is done.
+        if (apiKeyHash) {
+          try {
+            await supabase.from("api_keys").delete().eq("key_hash", apiKeyHash);
+          } catch { /* best effort */ }
+        }
+
+        const hasPartialErrors = Object.keys(stepErrors).length > 0;
+        return res.status(200).json({
+          success:      true,
+          rows_deleted: rowsDeleted,
+          ...(hasPartialErrors && { partial: true, step_errors: stepErrors }),
+        });
       }
 
       case "admin_tools": {
