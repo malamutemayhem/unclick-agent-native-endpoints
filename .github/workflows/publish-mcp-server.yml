@@ -1,5 +1,11 @@
 name: Publish MCP server
 
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
 # Auto-publishes @unclick/mcp-server to npm whenever files under
 # packages/mcp-server/ change on main. Bumps the patch version, pushes the
 # version bump commit back, then publishes. Skips if the last commit is
