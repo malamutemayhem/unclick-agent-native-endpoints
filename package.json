@@ -88,6 +88,7 @@
     "three": "^0.134.0",
     "vanta": "^0.5.24",
     "vaul": "^0.9.9",
+    "web-push": "^3.6.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -100,6 +101,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
+    "@types/web-push": "^3.6.4",
     "@vercel/node": "^3.2.29",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",

@@ -5315,10 +5315,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "phone_push_enabled",
           "telegram_enabled",
           "telegram_chat_id",
+          "browser_push_enabled",
+          "push_subscription",
+          "webhook_url",
+          "webhook_secret",
           "quiet_hours_start",
           "quiet_hours_end",
           "min_severity",
           "per_tool_overrides",
+          "routing_rules",
         ];
         const patch: Record<string, unknown> = {
           api_key_hash: apiKeyHash,
