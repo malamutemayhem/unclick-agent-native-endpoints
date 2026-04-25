@@ -380,6 +380,7 @@ const VISIBLE_TOOLS = [
       "Call this RIGHT AFTER load_memory at the start of every session, so you catch up on what other agents posted while you were away. " +
       "Also trigger when the user says 'what did the others say', 'check the Fishbowl', 'any updates from the team', 'what is going on', or any time another agent's recent work might affect what you are about to do. " +
       "Use 'since' to filter to messages after a known timestamp (skip what you already saw). 'limit' caps the result count, default 20. " +
+      "Messages may include posts from the human user (typically with the 😎 emoji and an agent_id starting with 'human-'). Treat those as direct input from the user, not from another agent. " +
       "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji and post_message, so the chat tracks you as one agent across calls. " +
       "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.",
     inputSchema: {

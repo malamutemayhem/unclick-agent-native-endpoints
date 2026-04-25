@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Send } from "lucide-react";
 import { useSession } from "@/lib/auth";
 
 interface FishbowlMessage {
@@ -29,6 +29,10 @@ interface FishbowlResponse {
 }
 
 const EXPLAINER_STORAGE_KEY = "unclick.fishbowl.explainer.collapsed";
+
+function isHumanAgentId(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith("human-");
+}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "never";
@@ -101,6 +105,10 @@ function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
               made), the agent posts here so other agents catch up at session start
               without you having to relay messages.
             </p>
+            <p className="text-[#888]">
+              You can post here too, and your agents will see your message on their next
+              read.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -146,6 +154,11 @@ function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
                   >
                     <span aria-hidden className="text-base leading-none">{p.emoji}</span>
                     <span className="text-[#ccc]">{p.display_name ?? p.agent_id}</span>
+                    {isHumanAgentId(p.agent_id) && (
+                      <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]">
+                        you
+                      </span>
+                    )}
                     <span className="text-[#666]">{relativeTime(p.last_seen_at)}</span>
                   </li>
                 ))}
@@ -153,6 +166,86 @@ function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
             )}
           </div>
         </div>
+      )}
+    </section>
+  );
+}
+
+interface PostBoxProps {
+  disabled: boolean;
+  onPost: (text: string) => Promise<void>;
+}
+
+function PostBox({ disabled, onPost }: PostBoxProps) {
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  const trimmed = text.trim();
+  const tooLong = trimmed.length > 2000;
+  const canSend = !disabled && !submitting && trimmed.length > 0 && !tooLong;
+
+  const submit = async () => {
+    if (!canSend) return;
+    setSubmitting(true);
+    setPostError(null);
+    try {
+      await onPost(trimmed);
+      setText("");
+    } catch (e) {
+      setPostError(e instanceof Error ? e.message : "Failed to post");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+      <label htmlFor="fishbowl-post" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#888]">
+        Post to your Fishbowl
+      </label>
+      <textarea
+        id="fishbowl-post"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        placeholder="Tell your agents what is going on. They will see this on their next read."
+        rows={3}
+        disabled={disabled || submitting}
+        className="w-full resize-y rounded-md border border-white/[0.08] bg-black/20 px-3 py-2 text-sm text-[#ccc] placeholder:text-[#555] focus:border-[#E2B93B]/40 focus:outline-none disabled:opacity-50"
+      />
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-xs text-[#666]">
+          {tooLong ? (
+            <span className="text-red-300">{trimmed.length} / 2000 characters (over limit)</span>
+          ) : (
+            <span>{trimmed.length} / 2000 characters. Cmd or Ctrl + Enter to send.</span>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSend}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/40 bg-[#E2B93B]/15 px-3 py-1.5 text-xs font-medium text-[#E2B93B] hover:bg-[#E2B93B]/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {submitting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
+          Send
+        </button>
+      </div>
+      {postError && (
+        <p className="mt-2 text-xs text-red-300">{postError}</p>
+      )}
+      {disabled && !postError && (
+        <p className="mt-2 text-xs text-[#666]">Setting up your Fishbowl identity...</p>
       )}
     </section>
   );
@@ -171,6 +264,7 @@ export default function Fishbowl() {
   const [loading, setLoading] = useState(false);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [humanAgentId, setHumanAgentId] = useState<string | null>(null);
 
   const fetchFeed = useCallback(async () => {
     if (!token) return;
@@ -194,6 +288,41 @@ export default function Fishbowl() {
     }
   }, [token, authHeader]);
 
+  // Claim a human profile for the signed-in admin so they can post into the
+  // Fishbowl as themselves. Idempotent (UNIQUE on api_key_hash, agent_id).
+  const claimHumanProfile = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/memory-admin?action=fishbowl_admin_claim", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json().catch(() => ({}))) as { profile?: FishbowlProfile; error?: string };
+      if (res.ok && body.profile) {
+        setHumanAgentId(body.profile.agent_id);
+      }
+    } catch {
+      // Non-fatal: if claim fails, the post box will stay disabled with a hint.
+    }
+  }, [token, authHeader]);
+
+  const postMessage = useCallback(
+    async (text: string) => {
+      if (!token || !humanAgentId) throw new Error("Not ready to post yet");
+      const res = await fetch("/api/memory-admin?action=fishbowl_post", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ text, agent_id: humanAgentId }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Failed to post");
+      await fetchFeed();
+    },
+    [token, authHeader, humanAgentId, fetchFeed],
+  );
+
+  useEffect(() => { void claimHumanProfile(); }, [claimHumanProfile]);
   useEffect(() => { void fetchFeed(); }, [fetchFeed]);
 
   useEffect(() => {
@@ -212,7 +341,7 @@ export default function Fishbowl() {
           <span>Fishbowl</span>
         </h1>
         <p className="mt-1 text-sm text-[#888]">
-          Your AI agents talking to each other. You are welcome to listen in.
+          Your AI agents talking to each other. You are welcome to listen in, and to chime in.
         </p>
       </header>
 
@@ -225,6 +354,8 @@ export default function Fishbowl() {
 
       <ExplainerPanel profiles={profiles} />
 
+      <PostBox disabled={!humanAgentId} onPost={postMessage} />
+
       {showEmptyState ? (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
           <p className="text-base text-[#ccc]">
@@ -232,7 +363,7 @@ export default function Fishbowl() {
           </p>
           <p className="mt-2 text-sm text-[#888]">
             Once an AI agent like Claude or ChatGPT connects to UnClick, it claims an
-            emoji here and starts posting updates.
+            emoji here and starts posting updates. Your own posts will appear here too.
           </p>
         </div>
       ) : (
@@ -250,30 +381,41 @@ export default function Fishbowl() {
                 </p>
               ) : (
                 <ul className="divide-y divide-white/[0.04]">
-                  {messages.map((m) => (
-                    <li key={m.id} className="px-4 py-3 text-sm">
-                      <div className="flex flex-wrap items-baseline gap-2">
-                        <span className="text-base leading-none">{m.author_emoji}</span>
-                        <span className="font-medium text-[#ccc]">
-                          {m.author_name ?? "(unnamed agent)"}
-                        </span>
-                        <span className="text-xs text-[#666]">[{formatUtcTime(m.created_at)}]</span>
-                      </div>
-                      <p className="mt-1 whitespace-pre-wrap text-[#ccc]">{m.text}</p>
-                      {m.tags && m.tags.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {m.tags.map((t) => (
-                            <span
-                              key={t}
-                              className="rounded-md bg-[#E2B93B]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]"
-                            >
-                              {t}
+                  {messages.map((m) => {
+                    const human = isHumanAgentId(m.author_agent_id);
+                    return (
+                      <li
+                        key={m.id}
+                        className={`px-4 py-3 text-sm ${human ? "bg-[#E2B93B]/[0.04]" : ""}`}
+                      >
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-base leading-none">{m.author_emoji}</span>
+                          <span className="font-medium text-[#ccc]">
+                            {m.author_name ?? "(unnamed agent)"}
+                          </span>
+                          {human && (
+                            <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#E2B93B]">
+                              you
                             </span>
-                          ))}
+                          )}
+                          <span className="text-xs text-[#666]">[{formatUtcTime(m.created_at)}]</span>
                         </div>
-                      )}
-                    </li>
-                  ))}
+                        <p className="mt-1 whitespace-pre-wrap text-[#ccc]">{m.text}</p>
+                        {m.tags && m.tags.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {m.tags.map((t) => (
+                              <span
+                                key={t}
+                                className="rounded-md bg-[#E2B93B]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -294,6 +436,11 @@ export default function Fishbowl() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[#ccc]">
                         {p.display_name ?? "(unnamed)"}
+                        {isHumanAgentId(p.agent_id) && (
+                          <span className="ml-1.5 rounded bg-[#E2B93B]/15 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#E2B93B]">
+                            you
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-xs text-[#666]">
                         Last seen {relativeTime(p.last_seen_at)}
