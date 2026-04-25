@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Send } from "lucide-react";
 import { useSession } from "@/lib/auth";
+import FishbowlTodos from "./FishbowlTodos";
+import FishbowlIdeas from "./FishbowlIdeas";
 
 interface FishbowlMessage {
   id: string;
@@ -542,6 +544,20 @@ export default function Fishbowl() {
       <NowPlayingStrip profiles={profiles} />
 
       <PostBox disabled={!humanAgentId} onPost={postMessage} />
+
+      <FishbowlTodos
+        token={token}
+        authHeader={authHeader}
+        agentId={humanAgentId}
+        profiles={profiles}
+      />
+
+      <FishbowlIdeas
+        token={token}
+        authHeader={authHeader}
+        agentId={humanAgentId}
+        profiles={profiles}
+      />
 
       {showEmptyState ? (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
