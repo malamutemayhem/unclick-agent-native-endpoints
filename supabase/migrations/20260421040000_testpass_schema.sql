@@ -82,40 +82,107 @@ alter table testpass_runs     enable row level security;
 alter table testpass_items    enable row level security;
 alter table testpass_evidence enable row level security;
 
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a DO block that checks pg_policies first.
+-- Without these guards, re-running this migration errors with 42710.
+
 -- Packs: public readable if no owner (built-in); owner-scoped otherwise
-create policy "testpass_packs_read" on testpass_packs
-  for select using (owner_user_id is null or owner_user_id = auth.uid());
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_packs'
+      and policyname = 'testpass_packs_read'
+  ) then
+    create policy "testpass_packs_read" on testpass_packs
+      for select using (owner_user_id is null or owner_user_id = auth.uid());
+  end if;
+end $$;
 
-create policy "testpass_packs_insert" on testpass_packs
-  for insert with check (owner_user_id = auth.uid());
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_packs'
+      and policyname = 'testpass_packs_insert'
+  ) then
+    create policy "testpass_packs_insert" on testpass_packs
+      for insert with check (owner_user_id = auth.uid());
+  end if;
+end $$;
 
-create policy "testpass_packs_update" on testpass_packs
-  for update using (owner_user_id = auth.uid());
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_packs'
+      and policyname = 'testpass_packs_update'
+  ) then
+    create policy "testpass_packs_update" on testpass_packs
+      for update using (owner_user_id = auth.uid());
+  end if;
+end $$;
 
-create policy "testpass_packs_delete" on testpass_packs
-  for delete using (owner_user_id = auth.uid());
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_packs'
+      and policyname = 'testpass_packs_delete'
+  ) then
+    create policy "testpass_packs_delete" on testpass_packs
+      for delete using (owner_user_id = auth.uid());
+  end if;
+end $$;
 
 -- Runs: actor-scoped
-create policy "testpass_runs_all" on testpass_runs
-  for all using (actor_user_id = auth.uid());
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_runs'
+      and policyname = 'testpass_runs_all'
+  ) then
+    create policy "testpass_runs_all" on testpass_runs
+      for all using (actor_user_id = auth.uid());
+  end if;
+end $$;
 
 -- Items: scoped via run ownership
-create policy "testpass_items_all" on testpass_items
-  for all using (
-    exists (
-      select 1 from testpass_runs r
-      where r.id = testpass_items.run_id
-        and r.actor_user_id = auth.uid()
-    )
-  );
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_items'
+      and policyname = 'testpass_items_all'
+  ) then
+    create policy "testpass_items_all" on testpass_items
+      for all using (
+        exists (
+          select 1 from testpass_runs r
+          where r.id = testpass_items.run_id
+            and r.actor_user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
 
 -- Evidence: accessible if the related item's run belongs to the user
-create policy "testpass_evidence_all" on testpass_evidence
-  for all using (
-    exists (
-      select 1 from testpass_items i
-      join testpass_runs r on r.id = i.run_id
-      where i.evidence_ref = testpass_evidence.id
-        and r.actor_user_id = auth.uid()
-    )
-  );
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'testpass_evidence'
+      and policyname = 'testpass_evidence_all'
+  ) then
+    create policy "testpass_evidence_all" on testpass_evidence
+      for all using (
+        exists (
+          select 1 from testpass_items i
+          join testpass_runs r on r.id = i.run_id
+          where i.evidence_ref = testpass_evidence.id
+            and r.actor_user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
