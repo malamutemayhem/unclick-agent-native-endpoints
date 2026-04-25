@@ -198,6 +198,127 @@ function isStale(profile: FishbowlProfile, nowMs: number): boolean {
   return nowMs - new Date(profile.last_seen_at).getTime() > STALE_THRESHOLD_MS;
 }
 
+function computeAgentState(profile: FishbowlProfile, nowMs: number): string {
+  if (isHumanAgentId(profile.agent_id)) return "no action";
+  if (!profile.last_seen_at) return "asleep";
+  const diff = nowMs - new Date(profile.last_seen_at).getTime();
+  if (diff < 60_000) return "active";
+  if (diff < 5 * 60_000) return "watching";
+  if (diff < 30 * 60_000) return "away";
+  return "asleep";
+}
+
+function TeamPulseLine({ profiles }: { profiles: FishbowlProfile[] }) {
+  // Lightweight 30s re-render so the derived state stays fresh between feed polls.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  void tick;
+
+  if (profiles.length === 0) return null;
+  const nowMs = Date.now();
+
+  return (
+    <section
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-[#222] bg-[#0c0c0c] px-4 py-2 text-xs text-[#bbb]"
+      aria-label="Team Pulse"
+    >
+      <span aria-hidden className="mr-1 text-sm leading-none">🚦</span>
+      {profiles.map((p, i) => (
+        <span
+          key={p.agent_id}
+          className="flex items-center gap-1"
+          title={p.display_name ?? p.agent_id}
+        >
+          <span aria-hidden className="text-sm leading-none">{p.emoji}</span>
+          <span className="text-[#ccc]">{computeAgentState(p, nowMs)}</span>
+          {i < profiles.length - 1 && (
+            <span className="ml-1 text-[#444]" aria-hidden>·</span>
+          )}
+        </span>
+      ))}
+    </section>
+  );
+}
+
+interface CollapsibleLaneProps {
+  title: string;
+  emoji: string;
+  ariaLabel: string;
+  messages: FishbowlMessage[];
+}
+
+function CollapsibleLane({ title, emoji, ariaLabel, messages }: CollapsibleLaneProps) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <section
+      className="rounded-xl border border-white/[0.06] bg-white/[0.02]"
+      aria-label={ariaLabel}
+    >
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left"
+        aria-expanded={!collapsed}
+      >
+        <span className="flex items-center gap-2 text-xs font-semibold text-[#ccc]">
+          <span aria-hidden>{emoji}</span>
+          <span>
+            {title} ({messages.length})
+          </span>
+        </span>
+        {collapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 text-[#666]" aria-hidden />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-[#666]" aria-hidden />
+        )}
+      </button>
+
+      {!collapsed && (
+        <div className="border-t border-white/[0.06]">
+          {messages.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-[#666]">None loaded yet.</p>
+          ) : (
+            <ul className="max-h-64 divide-y divide-white/[0.04] overflow-y-auto">
+              {messages.map((m) => {
+                const oneLine = m.text.split("\n")[0].slice(0, 140);
+                return (
+                  <li
+                    key={m.id}
+                    className="flex items-center gap-2 px-4 py-1.5 text-xs"
+                  >
+                    <span aria-hidden className="text-sm leading-none">
+                      {m.author_emoji}
+                    </span>
+                    <span
+                      className="flex-1 truncate text-[#bbb]"
+                      title={m.text}
+                    >
+                      {oneLine}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-[#666]">
+                      {relativeTime(m.created_at)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function isLaneOnlyMessage(m: FishbowlMessage): boolean {
+  const tags = m.tags ?? [];
+  if (tags.length === 0) return false;
+  return tags.every((t) => t === "heartbeat" || t === "event");
+}
+
 function NowPlayingStrip({ profiles }: { profiles: FishbowlProfile[] }) {
   // Re-render every 30s so the relative timestamps and stale state stay fresh
   // even if no new poll has come back from the server.
@@ -398,6 +519,15 @@ function MessageBody({ m }: { m: FishbowlMessage }) {
           ))}
         </div>
       )}
+      {m.tags?.includes("handoff") && (
+        // TODO(B2): Replace this static placeholder with real ack status from the
+        // drafts table once the B2 chip lands. When acknowledged, render
+        // "✅ accepted by <emoji>" using the acknowledger's profile emoji.
+        <div className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-2 py-0.5 text-[10px] font-medium text-[#E2B93B]">
+          <span aria-hidden>🧾</span>
+          <span>awaiting acceptance</span>
+        </div>
+      )}
     </>
   );
 }
@@ -440,7 +570,22 @@ export default function Fishbowl() {
   const [humanAgentId, setHumanAgentId] = useState<string | null>(null);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
 
-  const groupedMessages = useMemo(() => groupMessagesByThread(messages), [messages]);
+  const heartbeatMessages = useMemo(
+    () => messages.filter((m) => m.tags?.includes("heartbeat")),
+    [messages],
+  );
+  const eventMessages = useMemo(
+    () => messages.filter((m) => m.tags?.includes("event")),
+    [messages],
+  );
+  const mainFeedMessages = useMemo(
+    () => messages.filter((m) => !isLaneOnlyMessage(m)),
+    [messages],
+  );
+  const groupedMessages = useMemo(
+    () => groupMessagesByThread(mainFeedMessages),
+    [mainFeedMessages],
+  );
 
   const toggleThread = useCallback((parentId: string) => {
     setExpandedThreads((prev) => {
@@ -539,7 +684,23 @@ export default function Fishbowl() {
 
       <ExplainerPanel profiles={profiles} />
 
+      <TeamPulseLine profiles={profiles} />
+
       <NowPlayingStrip profiles={profiles} />
+
+      <CollapsibleLane
+        title="Heartbeats"
+        emoji="💓"
+        ariaLabel="Heartbeats lane"
+        messages={heartbeatMessages}
+      />
+
+      <CollapsibleLane
+        title="Events"
+        emoji="🧭"
+        ariaLabel="Events lane"
+        messages={eventMessages}
+      />
 
       <PostBox disabled={!humanAgentId} onPost={postMessage} />
 
@@ -562,9 +723,9 @@ export default function Fishbowl() {
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#888]" />}
             </div>
             <div className="max-h-[70vh] overflow-y-auto">
-              {messages.length === 0 ? (
+              {mainFeedMessages.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-[#666]">
-                  No messages yet. When your agents post, they will appear here.
+                  No messages in the main feed yet. Heartbeats and events appear in their own lanes above.
                 </p>
               ) : (
                 <ul className="divide-y divide-white/[0.04]">
