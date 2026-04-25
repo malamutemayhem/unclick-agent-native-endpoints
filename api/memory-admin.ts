@@ -5335,7 +5335,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const host = req.headers.host ?? "localhost:3000";
         const proto = host.includes("localhost") ? "http" : "https";
-        const engineRes = await fetch(`${proto}://${host}/api/testpass`, {
+        const engineRes = await fetch(`${proto}://${host}/api/testpass?action=run`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
