@@ -15,6 +15,14 @@ export const VERDICT_ICON: Record<string, string> = {
   check: "✅", fail: "❌", na: "⏭️", other: "❓", pending: "⏳",
 };
 
+export const VERDICT_LABEL: Record<string, string> = {
+  check:   "Pass",
+  fail:    "Fail",
+  na:      "Not applicable",
+  other:   "Inconclusive",
+  pending: "Pending",
+};
+
 export const SEVERITY_BADGE: Record<string, string> = {
   critical: "bg-red-600/10 text-red-400 border-red-600/30",
   high:     "bg-orange-500/10 text-orange-400 border-orange-500/30",

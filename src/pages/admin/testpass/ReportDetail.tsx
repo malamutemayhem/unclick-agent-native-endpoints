@@ -34,9 +34,9 @@ const REPORT_STATUS_PILL: Record<string, string> = {
 };
 
 const REPORT_STATUS_LABEL: Record<string, string> = {
-  open:      "Open",
-  complete:  "Complete",
-  abandoned: "Abandoned",
+  open:      "In progress",
+  complete:  "All clear",
+  abandoned: "Cancelled",
 };
 
 export default function ReportDetail() {
@@ -126,10 +126,10 @@ export default function ReportDetail() {
       <div className="py-24 text-center">
         <p className="text-red-400 text-sm mb-4">{error ?? "Report not found."}</p>
         <button
-          onClick={() => navigate("/admin/testpass/reports")}
+          onClick={() => navigate("/admin/testpass")}
           className="text-sm text-[#888] hover:text-white"
         >
-          Back to Reports
+          Back to TestPass
         </button>
       </div>
     );
@@ -142,10 +142,10 @@ export default function ReportDetail() {
   return (
     <div className="flex flex-col gap-0">
       <button
-        onClick={() => navigate("/admin/testpass/reports")}
+        onClick={() => navigate("/admin/testpass")}
         className="mb-4 flex items-center gap-1.5 text-sm text-[#888] hover:text-white w-fit"
       >
-        <ArrowLeft className="h-4 w-4" /> All reports
+        <ArrowLeft className="h-4 w-4" /> Back to TestPass
       </button>
 
       {report.status === "complete" && (
@@ -198,7 +198,7 @@ export default function ReportDetail() {
                 onClick={() => setShowAbandonModal(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-[#888] hover:text-red-400 hover:border-red-500/30"
               >
-                Mark abandoned
+                Cancel report
               </button>
             )}
           </div>
@@ -274,7 +274,7 @@ export default function ReportDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#111] p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Mark as abandoned?</h3>
+              <h3 className="text-sm font-semibold text-white">Cancel this report?</h3>
               <button
                 onClick={() => setShowAbandonModal(false)}
                 className="text-[#666] hover:text-white"
@@ -283,21 +283,21 @@ export default function ReportDetail() {
               </button>
             </div>
             <p className="mb-4 text-xs text-[#888]">
-              This report will be marked abandoned and closed. This cannot be undone.
+              This report will be marked cancelled and closed. This cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setShowAbandonModal(false)}
                 className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-[#888] hover:text-white"
               >
-                Cancel
+                Keep open
               </button>
               <button
                 onClick={() => void handleAbandon()}
                 disabled={abandonLoading}
                 className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
               >
-                {abandonLoading ? "Abandoning..." : "Mark abandoned"}
+                {abandonLoading ? "Cancelling..." : "Cancel report"}
               </button>
             </div>
           </div>

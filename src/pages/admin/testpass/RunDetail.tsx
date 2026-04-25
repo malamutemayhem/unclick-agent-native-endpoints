@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft, Check, ClipboardCopy, Download, Loader2, MessageSquare, X } from "lucide-react";
 import { useSession } from "@/lib/auth";
-import { SEVERITY_BADGE, STATUS_LABEL, STATUS_PILL, VERDICT_ICON, elapsedLabel, fmtDate } from "./testpass-ui";
+import { SEVERITY_BADGE, STATUS_LABEL, STATUS_PILL, VERDICT_ICON, VERDICT_LABEL, elapsedLabel, fmtDate } from "./testpass-ui";
 
 type VS = { check?: number; fail?: number; na?: number; other?: number; pending?: number };
 interface RunData { id: string; pack_name: string; target: { url?: string }; profile: string; started_at: string; completed_at?: string; status: string; verdict_summary: VS; report_id?: string | null; }
@@ -124,12 +124,19 @@ export default function RunDetail() {
                 <li key={item.id}>
                   <button onClick={() => setSelectedId(item.id)} className={`w-full px-4 py-3 text-left transition-colors ${selectedId === item.id ? "bg-white/[0.05]" : "hover:bg-white/[0.02]"}`}>
                     <div className="flex items-start gap-2">
-                      <span className="text-sm mt-0.5 shrink-0">{VERDICT_ICON[item.verdict] ?? "❓"}</span>
+                      <span
+                        className="text-sm mt-0.5 shrink-0"
+                        aria-label={VERDICT_LABEL[item.verdict] ?? "Unknown"}
+                        title={VERDICT_LABEL[item.verdict] ?? "Unknown"}
+                      >
+                        {VERDICT_ICON[item.verdict] ?? "❓"}
+                      </span>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-[#ccc] truncate">{item.title}</p>
-                        <div className="mt-1 flex items-center gap-1.5">
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono text-[10px] text-[#555]">{item.check_id}</span>
                           <span className={`rounded border px-1.5 py-0.5 text-[9px] ${SEVERITY_BADGE[item.severity] ?? ""}`}>{item.severity}</span>
+                          <span className="text-[10px] text-[#777]">{VERDICT_LABEL[item.verdict] ?? "Unknown"}</span>
                         </div>
                       </div>
                     </div>
@@ -145,7 +152,10 @@ export default function RunDetail() {
             <div className="flex flex-col gap-4">
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-lg">{VERDICT_ICON[selected.verdict]}</span>
+                  <span className="text-lg" aria-label={VERDICT_LABEL[selected.verdict]}>
+                    {VERDICT_ICON[selected.verdict]}
+                  </span>
+                  <span className="text-xs font-medium text-[#ccc]">{VERDICT_LABEL[selected.verdict] ?? "Unknown"}</span>
                   <span className={`rounded border px-2 py-0.5 text-xs ${SEVERITY_BADGE[selected.severity] ?? ""}`}>{selected.severity}</span>
                   <span className="font-mono text-xs text-[#555]">{selected.check_id}</span>
                 </div>

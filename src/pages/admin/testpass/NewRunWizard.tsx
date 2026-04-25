@@ -4,13 +4,19 @@ import { ArrowLeft, ChevronRight, Loader2, Play } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import { CATEGORY_BADGE } from "./testpass-ui";
 
-interface PackCard { id: string; name: string; description: string; check_count: number; category: string; }
+interface PackCard { id: string; slug?: string; name: string; description: string; check_count: number; category: string; }
 type Depth = "smoke" | "standard" | "deep";
 
+const EXAMPLE_TARGET_URL = "https://unclick.world/api/mcp";
+
+const PACK_USE_WHEN: Record<string, string> = {
+  "testpass-core": "Use this when you want a baseline check that your MCP server speaks the protocol correctly.",
+};
+
 const DEPTH_OPTIONS: { value: Depth; label: string; detail: string; subtitle: string }[] = [
-  { value: "smoke",    label: "Smoke",    detail: "1 pass, fastest",          subtitle: "Use when you want a quick sanity check." },
-  { value: "standard", label: "Standard", detail: "2 passes, balanced",        subtitle: "Use before every release." },
-  { value: "deep",     label: "Deep",     detail: "3 passes + Healer retry",   subtitle: "Use before a major launch or security review." },
+  { value: "smoke",    label: "Smoke",    detail: "1 pass, ~30s, fastest",                  subtitle: "Use when you want a quick sanity check." },
+  { value: "standard", label: "Standard", detail: "2 passes, ~2min, recommended",           subtitle: "Use before every release." },
+  { value: "deep",     label: "Deep",     detail: "3 passes + auto-fix retry, ~5min, most thorough", subtitle: "Use before a major launch or security review." },
 ];
 
 export default function NewRunWizard() {
@@ -24,7 +30,7 @@ export default function NewRunWizard() {
   const [packs, setPacks] = useState<PackCard[]>([]);
   const [loadingPacks, setLoadingPacks] = useState(false);
   const [selectedPackId, setSelectedPackId] = useState<string>(searchParams.get("pack_id") ?? "");
-  const [targetUrl, setTargetUrl] = useState("https://your-mcp-server.example.com/mcp");
+  const [targetUrl, setTargetUrl] = useState(EXAMPLE_TARGET_URL);
   const [depth, setDepth] = useState<Depth>("standard");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +52,7 @@ export default function NewRunWizard() {
   }, [searchParams]);
 
   async function handleRun() {
-    if (!selectedPackId || !targetUrl || targetUrl === "https://your-mcp-server.example.com/mcp") {
+    if (!selectedPackId || !targetUrl) {
       setError("Enter your MCP server URL before running."); return;
     }
     setRunning(true); setError(null);
@@ -90,20 +96,36 @@ export default function NewRunWizard() {
           {loadingPacks ? (
             <div className="flex items-center gap-2 text-[#888] py-8 justify-center"><Loader2 className="h-4 w-4 animate-spin" /> Loading packs...</div>
           ) : packs.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[#888]">No packs available. Create one from the Packs tab first.</p>
+            <div className="rounded-xl border border-white/[0.06] bg-[#111] px-6 py-10 text-center">
+              <p className="text-sm text-white">No packs yet.</p>
+              <p className="mt-1 text-xs text-[#888]">
+                Use the testpass-core starter, or create your own from YAML.
+              </p>
+              <button
+                onClick={() => navigate("/admin/testpass/packs/new/edit")}
+                className="mt-5 rounded-lg border border-[#61C1C4]/30 bg-[#61C1C4]/10 px-4 py-2 text-sm text-[#61C1C4] hover:bg-[#61C1C4]/20"
+              >
+                Open pack editor
+              </button>
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {packs.map((p) => (
-                <button key={p.id} onClick={() => { setSelectedPackId(p.id); setStep(2); }}
-                  className={`rounded-xl border p-4 text-left transition-colors ${selectedPackId === p.id ? "border-[#61C1C4]/50 bg-[#61C1C4]/10" : "border-white/[0.06] bg-[#111] hover:border-white/[0.12]"}`}>
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-sm font-semibold text-white">{p.name}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${CATEGORY_BADGE[p.category] ?? CATEGORY_BADGE.general}`}>{p.category}</span>
-                  </div>
-                  <p className="text-xs text-[#888] line-clamp-2">{p.description || "Use when you need to verify MCP conformance."}</p>
-                  <p className="mt-2 text-[11px] text-[#666]">{p.check_count} checks</p>
-                </button>
-              ))}
+              {packs.map((p) => {
+                const useWhen = (p.slug && PACK_USE_WHEN[p.slug])
+                  ?? p.description
+                  ?? "Use this when you need a custom set of MCP checks.";
+                return (
+                  <button key={p.id} onClick={() => { setSelectedPackId(p.id); setStep(2); }}
+                    className={`rounded-xl border p-4 text-left transition-colors ${selectedPackId === p.id ? "border-[#61C1C4]/50 bg-[#61C1C4]/10" : "border-white/[0.06] bg-[#111] hover:border-white/[0.12]"}`}>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-sm font-semibold text-white">{p.name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${CATEGORY_BADGE[p.category] ?? CATEGORY_BADGE.general}`}>{p.category}</span>
+                    </div>
+                    <p className="text-xs text-[#888] line-clamp-2">{useWhen}</p>
+                    <p className="mt-2 text-[11px] text-[#666]">{p.check_count} {p.check_count === 1 ? "check" : "checks"}</p>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -111,13 +133,25 @@ export default function NewRunWizard() {
 
       {step === 2 && (
         <div>
-          <p className="mb-1 text-sm text-[#888]">Enter the URL of the MCP server you want to test.{selectedPack && <span className="text-white ml-1">Pack: {selectedPack.name}</span>}</p>
-          <p className="mb-4 text-xs text-[#666]">Use when: testing a staging deployment, validating a new integration, or checking conformance before release.</p>
+          <p className="mb-1 text-sm text-[#888]">
+            Enter the URL of the MCP server you want to test.
+            {selectedPack && <span className="text-white ml-1">Pack: {selectedPack.name}</span>}
+          </p>
+          <p className="mb-4 text-xs text-[#666]">
+            Use this when you want to verify a staging deployment, check a new integration, or confirm conformance before release.
+          </p>
           <label className="block text-xs font-medium text-[#ccc] mb-2">MCP server URL</label>
           <input type="url" value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)}
             className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white focus:border-[#61C1C4]/40 focus:outline-none"
-            placeholder="https://your-mcp-server.example.com/mcp" />
-          <p className="mt-2 text-xs text-[#666]">Replace the example URL with your actual server. The URL should respond to JSON-RPC 2.0 requests.</p>
+            placeholder={EXAMPLE_TARGET_URL} />
+          <p className="mt-2 text-xs text-[#666]">
+            Pre-filled with the unclick.world MCP as an example. Replace it with your own server URL. The URL should respond to JSON-RPC 2.0 requests.
+          </p>
+          {targetUrl === EXAMPLE_TARGET_URL && (
+            <p className="mt-2 text-xs text-[#E2B93B]">
+              Heads up: this is the example URL. Wipe it and paste your own server URL before running.
+            </p>
+          )}
           <div className="mt-6 flex gap-2">
             <button onClick={() => setStep(1)} className="rounded-lg border border-white/[0.08] px-4 py-2 text-sm text-[#888] hover:text-white">Back</button>
             <button onClick={() => setStep(3)} disabled={!targetUrl}

@@ -391,7 +391,7 @@ export default function AdminTestPass() {
         <div>
           <h1 className="text-2xl font-semibold text-white">TestPass</h1>
           <p className="mt-1 text-sm text-[#888]">
-            MCP conformance checks. Edit a pack, run it against a target, export fixes.
+            Checks your MCP server speaks the protocol correctly. Edit a pack, run it against a target, export fixes.
           </p>
         </div>
       </div>
