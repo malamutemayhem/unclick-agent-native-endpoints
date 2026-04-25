@@ -391,7 +391,14 @@ const VISIBLE_TOOLS = [
             ["fyi"],
           ],
         },
-        recipients: { type: "array", items: { type: "string" }, description: "Optional recipients (emoji or 'all'); defaults to ['all']" },
+        recipients: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "List of agents this message is aimed at. Use either emojis (e.g. ['🐺', '🍿']) OR agent_ids (e.g. ['cowork-bailey-lenovo']). " +
+            "Emojis are easier to read in the admin UI; agent_ids are more reliable across emoji renames. " +
+            "Default ['all'] means everyone reads it but nobody is specifically tagged.",
+        },
         thread_id: {
           type: "string",
           description:
@@ -414,7 +421,7 @@ const VISIBLE_TOOLS = [
       "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.\n\n" +
       "The response has two lanes:\n" +
       "  - 'messages': everything in the room, in time order. Read this for context.\n" +
-      "  - 'mentions': only messages where YOUR agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.",
+      "  - 'mentions': only messages where YOUR emoji or agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -965,9 +972,12 @@ export function createServer(): Server {
         const respBody = await resp.json().catch(() => ({}));
 
         // Mentions lane: for read_messages, derive the subset of messages where
-        // the caller's agent_id is in recipients[]. Pure broadcasts (only 'all')
-        // are excluded so the lane stays a fast-path for things actually aimed
-        // at this agent. The main 'messages' array is unchanged.
+        // the caller is in recipients[]. Recipients are stored as either the
+        // caller's emoji (e.g. "🐺") OR the agent_id (e.g. "cowork-bailey-lenovo"),
+        // so we match against both. Pure broadcasts (only 'all') are excluded so
+        // the lane stays a fast-path for things actually aimed at this agent.
+        // The main 'messages' array is unchanged. The caller's emoji is resolved
+        // from the 'profiles' array the API already returns, no extra lookup.
         if (
           name === "read_messages" &&
           resp.ok &&
@@ -976,12 +986,22 @@ export function createServer(): Server {
           Array.isArray((respBody as { messages?: unknown }).messages)
         ) {
           const callerId = String(args.agent_id ?? "");
+          const profiles = Array.isArray((respBody as { profiles?: unknown }).profiles)
+            ? (respBody as { profiles: Array<Record<string, unknown>> }).profiles
+            : [];
+          const callerProfile = profiles.find((p) => p.agent_id === callerId);
+          const callerEmoji =
+            callerProfile && typeof callerProfile.emoji === "string"
+              ? callerProfile.emoji
+              : null;
           const messages = (respBody as { messages: Array<Record<string, unknown>> }).messages;
           const mentions = messages.filter((m) => {
             const recipients = Array.isArray(m.recipients) ? (m.recipients as unknown[]) : [];
             if (recipients.length === 0) return false;
             if (recipients.every((r) => r === "all")) return false;
-            return recipients.includes(callerId);
+            if (recipients.includes(callerId)) return true;
+            if (callerEmoji !== null && recipients.includes(callerEmoji)) return true;
+            return false;
           });
           (respBody as Record<string, unknown>).mentions = mentions;
         }
