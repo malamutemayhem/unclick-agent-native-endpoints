@@ -5747,7 +5747,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             { onConflict: "api_key_hash,agent_id" },
           )
-          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at")
+          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
           .single();
         if (error) throw error;
         return res.status(200).json({ profile: data });
@@ -5809,7 +5809,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             { onConflict: "api_key_hash,agent_id" },
           )
-          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at")
+          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
           .single();
         if (error) throw error;
         return res.status(200).json({ profile: data });
@@ -5828,7 +5828,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'. Run the UnClick setup wizard if you do not have one.",
           });
         }
-        const body = (req.body ?? {}) as { agent_id?: string | null; status?: string | null };
+        const body = (req.body ?? {}) as {
+          agent_id?: string | null;
+          status?: string | null;
+          next_checkin_at?: string | null;
+        };
 
         const agentId = (body.agent_id ?? "").toString().trim();
         if (!agentId) {
@@ -5848,17 +5852,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (statusRaw.length > 200) return res.status(400).json({ error: "status must be at most 200 characters" });
         const statusValue: string | null = statusRaw.trim().length === 0 ? null : statusRaw;
 
+        // next_checkin_at (optional): ISO 8601 timestamp OR a relative
+        // duration like '30m', '2h', '1d', '90s'. Empty string or null clears
+        // the field. Stored as an absolute timestamp so the watcher can
+        // compare directly against last_seen_at.
+        const RELATIVE_RE = /^(\d+)\s*([smhd])$/i;
+        const MAX_FUTURE_MS = 30 * 86_400_000;
+        let nextCheckinUpdate: { apply: boolean; iso: string | null } = { apply: false, iso: null };
+        if (Object.prototype.hasOwnProperty.call(body, "next_checkin_at")) {
+          const raw = body.next_checkin_at;
+          if (raw == null || (typeof raw === "string" && raw.trim() === "")) {
+            nextCheckinUpdate = { apply: true, iso: null };
+          } else if (typeof raw !== "string") {
+            return res.status(400).json({
+              error: "next_checkin_at must be a string (ISO 8601 timestamp or relative duration like '30m', '2h')",
+            });
+          } else {
+            const trimmed = raw.trim();
+            const m = trimmed.match(RELATIVE_RE);
+            if (m) {
+              const qty = parseInt(m[1], 10);
+              const unit = m[2].toLowerCase();
+              const factor = unit === "s" ? 1000 : unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : 86_400_000;
+              const ms = qty * factor;
+              if (!Number.isFinite(ms) || ms <= 0 || ms > MAX_FUTURE_MS) {
+                return res.status(400).json({ error: "next_checkin_at duration must be > 0 and <= 30d" });
+              }
+              nextCheckinUpdate = { apply: true, iso: new Date(Date.now() + ms).toISOString() };
+            } else {
+              const t = Date.parse(trimmed);
+              if (Number.isNaN(t)) {
+                return res.status(400).json({
+                  error: "next_checkin_at must be ISO 8601 timestamp or relative duration like '30m', '2h'",
+                });
+              }
+              nextCheckinUpdate = { apply: true, iso: new Date(t).toISOString() };
+            }
+          }
+        }
+
         const nowIso = new Date().toISOString();
+        const updatePayload: Record<string, unknown> = {
+          current_status: statusValue,
+          current_status_updated_at: nowIso,
+          last_seen_at: nowIso,
+        };
+        if (nextCheckinUpdate.apply) {
+          updatePayload.next_checkin_at = nextCheckinUpdate.iso;
+        }
         const { data, error } = await supabase
           .from("mc_fishbowl_profiles")
-          .update({
-            current_status: statusValue,
-            current_status_updated_at: nowIso,
-            last_seen_at: nowIso,
-          })
+          .update(updatePayload)
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId)
-          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at")
+          .select("id, agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
           .maybeSingle();
         if (error) throw error;
         if (!data) {
@@ -6020,6 +6067,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId);
 
+        // Wake-up plumbing: publish a Signal so existing dispatch (phone push,
+        // email, telegram per mc_signal_preferences) can wake the human if a
+        // message warrants it. Fire-and-forget so a Signals failure never
+        // blocks the post response.
+        void (async () => {
+          try {
+            const recipientList = inserted.recipients ?? [];
+            const tagList = inserted.tags ?? [];
+            const tagSet = new Set(tagList);
+            const isBlocker = tagSet.has("blocker") || tagSet.has("tripwire");
+            const broadcastsAll = recipientList.includes("all");
+
+            // Discover this tenant's human admin profiles so we can match
+            // recipients against the human's actual emoji and agent_id, not
+            // just the canonical 😎 fallback.
+            const { data: humanRows } = await supabase
+              .from("mc_fishbowl_profiles")
+              .select("agent_id, emoji")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("user_agent_hint", "admin-ui");
+            const humanEmojis = new Set<string>(["😎"]);
+            const humanAgentIds = new Set<string>();
+            for (const h of humanRows ?? []) {
+              if (h?.emoji) humanEmojis.add(h.emoji);
+              if (h?.agent_id) humanAgentIds.add(h.agent_id);
+            }
+
+            const targetsHuman = recipientList.some(
+              (r: string) =>
+                humanEmojis.has(r) ||
+                humanAgentIds.has(r) ||
+                (typeof r === "string" && r.startsWith("human-")),
+            );
+
+            let severity: "info" | "action_needed" | "critical" = "info";
+            if (targetsHuman) severity = "action_needed";
+            else if (broadcastsAll && isBlocker) severity = "action_needed";
+            else if (isBlocker) severity = "action_needed";
+
+            const summarySource = inserted.text ?? text;
+            const summary =
+              summarySource.length > 200 ? `${summarySource.slice(0, 197)}...` : summarySource;
+
+            await supabase.from("mc_signals").insert({
+              api_key_hash: apiKeyHash,
+              tool: "fishbowl",
+              action: "message_posted",
+              severity,
+              summary,
+              deep_link: `/admin/fishbowl#msg-${inserted.id}`,
+              payload: {
+                author_emoji: inserted.author_emoji,
+                author_agent_id: inserted.author_agent_id,
+                recipients: recipientList,
+                tags: tagList,
+                message_id: inserted.id,
+              },
+            });
+          } catch (publishErr) {
+            console.error(
+              "[fishbowl_post] signal publish failed:",
+              (publishErr as Error).message,
+            );
+          }
+        })();
+
         return res.status(200).json({ message: inserted });
       }
 
@@ -6072,7 +6185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           q,
           supabase
             .from("mc_fishbowl_profiles")
-            .select("agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at")
+            .select("agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
             .eq("api_key_hash", apiKeyHash)
             .order("last_seen_at", { ascending: false, nullsFirst: false }),
         ]);

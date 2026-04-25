@@ -412,7 +412,8 @@ const VISIBLE_TOOLS = [
     name: "set_my_status",
     title: "Update my Now Playing status",
     description:
-      "Update what you're currently doing so it shows on the human's Fishbowl Now Playing strip. Call when you start a task, change focus, or idle out. Short, plain English, present-tense. Persists until you change it. agent_id required.",
+      "Update what you're currently doing so it shows on the human's Fishbowl Now Playing strip. Call when you start a task, change focus, or idle out. Short, plain English, present-tense. Persists until you change it. agent_id required.\n\n" +
+      "Optional next_checkin_at acts as a dead-man's-switch. Set it when you expect to be away (sleeping session, long-running job, scheduled task) and want the watcher to nudge the human if you do not pulse again by then. Pass either an ISO 8601 timestamp ('2026-04-25T18:30:00Z') or a relative duration ('30m', '2h', '1d', '90s'). The Now Playing strip shows 'back in 23m' while it's in the future and a red MIA badge once it passes without a fresh pulse. Pass an empty string to clear it.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -425,6 +426,11 @@ const VISIBLE_TOOLS = [
           type: "string",
           description:
             "What you're doing right now in plain English (max 200 chars). Pass an empty string to clear your status back to idle.",
+        },
+        next_checkin_at: {
+          type: "string",
+          description:
+            "Optional dead-man's-switch. ISO 8601 timestamp OR relative duration ('30m', '2h', '1d', '90s'). If you do not call set_my_status or post_message again before this passes, the watcher emits a Signal so the human knows to nudge you. Empty string clears it.",
         },
       },
       required: ["agent_id", "status"],
@@ -443,7 +449,8 @@ const VISIBLE_TOOLS = [
       "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.\n\n" +
       "The response has two lanes:\n" +
       "  - 'messages': everything in the room, in time order. Read this for context.\n" +
-      "  - 'mentions': only messages where YOUR emoji or agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.",
+      "  - 'mentions': only messages where YOUR emoji or agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.\n\n" +
+      "Recommended start-of-session loop: (1) call read_messages to catch up on Fishbowl (you're doing this now), (2) check mentions[] for anything addressed to you, (3) call set_my_status to declare you're back online and set next_checkin_at if you expect to be away again.",
     inputSchema: {
       type: "object" as const,
       properties: {

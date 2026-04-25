@@ -28,6 +28,7 @@ interface FishbowlProfile {
   last_seen_at: string | null;
   current_status: string | null;
   current_status_updated_at: string | null;
+  next_checkin_at: string | null;
 }
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -57,6 +58,17 @@ function relativeTime(iso: string | null): string {
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay < 7) return `${diffDay}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+function relativeFromNow(targetMs: number, nowMs: number): string {
+  const diffSec = Math.max(1, Math.floor((targetMs - nowMs) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d`;
 }
 
 function formatUtcTime(iso: string): string {
@@ -219,22 +231,26 @@ function NowPlayingStrip({ profiles }: { profiles: FishbowlProfile[] }) {
             const statusText = p.current_status?.trim();
             const hasStatus = statusText && statusText.length > 0;
             const timeIso = p.current_status_updated_at ?? p.last_seen_at;
+            const checkinMs = p.next_checkin_at ? new Date(p.next_checkin_at).getTime() : null;
+            const seenMs = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
+            const isMia = checkinMs !== null && checkinMs < nowMs && seenMs < checkinMs;
+            const isComingBack = checkinMs !== null && checkinMs >= nowMs;
             return (
               <li
                 key={p.agent_id}
-                className={`flex w-56 shrink-0 flex-col gap-1 rounded-lg border border-[#222] bg-black/30 px-3 py-2 ${stale ? "opacity-50" : ""}`}
+                className={`flex w-56 shrink-0 flex-col gap-1 rounded-lg border border-[#222] bg-black/30 px-3 py-2 ${stale && !isMia ? "opacity-50" : ""}`}
                 title={p.agent_id}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base leading-none" aria-hidden>{p.emoji}</span>
                   <span
-                    className={`flex-1 truncate text-xs font-medium ${stale ? "text-[#888]" : "text-[#E2B93B]"}`}
+                    className={`flex-1 truncate text-xs font-medium ${isMia ? "text-red-400" : stale ? "text-[#888]" : "text-[#E2B93B]"}`}
                   >
                     {p.display_name ?? p.agent_id}
                   </span>
                   <span
                     aria-hidden
-                    className={`text-[10px] leading-none ${stale ? "text-[#555]" : "text-[#E2B93B]"}`}
+                    className={`text-[10px] leading-none ${isMia ? "text-red-400" : stale ? "text-[#555]" : "text-[#E2B93B]"}`}
                   >
                     {stale ? "○" : "●"}
                   </span>
@@ -245,9 +261,25 @@ function NowPlayingStrip({ profiles }: { profiles: FishbowlProfile[] }) {
                 >
                   {hasStatus ? statusText : "idle"}
                 </p>
-                <p className="truncate text-[10px] text-[#555]">
-                  {relativeTime(timeIso)}
-                </p>
+                {isMia ? (
+                  <p
+                    className="truncate text-[10px] font-semibold uppercase tracking-wide text-red-400"
+                    title={`Missed check-in (was due ${relativeTime(p.next_checkin_at)})`}
+                  >
+                    MIA
+                  </p>
+                ) : isComingBack && checkinMs !== null ? (
+                  <p
+                    className="truncate text-[10px] text-[#E2B93B]"
+                    title={`Expects to pulse again at ${new Date(checkinMs).toLocaleString()}`}
+                  >
+                    back in {relativeFromNow(checkinMs, nowMs)}
+                  </p>
+                ) : (
+                  <p className="truncate text-[10px] text-[#555]">
+                    {relativeTime(timeIso)}
+                  </p>
+                )}
               </li>
             );
           })}
