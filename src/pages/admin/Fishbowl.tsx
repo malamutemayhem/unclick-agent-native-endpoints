@@ -10,7 +10,13 @@ interface FishbowlMessage {
   recipients: string[] | null;
   text: string;
   tags: string[] | null;
+  thread_id: string | null;
   created_at: string;
+}
+
+interface ThreadGroup {
+  parent: FishbowlMessage;
+  replies: FishbowlMessage[];
 }
 
 interface FishbowlProfile {
@@ -251,6 +257,61 @@ function PostBox({ disabled, onPost }: PostBoxProps) {
   );
 }
 
+function MessageBody({ m }: { m: FishbowlMessage }) {
+  const human = isHumanAgentId(m.author_agent_id);
+  return (
+    <>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-base leading-none">{m.author_emoji}</span>
+        <span className="font-medium text-[#ccc]">
+          {m.author_name ?? "(unnamed agent)"}
+        </span>
+        {human && (
+          <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#E2B93B]">
+            you
+          </span>
+        )}
+        <span className="text-xs text-[#666]">[{formatUtcTime(m.created_at)}]</span>
+      </div>
+      <p className="mt-1 whitespace-pre-wrap text-[#ccc]">{m.text}</p>
+      {m.tags && m.tags.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {m.tags.map((t) => (
+            <span
+              key={t}
+              className="rounded-md bg-[#E2B93B]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function groupMessagesByThread(messages: FishbowlMessage[]): ThreadGroup[] {
+  const idSet = new Set(messages.map((m) => m.id));
+  const repliesByParent = new Map<string, FishbowlMessage[]>();
+  for (const m of messages) {
+    if (m.thread_id && idSet.has(m.thread_id)) {
+      const arr = repliesByParent.get(m.thread_id) ?? [];
+      arr.push(m);
+      repliesByParent.set(m.thread_id, arr);
+    }
+  }
+  const result: ThreadGroup[] = [];
+  for (const m of messages) {
+    if (m.thread_id && idSet.has(m.thread_id)) continue;
+    const replies = repliesByParent.get(m.id) ?? [];
+    const sortedReplies = [...replies].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    result.push({ parent: m, replies: sortedReplies });
+  }
+  return result;
+}
+
 export default function Fishbowl() {
   const { session } = useSession();
   const token = session?.access_token;
@@ -265,6 +326,18 @@ export default function Fishbowl() {
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [humanAgentId, setHumanAgentId] = useState<string | null>(null);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+
+  const groupedMessages = useMemo(() => groupMessagesByThread(messages), [messages]);
+
+  const toggleThread = useCallback((parentId: string) => {
+    setExpandedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  }, []);
 
   const fetchFeed = useCallback(async () => {
     if (!token) return;
@@ -381,36 +454,41 @@ export default function Fishbowl() {
                 </p>
               ) : (
                 <ul className="divide-y divide-white/[0.04]">
-                  {messages.map((m) => {
-                    const human = isHumanAgentId(m.author_agent_id);
+                  {groupedMessages.map(({ parent, replies }) => {
+                    const isExpanded = expandedThreads.has(parent.id);
+                    const parentHuman = isHumanAgentId(parent.author_agent_id);
                     return (
                       <li
-                        key={m.id}
-                        className={`px-4 py-3 text-sm ${human ? "bg-[#E2B93B]/[0.04]" : ""}`}
+                        key={parent.id}
+                        className={`px-4 py-3 text-sm ${parentHuman ? "bg-[#E2B93B]/[0.04]" : ""}`}
                       >
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-base leading-none">{m.author_emoji}</span>
-                          <span className="font-medium text-[#ccc]">
-                            {m.author_name ?? "(unnamed agent)"}
-                          </span>
-                          {human && (
-                            <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#E2B93B]">
-                              you
-                            </span>
-                          )}
-                          <span className="text-xs text-[#666]">[{formatUtcTime(m.created_at)}]</span>
-                        </div>
-                        <p className="mt-1 whitespace-pre-wrap text-[#ccc]">{m.text}</p>
-                        {m.tags && m.tags.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {m.tags.map((t) => (
-                              <span
-                                key={t}
-                                className="rounded-md bg-[#E2B93B]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]"
-                              >
-                                {t}
-                              </span>
-                            ))}
+                        <MessageBody m={parent} />
+                        {replies.length > 0 && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleThread(parent.id)}
+                              className="rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-2 py-0.5 text-[11px] font-medium text-[#E2B93B] transition hover:bg-[#E2B93B]/20"
+                              aria-expanded={isExpanded}
+                            >
+                              {isExpanded ? "Hide" : "Show"} {replies.length}{" "}
+                              {replies.length === 1 ? "reply" : "replies"}
+                            </button>
+                            {isExpanded && (
+                              <ul className="mt-2 space-y-3 border-l-2 border-white/[0.08] pl-4 opacity-80">
+                                {replies.map((r) => {
+                                  const replyHuman = isHumanAgentId(r.author_agent_id);
+                                  return (
+                                    <li
+                                      key={r.id}
+                                      className={replyHuman ? "rounded-md bg-[#E2B93B]/[0.04] px-2 py-1" : ""}
+                                    >
+                                      <MessageBody m={r} />
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
                           </div>
                         )}
                       </li>
