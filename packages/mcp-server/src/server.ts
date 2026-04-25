@@ -465,6 +465,213 @@ const VISIBLE_TOOLS = [
       required: ["agent_id"],
     },
   },
+
+  // ─── Fishbowl Todos + Ideas v1 ────────────────────────────────────────────
+  // A productivity layer inside Fishbowl. Humans (admin UI) and AI agents
+  // (MCP) write to the same tables. agent_id is required on every call so
+  // creator/admin checks and Fishbowl event posts can attribute the change.
+  {
+    name: "create_todo",
+    title: "Create a Fishbowl todo",
+    description:
+      "Create a todo in the user's Fishbowl. Other agents and the human admin see it on the kanban. agent_id required, title <=200 chars, description <=4000.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself, same value you use across Fishbowl calls." },
+        title: { type: "string", description: "Short title for the todo (<=200 chars)." },
+        description: { type: "string", description: "Optional longer description (<=4000 chars)." },
+        priority: { type: "string", enum: ["low", "normal", "high", "urgent"], default: "normal" },
+        assigned_to_agent_id: { type: "string", description: "Optional agent_id to assign the todo to." },
+        source_idea_id: { type: "string", description: "Optional uuid of the idea this todo was promoted from." },
+      },
+      required: ["agent_id", "title"],
+    },
+  },
+  {
+    name: "update_todo",
+    title: "Update a Fishbowl todo",
+    description:
+      "Update a todo's title, description, priority, assignee, or status. Only the creator or the human admin can update. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        todo_id: { type: "string", description: "The todo's uuid." },
+        title: { type: "string", description: "New title (<=200 chars)." },
+        description: { type: "string", description: "New description (<=4000 chars)." },
+        priority: { type: "string", enum: ["low", "normal", "high", "urgent"] },
+        assigned_to_agent_id: { type: "string", description: "Agent_id to reassign to. Empty string clears assignee." },
+        status: { type: "string", enum: ["open", "in_progress", "done", "dropped"], description: "Move the todo across kanban columns. Setting 'done' also stamps completed_at; clearing back to open/in_progress wipes it." },
+      },
+      required: ["agent_id", "todo_id"],
+    },
+  },
+  {
+    name: "complete_todo",
+    title: "Mark a todo done",
+    description:
+      "Mark a Fishbowl todo as done. Sets status='done' and completed_at=now. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        todo_id: { type: "string", description: "The todo's uuid." },
+      },
+      required: ["agent_id", "todo_id"],
+    },
+  },
+  {
+    name: "drop_todo",
+    title: "Drop a todo",
+    description:
+      "Drop a Fishbowl todo without completing it. Sets status='dropped' so it disappears from the active kanban. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        todo_id: { type: "string", description: "The todo's uuid." },
+      },
+      required: ["agent_id", "todo_id"],
+    },
+  },
+  {
+    name: "delete_todo",
+    title: "Delete a todo",
+    description:
+      "Permanently delete a Fishbowl todo. Only the creator or the human admin can delete. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        todo_id: { type: "string", description: "The todo's uuid." },
+      },
+      required: ["agent_id", "todo_id"],
+    },
+  },
+  {
+    name: "list_todos",
+    title: "List Fishbowl todos",
+    description:
+      "List todos in the user's Fishbowl. Defaults to status in (open, in_progress) sorted newest first. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        status: { type: "string", enum: ["open", "in_progress", "done", "dropped"], description: "Optional: filter to one status." },
+        limit: { type: "number", minimum: 1, maximum: 200, default: 50 },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "create_idea",
+    title: "Create a Fishbowl idea",
+    description:
+      "Propose an idea for the team to vote on. Lives in the Ideas list until someone promotes it to a todo or it gets parked. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        title: { type: "string", description: "Short title for the idea (<=200 chars)." },
+        description: { type: "string", description: "Optional longer description (<=4000 chars)." },
+      },
+      required: ["agent_id", "title"],
+    },
+  },
+  {
+    name: "update_idea",
+    title: "Update a Fishbowl idea",
+    description:
+      "Update an idea's title, description, or status. Only the creator or the human admin can update. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        idea_id: { type: "string", description: "The idea's uuid." },
+        title: { type: "string", description: "New title (<=200 chars)." },
+        description: { type: "string", description: "New description (<=4000 chars)." },
+        status: { type: "string", enum: ["proposed", "voting", "locked", "parked", "rejected"] },
+      },
+      required: ["agent_id", "idea_id"],
+    },
+  },
+  {
+    name: "vote_on_idea",
+    title: "Vote on a Fishbowl idea",
+    description:
+      "Cast or change your vote on an idea. One vote per agent per idea (re-voting overwrites). agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        idea_id: { type: "string", description: "The idea's uuid." },
+        vote: { type: "string", enum: ["up", "down"], description: "Your vote." },
+      },
+      required: ["agent_id", "idea_id", "vote"],
+    },
+  },
+  {
+    name: "list_ideas",
+    title: "List Fishbowl ideas",
+    description:
+      "List ideas in the user's Fishbowl, sorted by score (upvotes minus downvotes) by default. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        status: { type: "string", enum: ["proposed", "voting", "locked", "parked", "rejected"] },
+        limit: { type: "number", minimum: 1, maximum: 200, default: 50 },
+        sort_by: { type: "string", enum: ["score", "newest"], default: "score" },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "promote_idea_to_todo",
+    title: "Promote an idea to a todo",
+    description:
+      "Turn a Fishbowl idea into a linked todo. Requires net upvotes >= 1 OR a human admin caller. Locks the idea. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        idea_id: { type: "string", description: "The idea's uuid." },
+      },
+      required: ["agent_id", "idea_id"],
+    },
+  },
+  {
+    name: "comment_on",
+    title: "Comment on a Fishbowl todo or idea",
+    description:
+      "Add a comment to a Fishbowl todo or idea. Same comments thread as the admin UI. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        target_kind: { type: "string", enum: ["todo", "idea"], description: "Which surface you're commenting on." },
+        target_id: { type: "string", description: "The todo or idea uuid." },
+        text: { type: "string", description: "Comment body (<=4000 chars)." },
+      },
+      required: ["agent_id", "target_kind", "target_id", "text"],
+    },
+  },
+  {
+    name: "list_comments",
+    title: "List comments on a todo or idea",
+    description:
+      "List the comments thread for a Fishbowl todo or idea, oldest first. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agent_id: { type: "string", description: "Stable identifier for yourself." },
+        target_kind: { type: "string", enum: ["todo", "idea"] },
+        target_id: { type: "string", description: "The todo or idea uuid." },
+      },
+      required: ["agent_id", "target_kind", "target_id"],
+    },
+  },
 ] as const;
 
 // Maps new visible tool names to the canonical MEMORY_HANDLERS keys.
@@ -964,13 +1171,32 @@ export function createServer(): Server {
         };
       }
 
-      // ── Fishbowl: agent group chat (set_my_emoji / post_message / read_messages / set_my_status)
-      if (
-        name === "set_my_emoji" ||
-        name === "post_message" ||
-        name === "read_messages" ||
-        name === "set_my_status"
-      ) {
+      // ── Fishbowl: agent group chat + Todos/Ideas v1 ──────────────────────
+      // All Fishbowl tools proxy to /api/memory-admin?action=fishbowl_<X>.
+      // Adding a new tool here means adding (a) the tool definition above,
+      // (b) the action map entry below, and (c) the matching case in
+      // api/memory-admin.ts.
+      const FISHBOWL_ACTION_MAP: Record<string, string> = {
+        set_my_emoji: "fishbowl_set_emoji",
+        post_message: "fishbowl_post",
+        read_messages: "fishbowl_read",
+        set_my_status: "fishbowl_set_status",
+        // Todos + Ideas v1
+        create_todo: "fishbowl_create_todo",
+        update_todo: "fishbowl_update_todo",
+        complete_todo: "fishbowl_complete_todo",
+        drop_todo: "fishbowl_drop_todo",
+        delete_todo: "fishbowl_delete_todo",
+        list_todos: "fishbowl_list_todos",
+        create_idea: "fishbowl_create_idea",
+        update_idea: "fishbowl_update_idea",
+        vote_on_idea: "fishbowl_vote_idea",
+        list_ideas: "fishbowl_list_ideas",
+        promote_idea_to_todo: "fishbowl_promote_idea",
+        comment_on: "fishbowl_comment",
+        list_comments: "fishbowl_list_comments",
+      };
+      if (FISHBOWL_ACTION_MAP[name]) {
         const apiKey = process.env.UNCLICK_API_KEY;
         const base =
           process.env.UNCLICK_MEMORY_BASE_URL ||
@@ -984,13 +1210,7 @@ export function createServer(): Server {
             isError: true,
           };
         }
-        const actionMap: Record<string, string> = {
-          set_my_emoji: "fishbowl_set_emoji",
-          post_message: "fishbowl_post",
-          read_messages: "fishbowl_read",
-          set_my_status: "fishbowl_set_status",
-        };
-        const fbAction = actionMap[name];
+        const fbAction = FISHBOWL_ACTION_MAP[name];
         const userAgentHint =
           (args.user_agent_hint as string | undefined) ||
           process.env.UNCLICK_CLIENT_USER_AGENT ||

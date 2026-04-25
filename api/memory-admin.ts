@@ -1248,6 +1248,101 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+// Shared uuid validator used by Todos + Ideas + Comments handlers.
+const FISHBOWL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Posts a system message into the tenant's default Fishbowl room and emits a
+// matching Signal so the existing wake-up plumbing (push, email, telegram)
+// can route it to the human if severity warrants. Used by Todos/Ideas event
+// emissions (todo-created, todo-completed, idea-created, idea-voted, etc.).
+// Best-effort: never throws to the caller -- a Fishbowl noticeboard failure
+// must not roll back the underlying todo/idea write.
+async function postFishbowlEvent(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+  opts: { agentId: string; text: string; tags: string[]; recipients?: string[] },
+): Promise<void> {
+  try {
+    // Resolve the agent's profile so the message picks up the right emoji
+    // and display_name. Posting without a profile still works (placeholder
+    // emoji), matching the fishbowl_post fallback.
+    const { data: profile } = await supabase
+      .from("mc_fishbowl_profiles")
+      .select("emoji, display_name")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("agent_id", opts.agentId)
+      .maybeSingle();
+
+    // Get-or-create the default room for this tenant.
+    const { data: existingRoom } = await supabase
+      .from("mc_fishbowl_rooms")
+      .select("id")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("slug", "default")
+      .maybeSingle();
+    let roomId = existingRoom?.id as string | undefined;
+    if (!roomId) {
+      const { data: newRoom, error: roomErr } = await supabase
+        .from("mc_fishbowl_rooms")
+        .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Fishbowl" })
+        .select("id")
+        .single();
+      if (roomErr) throw roomErr;
+      roomId = newRoom.id;
+    }
+
+    const recipients = opts.recipients && opts.recipients.length > 0 ? opts.recipients : ["all"];
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("mc_fishbowl_messages")
+      .insert({
+        api_key_hash: apiKeyHash,
+        room_id: roomId,
+        author_emoji: profile?.emoji ?? "🤖",
+        author_name: profile?.display_name ?? null,
+        author_agent_id: opts.agentId,
+        recipients,
+        text: opts.text,
+        tags: opts.tags,
+      })
+      .select("id, text, tags, recipients")
+      .single();
+    if (insertErr) throw insertErr;
+
+    // Bump last_seen_at for the actor so the Now Playing strip stays accurate.
+    await supabase
+      .from("mc_fishbowl_profiles")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("api_key_hash", apiKeyHash)
+      .eq("agent_id", opts.agentId);
+
+    // Emit a low-severity Signal. Routing rules in the Signals tool decide
+    // whether to wake the human (per mc_signal_preferences).
+    const summarySource = inserted?.text ?? opts.text;
+    const summary =
+      summarySource.length > 200 ? `${summarySource.slice(0, 197)}...` : summarySource;
+    await supabase.from("mc_signals").insert({
+      api_key_hash: apiKeyHash,
+      tool: "fishbowl",
+      action: "event_posted",
+      severity: "info",
+      summary,
+      deep_link: `/admin/fishbowl#msg-${inserted?.id ?? ""}`,
+      payload: {
+        author_agent_id: opts.agentId,
+        recipients,
+        tags: opts.tags,
+        message_id: inserted?.id ?? null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "[postFishbowlEvent] failed:",
+      (err as Error).message,
+    );
+  }
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -6209,6 +6304,873 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messages: messages ?? [],
           profiles: profiles ?? [],
         });
+      }
+
+      // ─── Fishbowl Todos + Ideas v1 ────────────────────────────────────────
+      // Mirrors the MCP tools in packages/mcp-server/src/server.ts. Auth
+      // pattern matches existing fishbowl_* actions: api_key_hash via Bearer,
+      // human-* agent_ids only allowed when the caller's profile is marked
+      // user_agent_hint='admin-ui' (set by fishbowl_admin_claim).
+
+      case "fishbowl_create_todo": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          title?: string;
+          description?: string | null;
+          priority?: string;
+          assigned_to_agent_id?: string | null;
+          source_idea_id?: string | null;
+        };
+
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass a stable identifier for yourself, the same value you use for set_my_emoji and post_message.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const title = (body.title ?? "").toString().trim();
+        if (!title) return res.status(400).json({ error: "title required" });
+        if (title.length > 200) return res.status(400).json({ error: "title must be at most 200 characters" });
+
+        let description: string | null = null;
+        if (body.description != null && body.description !== "") {
+          if (typeof body.description !== "string") return res.status(400).json({ error: "description must be a string" });
+          if (body.description.length > 4000) return res.status(400).json({ error: "description must be at most 4000 characters" });
+          description = body.description;
+        }
+
+        const priority = (body.priority ?? "normal").toString().trim();
+        if (!["low", "normal", "high", "urgent"].includes(priority)) {
+          return res.status(400).json({ error: "priority must be low, normal, high, or urgent" });
+        }
+
+        let assignedTo: string | null = null;
+        if (body.assigned_to_agent_id != null && body.assigned_to_agent_id !== "") {
+          const a = String(body.assigned_to_agent_id).trim();
+          if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
+          assignedTo = a;
+        }
+
+        let sourceIdea: string | null = null;
+        if (body.source_idea_id != null && body.source_idea_id !== "") {
+          const s = String(body.source_idea_id).trim();
+          if (!FISHBOWL_UUID_RE.test(s)) return res.status(400).json({ error: "source_idea_id must be a valid uuid" });
+          sourceIdea = s;
+        }
+
+        // Anti-spoof: human-* agent_ids are reserved for the admin UI. Reject
+        // if the caller's profile is missing or not flagged admin-ui.
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({
+              error: "human-* agent_id is reserved for the admin UI",
+              how_to_fix: "AI agents should pick a non-human agent_id (for example 'claude-desktop-bailey-lenovo').",
+            });
+          }
+        }
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_todos")
+          .insert({
+            api_key_hash: apiKeyHash,
+            title,
+            description,
+            priority,
+            created_by_agent_id: agentId,
+            assigned_to_agent_id: assignedTo,
+            source_idea_id: sourceIdea,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+
+        // Fishbowl event post (non-blocking semantics: helper swallows errors)
+        await postFishbowlEvent(supabase, apiKeyHash, {
+          agentId,
+          text: `created todo: "${title}"`,
+          tags: ["event", "todo-created"],
+        });
+
+        return res.status(200).json({ todo: data });
+      }
+
+      case "fishbowl_update_todo": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          todo_id?: string;
+          title?: string;
+          description?: string | null;
+          priority?: string;
+          assigned_to_agent_id?: string | null;
+          status?: string;
+        };
+
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const todoId = (body.todo_id ?? "").toString().trim();
+        if (!todoId || !FISHBOWL_UUID_RE.test(todoId)) return res.status(400).json({ error: "todo_id must be a valid uuid" });
+
+        // Permission check: only the creator OR the human admin can update.
+        // The admin viewer has user_agent_hint='admin-ui' on their profile.
+        const { data: existingTodo } = await supabase
+          .from("mc_fishbowl_todos")
+          .select("id, created_by_agent_id")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId)
+          .maybeSingle();
+        if (!existingTodo) return res.status(404).json({ error: "todo not found" });
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+          isAdmin = true;
+        }
+        if (!isAdmin && existingTodo.created_by_agent_id !== agentId) {
+          return res.status(403).json({ error: "only the creator or the admin can update this todo" });
+        }
+
+        const updatePayload: Record<string, unknown> = {};
+        if (body.title != null) {
+          const t = String(body.title).trim();
+          if (!t) return res.status(400).json({ error: "title cannot be empty" });
+          if (t.length > 200) return res.status(400).json({ error: "title must be at most 200 characters" });
+          updatePayload.title = t;
+        }
+        if (body.description != null) {
+          if (typeof body.description !== "string") return res.status(400).json({ error: "description must be a string" });
+          if (body.description.length > 4000) return res.status(400).json({ error: "description must be at most 4000 characters" });
+          updatePayload.description = body.description.length === 0 ? null : body.description;
+        }
+        if (body.priority != null) {
+          if (!["low", "normal", "high", "urgent"].includes(body.priority)) {
+            return res.status(400).json({ error: "priority must be low, normal, high, or urgent" });
+          }
+          updatePayload.priority = body.priority;
+        }
+        if (body.assigned_to_agent_id != null) {
+          if (typeof body.assigned_to_agent_id !== "string") return res.status(400).json({ error: "assigned_to_agent_id must be a string" });
+          const a = body.assigned_to_agent_id.trim();
+          if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
+          updatePayload.assigned_to_agent_id = a.length === 0 ? null : a;
+        }
+        if (body.status != null) {
+          if (!["open", "in_progress", "done", "dropped"].includes(body.status)) {
+            return res.status(400).json({ error: "status must be open, in_progress, done, or dropped" });
+          }
+          updatePayload.status = body.status;
+          // Keep completed_at coherent with status: stamp it on done, wipe it
+          // when re-opening, leave alone otherwise.
+          if (body.status === "done") {
+            updatePayload.completed_at = new Date().toISOString();
+          } else if (body.status === "open" || body.status === "in_progress") {
+            updatePayload.completed_at = null;
+          }
+        }
+
+        if (Object.keys(updatePayload).length === 0) {
+          return res.status(400).json({ error: "no fields to update" });
+        }
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_todos")
+          .update(updatePayload)
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId)
+          .select("*")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ todo: data });
+      }
+
+      case "fishbowl_complete_todo": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; todo_id?: string };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const todoId = (body.todo_id ?? "").toString().trim();
+        if (!todoId || !FISHBOWL_UUID_RE.test(todoId)) return res.status(400).json({ error: "todo_id must be a valid uuid" });
+
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        const { data, error } = await supabase
+          .from("mc_fishbowl_todos")
+          .update({ status: "done", completed_at: nowIso })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId)
+          .select("*")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: "todo not found" });
+
+        await postFishbowlEvent(supabase, apiKeyHash, {
+          agentId,
+          text: `done: "${data.title}"`,
+          tags: ["event", "todo-completed"],
+        });
+
+        return res.status(200).json({ todo: data });
+      }
+
+      case "fishbowl_drop_todo": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; todo_id?: string };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const todoId = (body.todo_id ?? "").toString().trim();
+        if (!todoId || !FISHBOWL_UUID_RE.test(todoId)) return res.status(400).json({ error: "todo_id must be a valid uuid" });
+
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+        }
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_todos")
+          .update({ status: "dropped" })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId)
+          .select("*")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: "todo not found" });
+
+        return res.status(200).json({ todo: data });
+      }
+
+      case "fishbowl_delete_todo": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; todo_id?: string };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const todoId = (body.todo_id ?? "").toString().trim();
+        if (!todoId || !FISHBOWL_UUID_RE.test(todoId)) return res.status(400).json({ error: "todo_id must be a valid uuid" });
+
+        // Same rule as update: only creator or admin.
+        const { data: existingTodo } = await supabase
+          .from("mc_fishbowl_todos")
+          .select("id, created_by_agent_id")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId)
+          .maybeSingle();
+        if (!existingTodo) return res.status(404).json({ error: "todo not found" });
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+          isAdmin = true;
+        }
+        if (!isAdmin && existingTodo.created_by_agent_id !== agentId) {
+          return res.status(403).json({ error: "only the creator or the admin can delete this todo" });
+        }
+
+        const { error } = await supabase
+          .from("mc_fishbowl_todos")
+          .delete()
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", todoId);
+        if (error) throw error;
+        return res.status(200).json({ deleted: true });
+      }
+
+      case "fishbowl_list_todos": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; status?: string; limit?: number };
+        const agentId = (body.agent_id ?? req.query.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const status = (body.status ?? req.query.status ?? "").toString().trim();
+        if (status && !["open", "in_progress", "done", "dropped"].includes(status)) {
+          return res.status(400).json({ error: "status must be open, in_progress, done, or dropped" });
+        }
+        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 50) || 50, 1), 200);
+
+        let q = supabase
+          .from("mc_fishbowl_todos")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (status) {
+          q = q.eq("status", status);
+        } else {
+          q = q.in("status", ["open", "in_progress"]);
+        }
+        const { data, error } = await q;
+        if (error) throw error;
+
+        // Per-todo comment count (small N typical for v1; one round-trip).
+        const ids = (data ?? []).map((t) => t.id);
+        const counts: Record<string, number> = {};
+        if (ids.length > 0) {
+          const { data: comments } = await supabase
+            .from("mc_fishbowl_comments")
+            .select("target_id")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("target_kind", "todo")
+            .in("target_id", ids);
+          for (const c of comments ?? []) {
+            const tid = c.target_id as string;
+            counts[tid] = (counts[tid] ?? 0) + 1;
+          }
+        }
+        const todos = (data ?? []).map((t) => ({ ...t, comment_count: counts[t.id] ?? 0 }));
+
+        return res.status(200).json({ todos });
+      }
+
+      case "fishbowl_create_idea": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; title?: string; description?: string | null };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const title = (body.title ?? "").toString().trim();
+        if (!title) return res.status(400).json({ error: "title required" });
+        if (title.length > 200) return res.status(400).json({ error: "title must be at most 200 characters" });
+
+        let description: string | null = null;
+        if (body.description != null && body.description !== "") {
+          if (typeof body.description !== "string") return res.status(400).json({ error: "description must be a string" });
+          if (body.description.length > 4000) return res.status(400).json({ error: "description must be at most 4000 characters" });
+          description = body.description;
+        }
+
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+        }
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_ideas")
+          .insert({
+            api_key_hash: apiKeyHash,
+            title,
+            description,
+            created_by_agent_id: agentId,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+
+        await postFishbowlEvent(supabase, apiKeyHash, {
+          agentId,
+          text: `new idea: "${title}"`,
+          tags: ["event", "idea-created"],
+        });
+
+        return res.status(200).json({ idea: data });
+      }
+
+      case "fishbowl_update_idea": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          idea_id?: string;
+          title?: string;
+          description?: string | null;
+          status?: string;
+        };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const ideaId = (body.idea_id ?? "").toString().trim();
+        if (!ideaId || !FISHBOWL_UUID_RE.test(ideaId)) return res.status(400).json({ error: "idea_id must be a valid uuid" });
+
+        const { data: existingIdea } = await supabase
+          .from("mc_fishbowl_ideas")
+          .select("id, created_by_agent_id")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .maybeSingle();
+        if (!existingIdea) return res.status(404).json({ error: "idea not found" });
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+          isAdmin = true;
+        }
+        if (!isAdmin && existingIdea.created_by_agent_id !== agentId) {
+          return res.status(403).json({ error: "only the creator or the admin can update this idea" });
+        }
+
+        const updatePayload: Record<string, unknown> = {};
+        if (body.title != null) {
+          const t = String(body.title).trim();
+          if (!t) return res.status(400).json({ error: "title cannot be empty" });
+          if (t.length > 200) return res.status(400).json({ error: "title must be at most 200 characters" });
+          updatePayload.title = t;
+        }
+        if (body.description != null) {
+          if (typeof body.description !== "string") return res.status(400).json({ error: "description must be a string" });
+          if (body.description.length > 4000) return res.status(400).json({ error: "description must be at most 4000 characters" });
+          updatePayload.description = body.description.length === 0 ? null : body.description;
+        }
+        if (body.status != null) {
+          if (!["proposed", "voting", "locked", "parked", "rejected"].includes(body.status)) {
+            return res.status(400).json({ error: "status must be proposed, voting, locked, parked, or rejected" });
+          }
+          updatePayload.status = body.status;
+        }
+
+        if (Object.keys(updatePayload).length === 0) {
+          return res.status(400).json({ error: "no fields to update" });
+        }
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_ideas")
+          .update(updatePayload)
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .select("*")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ idea: data });
+      }
+
+      case "fishbowl_vote_idea": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; idea_id?: string; vote?: string };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const ideaId = (body.idea_id ?? "").toString().trim();
+        if (!ideaId || !FISHBOWL_UUID_RE.test(ideaId)) return res.status(400).json({ error: "idea_id must be a valid uuid" });
+        const vote = (body.vote ?? "").toString().trim();
+        if (vote !== "up" && vote !== "down") return res.status(400).json({ error: "vote must be 'up' or 'down'" });
+
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+        }
+
+        // Capture pre-vote score so we can detect a meaningful change for the
+        // event-post throttle.
+        const { data: ideaBefore } = await supabase
+          .from("mc_fishbowl_ideas")
+          .select("id, title, upvotes, downvotes")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .maybeSingle();
+        if (!ideaBefore) return res.status(404).json({ error: "idea not found" });
+        const scoreBefore = (ideaBefore.upvotes ?? 0) - (ideaBefore.downvotes ?? 0);
+
+        const { error: upsertErr } = await supabase
+          .from("mc_fishbowl_idea_votes")
+          .upsert(
+            {
+              api_key_hash: apiKeyHash,
+              idea_id: ideaId,
+              voter_agent_id: agentId,
+              vote,
+            },
+            { onConflict: "api_key_hash,idea_id,voter_agent_id" },
+          );
+        if (upsertErr) throw upsertErr;
+
+        // The trigger has now recomputed upvotes/downvotes on the parent.
+        const { data: ideaAfter } = await supabase
+          .from("mc_fishbowl_ideas")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .single();
+        const scoreAfter = (ideaAfter.upvotes ?? 0) - (ideaAfter.downvotes ?? 0);
+        const scoreChanged = Math.abs(scoreAfter - scoreBefore) >= 1;
+
+        // Rate-limit: only post a Fishbowl event when the score moved AND
+        // there hasn't been a vote post for THIS idea in the last 5 minutes.
+        // A short per-idea tag (i-<first12 of uuid>) lets us scan for it
+        // without exceeding the 32-char tag cap.
+        if (scoreChanged) {
+          const ideaShortTag = `i-${ideaId.slice(0, 12)}`;
+          const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+          const { data: recent } = await supabase
+            .from("mc_fishbowl_messages")
+            .select("id")
+            .eq("api_key_hash", apiKeyHash)
+            .contains("tags", ["idea-voted", ideaShortTag])
+            .gte("created_at", fiveMinAgo)
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (!recent || recent.length === 0) {
+            await postFishbowlEvent(supabase, apiKeyHash, {
+              agentId,
+              text: `vote on "${ideaAfter.title}" (score ${scoreAfter >= 0 ? "+" : ""}${scoreAfter})`,
+              tags: ["event", "idea-voted", ideaShortTag],
+            });
+          }
+        }
+
+        return res.status(200).json({ idea: ideaAfter, vote });
+      }
+
+      case "fishbowl_list_ideas": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; status?: string; limit?: number; sort_by?: string };
+        const agentId = (body.agent_id ?? req.query.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const status = (body.status ?? req.query.status ?? "").toString().trim();
+        if (status && !["proposed", "voting", "locked", "parked", "rejected"].includes(status)) {
+          return res.status(400).json({ error: "status must be proposed, voting, locked, parked, or rejected" });
+        }
+        const sortBy = (body.sort_by ?? req.query.sort_by ?? "score").toString().trim();
+        if (!["score", "newest"].includes(sortBy)) return res.status(400).json({ error: "sort_by must be score or newest" });
+        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 50) || 50, 1), 200);
+
+        let q = supabase
+          .from("mc_fishbowl_ideas")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .limit(limit);
+        if (status) q = q.eq("status", status);
+        if (sortBy === "newest") {
+          q = q.order("created_at", { ascending: false });
+        } else {
+          // Sort by score (upvotes - downvotes) DESC, with created_at as tie
+          // breaker so equal-score ideas stay deterministically ordered.
+          q = q.order("created_at", { ascending: false });
+        }
+        const { data, error } = await q;
+        if (error) throw error;
+
+        let ideas = data ?? [];
+        if (sortBy === "score") {
+          ideas = [...ideas].sort((a, b) => {
+            const scoreA = (a.upvotes ?? 0) - (a.downvotes ?? 0);
+            const scoreB = (b.upvotes ?? 0) - (b.downvotes ?? 0);
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+        }
+
+        // Caller's existing votes so the UI can highlight what they already chose.
+        const ideaIds = ideas.map((i) => i.id);
+        const myVotes: Record<string, "up" | "down"> = {};
+        if (ideaIds.length > 0) {
+          const { data: voteRows } = await supabase
+            .from("mc_fishbowl_idea_votes")
+            .select("idea_id, vote")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("voter_agent_id", agentId)
+            .in("idea_id", ideaIds);
+          for (const v of voteRows ?? []) {
+            myVotes[v.idea_id as string] = v.vote as "up" | "down";
+          }
+        }
+
+        // Per-idea comment count.
+        const counts: Record<string, number> = {};
+        if (ideaIds.length > 0) {
+          const { data: comments } = await supabase
+            .from("mc_fishbowl_comments")
+            .select("target_id")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("target_kind", "idea")
+            .in("target_id", ideaIds);
+          for (const c of comments ?? []) {
+            const tid = c.target_id as string;
+            counts[tid] = (counts[tid] ?? 0) + 1;
+          }
+        }
+
+        const enriched = ideas.map((i) => ({
+          ...i,
+          score: (i.upvotes ?? 0) - (i.downvotes ?? 0),
+          my_vote: myVotes[i.id] ?? null,
+          comment_count: counts[i.id] ?? 0,
+        }));
+
+        return res.status(200).json({ ideas: enriched });
+      }
+
+      case "fishbowl_promote_idea": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; idea_id?: string };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const ideaId = (body.idea_id ?? "").toString().trim();
+        if (!ideaId || !FISHBOWL_UUID_RE.test(ideaId)) return res.status(400).json({ error: "idea_id must be a valid uuid" });
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+          isAdmin = true;
+        }
+
+        const { data: idea } = await supabase
+          .from("mc_fishbowl_ideas")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .maybeSingle();
+        if (!idea) return res.status(404).json({ error: "idea not found" });
+
+        const score = (idea.upvotes ?? 0) - (idea.downvotes ?? 0);
+        if (!isAdmin && score < 1) {
+          return res.status(403).json({
+            error: "idea must reach at least net +1 to be promoted",
+            how_to_fix: "Wait for at least one net upvote, or have the admin promote it.",
+          });
+        }
+        if (idea.promoted_to_todo_id) {
+          return res.status(409).json({ error: "idea already promoted", todo_id: idea.promoted_to_todo_id });
+        }
+
+        const { data: newTodo, error: todoErr } = await supabase
+          .from("mc_fishbowl_todos")
+          .insert({
+            api_key_hash: apiKeyHash,
+            title: idea.title,
+            description: idea.description,
+            priority: "normal",
+            created_by_agent_id: agentId,
+            source_idea_id: ideaId,
+          })
+          .select("*")
+          .single();
+        if (todoErr) throw todoErr;
+
+        const { data: lockedIdea, error: lockErr } = await supabase
+          .from("mc_fishbowl_ideas")
+          .update({ status: "locked", promoted_to_todo_id: newTodo.id })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", ideaId)
+          .select("*")
+          .single();
+        if (lockErr) throw lockErr;
+
+        await postFishbowlEvent(supabase, apiKeyHash, {
+          agentId,
+          text: `idea promoted to todo: "${idea.title}"`,
+          tags: ["event", "idea-promoted", "todo-created"],
+        });
+
+        return res.status(200).json({ todo: newTodo, idea: lockedIdea });
+      }
+
+      case "fishbowl_comment": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as {
+          agent_id?: string;
+          target_kind?: string;
+          target_id?: string;
+          text?: string;
+        };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const targetKind = (body.target_kind ?? "").toString().trim();
+        if (targetKind !== "todo" && targetKind !== "idea") return res.status(400).json({ error: "target_kind must be 'todo' or 'idea'" });
+        const targetId = (body.target_id ?? "").toString().trim();
+        if (!targetId || !FISHBOWL_UUID_RE.test(targetId)) return res.status(400).json({ error: "target_id must be a valid uuid" });
+        const text = (body.text ?? "").toString();
+        const trimmed = text.trim();
+        if (!trimmed) return res.status(400).json({ error: "text required" });
+        if (trimmed.length > 4000) return res.status(400).json({ error: "text must be at most 4000 characters" });
+
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+        }
+
+        // Confirm the target exists (and belongs to this tenant) before
+        // inserting the comment row.
+        const targetTable = targetKind === "todo" ? "mc_fishbowl_todos" : "mc_fishbowl_ideas";
+        const { data: target } = await supabase
+          .from(targetTable)
+          .select("id")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", targetId)
+          .maybeSingle();
+        if (!target) return res.status(404).json({ error: `${targetKind} not found` });
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_comments")
+          .insert({
+            api_key_hash: apiKeyHash,
+            target_kind: targetKind,
+            target_id: targetId,
+            author_agent_id: agentId,
+            text: trimmed,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ comment: data });
+      }
+
+      case "fishbowl_list_comments": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as { agent_id?: string; target_kind?: string; target_id?: string };
+        const agentId = (body.agent_id ?? req.query.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+        const targetKind = (body.target_kind ?? req.query.target_kind ?? "").toString().trim();
+        if (targetKind !== "todo" && targetKind !== "idea") return res.status(400).json({ error: "target_kind must be 'todo' or 'idea'" });
+        const targetId = (body.target_id ?? req.query.target_id ?? "").toString().trim();
+        if (!targetId || !FISHBOWL_UUID_RE.test(targetId)) return res.status(400).json({ error: "target_id must be a valid uuid" });
+
+        const { data, error } = await supabase
+          .from("mc_fishbowl_comments")
+          .select("id, target_kind, target_id, author_agent_id, text, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("target_kind", targetKind)
+          .eq("target_id", targetId)
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+
+        // Decorate with author emoji + display_name so the admin UI does not
+        // have to re-resolve every author profile.
+        const authorIds = Array.from(new Set((data ?? []).map((c) => c.author_agent_id))).filter(Boolean) as string[];
+        const profiles: Record<string, { emoji: string; display_name: string | null }> = {};
+        if (authorIds.length > 0) {
+          const { data: profileRows } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("agent_id, emoji, display_name")
+            .eq("api_key_hash", apiKeyHash)
+            .in("agent_id", authorIds);
+          for (const p of profileRows ?? []) {
+            profiles[p.agent_id as string] = {
+              emoji: (p.emoji as string) ?? "🤖",
+              display_name: (p.display_name as string | null) ?? null,
+            };
+          }
+        }
+        const comments = (data ?? []).map((c) => ({
+          ...c,
+          author_emoji: profiles[c.author_agent_id]?.emoji ?? "🤖",
+          author_name: profiles[c.author_agent_id]?.display_name ?? null,
+        }));
+
+        return res.status(200).json({ comments });
       }
 
       default:
