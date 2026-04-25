@@ -73,14 +73,34 @@ CREATE INDEX IF NOT EXISTS idx_agent_trace_surface_outcome
 -- analytics reads via the admin surface.
 ALTER TABLE agent_trace ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_all" ON agent_trace
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a pg_policies check so re-running this
+-- migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_trace' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON agent_trace
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "block_anon_access" ON agent_trace
-  FOR ALL TO anon USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_trace' AND policyname = 'block_anon_access'
+  ) THEN
+    CREATE POLICY "block_anon_access" ON agent_trace
+      FOR ALL TO anon USING (false) WITH CHECK (false);
+  END IF;
 
-CREATE POLICY "block_authenticated_direct_access" ON agent_trace
-  FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_trace' AND policyname = 'block_authenticated_direct_access'
+  ) THEN
+    CREATE POLICY "block_authenticated_direct_access" ON agent_trace
+      FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 COMMENT ON TABLE agent_trace IS
   'Append-only per-turn trace log of every agent run. Input to future meta-harness / nightly-scorer work. See /api/trace. (Renamed from agent_activity to avoid collision with pre-existing usage-ledger table.)';

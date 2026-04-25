@@ -70,7 +70,35 @@ ALTER TABLE agent_tools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_memory_scope ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_activity ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_all" ON agents FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON agent_tools FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON agent_memory_scope FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON agent_activity FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a pg_policies check so re-running this
+-- migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agents' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON agents FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_tools' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON agent_tools FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_memory_scope' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON agent_memory_scope FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agent_activity' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON agent_activity FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;

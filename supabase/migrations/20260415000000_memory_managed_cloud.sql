@@ -625,13 +625,62 @@ ALTER TABLE mc_code_dumps ENABLE ROW LEVEL SECURITY;
 -- Service role gets full access (this is also the default in Supabase
 -- since service_role bypasses RLS, but the explicit policy makes intent
 -- visible).
-CREATE POLICY "service_role_all" ON mc_business_context FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_knowledge_library FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_knowledge_library_history FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_session_summaries FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_extracted_facts FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_conversation_log FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON mc_code_dumps FOR ALL TO service_role USING (true) WITH CHECK (true);
+--
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so a re-run on a database where the policy already exists raises
+-- "policy already exists" and aborts the whole migration. This blocked
+-- auto-apply for ~20 subsequent migrations. Each policy is wrapped in a
+-- pg_policies existence check so re-running is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_business_context' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_business_context FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_knowledge_library' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_knowledge_library FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_knowledge_library_history' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_knowledge_library_history FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_session_summaries' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_session_summaries FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_extracted_facts' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_extracted_facts FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_conversation_log' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_conversation_log FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_code_dumps' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_code_dumps FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- No policies for anon / authenticated: deny by default.
 

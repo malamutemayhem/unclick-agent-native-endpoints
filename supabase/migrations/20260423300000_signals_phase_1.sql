@@ -19,8 +19,17 @@ CREATE INDEX IF NOT EXISTS idx_mc_signals_tool_action ON mc_signals(tool, action
 
 ALTER TABLE mc_signals ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mc_signals_service_role_all"
-  ON mc_signals FOR ALL USING (auth.role() = 'service_role');
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so wrap in a pg_policies check so re-running this migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_signals' AND policyname = 'mc_signals_service_role_all'
+  ) THEN
+    CREATE POLICY "mc_signals_service_role_all"
+      ON mc_signals FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS mc_signal_preferences (
   api_key_hash text PRIMARY KEY,
@@ -37,5 +46,15 @@ CREATE TABLE IF NOT EXISTS mc_signal_preferences (
 );
 
 ALTER TABLE mc_signal_preferences ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "mc_signal_preferences_service_role_all"
-  ON mc_signal_preferences FOR ALL USING (auth.role() = 'service_role');
+
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so wrap in a pg_policies check so re-running this migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_signal_preferences' AND policyname = 'mc_signal_preferences_service_role_all'
+  ) THEN
+    CREATE POLICY "mc_signal_preferences_service_role_all"
+      ON mc_signal_preferences FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
