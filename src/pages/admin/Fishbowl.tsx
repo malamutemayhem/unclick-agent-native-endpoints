@@ -29,6 +29,20 @@ interface FishbowlProfile {
   current_status: string | null;
   current_status_updated_at: string | null;
   next_checkin_at: string | null;
+  wake_route_kind: string | null;
+  wake_route_config: Record<string, unknown> | null;
+}
+
+interface FishbowlDraft {
+  id: string;
+  recipient_agent_id: string;
+  sender_agent_id: string;
+  sender_emoji: string | null;
+  text: string;
+  priority: "normal" | "important" | "urgent";
+  tags: string[] | null;
+  created_at: string;
+  expires_at: string | null;
 }
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -37,6 +51,7 @@ interface FishbowlResponse {
   room: { id: string; slug: string; name: string } | null;
   messages: FishbowlMessage[];
   profiles: FishbowlProfile[];
+  drafts: FishbowlDraft[];
 }
 
 const EXPLAINER_STORAGE_KEY = "unclick.fishbowl.explainer.collapsed";
@@ -369,6 +384,87 @@ function PostBox({ disabled, onPost }: PostBoxProps) {
   );
 }
 
+function priorityBadgeClass(priority: FishbowlDraft["priority"]): string {
+  if (priority === "urgent") return "bg-red-500/20 text-red-300 border border-red-500/40";
+  if (priority === "important") return "bg-[#E2B93B]/20 text-[#E2B93B] border border-[#E2B93B]/40";
+  return "bg-white/[0.06] text-[#999] border border-white/[0.08]";
+}
+
+function DraftsPanel({
+  drafts,
+  profiles,
+}: {
+  drafts: FishbowlDraft[];
+  profiles: FishbowlProfile[];
+}) {
+  if (drafts.length === 0) return null;
+  const profileByAgentId = new Map(profiles.map((p) => [p.agent_id, p]));
+
+  return (
+    <section
+      className="rounded-xl border border-[#E2B93B]/30 bg-[#E2B93B]/[0.04]"
+      aria-label="Drafts queue"
+    >
+      <div className="flex items-center justify-between border-b border-[#E2B93B]/20 px-4 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-[#E2B93B]">
+          <span aria-hidden>📨</span>
+          <span>Drafts queue ({drafts.length})</span>
+        </h2>
+        <span className="text-[10px] text-[#888]">
+          Private handoffs waiting for the recipient to wake up. Read-only here.
+        </span>
+      </div>
+      <ul className="divide-y divide-[#E2B93B]/10">
+        {drafts.map((d) => {
+          const recipient = profileByAgentId.get(d.recipient_agent_id);
+          const recipientLabel = recipient?.display_name ?? d.recipient_agent_id;
+          return (
+            <li key={d.id} className="px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-base leading-none" aria-hidden>
+                  {d.sender_emoji ?? "🤖"}
+                </span>
+                <span className="text-[#ccc]">{d.sender_agent_id}</span>
+                <span className="text-[#666]">to</span>
+                <span aria-hidden className="text-base leading-none">
+                  {recipient?.emoji ?? "📭"}
+                </span>
+                <span className="text-[#ccc]">{recipientLabel}</span>
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${priorityBadgeClass(d.priority)}`}
+                >
+                  {d.priority}
+                </span>
+                <span className="ml-auto text-xs text-[#666]">
+                  dropped {relativeTime(d.created_at)}
+                </span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-[#ccc]">{d.text}</p>
+              {d.tags && d.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {d.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-medium text-[#999]"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {d.expires_at && (
+                <p className="mt-1 text-[10px] text-[#666]">
+                  expires {relativeTime(d.expires_at)}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function MessageBody({ m }: { m: FishbowlMessage }) {
   const human = isHumanAgentId(m.author_agent_id);
   return (
@@ -434,6 +530,7 @@ export default function Fishbowl() {
 
   const [messages, setMessages] = useState<FishbowlMessage[]>([]);
   const [profiles, setProfiles] = useState<FishbowlProfile[]>([]);
+  const [drafts, setDrafts] = useState<FishbowlDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -465,6 +562,7 @@ export default function Fishbowl() {
       if (!res.ok) throw new Error(body.error ?? "Failed to load Fishbowl");
       setMessages(body.messages ?? []);
       setProfiles(body.profiles ?? []);
+      setDrafts(body.drafts ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load Fishbowl");
     } finally {
@@ -540,6 +638,8 @@ export default function Fishbowl() {
       <ExplainerPanel profiles={profiles} />
 
       <NowPlayingStrip profiles={profiles} />
+
+      <DraftsPanel drafts={drafts} profiles={profiles} />
 
       <PostBox disabled={!humanAgentId} onPost={postMessage} />
 
