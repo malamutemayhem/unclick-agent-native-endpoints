@@ -28,6 +28,21 @@ import type {
   LibraryDocInput,
 } from "./types.js";
 
+/**
+ * Wraps a raw Supabase / Postgrest error in a real Error so the outer catch
+ * in server.ts can extract a useful message instead of producing "[object Object]".
+ */
+function pgError(context: string, err: unknown): Error {
+  if (err instanceof Error) return err;
+  const e = (err ?? {}) as { message?: string; code?: string; details?: string; hint?: string };
+  const parts: string[] = [`${context} failed`];
+  if (e.message) parts.push(e.message);
+  if (e.code) parts.push(`(code: ${e.code})`);
+  if (e.details) parts.push(`details: ${e.details}`);
+  if (e.hint) parts.push(`hint: ${e.hint}`);
+  return new Error(parts.join(" "));
+}
+
 function contentHash(text: string): string {
   return createHash("sha256").update(text.toLowerCase().trim(), "utf8").digest("hex");
 }
@@ -331,7 +346,7 @@ export class SupabaseBackend implements MemoryBackend {
       )
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw pgError("writeSessionSummary insert", error);
     return { id: row.id };
   }
 
@@ -383,7 +398,7 @@ export class SupabaseBackend implements MemoryBackend {
       )
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw pgError("addFact insert", error);
 
     // Append audit row (fire-and-forget; never blocks the main insert)
     this.writeFactAudit(row.id, "insert", { category: data.category }).catch(() => {});
@@ -413,7 +428,7 @@ export class SupabaseBackend implements MemoryBackend {
             ? { api_key_hash: this.tenancy.apiKeyHash, title: data.category, body: data.fact, content_hash: hash }
             : { title: data.category, body: data.fact, content_hash: hash };
         const { data: doc, error } = await this.client.from(docTable).insert(insertRow).select().single();
-        if (error) throw error;
+        if (error) throw pgError("saveBlob canonical_docs insert", error);
         docId = (doc as { id: string }).id;
       }
     }
@@ -462,7 +477,7 @@ export class SupabaseBackend implements MemoryBackend {
         )
         .select()
         .single();
-      if (ferr && (ferr as { code?: string }).code !== "23505") throw ferr;
+      if (ferr && (ferr as { code?: string }).code !== "23505") throw pgError("saveBlob extracted_facts insert", ferr);
       if (!ferr && frow) factIds.push((frow as { id: string }).id);
     }
 
@@ -530,7 +545,7 @@ export class SupabaseBackend implements MemoryBackend {
           has_code: data.has_code,
         })
       );
-    if (error) throw error;
+    if (error) throw pgError("logConversation insert", error);
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {
@@ -557,7 +572,7 @@ export class SupabaseBackend implements MemoryBackend {
       )
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw pgError("storeCode insert", error);
     return { id: row.id };
   }
 
@@ -571,7 +586,7 @@ export class SupabaseBackend implements MemoryBackend {
       query = query.eq("api_key_hash", this.tenancy.apiKeyHash);
     }
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) throw pgError("getBusinessContext select", error);
     return data ?? [];
   }
 
@@ -608,7 +623,7 @@ export class SupabaseBackend implements MemoryBackend {
       .upsert(this.withTenancy(row), { onConflict })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw pgError("setBusinessContext upsert", error);
   }
 
   async upsertLibraryDoc(data: LibraryDocInput): Promise<string> {
@@ -635,7 +650,7 @@ export class SupabaseBackend implements MemoryBackend {
           decay_tier: "hot",
         })
         .eq("id", existing.id);
-      if (error) throw error;
+      if (error) throw pgError("upsertLibraryDoc update", error);
       return `Library doc updated: "${data.title}" (v${existing.version + 1})`;
     } else {
       const { error } = await this.client
@@ -652,7 +667,7 @@ export class SupabaseBackend implements MemoryBackend {
             last_accessed: now(),
           })
         );
-      if (error) throw error;
+      if (error) throw pgError("upsertLibraryDoc insert", error);
       return `Library doc created: "${data.title}" (v1)`;
     }
   }

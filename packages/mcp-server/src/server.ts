@@ -980,7 +980,21 @@ export function createServer(): Server {
         isError: true,
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      let message: string;
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string") {
+        // Postgres / Supabase / PostgREST errors are plain objects, not Error instances.
+        // Surface code / details / hint when present so agents can self-diagnose.
+        const e = err as { message: string; code?: string; details?: string; hint?: string };
+        const parts: string[] = [e.message];
+        if (e.code) parts.push(`(code: ${e.code})`);
+        if (e.details) parts.push(`details: ${e.details}`);
+        if (e.hint) parts.push(`hint: ${e.hint}`);
+        message = parts.join(" ");
+      } else {
+        message = String(err);
+      }
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
         isError: true,
