@@ -389,6 +389,59 @@ async function resolveApiKeyHash(
   }
 }
 
+// ─── Fishbowl event helper ──────────────────────────────────────────────────
+//
+// Posts a system event message into the tenant's default Fishbowl room.
+// Used by the Todos / Ideas handlers to announce material changes
+// (todo-created, idea-promoted, etc.) without each handler duplicating the
+// room-resolve + insert logic. Best-effort: errors are logged, never thrown.
+async function postFishbowlEvent(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+  agentId: string,
+  eventTag: string,
+  text: string,
+): Promise<void> {
+  try {
+    const { data: profile } = await supabase
+      .from("mc_fishbowl_profiles")
+      .select("emoji, display_name")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("agent_id", agentId)
+      .maybeSingle();
+
+    const { data: existingRoom } = await supabase
+      .from("mc_fishbowl_rooms")
+      .select("id")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("slug", "default")
+      .maybeSingle();
+    let roomId = existingRoom?.id as string | undefined;
+    if (!roomId) {
+      const { data: newRoom } = await supabase
+        .from("mc_fishbowl_rooms")
+        .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Fishbowl" })
+        .select("id")
+        .single();
+      roomId = newRoom?.id;
+    }
+    if (!roomId) return;
+
+    await supabase.from("mc_fishbowl_messages").insert({
+      api_key_hash: apiKeyHash,
+      room_id: roomId,
+      author_emoji: profile?.emoji ?? "🤖",
+      author_name: profile?.display_name ?? null,
+      author_agent_id: agentId,
+      recipients: ["all"],
+      text,
+      tags: ["event", eventTag],
+    });
+  } catch (err) {
+    console.error(`[fishbowl postEvent ${eventTag}] failed:`, (err as Error).message);
+  }
+}
+
 // ─── Setup guide content ────────────────────────────────────────────────────
 //
 // Static, client-specific instructions for maximising memory auto-load
@@ -6209,6 +6262,644 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messages: messages ?? [],
           profiles: profiles ?? [],
         });
+      }
+
+      // ─── Fishbowl Todos + Ideas v1 ────────────────────────────────────────
+      //
+      // All thirteen handlers below share the same shape:
+      //   1. Require POST.
+      //   2. Resolve api_key_hash.
+      //   3. Validate agent_id (<= 128 chars).
+      //   4. Anti-spoof human-* agent_ids (must match a profile with
+      //      user_agent_hint='admin-ui').
+      //   5. Validate inputs.
+      //   6. Mutate or read.
+      //   7. For material changes (todo-created, todo-completed, idea-created,
+      //      idea-promoted), post a tagged event into the Fishbowl feed.
+      //
+      // Tables: mc_fishbowl_todos, mc_fishbowl_ideas, mc_fishbowl_idea_votes,
+      // mc_fishbowl_comments. Service-role-only RLS. See migration
+      // 20260425120000_fishbowl_todos_ideas.sql.
+
+      case "fishbowl_create_todo":
+      case "fishbowl_update_todo":
+      case "fishbowl_complete_todo":
+      case "fishbowl_drop_todo":
+      case "fishbowl_delete_todo":
+      case "fishbowl_list_todos":
+      case "fishbowl_create_idea":
+      case "fishbowl_update_idea":
+      case "fishbowl_vote_on_idea":
+      case "fishbowl_list_ideas":
+      case "fishbowl_promote_idea_to_todo":
+      case "fishbowl_comment_on":
+      case "fishbowl_list_comments": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as Record<string, unknown>;
+
+        const agentId = String(body.agent_id ?? "").trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass the same stable identifier you used for set_my_emoji so writes attribute to your profile.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        // Anti-spoof on human-<userid>: only allow if a profile exists with
+        // user_agent_hint='admin-ui' for that exact agent_id. AI agents must
+        // pick a non-human identifier.
+        let isAdminCaller = false;
+        if (agentId.startsWith("human-")) {
+          const { data: humanProfile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (humanProfile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({
+              error: "human-* agent_id is reserved for the admin UI",
+              how_to_fix: "AI agents should pick a different agent_id.",
+            });
+          }
+          isAdminCaller = true;
+        }
+
+        const validateTitle = (raw: unknown): string | { error: string } => {
+          const t = typeof raw === "string" ? raw.trim() : "";
+          if (!t) return { error: "title required" };
+          if (t.length > 200) return { error: "title must be at most 200 characters" };
+          return t;
+        };
+        const validateDescription = (raw: unknown): string | null | { error: string } => {
+          if (raw == null || raw === "") return null;
+          if (typeof raw !== "string") return { error: "description must be a string" };
+          if (raw.length > 4000) return { error: "description must be at most 4000 characters" };
+          return raw;
+        };
+        const validateUuid = (raw: unknown, field: string): string | { error: string } => {
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const t = typeof raw === "string" ? raw.trim() : "";
+          if (!t) return { error: `${field} required` };
+          if (!UUID_RE.test(t)) return { error: `${field} must be a uuid` };
+          return t;
+        };
+
+        // ── Todos ──────────────────────────────────────────────────────────
+
+        if (action === "fishbowl_create_todo") {
+          const titleRes = validateTitle(body.title);
+          if (typeof titleRes !== "string") return res.status(400).json(titleRes);
+          const descRes = validateDescription(body.description);
+          if (descRes && typeof descRes === "object") return res.status(400).json(descRes);
+
+          const priority = String(body.priority ?? "normal");
+          if (!["low", "normal", "high", "urgent"].includes(priority)) {
+            return res.status(400).json({ error: "priority must be low|normal|high|urgent" });
+          }
+
+          let assignee: string | null = null;
+          if (body.assigned_to_agent_id != null && body.assigned_to_agent_id !== "") {
+            const a = String(body.assigned_to_agent_id).trim();
+            if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
+            assignee = a;
+          }
+
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .insert({
+              api_key_hash: apiKeyHash,
+              title: titleRes,
+              description: descRes,
+              priority,
+              status: "open",
+              created_by_agent_id: agentId,
+              assigned_to_agent_id: assignee,
+            })
+            .select("*")
+            .single();
+          if (error) throw error;
+
+          void postFishbowlEvent(
+            supabase,
+            apiKeyHash,
+            agentId,
+            "todo-created",
+            `New todo: ${titleRes}`,
+          );
+          return res.status(200).json({ todo: data });
+        }
+
+        if (action === "fishbowl_update_todo") {
+          const idRes = validateUuid(body.todo_id, "todo_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+
+          const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+          if (body.title != null) {
+            const titleRes = validateTitle(body.title);
+            if (typeof titleRes !== "string") return res.status(400).json(titleRes);
+            update.title = titleRes;
+          }
+          if (body.description !== undefined) {
+            const descRes = validateDescription(body.description);
+            if (descRes && typeof descRes === "object") return res.status(400).json(descRes);
+            update.description = descRes;
+          }
+          if (body.status != null) {
+            const s = String(body.status);
+            if (!["open", "in_progress", "done", "dropped"].includes(s)) {
+              return res.status(400).json({ error: "status must be open|in_progress|done|dropped" });
+            }
+            update.status = s;
+            if (s === "done") update.completed_at = new Date().toISOString();
+          }
+          if (body.priority != null) {
+            const p = String(body.priority);
+            if (!["low", "normal", "high", "urgent"].includes(p)) {
+              return res.status(400).json({ error: "priority must be low|normal|high|urgent" });
+            }
+            update.priority = p;
+          }
+          if (body.assigned_to_agent_id !== undefined) {
+            const a = String(body.assigned_to_agent_id ?? "").trim();
+            if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
+            update.assigned_to_agent_id = a.length === 0 ? null : a;
+          }
+
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .update(update)
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("*")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return res.status(404).json({ error: "todo not found" });
+          return res.status(200).json({ todo: data });
+        }
+
+        if (action === "fishbowl_complete_todo") {
+          const idRes = validateUuid(body.todo_id, "todo_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const nowIso = new Date().toISOString();
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .update({ status: "done", completed_at: nowIso, updated_at: nowIso })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("*")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return res.status(404).json({ error: "todo not found" });
+
+          void postFishbowlEvent(
+            supabase,
+            apiKeyHash,
+            agentId,
+            "todo-completed",
+            `Todo done: ${data.title}`,
+          );
+          return res.status(200).json({ todo: data });
+        }
+
+        if (action === "fishbowl_drop_todo") {
+          const idRes = validateUuid(body.todo_id, "todo_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .update({ status: "dropped", updated_at: new Date().toISOString() })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("*")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return res.status(404).json({ error: "todo not found" });
+          return res.status(200).json({ todo: data });
+        }
+
+        if (action === "fishbowl_delete_todo") {
+          const idRes = validateUuid(body.todo_id, "todo_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          // Cascade comments manually since target_id is polymorphic (no FK).
+          await supabase
+            .from("mc_fishbowl_comments")
+            .delete()
+            .eq("api_key_hash", apiKeyHash)
+            .eq("target_kind", "todo")
+            .eq("target_id", idRes);
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .delete()
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("id")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return res.status(404).json({ error: "todo not found" });
+          return res.status(200).json({ deleted: true, id: idRes });
+        }
+
+        if (action === "fishbowl_list_todos") {
+          const limit = Math.min(Math.max(Number(body.limit ?? 50) || 50, 1), 200);
+          let q = supabase
+            .from("mc_fishbowl_todos")
+            .select("*")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(limit);
+          if (body.status != null) {
+            const s = String(body.status);
+            if (!["open", "in_progress", "done", "dropped"].includes(s)) {
+              return res.status(400).json({ error: "status filter must be open|in_progress|done|dropped" });
+            }
+            q = q.eq("status", s);
+          }
+          if (body.assigned_to_agent_id != null) {
+            const a = String(body.assigned_to_agent_id);
+            q = q.eq("assigned_to_agent_id", a);
+          }
+          const { data, error } = await q;
+          if (error) throw error;
+
+          // Decorate with comment_count for the kanban cards.
+          const todos = data ?? [];
+          let countMap: Record<string, number> = {};
+          if (todos.length > 0) {
+            const ids = todos.map((t) => t.id);
+            const { data: comments } = await supabase
+              .from("mc_fishbowl_comments")
+              .select("target_id")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("target_kind", "todo")
+              .in("target_id", ids);
+            countMap = (comments ?? []).reduce<Record<string, number>>((acc, c) => {
+              const k = c.target_id as string;
+              acc[k] = (acc[k] ?? 0) + 1;
+              return acc;
+            }, {});
+          }
+          const decorated = todos.map((t) => ({ ...t, comment_count: countMap[t.id as string] ?? 0 }));
+          return res.status(200).json({ todos: decorated });
+        }
+
+        // ── Ideas ──────────────────────────────────────────────────────────
+
+        if (action === "fishbowl_create_idea") {
+          const titleRes = validateTitle(body.title);
+          if (typeof titleRes !== "string") return res.status(400).json(titleRes);
+          const descRes = validateDescription(body.description);
+          if (descRes && typeof descRes === "object") return res.status(400).json(descRes);
+
+          const { data, error } = await supabase
+            .from("mc_fishbowl_ideas")
+            .insert({
+              api_key_hash: apiKeyHash,
+              title: titleRes,
+              description: descRes,
+              status: "proposed",
+              created_by_agent_id: agentId,
+            })
+            .select("*")
+            .single();
+          if (error) throw error;
+
+          void postFishbowlEvent(
+            supabase,
+            apiKeyHash,
+            agentId,
+            "idea-created",
+            `New idea: ${titleRes}`,
+          );
+          return res.status(200).json({ idea: data });
+        }
+
+        if (action === "fishbowl_update_idea") {
+          const idRes = validateUuid(body.idea_id, "idea_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+          if (body.title != null) {
+            const titleRes = validateTitle(body.title);
+            if (typeof titleRes !== "string") return res.status(400).json(titleRes);
+            update.title = titleRes;
+          }
+          if (body.description !== undefined) {
+            const descRes = validateDescription(body.description);
+            if (descRes && typeof descRes === "object") return res.status(400).json(descRes);
+            update.description = descRes;
+          }
+          if (body.status != null) {
+            const s = String(body.status);
+            if (!["proposed", "voting", "locked", "parked", "rejected"].includes(s)) {
+              return res.status(400).json({ error: "status must be proposed|voting|locked|parked|rejected" });
+            }
+            update.status = s;
+          }
+          const { data, error } = await supabase
+            .from("mc_fishbowl_ideas")
+            .update(update)
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("*")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return res.status(404).json({ error: "idea not found" });
+          return res.status(200).json({ idea: data });
+        }
+
+        if (action === "fishbowl_vote_on_idea") {
+          const idRes = validateUuid(body.idea_id, "idea_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const vote = String(body.vote ?? "");
+          if (vote !== "up" && vote !== "down") {
+            return res.status(400).json({ error: "vote must be 'up' or 'down'" });
+          }
+
+          // Verify the idea exists in this tenant.
+          const { data: existing } = await supabase
+            .from("mc_fishbowl_ideas")
+            .select("id, upvotes, downvotes")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (!existing) return res.status(404).json({ error: "idea not found" });
+
+          // What was the previous vote, if any? Needed to adjust counters.
+          const { data: prior } = await supabase
+            .from("mc_fishbowl_idea_votes")
+            .select("vote")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("idea_id", idRes)
+            .eq("voter_agent_id", agentId)
+            .maybeSingle();
+
+          const { error: voteErr } = await supabase
+            .from("mc_fishbowl_idea_votes")
+            .upsert(
+              {
+                api_key_hash: apiKeyHash,
+                idea_id: idRes,
+                voter_agent_id: agentId,
+                vote,
+                created_at: new Date().toISOString(),
+              },
+              { onConflict: "api_key_hash,idea_id,voter_agent_id" },
+            );
+          if (voteErr) throw voteErr;
+
+          // Recompute aggregate counters from the source of truth (the votes
+          // table). Cheaper to derive than to keep deltas in sync, and avoids
+          // skew if a vote ever lands twice.
+          const { data: voteRows, error: aggErr } = await supabase
+            .from("mc_fishbowl_idea_votes")
+            .select("vote")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("idea_id", idRes);
+          if (aggErr) throw aggErr;
+          let up = 0;
+          let down = 0;
+          for (const row of voteRows ?? []) {
+            if (row.vote === "up") up++;
+            else if (row.vote === "down") down++;
+          }
+          const { data: updated, error: updErr } = await supabase
+            .from("mc_fishbowl_ideas")
+            .update({ upvotes: up, downvotes: down, updated_at: new Date().toISOString() })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .select("*")
+            .maybeSingle();
+          if (updErr) throw updErr;
+
+          // Rate-limited vote event: only post if the most recent
+          // 'idea-voted' message for this idea is older than 5 minutes.
+          // Keeps the feed quiet during a flurry.
+          const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+          const { data: recentVoteEvents } = await supabase
+            .from("mc_fishbowl_messages")
+            .select("id, created_at, text")
+            .eq("api_key_hash", apiKeyHash)
+            .contains("tags", ["event", "idea-voted"])
+            .gte("created_at", fiveMinAgo)
+            .ilike("text", `%${idRes}%`)
+            .limit(1);
+          if (!recentVoteEvents || recentVoteEvents.length === 0) {
+            void postFishbowlEvent(
+              supabase,
+              apiKeyHash,
+              agentId,
+              "idea-voted",
+              `Vote on idea ${idRes}: ${up} up, ${down} down`,
+            );
+          }
+
+          return res.status(200).json({
+            idea: updated,
+            previous_vote: prior?.vote ?? null,
+          });
+        }
+
+        if (action === "fishbowl_list_ideas") {
+          const limit = Math.min(Math.max(Number(body.limit ?? 50) || 50, 1), 200);
+          let q = supabase
+            .from("mc_fishbowl_ideas")
+            .select("*")
+            .eq("api_key_hash", apiKeyHash)
+            .order("score", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(limit);
+          if (body.status != null) {
+            const s = String(body.status);
+            if (!["proposed", "voting", "locked", "parked", "rejected"].includes(s)) {
+              return res.status(400).json({ error: "status filter invalid" });
+            }
+            q = q.eq("status", s);
+          }
+          const { data, error } = await q;
+          if (error) throw error;
+          const ideas = data ?? [];
+
+          // Decorate with the caller's own vote and comment_count so the UI
+          // can render highlighted vote buttons and a comment badge.
+          let myVoteMap: Record<string, "up" | "down"> = {};
+          let countMap: Record<string, number> = {};
+          if (ideas.length > 0) {
+            const ids = ideas.map((i) => i.id);
+            const [{ data: myVotes }, { data: comments }] = await Promise.all([
+              supabase
+                .from("mc_fishbowl_idea_votes")
+                .select("idea_id, vote")
+                .eq("api_key_hash", apiKeyHash)
+                .eq("voter_agent_id", agentId)
+                .in("idea_id", ids),
+              supabase
+                .from("mc_fishbowl_comments")
+                .select("target_id")
+                .eq("api_key_hash", apiKeyHash)
+                .eq("target_kind", "idea")
+                .in("target_id", ids),
+            ]);
+            myVoteMap = (myVotes ?? []).reduce<Record<string, "up" | "down">>((acc, v) => {
+              acc[v.idea_id as string] = v.vote as "up" | "down";
+              return acc;
+            }, {});
+            countMap = (comments ?? []).reduce<Record<string, number>>((acc, c) => {
+              const k = c.target_id as string;
+              acc[k] = (acc[k] ?? 0) + 1;
+              return acc;
+            }, {});
+          }
+          const decorated = ideas.map((i) => ({
+            ...i,
+            my_vote: myVoteMap[i.id as string] ?? null,
+            comment_count: countMap[i.id as string] ?? 0,
+          }));
+          return res.status(200).json({ ideas: decorated });
+        }
+
+        if (action === "fishbowl_promote_idea_to_todo") {
+          const idRes = validateUuid(body.idea_id, "idea_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+
+          const { data: idea } = await supabase
+            .from("mc_fishbowl_ideas")
+            .select("*")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (!idea) return res.status(404).json({ error: "idea not found" });
+          if (idea.promoted_to_todo_id) {
+            return res.status(409).json({
+              error: "idea already promoted",
+              promoted_to_todo_id: idea.promoted_to_todo_id,
+            });
+          }
+
+          const netUp = (idea.upvotes ?? 0) - (idea.downvotes ?? 0);
+          if (!isAdminCaller && netUp < 1) {
+            return res.status(403).json({
+              error: "idea needs net upvotes >= 1 (or admin caller) to promote",
+              how_to_fix: "Vote it up first, or have the human admin promote it from the Fishbowl admin UI.",
+            });
+          }
+
+          const priority = String(body.priority ?? "normal");
+          if (!["low", "normal", "high", "urgent"].includes(priority)) {
+            return res.status(400).json({ error: "priority must be low|normal|high|urgent" });
+          }
+          let assignee: string | null = null;
+          if (body.assigned_to_agent_id != null && body.assigned_to_agent_id !== "") {
+            const a = String(body.assigned_to_agent_id).trim();
+            if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
+            assignee = a;
+          }
+
+          const { data: newTodo, error: todoErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .insert({
+              api_key_hash: apiKeyHash,
+              title: idea.title,
+              description: idea.description,
+              status: "open",
+              priority,
+              created_by_agent_id: agentId,
+              assigned_to_agent_id: assignee,
+              source_idea_id: idea.id,
+            })
+            .select("*")
+            .single();
+          if (todoErr) throw todoErr;
+
+          const { data: lockedIdea, error: ideaErr } = await supabase
+            .from("mc_fishbowl_ideas")
+            .update({
+              status: "locked",
+              promoted_to_todo_id: newTodo.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idea.id)
+            .select("*")
+            .single();
+          if (ideaErr) throw ideaErr;
+
+          void postFishbowlEvent(
+            supabase,
+            apiKeyHash,
+            agentId,
+            "idea-promoted",
+            `Idea promoted to todo: ${idea.title}`,
+          );
+          return res.status(200).json({ todo: newTodo, idea: lockedIdea });
+        }
+
+        // ── Comments (polymorphic) ─────────────────────────────────────────
+
+        if (action === "fishbowl_comment_on") {
+          const targetKind = String(body.target_kind ?? "");
+          if (targetKind !== "todo" && targetKind !== "idea") {
+            return res.status(400).json({ error: "target_kind must be 'todo' or 'idea'" });
+          }
+          const idRes = validateUuid(body.target_id, "target_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const text = typeof body.text === "string" ? body.text.trim() : "";
+          if (!text) return res.status(400).json({ error: "text required" });
+          if (text.length > 4000) return res.status(400).json({ error: "text must be at most 4000 characters" });
+
+          // Verify the target exists in this tenant before letting an orphan
+          // comment land.
+          const targetTable = targetKind === "todo" ? "mc_fishbowl_todos" : "mc_fishbowl_ideas";
+          const { data: target } = await supabase
+            .from(targetTable)
+            .select("id")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (!target) return res.status(404).json({ error: `${targetKind} not found` });
+
+          const { data, error } = await supabase
+            .from("mc_fishbowl_comments")
+            .insert({
+              api_key_hash: apiKeyHash,
+              target_kind: targetKind,
+              target_id: idRes,
+              author_agent_id: agentId,
+              text,
+            })
+            .select("*")
+            .single();
+          if (error) throw error;
+          return res.status(200).json({ comment: data });
+        }
+
+        if (action === "fishbowl_list_comments") {
+          const targetKind = String(body.target_kind ?? "");
+          if (targetKind !== "todo" && targetKind !== "idea") {
+            return res.status(400).json({ error: "target_kind must be 'todo' or 'idea'" });
+          }
+          const idRes = validateUuid(body.target_id, "target_id");
+          if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const limit = Math.min(Math.max(Number(body.limit ?? 100) || 100, 1), 200);
+          const { data, error } = await supabase
+            .from("mc_fishbowl_comments")
+            .select("*")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("target_kind", targetKind)
+            .eq("target_id", idRes)
+            .order("created_at", { ascending: true })
+            .limit(limit);
+          if (error) throw error;
+          return res.status(200).json({ comments: data ?? [] });
+        }
+
+        return res.status(400).json({ error: `Unhandled fishbowl action: ${action}` });
       }
 
       default:
