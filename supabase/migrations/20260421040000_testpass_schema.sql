@@ -69,6 +69,9 @@ begin
 end;
 $$;
 
+-- Idempotency guard: Postgres has no IF NOT EXISTS for CREATE TRIGGER, so drop-then-create
+-- ensures re-runs of this migration do not error with 42710 "trigger already exists".
+drop trigger if exists testpass_packs_updated_at on testpass_packs;
 create trigger testpass_packs_updated_at
   before update on testpass_packs
   for each row execute function testpass_set_updated_at();
