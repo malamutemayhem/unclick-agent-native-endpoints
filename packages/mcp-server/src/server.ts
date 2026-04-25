@@ -765,12 +765,15 @@ export function createServer(): Server {
     }
   );
 
-  // LIST TOOLS: advertise only the 5 core memory tools. Internal tools
-  // (unclick_search, unclick_browse, unclick_tool_info, unclick_call) and the
-  // individual direct tools remain callable for backwards compatibility but
-  // aren't shown in the tool list to keep the surface minimal.
+  // LIST TOOLS: advertise the core memory tools PLUS every product + marketplace
+  // tool registered in ADDITIONAL_TOOLS (TestPass, Crews, and all third-party
+  // integrations from tool-wiring.ts). Internal meta tools (unclick_search,
+  // unclick_browse, unclick_tool_info, unclick_call) and the small DIRECT_TOOLS
+  // utility set remain callable for backwards compatibility but stay hidden
+  // from tools/list to avoid duplicating what native chat clients already
+  // discover.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: [...VISIBLE_TOOLS] };
+    return { tools: [...VISIBLE_TOOLS, ...ADDITIONAL_TOOLS] };
   });
 
   // CALL TOOL
