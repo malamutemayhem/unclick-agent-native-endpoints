@@ -12,7 +12,11 @@
  *   POST ?action=save_pack                            - validate + upsert a pack (owner = actor)
  *   POST ?action=complete_run                         - finalize an in-flight run
  *
- * Authentication: Supabase JWT Bearer token (session user = actor).
+ * Authentication: Bearer token in Authorization header. Two valid shapes:
+ *   1. Supabase JWT (browser admin UI session)
+ *   2. UnClick API key prefixed with "uc_" (MCP callers, e.g. testpass_run
+ *      tool from a connected agent). Resolved against api_keys.key_hash.
+ * Both paths resolve to the same actor_user_id used for tenancy and RLS.
  * Service role key used server-side for DB writes (bypasses RLS which
  * checks actor_user_id = auth.uid() - that match happens at read time).
  *
@@ -23,6 +27,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import * as crypto from "node:crypto";
 import { probeServer } from "../packages/testpass/src/probe.js";
 import {
   createRun,
@@ -75,6 +80,47 @@ async function getActorUserId(
   if (!r.ok) return null;
   const u = (await r.json()) as { id?: string };
   return u.id ?? null;
+}
+
+function sha256hex(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+/**
+ * Resolve an UnClick API key (uc_...) to an actor user id by hashing it
+ * and looking up an active row in api_keys. Returns null if the key isn't
+ * found, isn't active, or has no linked user_id. Uses the service role key
+ * to bypass RLS on api_keys (same pattern as api/mcp.ts).
+ */
+async function getActorUserIdFromApiKey(
+  supabaseUrl: string,
+  serviceKey: string,
+  apiKey: string,
+): Promise<string | null> {
+  const apiKeyHash = sha256hex(apiKey);
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${encodeURIComponent(apiKeyHash)}&is_active=eq.true&select=user_id&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+  );
+  if (!r.ok) return null;
+  const rows = (await r.json()) as Array<{ user_id: string | null }>;
+  return rows[0]?.user_id ?? null;
+}
+
+/**
+ * Resolve the bearer token to an actor user id. UnClick API keys are
+ * prefixed with "uc_" and looked up in api_keys; anything else is tried
+ * as a Supabase JWT. Returns null if neither path succeeds.
+ */
+async function resolveActorUserId(
+  supabaseUrl: string,
+  serviceKey: string,
+  token: string,
+): Promise<string | null> {
+  if (token.startsWith("uc_")) {
+    return getActorUserIdFromApiKey(supabaseUrl, serviceKey, token);
+  }
+  return getActorUserId(supabaseUrl, token);
 }
 
 async function getPackIdBySlug(
@@ -291,7 +337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
   if (!token) return json(res, 401, { error: "Missing Bearer token" });
 
-  const actorUserId = await getActorUserId(supabaseUrl, token);
+  const actorUserId = await resolveActorUserId(supabaseUrl, serviceKey, token);
   if (!actorUserId) return json(res, 401, { error: "Invalid session" });
 
   const action = req.query.action as string;
