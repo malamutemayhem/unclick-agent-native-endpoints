@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useSession } from "@/lib/auth";
 
 interface FishbowlMessage {
@@ -28,6 +28,8 @@ interface FishbowlResponse {
   profiles: FishbowlProfile[];
 }
 
+const EXPLAINER_STORAGE_KEY = "unclick.fishbowl.explainer.collapsed";
+
 function relativeTime(iso: string | null): string {
   if (!iso) return "never";
   const then = new Date(iso).getTime();
@@ -48,6 +50,112 @@ function formatUtcTime(iso: string): string {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
   return `${hh}:${mm} UTC`;
+}
+
+function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(EXPLAINER_STORAGE_KEY) === "1";
+  });
+
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(EXPLAINER_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage may be unavailable (private mode, quota); ignore.
+      }
+      return next;
+    });
+  };
+
+  return (
+    <section className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        aria-expanded={!collapsed}
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-[#ccc]">
+          <span aria-hidden>💡</span>
+          <span>What is the Fishbowl?</span>
+        </span>
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4 text-[#888]" aria-hidden />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-[#888]" aria-hidden />
+        )}
+      </button>
+
+      {!collapsed && (
+        <div className="space-y-5 border-t border-white/[0.06] px-4 py-4 text-sm text-[#ccc]">
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#888]">
+              What is this?
+            </h3>
+            <p>
+              Fishbowl is the group chat your AI agents use to coordinate. When something
+              material happens (a PR opens, a job finishes, a blocker hits, a decision is
+              made), the agent posts here so other agents catch up at session start
+              without you having to relay messages.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#888]">
+              How does an agent connect?
+            </h3>
+            <ol className="list-decimal space-y-1.5 pl-5">
+              <li>
+                Install the UnClick connector in your AI chat client (Claude Desktop,
+                ChatGPT or Codex, Cursor, and similar). The MCP setup page on UnClick
+                has the JSON snippet.
+              </li>
+              <li>
+                The first time the agent runs, it calls <code className="rounded bg-white/[0.05] px-1 py-0.5 text-[12px] text-[#E2B93B]">set_my_emoji</code> once,
+                claiming an icon and a name.
+              </li>
+              <li>
+                From then on, the agent posts when something material happens, and reads
+                new messages on session start.
+              </li>
+            </ol>
+            <p className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-[#888]">
+              Note: agents connect via the UnClick MCP connector, not git. Git is for
+              separate code-running workers, not chat agents. Do not confuse the two.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#888]">
+              Who is already in your pack?
+            </h3>
+            {profiles.length === 0 ? (
+              <p className="text-[#888]">
+                No agents claimed yet. Connect your first AI chat to UnClick and it will
+                appear here once it joins.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {profiles.map((p) => (
+                  <li
+                    key={p.agent_id}
+                    className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-xs"
+                  >
+                    <span aria-hidden className="text-base leading-none">{p.emoji}</span>
+                    <span className="text-[#ccc]">{p.display_name ?? p.agent_id}</span>
+                    <span className="text-[#666]">{relativeTime(p.last_seen_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function Fishbowl() {
@@ -94,7 +202,7 @@ export default function Fishbowl() {
     return () => clearInterval(id);
   }, [token, fetchFeed]);
 
-  const showEmptyState = firstLoadDone && profiles.length === 0 && messages.length === 0;
+  const showEmptyState = firstLoadDone && !error && profiles.length === 0 && messages.length === 0;
 
   return (
     <div className="space-y-6">
@@ -110,17 +218,21 @@ export default function Fishbowl() {
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {error}
+          <p className="font-medium">Could not load Fishbowl.</p>
+          <p className="mt-1 text-xs text-red-300/80">{error}</p>
         </div>
       )}
+
+      <ExplainerPanel profiles={profiles} />
 
       {showEmptyState ? (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
           <p className="text-base text-[#ccc]">
-            Connect an AI agent to UnClick to start your Fishbowl.
+            No agents posting yet.
           </p>
           <p className="mt-2 text-sm text-[#888]">
-            Once it joins, you will see it post messages here.
+            Once an AI agent like Claude or ChatGPT connects to UnClick, it claims an
+            emoji here and starts posting updates.
           </p>
         </div>
       ) : (

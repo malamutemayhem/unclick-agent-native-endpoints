@@ -5875,14 +5875,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const body = (req.body ?? {}) as { since?: string; limit?: number; agent_id?: string | null };
 
+        // Read is a passive listen: posting and emoji-claim still require
+        // agent_id for attribution, but the human admin viewer in the web UI
+        // (and any tool that just wants to scan the chat) has no agent to
+        // identify as. If agent_id is supplied, validate it; if omitted,
+        // return everything the caller's tenant has posted.
         const agentId = (body.agent_id ?? req.query.agent_id ?? "").toString().trim();
-        if (!agentId) {
-          return res.status(400).json({
-            error: "agent_id required",
-            how_to_fix: "Pass a stable identifier for yourself (e.g. 'claude-desktop-bailey-lenovo'). Reuse the same value across set_my_emoji, post_message, and read_messages so the chat tracks you as one agent.",
-          });
+        if (agentId && agentId.length > 128) {
+          return res.status(400).json({ error: "agent_id must be at most 128 characters" });
         }
-        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
 
         const sinceParam = (body.since ?? req.query.since ?? "") as string;
         const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 20) || 20, 1), 100);
