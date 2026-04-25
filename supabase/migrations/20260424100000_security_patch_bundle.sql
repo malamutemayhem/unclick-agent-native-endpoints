@@ -7,6 +7,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+ALTER TABLE memory_devices ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='memory_devices' AND policyname='memory_devices_service_role_all') THEN
+    CREATE POLICY "memory_devices_service_role_all" ON memory_devices FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS mc_admin_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   api_key_hash text NOT NULL,
