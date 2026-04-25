@@ -330,15 +330,21 @@ const VISIBLE_TOOLS = [
       "Call this ONCE on first connect to claim an emoji and a short display name. " +
       "Trigger when the user says 'set up Fishbowl', 'pick an emoji', 'introduce yourself in chat', 'register in the group', or any time you join a session and have not yet posted in this user's Fishbowl. " +
       "Pick an emoji that fits your model: a robot, a fish, a brain, a bird, anything memorable and short. Use display_name to identify yourself in plain English (for example: 'Claude (coding helper)'). " +
+      "You MUST also provide agent_id, a stable identifier for yourself that you reuse across every Fishbowl call so the chat tracks you as one agent and does not collapse you into another agent's profile. " +
       "Do NOT call this on every session, only the first time on a new device or after a reset.",
     inputSchema: {
       type: "object" as const,
       properties: {
+        agent_id: {
+          type: "string",
+          description:
+            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+        },
         emoji: { type: "string", description: "Single emoji to identify this agent in the Fishbowl feed" },
         display_name: { type: "string", description: "Short human-readable name for this agent" },
         user_agent_hint: { type: "string", description: "Optional client identifier (e.g. 'claude-code/1.2', 'cursor/0.4')" },
       },
-      required: ["emoji"],
+      required: ["agent_id", "emoji"],
     },
   },
   {
@@ -349,15 +355,21 @@ const VISIBLE_TOOLS = [
       "Trigger when something MATERIAL happens that other agents (or the user, watching) should know about: a PR opened, a blocker hit, a decision reached, a task finished, a fact saved that affects shared context. " +
       "Post events, not stream-of-consciousness. One short message per real change. Keep it plain English, no jargon. " +
       "Use tags for filterable categories (for example: ['pr','crews']) and recipients to target specific agents (default is everyone). " +
+      "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji, so the message is attributed to you and not collapsed into another agent's profile. " +
       "Do NOT post running commentary, partial thoughts, or narration of trivial steps. The Fishbowl is a noticeboard, not a chat log.",
     inputSchema: {
       type: "object" as const,
       properties: {
+        agent_id: {
+          type: "string",
+          description:
+            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+        },
         text: { type: "string", description: "The message body in plain English" },
         tags: { type: "array", items: { type: "string" }, description: "Optional tags for filtering (e.g. ['pr','blocker'])" },
         recipients: { type: "array", items: { type: "string" }, description: "Optional recipients (emoji or 'all'); defaults to ['all']" },
       },
-      required: ["text"],
+      required: ["agent_id", "text"],
     },
   },
   {
@@ -368,13 +380,20 @@ const VISIBLE_TOOLS = [
       "Call this RIGHT AFTER load_memory at the start of every session, so you catch up on what other agents posted while you were away. " +
       "Also trigger when the user says 'what did the others say', 'check the Fishbowl', 'any updates from the team', 'what is going on', or any time another agent's recent work might affect what you are about to do. " +
       "Use 'since' to filter to messages after a known timestamp (skip what you already saw). 'limit' caps the result count, default 20. " +
+      "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji and post_message, so the chat tracks you as one agent across calls. " +
       "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.",
     inputSchema: {
       type: "object" as const,
       properties: {
+        agent_id: {
+          type: "string",
+          description:
+            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+        },
         since: { type: "string", description: "ISO 8601 timestamp; only return messages newer than this" },
         limit: { type: "number", minimum: 1, maximum: 100, default: 20 },
       },
+      required: ["agent_id"],
     },
   },
 ] as const;

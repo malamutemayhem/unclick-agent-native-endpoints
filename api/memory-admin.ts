@@ -5705,14 +5705,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user_agent_hint?: string | null;
           agent_id?: string | null;
         };
-        const emoji = (body.emoji ?? "").trim();
-        if (!emoji) return res.status(400).json({ error: "emoji required" });
-        const userAgentHint = (body.user_agent_hint ?? "").toString().trim() || null;
-        let agentId = (body.agent_id ?? "").toString().trim();
+
+        const agentId = (body.agent_id ?? "").toString().trim();
         if (!agentId) {
-          const seed = `${apiKeyHash}|${userAgentHint ?? "unknown"}`;
-          agentId = crypto.createHash("sha256").update(seed).digest("hex").slice(0, 16);
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass a stable identifier for yourself (e.g. 'claude-desktop-bailey-lenovo'). Reuse the same value across set_my_emoji, post_message, and read_messages so the chat tracks you as one agent.",
+          });
         }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const emoji = (body.emoji ?? "").toString().trim();
+        if (!emoji) return res.status(400).json({ error: "emoji required" });
+        if (Array.from(emoji).length > 8) return res.status(400).json({ error: "emoji must be at most 8 characters" });
+
+        let displayName: string | null = null;
+        if (body.display_name != null) {
+          const dn = String(body.display_name);
+          if (dn.length < 1) return res.status(400).json({ error: "display_name must be at least 1 character" });
+          if (dn.length > 64) return res.status(400).json({ error: "display_name must be at most 64 characters" });
+          displayName = dn;
+        }
+
+        const userAgentHint = (body.user_agent_hint ?? "").toString().trim() || null;
+        if (userAgentHint !== null && userAgentHint.length > 128) {
+          return res.status(400).json({ error: "user_agent_hint must be at most 128 characters" });
+        }
+
         const nowIso = new Date().toISOString();
         const { data, error } = await supabase
           .from("mc_fishbowl_profiles")
@@ -5721,7 +5740,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               api_key_hash: apiKeyHash,
               agent_id: agentId,
               emoji,
-              display_name: body.display_name ?? null,
+              display_name: displayName,
               user_agent_hint: userAgentHint,
               last_seen_at: nowIso,
             },
@@ -5749,14 +5768,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user_agent_hint?: string | null;
           agent_id?: string | null;
         };
+
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass a stable identifier for yourself (e.g. 'claude-desktop-bailey-lenovo'). Reuse the same value across set_my_emoji, post_message, and read_messages so the chat tracks you as one agent.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
         const text = (body.text ?? "").toString().trim();
         if (!text) return res.status(400).json({ error: "text required" });
+        if (text.length > 2000) return res.status(400).json({ error: "text must be at most 2000 characters" });
 
-        let agentId = (body.agent_id ?? "").toString().trim();
         const userAgentHint = (body.user_agent_hint ?? "").toString().trim() || null;
-        if (!agentId) {
-          const seed = `${apiKeyHash}|${userAgentHint ?? "unknown"}`;
-          agentId = crypto.createHash("sha256").update(seed).digest("hex").slice(0, 16);
+        if (userAgentHint !== null && userAgentHint.length > 128) {
+          return res.status(400).json({ error: "user_agent_hint must be at most 128 characters" });
+        }
+
+        let tags: string[] | null = null;
+        if (body.tags != null) {
+          if (!Array.isArray(body.tags)) return res.status(400).json({ error: "tags must be an array of strings" });
+          if (body.tags.length > 10) return res.status(400).json({ error: "tags must be at most 10 items" });
+          for (const t of body.tags) {
+            if (typeof t !== "string" || t.length < 1 || t.length > 32) {
+              return res.status(400).json({ error: "each tag must be 1 to 32 characters" });
+            }
+          }
+          tags = body.tags;
+        }
+
+        let recipients: string[] = ["all"];
+        if (body.recipients != null) {
+          if (!Array.isArray(body.recipients)) return res.status(400).json({ error: "recipients must be an array of strings" });
+          if (body.recipients.length > 10) return res.status(400).json({ error: "recipients must be at most 10 items" });
+          for (const r of body.recipients) {
+            if (typeof r !== "string") return res.status(400).json({ error: "each recipient must be a string" });
+            const rLen = Array.from(r).length;
+            if (rLen < 1 || rLen > 8) return res.status(400).json({ error: "each recipient must be 1 to 8 characters" });
+          }
+          if (body.recipients.length > 0) recipients = body.recipients;
         }
 
         // Look up the agent's profile so we can decorate the message with its
@@ -5786,9 +5838,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (roomErr) throw roomErr;
           roomId = newRoom.id;
         }
-
-        const recipients = Array.isArray(body.recipients) && body.recipients.length > 0 ? body.recipients : ["all"];
-        const tags = Array.isArray(body.tags) ? body.tags : null;
 
         const { data: inserted, error: insertErr } = await supabase
           .from("mc_fishbowl_messages")
@@ -5824,7 +5873,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'. Run the UnClick setup wizard if you do not have one.",
           });
         }
-        const body = (req.body ?? {}) as { since?: string; limit?: number };
+        const body = (req.body ?? {}) as { since?: string; limit?: number; agent_id?: string | null };
+
+        const agentId = (body.agent_id ?? req.query.agent_id ?? "").toString().trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass a stable identifier for yourself (e.g. 'claude-desktop-bailey-lenovo'). Reuse the same value across set_my_emoji, post_message, and read_messages so the chat tracks you as one agent.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
         const sinceParam = (body.since ?? req.query.since ?? "") as string;
         const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 20) || 20, 1), 100);
 
