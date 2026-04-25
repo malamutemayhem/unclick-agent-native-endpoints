@@ -33,6 +33,78 @@ function sha256hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+// MCP spec § lifecycle: protocol-handshake methods MUST be reachable before
+// the client has any auth material. Tool execution still requires a key.
+// Claude Desktop, Inspector, and TestPass all assume this; rejecting the
+// initialize handshake on a missing Authorization header makes the server
+// look broken to every spec-compliant client.
+const HANDSHAKE_METHODS = new Set<string>([
+  "initialize",
+  "notifications/initialized",
+  "tools/list",
+]);
+
+type JsonRpcId = string | number | null;
+
+interface PeekedRpc {
+  // The id of the (first) request in the body. Used to echo back in error
+  // responses so clients can correlate. JSON-RPC 2.0 § 5.1 requires the
+  // response id to equal the request id exactly.
+  id: JsonRpcId;
+  // True iff every entry in the body is a known handshake method. For batch
+  // requests this is conservative: any non-handshake item forces auth.
+  handshakeOnly: boolean;
+  // True iff this is a JSON-RPC notification (no id field). Notifications
+  // get no response per spec, but we still need auth decisions for them.
+  isNotification: boolean;
+}
+
+function readRpcEntry(entry: unknown): {
+  method?: string;
+  id: JsonRpcId;
+  hasId: boolean;
+} {
+  if (!entry || typeof entry !== "object") {
+    return { id: null, hasId: false };
+  }
+  const obj = entry as Record<string, unknown>;
+  const method = typeof obj.method === "string" ? obj.method : undefined;
+  const hasId = "id" in obj;
+  let id: JsonRpcId = null;
+  if (hasId) {
+    const raw = obj.id;
+    if (typeof raw === "string" || typeof raw === "number" || raw === null) {
+      id = raw;
+    }
+  }
+  return { method, id, hasId };
+}
+
+function peekRpc(body: unknown): PeekedRpc {
+  if (Array.isArray(body)) {
+    let handshakeOnly = body.length > 0;
+    let firstId: JsonRpcId = null;
+    let firstHasId = false;
+    let allNotifications = body.length > 0;
+    for (const entry of body) {
+      const { method, id, hasId } = readRpcEntry(entry);
+      if (!method || !HANDSHAKE_METHODS.has(method)) handshakeOnly = false;
+      if (hasId) allNotifications = false;
+      if (!firstHasId && hasId) {
+        firstId = id;
+        firstHasId = true;
+      }
+    }
+    return { id: firstId, handshakeOnly, isNotification: allNotifications };
+  }
+  const { method, id, hasId } = readRpcEntry(body);
+  return {
+    id,
+    handshakeOnly: method !== undefined && HANDSHAKE_METHODS.has(method),
+    isNotification: !hasId,
+  };
+}
+
 interface ApiKeyContext {
   api_key_hash: string;
   tier: string;
@@ -198,6 +270,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
+  // Peek at the JSON-RPC body up front so we can:
+  //   1. Echo the request id back in any error response we generate (the
+  //      spec requires id equality between request and response).
+  //   2. Decide whether the request is an unauthenticated protocol handshake
+  //      that must succeed without an API key.
+  // Vercel parses JSON bodies for application/json automatically; if the
+  // client sent something unparseable, req.body will be a string/undefined
+  // and peekRpc safely returns { id: null, handshakeOnly: false }.
+  const peeked = peekRpc(req.body);
+
   if (req.method !== "POST") {
     return res.status(405).json({
       jsonrpc: "2.0",
@@ -205,7 +287,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         code: -32601,
         message: "Method Not Allowed. POST to this endpoint with an MCP JSON-RPC message.",
       },
-      id: null,
+      id: peeked.id,
     });
   }
 
@@ -216,6 +298,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //      connector UIs that can't set headers)
   //   3. Supabase Auth session cookie               (browser on
   //      unclick.world after Phase 2 sign in)
+  //
+  // Bypass: the protocol handshake methods (initialize,
+  // notifications/initialized, tools/list) MUST be reachable without
+  // credentials per the MCP lifecycle spec. We still enforce auth for
+  // tools/call and every other method below.
   //
   // The api_key paths produce an ApiKeyContext directly. The session
   // cookie path resolves to the same ApiKeyContext shape via the
@@ -236,7 +323,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (apiKey) {
     ctx = await validateApiKey(apiKey);
-    if (!ctx) {
+    if (!ctx && !peeked.handshakeOnly) {
+      // Bad key on a non-handshake call: reject. We deliberately do NOT
+      // reject a bad key on a handshake call, because the MCP spec says
+      // handshake reachability does not depend on credentials -- we just
+      // let the request fall through to the SDK with no tenancy context.
       return res.status(401).json({
         jsonrpc: "2.0",
         error: {
@@ -245,22 +336,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             "Invalid or revoked API key. Check that the key is correct and still active. " +
             "Manage keys at https://unclick.world",
         },
-        id: null,
+        id: peeked.id,
       });
     }
-  } else {
+  } else if (!peeked.handshakeOnly) {
     // No api_key supplied - try resolving via Supabase session cookie.
+    // Handshake methods skip this entirely.
     ctx = await validateSessionCookie(req);
     if (!ctx) {
       return res.status(401).json({
         jsonrpc: "2.0",
         error: {
-          code: -32600,
+          code: -32001,
           message:
             "Missing API key. Pass it as Authorization: Bearer <key> or as ?key=<key> in the URL. " +
             "Get a key at https://unclick.world",
         },
-        id: null,
+        id: peeked.id,
       });
     }
   }
@@ -276,16 +368,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // access it - this is the AES-256-GCM encryption property we
   // explicitly want to preserve: a logged-in user cannot decrypt
   // another device's stored credentials without holding the api_key.
+  //
+  // ctx can be null only on unauthenticated handshake requests
+  // (initialize / notifications/initialized / tools/list). The handshake
+  // methods do not read tenancy env vars, so leaving them unset is safe;
+  // we still clear stale values from previous invocations on the same
+  // serverless instance.
   if (apiKey) {
     process.env.UNCLICK_API_KEY = apiKey;
   } else {
     delete process.env.UNCLICK_API_KEY;
   }
-  process.env.UNCLICK_API_KEY_HASH = ctx.api_key_hash;
-  process.env.UNCLICK_TIER = ctx.tier;
-  if (ctx.user_id) {
-    process.env.UNCLICK_USER_ID = ctx.user_id;
+  if (ctx) {
+    process.env.UNCLICK_API_KEY_HASH = ctx.api_key_hash;
+    process.env.UNCLICK_TIER = ctx.tier;
+    if (ctx.user_id) {
+      process.env.UNCLICK_USER_ID = ctx.user_id;
+    } else {
+      delete process.env.UNCLICK_USER_ID;
+    }
   } else {
+    delete process.env.UNCLICK_API_KEY_HASH;
+    delete process.env.UNCLICK_TIER;
     delete process.env.UNCLICK_USER_ID;
   }
 
@@ -307,7 +411,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(500).json({
         jsonrpc: "2.0",
         error: { code: -32603, message: "Internal server error" },
-        id: null,
+        id: peeked.id,
       });
     }
   } finally {

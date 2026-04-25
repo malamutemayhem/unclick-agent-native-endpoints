@@ -864,8 +864,11 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 export function createServer(): Server {
   const server = new Server(
     {
-      name: "UnClick",
-      version: "1.0.0",
+      // MCP spec § Implementation requires `name` and `version`. The extra
+      // fields (description, websiteUrl, icons) are non-standard but
+      // tolerated and surfaced to clients that know how to read them.
+      name: "@unclick/mcp-server",
+      version: "0.3.0",
       description: "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
       websiteUrl: "https://unclick.world",
       icons: [
@@ -877,7 +880,12 @@ export function createServer(): Server {
       ],
     },
     {
-      capabilities: { tools: {} },
+      // Declare the tools capability explicitly. `listChanged: false` tells
+      // clients we will not emit notifications/tools/list_changed (we are
+      // stateless per request, so the tool list is fixed for the session).
+      // MCP-spec compliant clients (TestPass, Inspector) check the shape of
+      // capabilities.tools to confirm tools are advertised.
+      capabilities: { tools: { listChanged: false } },
       // Instructions are surfaced to the client on the MCP `initialize` response
       // and most Claude surfaces (Desktop, web, Code, Cowork) inject them into
       // the system/tool context. This is how we tell every connected agent:
