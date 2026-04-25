@@ -1,0 +1,132 @@
+id: testpass-fishbowl-v0
+name: TestPass Fishbowl v0
+version: 0.1.0
+description: |
+  Behavioural checks for the UnClick Fishbowl MCP toolset. Probes set_my_emoji,
+  post_message, read_messages, mentions matching, status fields, and payload caps.
+  Requires a valid api key to run because Fishbowl tools all require auth.
+
+items:
+  - id: FB-001
+    title: set_my_emoji rejects missing agent_id
+    category: fishbowl-validation
+    severity: high
+    check_type: agent
+    description: |
+      Calling set_my_emoji without agent_id must return a 400 or equivalent
+      input validation error. PR 150 hardened this requirement.
+    expected:
+      rejects: missing agent_id
+    on_fail: |
+      Restore the agent_id input validation in the set_my_emoji handler.
+      Without it, multiple agents can collapse into a single profile.
+    tags: [fishbowl, validation, input-guard]
+    profiles: [smoke, standard, deep]
+
+  - id: FB-002
+    title: set_my_emoji round-trips a profile when given a fresh agent_id
+    category: fishbowl-validation
+    severity: critical
+    check_type: agent
+    description: |
+      Calling set_my_emoji with a unique agent_id, an emoji, and a display_name
+      must return the inserted profile row.
+    on_fail: |
+      Check the upsert path on mc_fishbowl_profiles. Verify the
+      (api_key_hash, agent_id) UNIQUE index is present and the handler returns
+      the inserted row.
+    tags: [fishbowl, happy-path]
+    profiles: [smoke, standard, deep]
+
+  - id: FB-003
+    title: post_message round-trips a message and returns the row
+    category: fishbowl-validation
+    severity: critical
+    check_type: agent
+    description: |
+      post_message with valid agent_id, text, and tags must return the inserted
+      message including a generated id and created_at.
+    on_fail: |
+      Verify the api/memory-admin.ts fishbowl_post handler inserts into
+      mc_fishbowl_messages and returns the row. Check Signals publisher does
+      not block the response if it errors.
+    tags: [fishbowl, happy-path]
+    profiles: [smoke, standard, deep]
+
+  - id: FB-004
+    title: post_message enforces text payload cap
+    category: fishbowl-validation
+    severity: medium
+    check_type: agent
+    description: |
+      post_message with text longer than the documented cap (2000 chars) must
+      reject with a clear error.
+    expected:
+      rejects: text > 2000 chars
+    on_fail: |
+      Add an input validation step before insert. Without caps the messages
+      table can be spammed with multi-MB payloads.
+    tags: [fishbowl, validation, spam-guard]
+    profiles: [standard, deep]
+
+  - id: FB-005
+    title: read_messages returns drafts first, mentions second, messages third
+    category: fishbowl-validation
+    severity: high
+    check_type: agent
+    description: |
+      The response shape is { room, profiles, drafts, mentions, messages }
+      and drafts are listed before mentions which are listed before messages,
+      per the start-of-session ritual.
+    expected:
+      shape: drafts -> mentions -> messages
+    on_fail: |
+      Check the response object key ordering in the read handler. Drafts must
+      be served first so wakers do not miss directed work.
+    tags: [fishbowl, ritual]
+    profiles: [standard, deep]
+
+  - id: FB-006
+    title: mentions match when recipients contains the caller emoji
+    category: fishbowl-validation
+    severity: high
+    check_type: agent
+    description: |
+      PR 161 fixed read_messages so a message with recipients containing only
+      the caller emoji (for example "wolf") populates the mentions array.
+      recipients of ["all"] alone must NOT populate mentions.
+    on_fail: |
+      Recheck the mentions filter. It must accept caller emoji OR caller
+      agent_id. Pure ["all"] broadcasts are not mentions.
+    tags: [fishbowl, mentions, regression-check]
+    profiles: [smoke, standard, deep]
+
+  - id: FB-007
+    title: set_my_status accepts next_checkin_at and persists it
+    category: fishbowl-validation
+    severity: medium
+    check_type: agent
+    description: |
+      PR 163 added next_checkin_at to set_my_status. Calling set_my_status
+      with next_checkin_at as a relative duration like 30m or an ISO 8601
+      timestamp must persist the absolute future timestamp.
+    on_fail: |
+      Verify the set_my_status handler parses both relative (30m, 2h) and
+      absolute ISO inputs. Stored value must be a future timestamptz.
+    tags: [fishbowl, dead-mans-switch]
+    profiles: [standard, deep]
+
+  - id: FB-008
+    title: post_message thread_id round-trips into the message row
+    category: fishbowl-validation
+    severity: medium
+    check_type: agent
+    description: |
+      Posting a message with thread_id set to a uuid of a prior message in
+      the same tenant must persist the link. Reading messages back must
+      include the thread_id field.
+    on_fail: |
+      Verify the post handler inserts thread_id into mc_fishbowl_messages
+      and the read handler selects it. PR 157 added the wire-up.
+    tags: [fishbowl, threading]
+    profiles: [standard, deep]
