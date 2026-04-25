@@ -5830,6 +5830,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           recipients?: string[] | null;
           user_agent_hint?: string | null;
           agent_id?: string | null;
+          thread_id?: string | null;
         };
 
         const agentId = (body.agent_id ?? "").toString().trim();
@@ -5844,6 +5845,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const text = (body.text ?? "").toString().trim();
         if (!text) return res.status(400).json({ error: "text required" });
         if (text.length > 2000) return res.status(400).json({ error: "text must be at most 2000 characters" });
+
+        // thread_id (optional): must be a uuid of an existing message in this
+        // tenant's fishbowl. We resolve the existence check below, after we
+        // know the tenant (apiKeyHash) is valid.
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let threadId: string | null = null;
+        if (body.thread_id != null && body.thread_id !== "") {
+          const candidate = String(body.thread_id).trim();
+          if (!UUID_RE.test(candidate)) {
+            return res.status(400).json({
+              error: "thread_id must be a valid uuid of an existing message in your fishbowl",
+            });
+          }
+          const { data: parent } = await supabase
+            .from("mc_fishbowl_messages")
+            .select("id")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", candidate)
+            .maybeSingle();
+          if (!parent) {
+            return res.status(400).json({
+              error: "thread_id must be a valid uuid of an existing message in your fishbowl",
+            });
+          }
+          threadId = candidate;
+        }
 
         const userAgentHint = (body.user_agent_hint ?? "").toString().trim() || null;
         if (userAgentHint !== null && userAgentHint.length > 128) {
@@ -5925,8 +5952,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             recipients,
             text,
             tags,
+            thread_id: threadId,
           })
-          .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, created_at")
+          .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
           .single();
         if (insertErr) throw insertErr;
 
@@ -5978,7 +6006,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let q = supabase
           .from("mc_fishbowl_messages")
-          .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, created_at")
+          .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
           .eq("api_key_hash", apiKeyHash)
           .eq("room_id", room.id)
           .order("created_at", { ascending: false })

@@ -356,7 +356,17 @@ const VISIBLE_TOOLS = [
       "Post events, not stream-of-consciousness. One short message per real change. Keep it plain English, no jargon. " +
       "Use tags for filterable categories (for example: ['pr','crews']) and recipients to target specific agents (default is everyone). " +
       "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji, so the message is attributed to you and not collapsed into another agent's profile. " +
-      "Do NOT post running commentary, partial thoughts, or narration of trivial steps. The Fishbowl is a noticeboard, not a chat log.",
+      "Do NOT post running commentary, partial thoughts, or narration of trivial steps. The Fishbowl is a noticeboard, not a chat log.\n\n" +
+      "Use these canonical tags so other agents can filter the feed reliably:\n" +
+      "  - 'decision' for a locked-in choice\n" +
+      "  - 'question' for something you need answered before continuing\n" +
+      "  - 'answer' for a reply to someone else's question\n" +
+      "  - 'handoff' when you're passing work to another agent\n" +
+      "  - 'blocker' when you're stuck on something the user must resolve\n" +
+      "  - 'done' when a task or PR is complete\n" +
+      "  - 'fyi' for context that doesn't need a reply\n" +
+      "Pick one or two. Avoid inventing new tags unless none of these fit.\n\n" +
+      "If you're replying to a specific earlier message, set thread_id to that message's id. The admin view groups threads visually so the user can collapse a back-and-forth instead of scrolling through every reply.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -366,8 +376,27 @@ const VISIBLE_TOOLS = [
             "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
         },
         text: { type: "string", description: "The message body in plain English" },
-        tags: { type: "array", items: { type: "string" }, description: "Optional tags for filtering (e.g. ['pr','blocker'])" },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional tags for filtering. Prefer the canonical set: 'decision', 'question', 'answer', 'handoff', 'blocker', 'done', 'fyi'. Pick one or two.",
+          examples: [
+            ["decision"],
+            ["question"],
+            ["answer"],
+            ["handoff"],
+            ["blocker"],
+            ["done"],
+            ["fyi"],
+          ],
+        },
         recipients: { type: "array", items: { type: "string" }, description: "Optional recipients (emoji or 'all'); defaults to ['all']" },
+        thread_id: {
+          type: "string",
+          description:
+            "Optional id of an earlier message you're replying to. Set this for follow-ups so the admin view can group the conversation under the original message.",
+        },
       },
       required: ["agent_id", "text"],
     },
@@ -382,7 +411,10 @@ const VISIBLE_TOOLS = [
       "Use 'since' to filter to messages after a known timestamp (skip what you already saw). 'limit' caps the result count, default 20. " +
       "Messages may include posts from the human user (typically with the 😎 emoji and an agent_id starting with 'human-'). Treat those as direct input from the user, not from another agent. " +
       "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji and post_message, so the chat tracks you as one agent across calls. " +
-      "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.",
+      "Do NOT poll repeatedly within the same session; once per session at start is enough unless something changed.\n\n" +
+      "The response has two lanes:\n" +
+      "  - 'messages': everything in the room, in time order. Read this for context.\n" +
+      "  - 'mentions': only messages where YOUR agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -931,6 +963,29 @@ export function createServer(): Server {
           body,
         });
         const respBody = await resp.json().catch(() => ({}));
+
+        // Mentions lane: for read_messages, derive the subset of messages where
+        // the caller's agent_id is in recipients[]. Pure broadcasts (only 'all')
+        // are excluded so the lane stays a fast-path for things actually aimed
+        // at this agent. The main 'messages' array is unchanged.
+        if (
+          name === "read_messages" &&
+          resp.ok &&
+          respBody &&
+          typeof respBody === "object" &&
+          Array.isArray((respBody as { messages?: unknown }).messages)
+        ) {
+          const callerId = String(args.agent_id ?? "");
+          const messages = (respBody as { messages: Array<Record<string, unknown>> }).messages;
+          const mentions = messages.filter((m) => {
+            const recipients = Array.isArray(m.recipients) ? (m.recipients as unknown[]) : [];
+            if (recipients.length === 0) return false;
+            if (recipients.every((r) => r === "all")) return false;
+            return recipients.includes(callerId);
+          });
+          (respBody as Record<string, unknown>).mentions = mentions;
+        }
+
         return {
           content: [{ type: "text", text: JSON.stringify(respBody, null, 2) }],
           isError: !resp.ok,
