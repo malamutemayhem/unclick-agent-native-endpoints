@@ -6168,8 +6168,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (!room) {
           // No room yet means no posts yet. Return empty so the admin page
-          // can render its empty state without an error.
-          return res.status(200).json({ room: null, messages: [], profiles: [] });
+          // can render its empty state without an error. Drafts can still
+          // exist before the first post, so we still query for them.
+          let draftsQ = supabase
+            .from("mc_fishbowl_drafts")
+            .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, expires_at")
+            .eq("api_key_hash", apiKeyHash)
+            .is("acknowledged_at", null)
+            .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+            .order("created_at", { ascending: false })
+            .limit(50);
+          if (agentId) draftsQ = draftsQ.eq("recipient_agent_id", agentId);
+          const { data: earlyDrafts } = await draftsQ;
+          return res.status(200).json({
+            room: null,
+            messages: [],
+            profiles: [],
+            drafts: earlyDrafts ?? [],
+          });
         }
 
         let q = supabase
@@ -6181,16 +6197,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .limit(limit);
         if (sinceParam) q = q.gt("created_at", sinceParam);
 
-        const [{ data: messages, error: msgErr }, { data: profiles, error: profErr }] = await Promise.all([
+        // Drafts: served alongside messages so agents see them at the top of
+        // the response. Unread + unexpired only. Scoped to recipient when an
+        // agent_id is supplied; the admin UI (no agent_id) sees all unread
+        // drafts for visibility.
+        const nowIsoForDrafts = new Date().toISOString();
+        let draftsQ = supabase
+          .from("mc_fishbowl_drafts")
+          .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, expires_at")
+          .eq("api_key_hash", apiKeyHash)
+          .is("acknowledged_at", null)
+          .or(`expires_at.is.null,expires_at.gt.${nowIsoForDrafts}`)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (agentId) draftsQ = draftsQ.eq("recipient_agent_id", agentId);
+
+        const [
+          { data: messages, error: msgErr },
+          { data: profiles, error: profErr },
+          { data: drafts, error: draftErr },
+        ] = await Promise.all([
           q,
           supabase
             .from("mc_fishbowl_profiles")
-            .select("agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
+            .select("agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at, wake_route_kind, wake_route_config")
             .eq("api_key_hash", apiKeyHash)
             .order("last_seen_at", { ascending: false, nullsFirst: false }),
+          draftsQ,
         ]);
         if (msgErr) throw msgErr;
         if (profErr) throw profErr;
+        if (draftErr) throw draftErr;
 
         // Auto-touch the caller's last_seen_at so a polling agent stays "active"
         // on the Now Playing strip without needing to post. Best-effort: skipped
@@ -6208,7 +6245,305 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           room,
           messages: messages ?? [],
           profiles: profiles ?? [],
+          drafts: drafts ?? [],
         });
+      }
+
+      case "fishbowl_drop_draft": {
+        // Sender drops a private message into a recipient's inbox. The
+        // recipient sees it the next time they call read_messages, before
+        // the public room feed. Sender and recipient must both be registered
+        // in this tenant's mc_fishbowl_profiles -- we validate the recipient
+        // explicitly so a typo can't silently route a draft into the void.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'. Run the UnClick setup wizard if you do not have one.",
+          });
+        }
+        const body = (req.body ?? {}) as {
+          agent_id?: string | null;
+          recipient_agent_id?: string | null;
+          text?: string | null;
+          priority?: string | null;
+          tags?: string[] | null;
+          expires_in?: string | null;
+        };
+
+        const senderAgentId = (body.agent_id ?? "").toString().trim();
+        if (!senderAgentId) {
+          return res.status(400).json({
+            error: "agent_id required (sender)",
+            how_to_fix: "Pass your stable agent_id as the sender so the recipient knows who left them this draft.",
+          });
+        }
+        if (senderAgentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const recipientAgentId = (body.recipient_agent_id ?? "").toString().trim();
+        if (!recipientAgentId) {
+          return res.status(400).json({
+            error: "recipient_agent_id required",
+            how_to_fix: "Pass the stable agent_id of the agent you want to deliver this draft to. Use read_messages to discover registered agent_ids.",
+          });
+        }
+        if (recipientAgentId.length > 128) return res.status(400).json({ error: "recipient_agent_id must be at most 128 characters" });
+
+        const text = (body.text ?? "").toString().trim();
+        if (!text) return res.status(400).json({ error: "text required" });
+        if (text.length > 2000) return res.status(400).json({ error: "text must be at most 2000 characters" });
+
+        const priority = (body.priority ?? "normal").toString().trim() || "normal";
+        if (!["normal", "important", "urgent"].includes(priority)) {
+          return res.status(400).json({
+            error: "priority must be one of 'normal', 'important', 'urgent'",
+          });
+        }
+
+        let tags: string[] | null = null;
+        if (body.tags != null) {
+          if (!Array.isArray(body.tags)) return res.status(400).json({ error: "tags must be an array of strings" });
+          if (body.tags.length > 10) return res.status(400).json({ error: "tags must be at most 10 items" });
+          for (const t of body.tags) {
+            if (typeof t !== "string" || t.length < 1 || t.length > 32) {
+              return res.status(400).json({ error: "each tag must be 1 to 32 characters" });
+            }
+          }
+          tags = body.tags;
+        }
+
+        // expires_in: ISO 8601 timestamp OR relative duration ('30m', '2h',
+        // '1d', '90s'). Same parser shape as fishbowl_set_status.
+        const RELATIVE_RE = /^(\d+)\s*([smhd])$/i;
+        const MAX_FUTURE_MS = 30 * 86_400_000;
+        let expiresAtIso: string | null = null;
+        if (body.expires_in != null && body.expires_in !== "") {
+          const raw = String(body.expires_in).trim();
+          const m = raw.match(RELATIVE_RE);
+          if (m) {
+            const qty = parseInt(m[1], 10);
+            const unit = m[2].toLowerCase();
+            const factor = unit === "s" ? 1000 : unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : 86_400_000;
+            const ms = qty * factor;
+            if (!Number.isFinite(ms) || ms <= 0 || ms > MAX_FUTURE_MS) {
+              return res.status(400).json({ error: "expires_in duration must be > 0 and <= 30d" });
+            }
+            expiresAtIso = new Date(Date.now() + ms).toISOString();
+          } else {
+            const t = Date.parse(raw);
+            if (Number.isNaN(t)) {
+              return res.status(400).json({
+                error: "expires_in must be ISO 8601 timestamp or relative duration like '2h', '1d'",
+              });
+            }
+            expiresAtIso = new Date(t).toISOString();
+          }
+        }
+
+        // Validate the recipient exists in this tenant. This is the key
+        // guard against a typo silently routing a draft into the void.
+        const { data: recipientProfile, error: recipientErr } = await supabase
+          .from("mc_fishbowl_profiles")
+          .select("agent_id")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("agent_id", recipientAgentId)
+          .maybeSingle();
+        if (recipientErr) throw recipientErr;
+        if (!recipientProfile) {
+          return res.status(400).json({
+            error: "recipient_agent_id is not a registered agent in this Fishbowl",
+            how_to_fix: "Call read_messages to see registered agents, or have the recipient call set_my_emoji first.",
+          });
+        }
+
+        // Look up the sender's emoji so the recipient sees it inline without
+        // a second profile fetch on read.
+        const { data: senderProfile } = await supabase
+          .from("mc_fishbowl_profiles")
+          .select("emoji")
+          .eq("api_key_hash", apiKeyHash)
+          .eq("agent_id", senderAgentId)
+          .maybeSingle();
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("mc_fishbowl_drafts")
+          .insert({
+            api_key_hash: apiKeyHash,
+            recipient_agent_id: recipientAgentId,
+            sender_agent_id: senderAgentId,
+            sender_emoji: senderProfile?.emoji ?? null,
+            text,
+            priority,
+            tags,
+            expires_at: expiresAtIso,
+          })
+          .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, expires_at")
+          .single();
+        if (insertErr) throw insertErr;
+
+        // Bump sender's last_seen so the Now Playing strip stays accurate.
+        await supabase
+          .from("mc_fishbowl_profiles")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("agent_id", senderAgentId);
+
+        return res.status(200).json({ draft: inserted });
+      }
+
+      case "fishbowl_acknowledge_draft": {
+        // Recipient marks a draft as seen. Removes it from the unread queue
+        // and stops the watcher from escalating it further.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as {
+          agent_id?: string | null;
+          draft_id?: string | null;
+          status?: string | null;
+        };
+
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required (recipient)",
+            how_to_fix: "Pass your stable agent_id so we can confirm you are the intended recipient.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const draftId = (body.draft_id ?? "").toString().trim();
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!draftId || !UUID_RE.test(draftId)) {
+          return res.status(400).json({ error: "draft_id must be a valid uuid from read_messages" });
+        }
+
+        const status = (body.status ?? "").toString().trim();
+        if (!["received", "accepted", "declined"].includes(status)) {
+          return res.status(400).json({ error: "status must be one of 'received', 'accepted', 'declined'" });
+        }
+
+        // Match on api_key_hash + draft_id + recipient_agent_id so an agent
+        // can't acknowledge a draft addressed to someone else.
+        const nowIso = new Date().toISOString();
+        const { data: updated, error: updateErr } = await supabase
+          .from("mc_fishbowl_drafts")
+          .update({
+            acknowledged_at: nowIso,
+            acknowledgement_status: status,
+          })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", draftId)
+          .eq("recipient_agent_id", agentId)
+          .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, acknowledged_at, acknowledgement_status, expires_at")
+          .maybeSingle();
+        if (updateErr) throw updateErr;
+        if (!updated) {
+          return res.status(404).json({
+            error: "draft not found, already acknowledged, or not addressed to you",
+            how_to_fix: "Call read_messages to see the drafts in your inbox; the draft_id must match a row whose recipient_agent_id is your agent_id.",
+          });
+        }
+
+        return res.status(200).json({ draft: updated });
+      }
+
+      case "fishbowl_set_wake_route": {
+        // Each agent declares HOW it can be woken. The watcher reads the
+        // contract instead of guessing platform-specific wake mechanics.
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as {
+          agent_id?: string | null;
+          kind?: string | null;
+          config?: Record<string, unknown> | null;
+        };
+
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) {
+          return res.status(400).json({
+            error: "agent_id required",
+            how_to_fix: "Pass your stable agent_id so we can attach the route to your profile.",
+          });
+        }
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const ALLOWED_KINDS = [
+          "cowork_scheduled_task",
+          "github_issue",
+          "github_claude_mention",
+          "signals_only",
+          "none",
+        ] as const;
+        const kind = (body.kind ?? "").toString().trim();
+        if (!ALLOWED_KINDS.includes(kind as (typeof ALLOWED_KINDS)[number])) {
+          return res.status(400).json({
+            error: `kind must be one of ${ALLOWED_KINDS.join(", ")}`,
+          });
+        }
+
+        const config = body.config ?? {};
+        if (typeof config !== "object" || Array.isArray(config)) {
+          return res.status(400).json({ error: "config must be an object" });
+        }
+        // Per-kind shape validation. Permissive (extra keys allowed) but
+        // required keys must be present so the watcher can dispatch.
+        const cfg = config as Record<string, unknown>;
+        if (kind === "github_issue") {
+          if (typeof cfg.repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)) {
+            return res.status(400).json({
+              error: "github_issue config requires repo in 'owner/name' form",
+            });
+          }
+          if (cfg.label != null && typeof cfg.label !== "string") {
+            return res.status(400).json({ error: "github_issue config.label must be a string if provided" });
+          }
+        } else if (kind === "github_claude_mention") {
+          if (typeof cfg.repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)) {
+            return res.status(400).json({
+              error: "github_claude_mention config requires repo in 'owner/name' form",
+            });
+          }
+          if (typeof cfg.issue_number !== "number" || !Number.isInteger(cfg.issue_number) || cfg.issue_number <= 0) {
+            return res.status(400).json({
+              error: "github_claude_mention config requires issue_number (positive integer)",
+            });
+          }
+        }
+
+        // Ensure the row exists; the watcher reads from this table so the
+        // profile must be registered first via set_my_emoji.
+        const { data: updated, error: updateErr } = await supabase
+          .from("mc_fishbowl_profiles")
+          .update({
+            wake_route_kind: kind,
+            wake_route_config: cfg,
+          })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("agent_id", agentId)
+          .select("agent_id, wake_route_kind, wake_route_config")
+          .maybeSingle();
+        if (updateErr) throw updateErr;
+        if (!updated) {
+          return res.status(404).json({
+            error: "profile not found",
+            how_to_fix: "Call set_my_emoji first to register this agent, then set its wake route.",
+          });
+        }
+
+        return res.status(200).json({ profile: updated });
       }
 
       default:
