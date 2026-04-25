@@ -20,7 +20,7 @@ inputs:
   api_url:
     description: TestPass API endpoint.
     required: false
-    default: https://unclick.ai/api/testpass-run
+    default: https://unclick.world/api/testpass-run
 
 outputs:
   run_id:
