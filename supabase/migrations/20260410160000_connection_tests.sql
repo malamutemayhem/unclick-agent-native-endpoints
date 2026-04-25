@@ -17,7 +17,16 @@ CREATE INDEX idx_connection_tests_success ON connection_tests(success, created_a
 
 ALTER TABLE connection_tests ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_all" ON connection_tests FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so wrap in a pg_policies check so re-running this migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'connection_tests' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON connection_tests FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- View for quality dashboard (success rate per platform)
 CREATE OR REPLACE VIEW platform_quality AS

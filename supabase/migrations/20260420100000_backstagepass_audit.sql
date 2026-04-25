@@ -84,14 +84,34 @@ CREATE INDEX IF NOT EXISTS idx_bp_audit_failures
 -- The /api/backstagepass endpoint is the sole read/write path.
 ALTER TABLE backstagepass_audit ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_all" ON backstagepass_audit
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a pg_policies check so re-running this
+-- migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'backstagepass_audit' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON backstagepass_audit
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "block_anon_access" ON backstagepass_audit
-  FOR ALL TO anon USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'backstagepass_audit' AND policyname = 'block_anon_access'
+  ) THEN
+    CREATE POLICY "block_anon_access" ON backstagepass_audit
+      FOR ALL TO anon USING (false) WITH CHECK (false);
+  END IF;
 
-CREATE POLICY "block_authenticated_direct_access" ON backstagepass_audit
-  FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'backstagepass_audit' AND policyname = 'block_authenticated_direct_access'
+  ) THEN
+    CREATE POLICY "block_authenticated_direct_access" ON backstagepass_audit
+      FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 COMMENT ON TABLE backstagepass_audit IS
   'Append-only audit log of every action against user_credentials via the BackstagePass admin surface. Source of truth for "who revealed/updated/deleted what, when". Read via /api/backstagepass?action=audit.';

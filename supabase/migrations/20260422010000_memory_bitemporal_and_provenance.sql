@@ -641,23 +641,51 @@ $$;
 ALTER TABLE mc_canonical_docs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mc_facts_audit    ENABLE ROW LEVEL SECURITY;
 
--- Service role has full access (same pattern as all other mc_* tables)
-CREATE POLICY "service_role_all" ON mc_canonical_docs
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Service role has full access (same pattern as all other mc_* tables).
+--
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a pg_policies check so re-running this
+-- migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_canonical_docs' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_canonical_docs
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "service_role_all" ON mc_facts_audit
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'mc_facts_audit' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON mc_facts_audit
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- BYOD tables use the same per-user auth pattern as existing tables
 ALTER TABLE canonical_docs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facts_audit    ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can manage their own canonical_docs" ON canonical_docs
-  FOR ALL TO authenticated
-  USING ((SELECT auth.uid()) IS NOT NULL)
-  WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'canonical_docs' AND policyname = 'Users can manage their own canonical_docs'
+  ) THEN
+    CREATE POLICY "Users can manage their own canonical_docs" ON canonical_docs
+      FOR ALL TO authenticated
+      USING ((SELECT auth.uid()) IS NOT NULL)
+      WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
+  END IF;
 
-CREATE POLICY "Users can manage their own facts_audit" ON facts_audit
-  FOR ALL TO authenticated
-  USING ((SELECT auth.uid()) IS NOT NULL)
-  WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'facts_audit' AND policyname = 'Users can manage their own facts_audit'
+  ) THEN
+    CREATE POLICY "Users can manage their own facts_audit" ON facts_audit
+      FOR ALL TO authenticated
+      USING ((SELECT auth.uid()) IS NOT NULL)
+      WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
+  END IF;
+END $$;

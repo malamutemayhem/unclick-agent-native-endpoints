@@ -34,11 +34,32 @@ ALTER TABLE user_credentials ENABLE ROW LEVEL SECURITY;
 
 -- Block all direct client access; only the service role (in Vercel API
 -- functions) may read or write.
-CREATE POLICY "service_role_all" ON user_credentials
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+--
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so each policy is wrapped in a pg_policies check so re-running this
+-- migration is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'user_credentials' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON user_credentials
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "block_anon_access" ON user_credentials
-  FOR ALL TO anon USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'user_credentials' AND policyname = 'block_anon_access'
+  ) THEN
+    CREATE POLICY "block_anon_access" ON user_credentials
+      FOR ALL TO anon USING (false) WITH CHECK (false);
+  END IF;
 
-CREATE POLICY "block_authenticated_direct_access" ON user_credentials
-  FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'user_credentials' AND policyname = 'block_authenticated_direct_access'
+  ) THEN
+    CREATE POLICY "block_authenticated_direct_access" ON user_credentials
+      FOR ALL TO authenticated USING (false) WITH CHECK (false);
+  END IF;
+END $$;

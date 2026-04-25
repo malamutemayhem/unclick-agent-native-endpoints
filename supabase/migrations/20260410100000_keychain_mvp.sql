@@ -57,14 +57,49 @@ ALTER TABLE platform_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_connectors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metering_events ENABLE ROW LEVEL SECURITY;
 
--- Service role access for all tables
-CREATE POLICY "service_role_all" ON api_keys FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON platform_credentials FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON platform_connectors FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all" ON metering_events FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Service role access for all tables.
+--
+-- Idempotency guard: CREATE POLICY has no IF NOT EXISTS form in Postgres,
+-- so a re-run on a database where the policy already exists raises
+-- "policy already exists" and aborts the migration. Wrap each policy in
+-- a pg_policies existence check so re-running is safe.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'api_keys' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON api_keys FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
 
--- Anon can read connectors (public catalog)
-CREATE POLICY "anon_read_connectors" ON platform_connectors FOR SELECT TO anon USING (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'platform_credentials' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON platform_credentials FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'platform_connectors' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON platform_connectors FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'metering_events' AND policyname = 'service_role_all'
+  ) THEN
+    CREATE POLICY "service_role_all" ON metering_events FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  -- Anon can read connectors (public catalog)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'platform_connectors' AND policyname = 'anon_read_connectors'
+  ) THEN
+    CREATE POLICY "anon_read_connectors" ON platform_connectors FOR SELECT TO anon USING (true);
+  END IF;
+END $$;
 
 -- Seed the 5 MVP platform connectors
 INSERT INTO platform_connectors (id, name, category, auth_type, description, setup_url, test_endpoint, sort_order) VALUES
