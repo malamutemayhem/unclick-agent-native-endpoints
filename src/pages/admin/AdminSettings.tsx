@@ -125,6 +125,13 @@ export default function AdminSettings() {
   const [deleteTyped, setDeleteTyped] = useState("");
   const [deleting, setDeleting]       = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteResult, setDeleteResult] = useState<{
+    success: boolean;
+    partial?: boolean;
+    step_errors?: Record<string, string>;
+    rows_deleted?: Record<string, number>;
+    step?: string;
+  } | null>(null);
 
   // TOTP MFA state
   const [mfaLoading, setMfaLoading]             = useState(true);
@@ -389,6 +396,7 @@ export default function AdminSettings() {
     if (!session) return;
     setDeleting(true);
     setDeleteError(null);
+    setDeleteResult(null);
     try {
       const res = await fetch("/api/memory-admin?action=delete_account", {
         method:  "POST",
@@ -397,10 +405,20 @@ export default function AdminSettings() {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
+      const body = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        error?: string;
+        step?: string;
+        partial?: boolean;
+        step_errors?: Record<string, string>;
+        rows_deleted?: Record<string, number>;
+        already_deleted?: boolean;
+      };
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? `Delete failed with ${res.status}`);
+        setDeleteResult({ success: false, step: body.step, step_errors: body.step_errors, rows_deleted: body.rows_deleted });
+        throw new Error(body.error ?? `Delete failed with ${res.status}`);
       }
+      setDeleteResult({ success: true, partial: body.partial, step_errors: body.step_errors, rows_deleted: body.rows_deleted });
       try { localStorage.removeItem("unclick_api_key"); } catch { /* ignore */ }
       await signOut();
       navigate("/", { replace: true });
@@ -832,30 +850,78 @@ export default function AdminSettings() {
             <p className="mt-3 text-xs text-[#BBB] leading-relaxed">
               This removes your auth identity plus every row keyed to your account: memory (facts,
               sessions, business context, conversation log, knowledge library, code dumps), stored
-              credentials, API keys, devices, and profile data. It is permanent.
+              credentials, API keys, crews, agents, devices, and profile data. It is permanent.
             </p>
-            <p className="mt-3 text-xs text-[#BBB]">
-              To confirm, type your email address:
-            </p>
-            <p className="mt-1 font-mono text-xs text-white">{session?.user?.email ?? ""}</p>
-            <input
-              type="email"
-              value={deleteTyped}
-              onChange={(e) => setDeleteTyped(e.target.value)}
-              placeholder="Type your email here"
-              autoFocus
-              disabled={deleting}
-              className="mt-3 w-full rounded-md border border-white/10 bg-black/50 px-3 py-2 font-mono text-xs text-white placeholder:text-[#555] focus:border-red-500/60 focus:outline-none"
-            />
-            {deleteError && (
-              <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
-                {deleteError}
-              </p>
+
+            {deleting && (
+              <div className="mt-4 space-y-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                {[
+                  { label: "Deleting memory data..." },
+                  { label: "Deleting crews and agents..." },
+                  { label: "Deleting credentials and config..." },
+                  { label: "Removing your account..." },
+                ].map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-white/60">
+                    <Loader2 className="h-3 w-3 animate-spin opacity-60" />
+                    {s.label}
+                  </div>
+                ))}
+              </div>
             )}
+
+            {deleteResult?.partial && deleteResult.step_errors && (
+              <div className="mt-3 rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-400">
+                Account deleted but some data cleanup had errors:
+                {Object.entries(deleteResult.step_errors).map(([table, err]) => (
+                  <div key={table} className="mt-1 font-mono text-[10px] text-yellow-300/70">
+                    {table}: {err}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+                <p>{deleteError}</p>
+                {deleteResult?.step && (
+                  <p className="mt-1 font-mono text-[10px] text-red-300/70">
+                    Failed at step: {deleteResult.step}
+                  </p>
+                )}
+                {deleteResult?.step_errors && Object.keys(deleteResult.step_errors).length > 0 && (
+                  <div className="mt-1">
+                    {Object.entries(deleteResult.step_errors).map(([table, err]) => (
+                      <p key={table} className="font-mono text-[10px] text-red-300/70">
+                        {table}: {err}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!deleting && (
+              <>
+                <p className="mt-3 text-xs text-[#BBB]">
+                  To confirm, type your email address:
+                </p>
+                <p className="mt-1 font-mono text-xs text-white">{session?.user?.email ?? ""}</p>
+                <input
+                  type="email"
+                  value={deleteTyped}
+                  onChange={(e) => setDeleteTyped(e.target.value)}
+                  placeholder="Type your email here"
+                  autoFocus
+                  disabled={deleting}
+                  className="mt-3 w-full rounded-md border border-white/10 bg-black/50 px-3 py-2 font-mono text-xs text-white placeholder:text-[#555] focus:border-red-500/60 focus:outline-none"
+                />
+              </>
+            )}
+
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDeleteOpen(false)}
+                onClick={() => { setDeleteOpen(false); setDeleteResult(null); setDeleteError(null); setDeleteTyped(""); }}
                 disabled={deleting}
                 className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-[#BBB] transition-colors hover:bg-white/[0.06] disabled:opacity-40"
               >

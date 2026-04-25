@@ -13,6 +13,11 @@ import {
   reportToolDetections,
 } from "./tool-awareness.js";
 import { resolveAgent, filterContextByLayers } from "./agent.js";
+import { emitSignal } from "../signals/emit.js";
+
+function currentApiKeyHash(): string | null {
+  return process.env.UNCLICK_API_KEY_HASH ?? null;
+}
 
 type Args = Record<string, unknown>;
 
@@ -109,7 +114,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
 
   async write_session_summary(args) {
     const db = await getBackend();
-    return db.writeSessionSummary({
+    const result = await db.writeSessionSummary({
       session_id: str(args.session_id),
       summary: str(args.summary),
       topics: arr(args.topics),
@@ -118,11 +123,23 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       platform: str(args.platform, "claude-code"),
       duration_minutes: typeof args.duration_minutes === "number" ? args.duration_minutes : undefined,
     });
+    const hash = currentApiKeyHash();
+    if (hash) {
+      void emitSignal({
+        apiKeyHash: hash,
+        tool: "memory",
+        action: "session_saved",
+        severity: "info",
+        summary: "Session summary saved to memory",
+        deepLink: "/admin/memory?tab=sessions",
+      });
+    }
+    return result;
   },
 
   async add_fact(args) {
     const db = await getBackend();
-    return db.addFact({
+    const result = await db.addFact({
       fact: str(args.fact),
       category: str(args.category, "general"),
       confidence: num(args.confidence, 0.9),
@@ -135,6 +152,19 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       commit_sha: typeof args.commit_sha === "string" ? args.commit_sha : undefined,
       pr_number: typeof args.pr_number === "number" ? Math.floor(args.pr_number) : undefined,
     });
+    const hash = currentApiKeyHash();
+    if (hash) {
+      const preview = str(args.fact).slice(0, 80);
+      void emitSignal({
+        apiKeyHash: hash,
+        tool: "memory",
+        action: "fact_saved",
+        severity: "info",
+        summary: preview ? `Fact saved: ${preview}` : "Fact saved to memory",
+        deepLink: "/admin/memory?tab=facts",
+      });
+    }
+    return result;
   },
 
   async supersede_fact(args) {

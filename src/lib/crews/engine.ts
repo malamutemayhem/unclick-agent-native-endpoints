@@ -1,9 +1,30 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 
-const MODEL = "claude-sonnet-4-6";
 const MAX_PER_CALL = 2048;
 const LABELS = "ABCDEFGHIJKLMNOP".split("");
+
+export interface SamplerResult {
+  content: string;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/**
+ * Sampler callback: the engine hands off every LLM prompt to the calling
+ * Orchestrator via MCP's `sampling/createMessage` capability. The MCP client
+ * (Claude Desktop, etc.) runs the model and returns the response. The server
+ * never calls Anthropic directly for user-facing runs.
+ */
+export type Sampler = (args: {
+  system: string;
+  user: string;
+  maxTokens: number;
+}) => Promise<SamplerResult>;
+
+export interface SamplingNotSupportedError {
+  error: "SAMPLING_NOT_SUPPORTED";
+  message: string;
+}
 
 export interface EngineCtx {
   runId: string;
@@ -13,6 +34,10 @@ export interface EngineCtx {
   tokenBudget: number;
   supabaseUrl: string;
   serviceRoleKey: string;
+  /** MCP sampler bound to the calling Orchestrator. Required for user-facing runs. */
+  sampler?: Sampler;
+  /** Explicit capability flag from MCP `initialize`. When false the engine aborts. */
+  supportsSampling?: boolean;
 }
 
 interface AgentRow {
@@ -35,7 +60,6 @@ interface StageResult {
 export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
   const { runId, crewId, apiKeyHash, taskPrompt, tokenBudget } = ctx;
   const sb = createClient(ctx.supabaseUrl, ctx.serviceRoleKey);
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let tokensUsed = 0;
 
   async function updateRun(patch: Record<string, unknown>) {
@@ -67,21 +91,29 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
     });
   }
 
-  async function callClaude(system: string, user: string) {
+  // Capability gate: fail fast if the caller cannot do MCP sampling.
+  if (ctx.supportsSampling === false || !ctx.sampler) {
+    const err: SamplingNotSupportedError = {
+      error: "SAMPLING_NOT_SUPPORTED",
+      message:
+        "Orchestrator does not support sampling. Use Claude Desktop or another sampling-capable client.",
+    };
+    await updateRun({
+      status: "failed",
+      completed_at: new Date().toISOString(),
+      tokens_used: 0,
+      result_artifact: err,
+    }).catch(() => null);
+    throw Object.assign(new Error(err.message), err);
+  }
+
+  const sampler = ctx.sampler;
+
+  async function callSampler(system: string, user: string): Promise<SamplerResult> {
     if (tokensUsed >= tokenBudget) {
       throw Object.assign(new Error("token_budget_exceeded"), { isBudget: true });
     }
-    const msg = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: MAX_PER_CALL,
-      system,
-      messages: [{ role: "user", content: user }],
-    });
-    const content = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join("");
-    return { content, tokensIn: msg.usage.input_tokens, tokensOut: msg.usage.output_tokens };
+    return sampler({ system, user, maxTokens: MAX_PER_CALL });
   }
 
   try {
@@ -140,7 +172,7 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
       advisors.map(async (agent, i) => {
         const system = `${agent.seed_prompt ?? `You are ${agent.name}.`}\n\nProvide your honest, specific opinion on the task. 150 to 250 words. Be direct and substantive.`;
         const user = `${memCtx}Task: ${taskPrompt}`;
-        const { content, tokensIn, tokensOut } = await callClaude(system, user);
+        const { content, tokensIn, tokensOut } = await callSampler(system, user);
         return {
           agentId: agent.id,
           label: `Opinion ${LABELS[i] ?? String(i + 1)}`,
@@ -165,7 +197,7 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
         const agent = advisors.find((a) => a.id === reviewer.agentId)!;
         const system = `${agent.seed_prompt ?? `You are ${agent.name}.`}\n\nRank each opinion below from 1 (most compelling) to ${others.length} (least). One-line rationale per ranking. Be honest and concise.`;
         const user = `Task: ${taskPrompt}\n\nOpinions to rank:\n\n${othersText}`;
-        const { content, tokensIn, tokensOut } = await callClaude(system, user);
+        const { content, tokensIn, tokensOut } = await callSampler(system, user);
         await writeMsg(reviewer.agentId, "advisor", "peer_review", content, tokensIn, tokensOut);
       })
     );
@@ -178,7 +210,7 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
         .join("\n\n---\n\n");
       const system = `You are the Chairman. Synthesise all advisor opinions into one clear, final answer.\n\nFormat your response exactly as:\n\nFINAL ANSWER:\n[Your conclusion, 200 to 350 words]\n\nWHAT DIDN'T MAKE THE CONSENSUS:\n[Minority views not incorporated, 1 to 3 bullet points starting with -. If full consensus, write: No significant dissents.]`;
       const user = `Task: ${taskPrompt}\n\nAdvisor opinions:\n\n${opinionsText}`;
-      const { content, tokensIn, tokensOut } = await callClaude(system, user);
+      const { content, tokensIn, tokensOut } = await callSampler(system, user);
       await writeMsg(chairman.id, "chairman", "synthesis", content, tokensIn, tokensOut);
     }
 

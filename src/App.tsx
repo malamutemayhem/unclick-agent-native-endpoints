@@ -40,6 +40,7 @@ import SignupPage from "./pages/Signup.tsx";
 import AuthCallbackPage from "./pages/AuthCallback.tsx";
 import VerifyMfaPage from "./pages/VerifyMfa.tsx";
 import RequireAuth from "./components/RequireAuth.tsx";
+import RequireAdmin from "./components/RequireAdmin.tsx";
 import BetaBanner from "./components/BetaBanner.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
 import AdminYou from "./pages/admin/AdminYou.tsx";
@@ -53,11 +54,22 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics.tsx";
 import AdminCodebase from "./pages/admin/AdminCodebase.tsx";
 import AdminOrchestratorPage from "./pages/admin/AdminOrchestrator.tsx";
 import AdminTestPass from "./pages/admin/AdminTestPass.tsx";
+import TestPassCatalog from "./pages/admin/testpass/TestPassCatalog.tsx";
+import NewRunWizard from "./pages/admin/testpass/NewRunWizard.tsx";
+import RunDetail from "./pages/admin/testpass/RunDetail.tsx";
+import ReportDetail from "./pages/admin/testpass/ReportDetail.tsx";
+import ReportsList from "./pages/admin/testpass/ReportsList.tsx";
 import CrewsCatalog from "./pages/admin/crews/CrewsCatalog.tsx";
 import CrewComposer from "./pages/admin/crews/CrewComposer.tsx";
 import CrewsRuns from "./pages/admin/crews/CrewsRuns.tsx";
 import CrewsSettings from "./pages/admin/crews/CrewsSettings.tsx";
 import CrewRun from "./pages/admin/crews/CrewRun.tsx";
+import AdminUsers from "./pages/admin/AdminUsers.tsx";
+import AdminSystemHealth from "./pages/admin/AdminSystemHealth.tsx";
+import AdminModeration from "./pages/admin/AdminModeration.tsx";
+import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
+import SignalsCatalog from "./pages/admin/signals/SignalsCatalog.tsx";
+import SignalsSettings from "./pages/admin/signals/SignalsSettings.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
 import { initPostHog } from "./lib/posthog.ts";
 
@@ -123,16 +135,28 @@ const App = () => (
             <Route path="activity" element={<AdminActivity />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="agents"     element={<AdminAgentsPage />} />
-            <Route path="analytics"      element={<AdminAnalytics />} />
-            <Route path="codebase"       element={<AdminCodebase />} />
-            <Route path="orchestrator"   element={<AdminOrchestratorPage />} />
-            <Route path="testpass"       element={<AdminTestPass />} />
+            <Route path="testpass"              element={<TestPassCatalog />} />
+            <Route path="testpass/new"          element={<NewRunWizard />} />
+            <Route path="testpass/runs/:id"     element={<RunDetail />} />
+            <Route path="testpass/packs/:id/edit" element={<AdminTestPass />} />
+            <Route path="testpass/reports"      element={<ReportsList />} />
+            <Route path="testpass/reports/:id"  element={<ReportDetail />} />
             <Route path="crews"          element={<CrewsCatalog />} />
             <Route path="crews/new"      element={<CrewComposer />} />
             <Route path="crews/:id/edit" element={<CrewComposer />} />
             <Route path="crews/runs"          element={<CrewsRuns />} />
             <Route path="crews/runs/:runId"  element={<CrewRun />} />
             <Route path="crews/settings"      element={<CrewsSettings />} />
+            {/* Admin-only surfaces (wrapped in RequireAdmin; also hidden from non-admin sidebar) */}
+            <Route path="analytics"      element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
+            <Route path="codebase"       element={<RequireAdmin><AdminCodebase /></RequireAdmin>} />
+            <Route path="orchestrator"   element={<RequireAdmin><AdminOrchestratorPage /></RequireAdmin>} />
+            <Route path="users"          element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
+            <Route path="system-health"  element={<RequireAdmin><AdminSystemHealth /></RequireAdmin>} />
+            <Route path="moderation"     element={<RequireAdmin><AdminModeration /></RequireAdmin>} />
+            <Route path="audit-log"      element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
+            <Route path="signals"          element={<SignalsCatalog />} />
+            <Route path="signals/settings" element={<SignalsSettings />} />
           </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />

@@ -93,7 +93,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { runCouncilEngine } from "../src/lib/crews/engine";
+import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -3430,25 +3430,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "delete_account": {
         // Self-serve account deletion. The signed-in user is the ONLY
-        // user that can trigger this - there is no admin-impersonation
-        // path and no body / query param that targets another user.
+        // user that can trigger this - no admin-impersonation path,
+        // no body/query param targeting another user.
         //
         // Order of operations:
-        //
-        //   1. Audit the attempt to backstagepass_audit BEFORE any
-        //      delete fires, so partial failures still leave a record.
-        //   2. Delete rows keyed by api_key_hash across the mc_* /
-        //      keychain tables (no FK to auth.users, so these do NOT
-        //      cascade when the auth row is removed).
-        //   3. Call supabase.auth.admin.deleteUser() which removes the
-        //      auth.users row and cascades to any table with a FK to
-        //      it (profiles, customers, accounts, assets, jobs, etc.
-        //      all use ON DELETE CASCADE per their migrations).
-        //
-        // If step 3 fails the user still has their auth identity but
-        // their api_key_hash data is gone - better than the other way
-        // round. Step 2 failures are swallowed so we always reach step
-        // 3 and at least detach the auth identity.
+        //   1. Resolve user + api_key_hash (idempotency: return 200 if
+        //      already deleted).
+        //   2. Write to account_deletions_audit BEFORE any destructive
+        //      step so partial failures leave a trail.
+        //   3. Delete all api_key_hash-scoped rows in dependency order
+        //      (children before parents). Collect per-table row counts
+        //      and errors rather than silently swallowing.
+        //   4. Call auth.admin.deleteUser() to remove the auth.users row
+        //      and cascade to FK-linked tables (ON DELETE CASCADE).
+        //   5. Clean up the now-orphaned api_keys row (user_id FK is
+        //      ON DELETE SET NULL so it survives step 4).
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
         if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -3460,8 +3456,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .maybeSingle()).data as { key_hash?: string | null } | null;
         const apiKeyHash = keyRow?.key_hash ?? null;
 
-        // Audit BEFORE any destructive op so even a partial failure
-        // leaves a trail Chris can inspect.
+        // Idempotency: if a previous deletion removed the api_keys link
+        // already, return a benign response without re-attempting.
+        if (!keyRow && !apiKeyHash) {
+          const { error: idempotentAuthErr } = await supabase.auth.admin.deleteUser(user.id);
+          if (idempotentAuthErr && idempotentAuthErr.message?.toLowerCase().includes("not found")) {
+            return res.status(200).json({ success: true, already_deleted: true });
+          }
+        }
+
+        // Pre-deletion audit record (captured before any delete fires).
+        try {
+          await supabase.from("account_deletions_audit").insert({
+            api_key_hash:  apiKeyHash,
+            email:         user.email,
+            reason:        "user_self_delete",
+            tables_affected: [],
+            rows_deleted:  {},
+          });
+        } catch { /* audit failure must not block deletion */ }
+
+        // Also write to backstagepass_audit for backward compatibility.
         try {
           await supabase.from("backstagepass_audit").insert({
             api_key_hash: apiKeyHash,
@@ -3471,56 +3486,98 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             user_agent:   clientUa(req),
             metadata:     { user_id: user.id, email: user.email },
           });
-        } catch {
-          // Do not block the delete if audit write fails.
-        }
+        } catch { /* swallow */ }
 
-        // Delete api_key_hash-scoped rows. These tables do not carry a
-        // FK to auth.users so auth.admin.deleteUser cascade will not
-        // reach them. Swallow individual table errors so one bad drop
-        // does not leave the account half-alive.
-        if (apiKeyHash) {
-          const hashTables = [
-            "mc_business_context",
-            "mc_code_dumps",
-            "mc_conversation_log",
-            "mc_extracted_facts",
-            "mc_knowledge_library",
-            "mc_knowledge_library_history",
-            "mc_session_summaries",
-            "memory_configs",
-            "memory_devices",
-            "tenant_settings",
-            "tool_detections",
-            "tool_usage_events",
-            "user_credentials",
-            "platform_credentials",
-            "agent_trace",
-          ];
-          for (const table of hashTables) {
-            try {
-              await supabase.from(table).delete().eq("api_key_hash", apiKeyHash);
-            } catch { /* per-table swallow */ }
-          }
-          // metering_events uses the column name `key_hash`, not `api_key_hash`.
+        // Per-step tracking. Errors are collected, not thrown, so we
+        // always reach auth.admin.deleteUser regardless of table errors.
+        const rowsDeleted: Record<string, number> = {};
+        const stepErrors: Record<string, string>  = {};
+
+        async function delByHash(table: string, col = "api_key_hash") {
+          if (!apiKeyHash) return;
           try {
-            await supabase.from("metering_events").delete().eq("key_hash", apiKeyHash);
-          } catch { /* swallow */ }
+            const { count, error } = await supabase
+              .from(table)
+              .delete({ count: "exact" })
+              .eq(col, apiKeyHash);
+            rowsDeleted[table] = count ?? 0;
+            if (error) stepErrors[table] = error.message;
+          } catch (e) {
+            stepErrors[table] = String(e);
+            rowsDeleted[table] = 0;
+          }
         }
 
-        // Finally detach the auth identity. Supabase admin API cleans
-        // up auth.identities and any outstanding session tokens.
-        // Cascade FKs handle profiles / accounts / customers / jobs /
-        // etc. Any table added in the future with a user_id FK and
-        // ON DELETE CASCADE gets cleaned automatically.
+        if (apiKeyHash) {
+          // Delete children before parents to respect FK order.
+          // mc_run_messages -> mc_crew_runs -> mc_crews
+          await delByHash("mc_run_messages");
+          await delByHash("mc_crew_runs");
+          await delByHash("mc_crews");
+          // mc_facts_audit cascades from mc_extracted_facts (ON DELETE CASCADE),
+          // but delete explicitly for clear row accounting.
+          await delByHash("mc_facts_audit");
+          await delByHash("mc_extracted_facts");
+          await delByHash("mc_session_summaries");
+          await delByHash("mc_conversation_log");
+          await delByHash("mc_code_dumps");
+          await delByHash("mc_business_context");
+          await delByHash("mc_knowledge_library");
+          await delByHash("mc_knowledge_library_history");
+          await delByHash("mc_canonical_docs");
+          // User-specific agents only (is_system = false). System agents are
+          // shared across tenants and must not be deleted here.
+          try {
+            const { count, error } = await supabase
+              .from("mc_agents")
+              .delete({ count: "exact" })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("is_system", false);
+            rowsDeleted["mc_agents"] = count ?? 0;
+            if (error) stepErrors["mc_agents"] = error.message;
+          } catch (e) {
+            stepErrors["mc_agents"] = String(e);
+            rowsDeleted["mc_agents"] = 0;
+          }
+          // Config / credential layer.
+          await delByHash("memory_configs");
+          await delByHash("memory_devices");
+          await delByHash("tenant_settings");
+          await delByHash("tool_detections");
+          await delByHash("tool_usage_events");
+          await delByHash("user_credentials");
+          await delByHash("platform_credentials");
+          await delByHash("agent_trace");
+          // metering_events uses "key_hash", not "api_key_hash".
+          await delByHash("metering_events", "key_hash");
+        }
+
+        // Remove the auth.users row. auth.admin.deleteUser requires the
+        // service_role key (SUPABASE_SERVICE_ROLE_KEY must be set).
         const { error: authErr } = await supabase.auth.admin.deleteUser(user.id);
         if (authErr) {
           return res.status(500).json({
-            error: `auth.users delete failed: ${authErr.message}. api_key_hash data was already purged.`,
+            error:        `auth.users delete failed: ${authErr.message}`,
+            step:         "auth_user",
+            step_errors:  stepErrors,
+            rows_deleted: rowsDeleted,
           });
         }
 
-        return res.status(200).json({ success: true });
+        // api_keys.user_id has ON DELETE SET NULL so the row survives
+        // auth deletion. Clean it up now that the cascade is done.
+        if (apiKeyHash) {
+          try {
+            await supabase.from("api_keys").delete().eq("key_hash", apiKeyHash);
+          } catch { /* best effort */ }
+        }
+
+        const hasPartialErrors = Object.keys(stepErrors).length > 0;
+        return res.status(200).json({
+          success:      true,
+          rows_deleted: rowsDeleted,
+          ...(hasPartialErrors && { partial: true, step_errors: stepErrors }),
+        });
       }
 
       case "admin_tools": {
@@ -4950,9 +5007,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
-        if (!process.env.ANTHROPIC_API_KEY) {
-          return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured in Vercel env." });
-        }
         const { crew_id, task_prompt, token_budget } = (req.body ?? {}) as {
           crew_id?: string;
           task_prompt?: string;
@@ -4961,6 +5015,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!crew_id || !task_prompt?.trim()) {
           return res.status(400).json({ error: "crew_id and task_prompt required" });
         }
+        // User-facing runs now route LLM traffic through MCP sampling. The HTTP
+        // path cannot do bidirectional sampling, so we create the run row for
+        // bookkeeping and return a card asking the caller to re-run via MCP.
         const { data: runRow, error: runErr } = await supabase
           .from("mc_crew_runs")
           .insert({
@@ -4968,23 +5025,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             crew_id,
             task_prompt: task_prompt.trim(),
             token_budget: token_budget ?? 150000,
-            status: "pending",
+            status: "failed",
+            result_artifact: {
+              error: "SAMPLING_NOT_SUPPORTED",
+              message:
+                "Orchestrator does not support sampling. Use Claude Desktop or another sampling-capable client.",
+            },
+            completed_at: new Date().toISOString(),
           })
           .select()
           .single();
         if (runErr) throw runErr;
-        // Respond immediately - engine runs after response, Vercel keeps function alive
-        res.status(202).json({ run_id: runRow.id });
-        await runCouncilEngine({
-          runId: runRow.id,
-          crewId: crew_id,
-          apiKeyHash,
-          taskPrompt: task_prompt.trim(),
-          tokenBudget: token_budget ?? 150000,
-          supabaseUrl,
-          serviceRoleKey: supabaseKey,
-        }).catch((e: Error) => console.error("Council engine error:", e.message));
-        return;
+        const card: ConversationalCard = buildCard({
+          headline: "Crews Council run needs MCP sampling",
+          summary:
+            "This HTTP endpoint cannot run a Council round because LLM traffic now flows through MCP sampling. Start the run from a sampling-capable client (e.g. Claude Desktop) using the start_crew_run MCP tool.",
+          keyFacts: [
+            `run_id: ${runRow.id}`,
+            `crew_id: ${crew_id}`,
+            "status: failed (SAMPLING_NOT_SUPPORTED)",
+          ],
+          nextActions: [
+            "Install the UnClick MCP server in a sampling-capable client",
+            "Call the start_crew_run MCP tool with the same crew_id and task_prompt",
+          ],
+          deepLink: `/admin/crews/runs/${runRow.id}`,
+        });
+        return res.status(409).json({
+          error: "SAMPLING_NOT_SUPPORTED",
+          run_id: runRow.id,
+          card,
+        });
       }
 
       case "get_run": {
@@ -5010,7 +5081,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ]);
         if (runRes.error) throw runRes.error;
         if (!runRes.data) return res.status(404).json({ error: "Run not found" });
-        return res.status(200).json({ run: runRes.data, messages: msgsRes.data ?? [] });
+        const run = runRes.data as {
+          id: string;
+          status: string;
+          task_prompt: string;
+          tokens_used: number | null;
+          result_artifact: Record<string, unknown> | null;
+          started_at: string | null;
+          completed_at: string | null;
+          crew_id?: string;
+        };
+        const messages = (msgsRes.data ?? []) as Array<{ stage?: string }>;
+        const stageCounts = messages.reduce<Record<string, number>>((acc, m) => {
+          const s = m.stage ?? "unknown";
+          acc[s] = (acc[s] ?? 0) + 1;
+          return acc;
+        }, {});
+        const stageSummary = Object.entries(stageCounts)
+          .map(([s, n]) => `${s}: ${n}`)
+          .join(", ") || "none";
+        const errArtifact = run.result_artifact as { error?: string; message?: string } | null;
+        const errorLine = errArtifact?.error
+          ? `error: ${errArtifact.error}${errArtifact.message ? ` (${errArtifact.message})` : ""}`
+          : null;
+        let agents: unknown[] = [];
+        if (run.crew_id) {
+          const crewRes = await supabase
+            .from("mc_crews")
+            .select("agent_ids")
+            .eq("id", run.crew_id)
+            .eq("api_key_hash", apiKeyHash)
+            .maybeSingle();
+          const agentIds: string[] = (crewRes.data as { agent_ids?: string[] } | null)?.agent_ids ?? [];
+          if (agentIds.length > 0) {
+            const { data: agentRows } = await supabase
+              .from("mc_agents")
+              .select("id,slug,name,category,colour_token")
+              .in("id", agentIds);
+            agents = agentRows ?? [];
+          }
+          const hasChairman = (agents as { slug?: string }[]).some((a) => a.slug === "chairman");
+          if (!hasChairman) {
+            const { data: chairRow } = await supabase
+              .from("mc_agents")
+              .select("id,slug,name,category,colour_token")
+              .eq("slug", "chairman")
+              .eq("is_system", true)
+              .maybeSingle();
+            if (chairRow) agents = [...agents, chairRow];
+          }
+        }
+        const agentNames = (agents as { name?: string }[]).map((a) => a.name).filter(Boolean).join(", ");
+        const card: ConversationalCard = buildCard({
+          headline: `Crews run ${run.status}`,
+          summary: run.task_prompt.slice(0, 240),
+          keyFacts: [
+            `run_id: ${run.id}`,
+            `status: ${run.status}`,
+            `tokens_used: ${run.tokens_used ?? 0}`,
+            `stages: ${stageSummary}`,
+            ...(agentNames ? [`agents: ${agentNames}`] : []),
+            ...(errorLine ? [errorLine] : []),
+          ],
+          nextActions:
+            run.status === "complete"
+              ? ["Open the admin run page to review the synthesis"]
+              : run.status === "failed"
+                ? ["Inspect result_artifact for the failure reason", "Start a new run via MCP sampling"]
+                : ["Poll get_run until status is complete or failed"],
+          deepLink: `/admin/crews/runs/${run.id}`,
+        });
+        return res.status(200).json({
+          run: runRes.data,
+          messages: msgsRes.data ?? [],
+          agents,
+          card,
+        });
       }
 
       case "list_runs": {
@@ -5034,7 +5180,512 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (crewId) q = q.eq("crew_id", crewId);
         const { data, error } = await q;
         if (error) throw error;
-        return res.status(200).json({ data: data ?? [] });
+        const rows = (data ?? []) as Array<{
+          id: string;
+          crew_id: string;
+          status: string;
+          task_prompt: string;
+        }>;
+        const recent = rows.slice(0, 3).map((r) => {
+          const preview = r.task_prompt.length > 40
+            ? r.task_prompt.slice(0, 40) + "..."
+            : r.task_prompt;
+          return `${r.id} (${r.status}): ${preview}`;
+        });
+        const card: ConversationalCard = buildCard({
+          headline: `Found ${rows.length} Crews run${rows.length === 1 ? "" : "s"}`,
+          summary: crewId
+            ? `Runs for crew ${crewId}, newest first.`
+            : "All runs for this API key, newest first.",
+          keyFacts: [
+            `total: ${rows.length}`,
+            ...(recent.length > 0 ? recent : ["no runs yet"]),
+          ],
+          nextActions:
+            rows.length === 0
+              ? ["Call start_crew_run via MCP to kick off your first run"]
+              : [
+                  "Call get_run with a run_id to inspect a specific run",
+                  "Call start_crew_run via MCP to start a new one",
+                ],
+          deepLink: "/admin/crews/runs",
+        });
+        return res.status(200).json({ data: rows, card });
+      }
+
+      // ─── TestPass run management (Phase 9A visual UI) ─────────────────────
+
+      case "list_testpass_runs": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const limit = Math.min(Number(req.query.limit ?? req.body?.limit ?? 50), 100);
+        const targetFilter = (req.query.target ?? req.body?.target ?? "") as string;
+        let q = supabase
+          .from("testpass_runs")
+          .select("id, pack_id, pack_name, target, profile, started_at, completed_at, status, verdict_summary")
+          .eq("actor_user_id", user.id)
+          .order("started_at", { ascending: false })
+          .limit(limit);
+        if (targetFilter) q = q.ilike("target->>url", `%${targetFilter}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ runs: data ?? [] });
+      }
+
+      case "list_testpass_packs": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("testpass_packs")
+          .select("id, slug, name, version, description, yaml")
+          .or(`owner_user_id.is.null,owner_user_id.eq.${user.id}`)
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        const packs = (data ?? []).map((p) => {
+          const yamlData = (p.yaml ?? {}) as Record<string, unknown>;
+          const items = Array.isArray(yamlData.items) ? yamlData.items : [];
+          const category = (yamlData.category as string | undefined) ?? "general";
+          return {
+            id: p.id,
+            slug: p.slug,
+            name: p.name,
+            description: p.description,
+            check_count: items.length,
+            category,
+            is_system: !p.yaml || Object.keys(p.yaml as object).length === 0,
+          };
+        });
+        return res.status(200).json({ packs });
+      }
+
+      case "get_testpass_run": {
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const runId = (req.query.run_id ?? req.body?.run_id ?? "") as string;
+        if (!runId) return res.status(400).json({ error: "run_id required" });
+        const [runRes, itemsRes] = await Promise.all([
+          supabase
+            .from("testpass_runs")
+            .select("*")
+            .eq("id", runId)
+            .eq("actor_user_id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("testpass_items")
+            .select("*")
+            .eq("run_id", runId)
+            .order("created_at", { ascending: true }),
+        ]);
+        if (runRes.error) throw runRes.error;
+        if (!runRes.data) return res.status(404).json({ error: "Run not found" });
+        if (itemsRes.error) throw itemsRes.error;
+        return res.status(200).json({ run: runRes.data, items: itemsRes.data ?? [] });
+      }
+
+      case "start_testpass_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Authorization header required" });
+        const { pack_id, target, depth } = (req.body ?? {}) as {
+          pack_id?: string;
+          target?: string;
+          depth?: string;
+        };
+        if (!pack_id) return res.status(400).json({ error: "pack_id required" });
+        if (!target) return res.status(400).json({ error: "target required" });
+        const profile = (["smoke", "standard", "deep"].includes(depth ?? "") ? depth : "standard") as string;
+        const { data: pack } = await supabase
+          .from("testpass_packs")
+          .select("slug, name")
+          .eq("id", pack_id)
+          .maybeSingle();
+        if (!pack) return res.status(404).json({ error: "Pack not found" });
+
+        // Resolve api_key_hash for report linking (two-layer: raw key or session JWT)
+        const tpApiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+
+        // Find or create open report for this (api_key_hash, target, pack_id)
+        let reportId: string | null = null;
+        if (tpApiKeyHash) {
+          const { data: existingReport } = await supabase
+            .from("mc_testpass_reports")
+            .select("id, run_sequence")
+            .eq("api_key_hash", tpApiKeyHash)
+            .eq("target", target)
+            .eq("pack_id", pack_id)
+            .eq("status", "open")
+            .maybeSingle();
+          if (existingReport) {
+            reportId = existingReport.id as string;
+          } else {
+            const { data: newReport } = await supabase
+              .from("mc_testpass_reports")
+              .insert({
+                api_key_hash: tpApiKeyHash,
+                target,
+                pack_id,
+                status: "open",
+                run_sequence: [],
+              })
+              .select("id")
+              .maybeSingle();
+            if (newReport) reportId = newReport.id as string;
+          }
+        }
+
+        const host = req.headers.host ?? "localhost:3000";
+        const proto = host.includes("localhost") ? "http" : "https";
+        const engineRes = await fetch(`${proto}://${host}/api/testpass`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: req.headers.authorization ?? "",
+          },
+          body: JSON.stringify({
+            action: "run",
+            target_url: target,
+            profile,
+            pack_slug: pack.slug,
+            pack_id,
+            pack_name: pack.name,
+          }),
+        });
+        const engineBody = (await engineRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!engineRes.ok) return res.status(engineRes.status).json(engineBody);
+
+        const runId = engineBody.run_id as string | undefined;
+
+        // Link run to report and append to run_sequence
+        if (runId && reportId && tpApiKeyHash) {
+          await supabase
+            .from("testpass_runs")
+            .update({ report_id: reportId })
+            .eq("id", runId);
+
+          // Append run to report's sequence via array append
+          const { data: currentReport } = await supabase
+            .from("mc_testpass_reports")
+            .select("run_sequence")
+            .eq("id", reportId)
+            .maybeSingle();
+          const currentSeq = (currentReport?.run_sequence as string[] | null) ?? [];
+          await supabase
+            .from("mc_testpass_reports")
+            .update({ run_sequence: [...currentSeq, runId] })
+            .eq("id", reportId);
+
+          // Check if all items in this run are Pass or N/A - if so, close the report
+          const summary = engineBody.summary as Record<string, number> | undefined;
+          if (summary) {
+            const failCount = summary.fail ?? 0;
+            const pendingCount = summary.pending ?? 0;
+            if (failCount === 0 && pendingCount === 0) {
+              const closedAt = new Date().toISOString();
+              await supabase
+                .from("mc_testpass_reports")
+                .update({ status: "complete", closed_at: closedAt })
+                .eq("id", reportId);
+              void emitSignal({
+                apiKeyHash: tpApiKeyHash,
+                tool: "testpass",
+                action: "report_closed",
+                severity: "info",
+                summary: "All checks cleared. Report closed.",
+                deepLink: `/admin/testpass/reports/${reportId}`,
+              });
+            } else {
+              void emitSignal({
+                apiKeyHash: tpApiKeyHash,
+                tool: "testpass",
+                action: "report_stalled",
+                severity: "action_needed",
+                summary: `Report has ${failCount} failing check${failCount === 1 ? "" : "s"}. Run again after fixes.`,
+                deepLink: `/admin/testpass/reports/${reportId}`,
+              });
+            }
+          }
+
+          void emitSignal({
+            apiKeyHash: tpApiKeyHash,
+            tool: "testpass",
+            action: "run_complete",
+            severity: "info",
+            summary: `TestPass run completed for ${target}`,
+            deepLink: `/admin/testpass/runs/${runId}`,
+          });
+        }
+
+        return res.status(200).json({ run_id: runId, report_id: reportId });
+      }
+
+      // ─── TestPass Phase 9B: report actions ────────────────────────────────
+
+      case "get_report": {
+        const tpUser = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!tpUser) return res.status(401).json({ error: "Authorization header required" });
+        const grApiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!grApiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const reportId = (req.body?.report_id ?? req.query.report_id ?? "") as string;
+        if (!reportId) return res.status(400).json({ error: "report_id required" });
+        const [reportRes, runsRes] = await Promise.all([
+          supabase
+            .from("mc_testpass_reports")
+            .select("*")
+            .eq("id", reportId)
+            .eq("api_key_hash", grApiKeyHash)
+            .maybeSingle(),
+          supabase
+            .from("testpass_runs")
+            .select("id, status, verdict_summary, started_at, completed_at, pack_name, target, profile")
+            .eq("report_id", reportId)
+            .order("started_at", { ascending: true }),
+        ]);
+        if (reportRes.error) throw reportRes.error;
+        if (!reportRes.data) return res.status(404).json({ error: "Report not found" });
+        if (runsRes.error) throw runsRes.error;
+        const runsRaw = runsRes.data ?? [];
+        type VerdictSummary = { check?: number; fail?: number; na?: number; other?: number; pending?: number };
+        const runsWithMeta = runsRaw.map((r, idx) => {
+          const vs = (r.verdict_summary ?? {}) as VerdictSummary;
+          const pass = vs.check ?? 0;
+          const fail = vs.fail ?? 0;
+          const na = vs.na ?? 0;
+          let delta: { fixed: number; new_fails: number } | null = null;
+          if (idx > 0) {
+            const prev = (runsRaw[idx - 1].verdict_summary ?? {}) as VerdictSummary;
+            delta = {
+              fixed: Math.max(0, (prev.fail ?? 0) - fail),
+              new_fails: Math.max(0, fail - (prev.fail ?? 0)),
+            };
+          }
+          return { ...r, run_number: idx + 1, pass, fail, na, delta };
+        });
+        return res.status(200).json({ report: reportRes.data, runs: runsWithMeta });
+      }
+
+      case "list_reports": {
+        const lrUser = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!lrUser) return res.status(401).json({ error: "Authorization header required" });
+        const lrApiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!lrApiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const lrBody = (req.body ?? {}) as { status?: string; target?: string; limit?: number };
+        const lrLimit = Math.min(Number(lrBody.limit ?? req.query.limit ?? 50), 200);
+        const lrStatus = (lrBody.status ?? req.query.status ?? "") as string;
+        const lrTarget = (lrBody.target ?? req.query.target ?? "") as string;
+        let lrQ = supabase
+          .from("mc_testpass_reports")
+          .select("*")
+          .eq("api_key_hash", lrApiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(lrLimit);
+        if (lrStatus) lrQ = lrQ.eq("status", lrStatus);
+        if (lrTarget) lrQ = lrQ.ilike("target", `%${lrTarget}%`);
+        const { data: reports, error: lrErr } = await lrQ;
+        if (lrErr) throw lrErr;
+        const reportsWithMeta = await Promise.all(
+          (reports ?? []).map(async (rpt) => {
+            const runSeq = (rpt.run_sequence as string[] | null) ?? [];
+            const runCount = runSeq.length;
+            let latestRun: Record<string, unknown> | null = null;
+            if (runCount > 0) {
+              const lastRunId = runSeq[runCount - 1];
+              const { data: lr } = await supabase
+                .from("testpass_runs")
+                .select("id, status, verdict_summary, started_at, completed_at")
+                .eq("id", lastRunId)
+                .maybeSingle();
+              latestRun = lr as Record<string, unknown> | null;
+            }
+            return { report: rpt, latest_run: latestRun, run_count: runCount };
+          })
+        );
+        return res.status(200).json({ reports: reportsWithMeta });
+      }
+
+      case "abandon_report": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const arUser = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!arUser) return res.status(401).json({ error: "Authorization header required" });
+        const arApiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!arApiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const arReportId = (req.body?.report_id ?? "") as string;
+        if (!arReportId) return res.status(400).json({ error: "report_id required" });
+        const { data: arData, error: arErr } = await supabase
+          .from("mc_testpass_reports")
+          .update({ status: "abandoned", closed_at: new Date().toISOString() })
+          .eq("id", arReportId)
+          .eq("api_key_hash", arApiKeyHash)
+          .select("*")
+          .maybeSingle();
+        if (arErr) throw arErr;
+        if (!arData) return res.status(404).json({ error: "Report not found" });
+        return res.status(200).json({ report: arData });
+      }
+
+      // ─── Signals Phase 1: notifications hub ───────────────────────────────
+
+      case "list_signals": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const body = (req.body ?? {}) as { limit?: number; tool?: string; unread_only?: boolean };
+        const limit = Math.min(Number(body.limit ?? req.query.limit ?? 50), 200);
+        const unreadOnly = body.unread_only === true || req.query.unread_only === "1";
+        const toolFilter = (body.tool ?? req.query.tool ?? "") as string;
+        let q = supabase
+          .from("mc_signals")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (toolFilter) q = q.eq("tool", toolFilter);
+        if (unreadOnly) q = q.is("read_at", null);
+        const { data, error } = await q;
+        if (error) throw error;
+        return res.status(200).json({ signals: data ?? [] });
+      }
+
+      case "mark_signal_read": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { signal_id, read_via } = (req.body ?? {}) as { signal_id?: string; read_via?: string };
+        if (!signal_id) return res.status(400).json({ error: "signal_id required" });
+        const { error } = await supabase
+          .from("mc_signals")
+          .update({ read_at: new Date().toISOString(), read_via: read_via ?? "ui" })
+          .eq("id", signal_id)
+          .eq("api_key_hash", apiKeyHash);
+        if (error) throw error;
+        return res.status(200).json({ success: true });
+      }
+
+      case "mark_all_read": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("mc_signals")
+          .update({ read_at: new Date().toISOString(), read_via: "dismiss" })
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null)
+          .select("id");
+        if (error) throw error;
+        return res.status(200).json({ updated: data?.length ?? 0 });
+      }
+
+      case "get_signal_preferences": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { data, error } = await supabase
+          .from("mc_signal_preferences")
+          .select("*")
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          return res.status(200).json({
+            preferences: {
+              api_key_hash: apiKeyHash,
+              email_enabled: false,
+              email_address: null,
+              phone_push_enabled: true,
+              telegram_enabled: false,
+              telegram_chat_id: null,
+              quiet_hours_start: null,
+              quiet_hours_end: null,
+              min_severity: "info",
+              per_tool_overrides: {},
+            },
+          });
+        }
+        return res.status(200).json({ preferences: data });
+      }
+
+      case "update_signal_preferences": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const allowed = [
+          "email_enabled",
+          "email_address",
+          "phone_push_enabled",
+          "telegram_enabled",
+          "telegram_chat_id",
+          "quiet_hours_start",
+          "quiet_hours_end",
+          "min_severity",
+          "per_tool_overrides",
+        ];
+        const patch: Record<string, unknown> = {
+          api_key_hash: apiKeyHash,
+          updated_at: new Date().toISOString(),
+        };
+        for (const k of allowed) {
+          if (k in body) patch[k] = body[k];
+        }
+        const { data, error } = await supabase
+          .from("mc_signal_preferences")
+          .upsert(patch, { onConflict: "api_key_hash" })
+          .select()
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ preferences: data });
+      }
+
+      case "check_signals": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const { count: totalUnread } = await supabase
+          .from("mc_signals")
+          .select("id", { count: "exact", head: true })
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null);
+
+        const { data: rows, error: fetchErr } = await supabase
+          .from("mc_signals")
+          .select("id, tool, action, severity, summary, deep_link, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (fetchErr) throw fetchErr;
+
+        const signals = rows ?? [];
+        if (signals.length > 0) {
+          const ids = signals.map((s) => s.id);
+          const { error: updateErr } = await supabase
+            .from("mc_signals")
+            .update({ read_at: new Date().toISOString(), read_via: "agent" })
+            .in("id", ids)
+            .eq("api_key_hash", apiKeyHash);
+          if (updateErr) throw updateErr;
+        }
+
+        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, info: 0 };
+        const byTool: Record<string, number> = {};
+        for (const s of signals) {
+          if (s.severity in bySeverity) bySeverity[s.severity]++;
+          byTool[s.tool] = (byTool[s.tool] ?? 0) + 1;
+        }
+        const parts: string[] = [];
+        if (bySeverity.critical > 0) parts.push(`${bySeverity.critical} critical`);
+        if (bySeverity.action_needed > 0) parts.push(`${bySeverity.action_needed} needing action`);
+        if (bySeverity.info > 0) parts.push(`${bySeverity.info} info`);
+        const toolList = Object.entries(byTool)
+          .map(([t, c]) => `${c} from ${t}`)
+          .join(", ");
+        const narrative_hint =
+          signals.length === 0
+            ? "No new signals. User is caught up."
+            : `${signals.length} new signal${signals.length === 1 ? "" : "s"}${parts.length ? ` (${parts.join(", ")})` : ""}${toolList ? `: ${toolList}` : ""}.`;
+
+        return res.status(200).json({
+          unread_count: totalUnread ?? signals.length,
+          signals,
+          narrative_hint,
+        });
       }
 
       default:

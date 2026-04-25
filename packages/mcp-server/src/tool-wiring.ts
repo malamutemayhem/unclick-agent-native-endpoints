@@ -750,6 +750,9 @@ import {
 // ─── TestPass ─────────────────────────────────────────────────────────────────
 import { testpassRun, testpassStatus, testpassSavePack, testpassEditItem } from "./testpass-tool.js";
 
+// ─── Crews (Orchestrator Wizard) ──────────────────────────────────────────────
+import { crewsStartRun, crewsGetRun, crewsListRuns } from "./crews-tool.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADDITIONAL_TOOLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11110,6 +11113,43 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── crews-tool.ts (Orchestrator Wizard) ──────────────────────────────────────
+  {
+    name: "start_crew_run",
+    description: "Call this tool when the user wants to start a Crews Council run. Creates the run row on the UnClick API and returns a ConversationalCard with next actions. LLM turns are expected to flow through MCP sampling; if the Orchestrator does not support sampling the card reports SAMPLING_NOT_SUPPORTED.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        crew_id: { type: "string", description: "The UUID of the Crew to run" },
+        task_prompt: { type: "string", description: "The task the Council should deliberate on" },
+        token_budget: { type: "number", description: "Optional token budget (default 150000)" },
+      },
+      required: ["crew_id", "task_prompt"],
+    },
+  },
+  {
+    name: "get_run",
+    description: "Call this tool when the user wants the status of a specific Crews run. Returns a ConversationalCard summarising stage progress, token usage, and any failure artifact.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run_id returned by start_crew_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "list_runs",
+    description: "Call this tool when the user wants a recent history of Crews runs. Returns a ConversationalCard with a run count and the newest few run ids.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        crew_id: { type: "string", description: "Optional: filter to one crew" },
+        limit: { type: "number", description: "Optional: max rows to return (default 50, capped at 100)" },
+      },
+    },
+  },
+
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12223,4 +12263,9 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   testpass_status:    (args) => testpassStatus(args),
   testpass_save_pack: (args) => testpassSavePack(args),
   testpass_edit_item: (args) => testpassEditItem(args),
+
+  // crews-tool.ts
+  start_crew_run: (args) => crewsStartRun(args),
+  get_run:        (args) => crewsGetRun(args),
+  list_runs:      (args) => crewsListRuns(args),
 };

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useSession } from "@/lib/auth";
 import CrewsNav from "@/components/crews/CrewsNav";
+import CrewRunGraph, { type RunAgent } from "@/components/crews/CrewRunGraph";
 import { Copy, Check, ChevronLeft, Loader2 } from "lucide-react";
 
 type RunStatus = "pending" | "running" | "complete" | "failed";
@@ -57,6 +58,7 @@ export default function CrewRun() {
   const { session } = useSession();
   const [run, setRun] = useState<RunRow | null>(null);
   const [messages, setMessages] = useState<RunMessage[]>([]);
+  const [agents, setAgents] = useState<RunAgent[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -75,11 +77,13 @@ export default function CrewRun() {
       const body = (await res.json()) as {
         run?: RunRow;
         messages?: RunMessage[];
+        agents?: unknown[];
         error?: string;
       };
       if (body.run) {
         setRun(body.run);
         setMessages(body.messages ?? []);
+        if (body.agents) setAgents(body.agents as RunAgent[]);
       } else if (body.error) {
         setFetchError(body.error);
       }
@@ -116,7 +120,7 @@ export default function CrewRun() {
 
   const runError = run?.result_artifact?.error;
   const budgetExceeded = runError === "token_budget_exceeded";
-  const apiMissing = runError === "ANTHROPIC_API_KEY not configured in Vercel env.";
+  const samplingMissing = runError === "SAMPLING_NOT_SUPPORTED";
 
   function copyToClipboard() {
     void navigator.clipboard.writeText(synthMain).then(() => {
@@ -162,34 +166,23 @@ export default function CrewRun() {
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-400">
               {budgetExceeded
                 ? "This run used more words than the budget allows. Try a shorter task, or bump the budget in Settings."
-                : apiMissing
-                ? "Claude API not configured. Ask Bailey or check Vercel env vars."
+                : samplingMissing
+                ? "This run needs MCP sampling. Start it from Claude Desktop (or another sampling-capable client) using the start_crew_run MCP tool."
                 : (runError ?? "Run failed.")}
             </div>
           )}
 
-          {opinions.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#555]">
-                Advisor opinions
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {opinions.map((msg, i) => (
-                  <div
-                    key={msg.id}
-                    className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4"
-                  >
-                    <p className="mb-2 text-[10px] font-semibold text-[#61C1C4]">
-                      Opinion {String.fromCharCode(65 + i)}
-                    </p>
-                    <p className="text-xs leading-relaxed text-[#bbb]">{msg.content}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {agents.length > 0 && (
+            <CrewRunGraph
+              runStatus={run.status}
+              agents={agents}
+              messages={messages}
+              startedAt={run.started_at}
+              completedAt={run.completed_at}
+            />
           )}
 
-          {isActive && (
+          {isActive && agents.length === 0 && (
             <div className="flex items-center gap-2 text-xs text-[#555]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>

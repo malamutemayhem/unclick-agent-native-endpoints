@@ -85,6 +85,8 @@
     "stripe": "^17.7.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.134.0",
+    "vanta": "^0.5.24",
     "vaul": "^0.9.9",
     "zod": "^3.25.76"
   },

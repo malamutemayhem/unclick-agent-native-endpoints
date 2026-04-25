@@ -309,6 +309,19 @@ const VISIBLE_TOOLS = [
       required: ["fact_id"],
     },
   },
+  {
+    name: "check_signals",
+    title: "Check signals",
+    description:
+      "Call at the start of every session to catch up on what happened since the user last chatted. " +
+      "Returns unread signals from TestPass, Crews, Memory, and every UnClick tool. " +
+      "Narrate the important ones to the user in plain English. " +
+      "Automatically marks them as read so you do not re-narrate later.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
 ] as const;
 
 // Maps new visible tool names to the canonical MEMORY_HANDLERS keys.
@@ -769,6 +782,42 @@ export function createServer(): Server {
     trackToolCall(name);
 
     try {
+      // ── Signals: catch up on unread signals at session start ─────
+      if (name === "check_signals") {
+        const apiKey = process.env.UNCLICK_API_KEY;
+        const base =
+          process.env.UNCLICK_MEMORY_BASE_URL ||
+          process.env.UNCLICK_SITE_URL ||
+          "https://unclick.world";
+        if (!apiKey) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  unread_count: 0,
+                  signals: [],
+                  narrative_hint: "No API key configured; signals unavailable.",
+                }, null, 2),
+              },
+            ],
+          };
+        }
+        const resp = await fetch(`${base}/api/memory-admin?action=check_signals`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        });
+        const body = await resp.json().catch(() => ({}));
+        return {
+          content: [{ type: "text", text: JSON.stringify(body, null, 2) }],
+          isError: !resp.ok,
+        };
+      }
+
       // ── UnClick Memory (direct tools + memory.* endpoints) ───────
       // Resolve new tool names (load_memory, save_fact, etc.) to canonical
       // handler keys (get_startup_context, add_fact, etc.). Old names still

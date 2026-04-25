@@ -27,6 +27,7 @@ import {
   Menu,
   Bot,
   BarChart3,
+  Bell,
   Code2,
   Terminal,
   ChevronRight,
@@ -37,14 +38,19 @@ import {
   Sparkles,
   BookOpen,
   FlaskConical,
-  Users,
+  ShieldAlert,
+  Users as UsersIcon,
+  HeartPulse,
+  ShieldCheck,
+  ScrollText,
 } from "lucide-react";
 
-function SurfaceLink({ path, label, icon: Icon, onClick }: {
+function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
   path: string;
   label: string;
   icon: typeof User;
   onClick?: () => void;
+  badge?: number;
 }) {
   return (
     <NavLink
@@ -59,8 +65,68 @@ function SurfaceLink({ path, label, icon: Icon, onClick }: {
       }
     >
       <Icon className="h-4 w-4 shrink-0" />
-      <span>{label}</span>
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </NavLink>
+  );
+}
+
+const ADMIN_SUBMENU = [
+  { path: "/admin/analytics",     label: "Analytics",             icon: BarChart3   },
+  { path: "/admin/codebase",      label: "Codebase",              icon: Code2       },
+  { path: "/admin/orchestrator",  label: "Orchestrator",          icon: Terminal    },
+  { path: "/admin/users",         label: "User Management",       icon: UsersIcon   },
+  { path: "/admin/system-health", label: "System Health",         icon: HeartPulse  },
+  { path: "/admin/moderation",    label: "Marketplace Moderation", icon: ShieldCheck },
+  { path: "/admin/audit-log",     label: "Audit Log",             icon: ScrollText  },
+] as const;
+
+function AdminSubmenu({ onLinkClick }: { onLinkClick?: () => void }) {
+  const location = useLocation();
+  const [open, setOpen] = useState(() =>
+    ADMIN_SUBMENU.some((item) => location.pathname.startsWith(item.path)),
+  );
+
+  return (
+    <div className="mt-1 rounded-lg border border-[#E2B93B]/25 bg-[#E2B93B]/[0.04] p-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Internal tools for super-admins. You see this because your email is on the admin list."
+        className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/10"
+      >
+        <ShieldAlert className="h-4 w-4 shrink-0" />
+        <span className="flex-1 text-left">Admin</span>
+        {open
+          ? <ChevronDown className="h-3 w-3 shrink-0" />
+          : <ChevronRight className="h-3 w-3 shrink-0" />}
+      </button>
+      {open && (
+        <div className="mt-1 flex flex-col gap-0.5 border-l-2 border-[#E2B93B]/40 pl-2">
+          {ADMIN_SUBMENU.map(({ path, label, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              onClick={onLinkClick}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                  isActive
+                    ? "bg-[#E2B93B]/15 text-[#E2B93B]"
+                    : "text-[#a68a30] hover:bg-[#E2B93B]/10 hover:text-[#E2B93B]"
+                }`
+              }
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -125,6 +191,7 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [signalsUnread, setSignalsUnread] = useState(0);
 
   useEffect(() => {
     const token = session?.access_token;
@@ -141,6 +208,29 @@ export default function AdminShell() {
     return () => { cancelled = true; };
   }, [session?.access_token]);
 
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token) return;
+    let cancelled = false;
+
+    async function fetchUnread() {
+      try {
+        const res = await fetch("/api/memory-admin?action=list_signals", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 100, unread_only: true }),
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setSignalsUnread((body.signals ?? []).length);
+      } catch {}
+    }
+
+    void fetchUnread();
+    const id = setInterval(fetchUnread, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [session?.access_token]);
+
   async function handleLogout() {
     await signOut();
     navigate("/login", { replace: true });
@@ -154,13 +244,13 @@ export default function AdminShell() {
         <SurfaceLink path="/admin/keychain" label="Keychain (BackstagePass)" icon={KeyRound} onClick={onLinkClick} />
         <SurfaceLink path="/admin/tools"    label="Tools"                    icon={Wrench}   onClick={onLinkClick} />
         <SurfaceLink path="/admin/activity" label="Activity"                 icon={Activity} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/agents"       label="Agents"        icon={Bot}       onClick={onLinkClick} />
-        <SurfaceLink path="/admin/crews"        label="Crews"         icon={Users}     onClick={onLinkClick} />
-        <SurfaceLink path="/admin/codebase"    label="Codebase"      icon={Code2}     onClick={onLinkClick} />
-        <SurfaceLink path="/admin/orchestrator" label="Orchestrator"  icon={Terminal}  onClick={onLinkClick} />
+        <SurfaceLink path="/admin/agents"       label="Agents"        icon={Bot}          onClick={onLinkClick} />
+        <SurfaceLink path="/admin/crews"        label="Crews"         icon={UsersIcon}    onClick={onLinkClick} />
         <SurfaceLink path="/admin/testpass"     label="TestPass"      icon={FlaskConical} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
         {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
         <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
+        {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}
       </>
     );
   }

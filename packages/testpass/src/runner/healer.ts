@@ -1,17 +1,19 @@
 /**
  * Healer retry for TestPass.
  *
- * Re-runs failed deterministic checks through the agent runner to catch
- * transient infrastructure hiccups (flaky networks, cold starts, rate limits)
- * that caused a binary check to fail the first time around.
+ * Re-runs failed deterministic checks through a caller supplied sampler to
+ * catch transient infrastructure hiccups (flaky networks, cold starts, rate
+ * limits) that caused a binary check to fail the first time around. The
+ * server never calls Anthropic directly; evaluation flows through MCP
+ * sampling.
  *
  * Returns the number of items whose verdict changed as a result of healing.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { Pack } from "../types.js";
 import type { RunManagerConfig } from "../run-manager.js";
 import { updateItem, createEvidence } from "../run-manager.js";
+import type { JudgeSampler } from "./agent.js";
 
 interface FailedItem {
   check_id: string;
@@ -49,15 +51,14 @@ export async function healFailedChecks(
   config: RunManagerConfig,
   runId: string,
   pack: Pack,
+  sampler?: JudgeSampler,
 ): Promise<number> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return 0;
+  if (!sampler) return 0;
 
   const failedIds = await fetchFailedDeterministicIds(config, runId);
   if (failedIds.length === 0) return 0;
 
   const packItemMap = new Map(pack.items.map((i) => [i.id, i]));
-  const client = new Anthropic({ apiKey: anthropicKey });
 
   let healedCount = 0;
 
@@ -77,22 +78,21 @@ export async function healFailedChecks(
       type HealedVerdict = "check" | "fail" | "na" | "other";
       let reasoning = "";
       let newVerdict: HealedVerdict = "other";
+      let model = "unknown";
 
       try {
-        const msg = await client.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 256,
+        const r = await sampler({
           system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: parts.join("\n") }],
+          user: parts.join("\n"),
+          maxTokens: 256,
         });
-        const text = (msg.content as Array<{ type: string; text?: string }>)
-          .find((b) => b.type === "text")?.text ?? "";
-        const parsed = JSON.parse(text.trim()) as { verdict?: string; reasoning?: string };
+        model = r.model;
+        const parsed = JSON.parse(r.text.trim()) as { verdict?: string; reasoning?: string };
         const valid: readonly HealedVerdict[] = ["check", "fail", "na", "other"];
         if ((valid as readonly string[]).includes(parsed.verdict ?? "")) {
           newVerdict = parsed.verdict as HealedVerdict;
         }
-        reasoning = parsed.reasoning ?? text;
+        reasoning = parsed.reasoning ?? r.text;
       } catch (err) {
         reasoning = `Healer exception: ${(err as Error).message}`;
         return;
@@ -107,7 +107,7 @@ export async function healFailedChecks(
           payload: {
             healer: true,
             reasoning,
-            model: "claude-haiku-4-5",
+            model,
             check_id: checkId,
             new_verdict: newVerdict,
           },

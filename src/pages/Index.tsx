@@ -9,6 +9,7 @@ import FAQ from "@/components/FAQ";
 import Footer from "@/components/Footer";
 import { useCanonical } from "@/hooks/use-canonical";
 import { useMetaTags } from "@/hooks/useMetaTags";
+import VantaWavesBackground from "@/components/VantaWavesBackground";
 
 const Index = () => {
   useCanonical("/");
@@ -21,7 +22,7 @@ const Index = () => {
   });
 
   return (
-    <div className="min-h-screen">
+    <VantaWavesBackground>
       <Navbar />
       <Hero />
       <Problem />
@@ -31,7 +32,7 @@ const Index = () => {
       <FinalCTA />
       <FAQ />
       <Footer />
-    </div>
+    </VantaWavesBackground>
   );
 };
 

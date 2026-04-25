@@ -2,11 +2,11 @@
  * Agent runner for TestPass.
  *
  * Picks up items left pending by the deterministic runner and evaluates
- * them using Claude Haiku. Designed for checks that require judgment
- * rather than binary pass/fail assertions (check_type: agent | hybrid).
+ * them using a caller supplied sampler. For user facing runs the sampler is
+ * an MCP `sampling/createMessage` bridge so the client model (e.g. Claude
+ * Desktop) does the evaluation. The server never calls Anthropic directly.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { Pack, RunProfile } from "../types.js";
 import type { RunManagerConfig } from "../run-manager.js";
 import { updateItem, createEvidence } from "../run-manager.js";
@@ -17,6 +17,10 @@ interface AgentOutcome {
   verdict: AgentVerdict;
   note?: string;
   reasoning: string;
+}
+
+export interface JudgeSampler {
+  (args: { system: string; user: string; maxTokens: number }): Promise<{ text: string; model: string }>;
 }
 
 async function fetchPendingCheckIds(
@@ -63,7 +67,7 @@ Verdict meanings:
 - "other": ambiguous result requiring human review`;
 
 async function evaluateCheck(
-  client: Anthropic,
+  sampler: JudgeSampler,
   checkId: string,
   title: string,
   description: string | undefined,
@@ -71,7 +75,7 @@ async function evaluateCheck(
   onFail: string | undefined,
   targetUrl: string,
   probeData: unknown,
-): Promise<AgentOutcome> {
+): Promise<{ outcome: AgentOutcome; model: string }> {
   const parts = [
     `Check ID: ${checkId}`,
     `Title: ${title}`,
@@ -84,31 +88,29 @@ async function evaluateCheck(
       : "No probe data available.",
   ].filter(Boolean) as string[];
 
-  const msg = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 256,
+  const { text, model } = await sampler({
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: parts.join("\n") }],
+    user: parts.join("\n"),
+    maxTokens: 256,
   });
 
-  const text = (msg.content as Array<{ type: string; text?: string }>)
-    .find((b) => b.type === "text")?.text ?? "";
   try {
     const parsed = JSON.parse(text.trim()) as { verdict?: string; reasoning?: string };
     const validVerdicts: AgentVerdict[] = ["check", "fail", "na", "other"];
     const verdict: AgentVerdict = validVerdicts.includes(parsed.verdict as AgentVerdict)
       ? (parsed.verdict as AgentVerdict)
       : "other";
-    return { verdict, reasoning: parsed.reasoning ?? text };
+    return { outcome: { verdict, reasoning: parsed.reasoning ?? text }, model };
   } catch {
-    return { verdict: "other", note: "Failed to parse LLM response", reasoning: text };
+    return { outcome: { verdict: "other", note: "Failed to parse LLM response", reasoning: text }, model };
   }
 }
 
 /**
  * Run LLM-assisted checks for all pending items in a run.
- * Items with no matching pack spec are silently skipped.
- * Each check runs independently via Promise.allSettled.
+ * When no sampler is wired (HTTP invocation without MCP), every pending item
+ * is marked `na` with a SAMPLING_NOT_SUPPORTED note so the run still completes
+ * without a server side Anthropic fallback.
  */
 export async function runAgentChecks(
   config: RunManagerConfig,
@@ -117,20 +119,33 @@ export async function runAgentChecks(
   pack: Pack,
   _profile: RunProfile,
   probeEvidenceRef?: string,
+  sampler?: JudgeSampler,
 ): Promise<void> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return;
-
   const pendingCheckIds = await fetchPendingCheckIds(config, runId);
   if (pendingCheckIds.length === 0) return;
+
+  const packItemMap = new Map(pack.items.map((i) => [i.id, i]));
+
+  if (!sampler) {
+    await Promise.allSettled(
+      pendingCheckIds.map(async (checkId) => {
+        if (!packItemMap.has(checkId)) return;
+        await updateItem(config, runId, checkId, {
+          verdict: "na",
+          on_fail_comment:
+            "SAMPLING_NOT_SUPPORTED: LLM judgment requires an MCP sampler. Re-run from a sampling-capable client (e.g. Claude Desktop).",
+          time_ms: 0,
+          cost_usd: 0,
+        });
+      }),
+    );
+    return;
+  }
 
   let probeData: unknown = null;
   if (probeEvidenceRef) {
     probeData = await fetchProbePayload(config, probeEvidenceRef);
   }
-
-  const client = new Anthropic({ apiKey: anthropicKey });
-  const packItemMap = new Map(pack.items.map((i) => [i.id, i]));
 
   await Promise.allSettled(
     pendingCheckIds.map(async (checkId) => {
@@ -139,9 +154,10 @@ export async function runAgentChecks(
 
       const checkStart = Date.now();
       let outcome: AgentOutcome;
+      let model = "unknown";
       try {
-        outcome = await evaluateCheck(
-          client,
+        const r = await evaluateCheck(
+          sampler,
           checkId,
           spec.title,
           spec.description,
@@ -150,6 +166,8 @@ export async function runAgentChecks(
           targetUrl,
           probeData,
         );
+        outcome = r.outcome;
+        model = r.model;
       } catch (err) {
         outcome = {
           verdict: "other",
@@ -166,7 +184,7 @@ export async function runAgentChecks(
           kind: "agent_verdict",
           payload: {
             reasoning: outcome.reasoning,
-            model: "claude-haiku-4-5",
+            model,
             check_id: checkId,
           },
         });
