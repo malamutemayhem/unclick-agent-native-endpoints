@@ -1107,8 +1107,8 @@ const DIRECT_HANDLERS: Record<string, DirectHandler> = {
 export function createServer(): Server {
   const server = new Server(
     {
-      name: "UnClick",
-      version: "1.0.0",
+      name: "@unclick/mcp-server",
+      version: "0.3.0",
       description: "AI agent tool marketplace. 60+ tools for social, e-commerce, accounting, and messaging.",
       websiteUrl: "https://unclick.world",
       icons: [
@@ -1120,7 +1120,10 @@ export function createServer(): Server {
       ],
     },
     {
-      capabilities: { tools: {} },
+      // listChanged: false makes the tools capability explicit (TestPass and
+      // Inspector check the shape). We are stateless per request, so the tool
+      // list is fixed and we never emit notifications/tools/list_changed.
+      capabilities: { tools: { listChanged: false } },
       // Instructions are surfaced to the client on the MCP `initialize` response
       // and most Claude surfaces (Desktop, web, Code, Cowork) inject them into
       // the system/tool context. This is how we tell every connected agent:
