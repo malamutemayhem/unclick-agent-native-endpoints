@@ -306,66 +306,100 @@ export class SupabaseBackend implements MemoryBackend {
    * mc_session_summaries. Used when hybrid retrieval returns []. Returns
    * rows shaped to mirror mc_search_memory_hybrid so callers don't branch.
    * Never widens RLS: tenant scoping via api_key_hash is preserved.
+   *
+   * Phrase support: the query is tokenized on whitespace. Tokens shorter
+   * than 2 chars or containing PostgREST .or() metacharacters are dropped.
+   * We try AND-of-tokens first (every token must appear, in any order); if
+   * that returns nothing we degrade to OR-of-tokens and rank rows by how
+   * many tokens they contain so partial matches at least surface something.
    */
   private async keywordFallback(query: string, maxResults: number): Promise<unknown[]> {
-    const trimmed = query.trim();
-    if (!trimmed) return [];
-    const pattern = `%${trimmed.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const half = Math.max(1, Math.ceil(maxResults / 2));
+    const tokens = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2 && !/[,():]/.test(t));
+    if (tokens.length === 0) return [];
+    const patterns = tokens.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    const score = (text: string): number => {
+      const lower = text.toLowerCase();
+      let n = 0;
+      for (const t of tokens) if (lower.includes(t)) n++;
+      return n;
+    };
 
-    let factQ = this.client
-      .from(this.tables.extracted_facts)
-      .select("id, fact, category, confidence, created_at")
-      .eq("status", "active")
-      .is("invalidated_at", null)
-      .ilike("fact", pattern)
-      .order("confidence", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(half);
-    if (this.tenancy.mode === "managed") {
-      factQ = factQ.eq("api_key_hash", this.tenancy.apiKeyHash);
-    }
+    const runScan = async (mode: "and" | "or"): Promise<unknown[]> => {
+      let factQ = this.client
+        .from(this.tables.extracted_facts)
+        .select("id, fact, category, confidence, created_at")
+        .eq("status", "active")
+        .is("invalidated_at", null);
+      let sessQ = this.client
+        .from(this.tables.session_summaries)
+        .select("id, summary, created_at");
 
-    let sessQ = this.client
-      .from(this.tables.session_summaries)
-      .select("id, summary, created_at")
-      .ilike("summary", pattern)
-      .order("created_at", { ascending: false })
-      .limit(half);
-    if (this.tenancy.mode === "managed") {
-      sessQ = sessQ.eq("api_key_hash", this.tenancy.apiKeyHash);
-    }
+      if (mode === "and") {
+        for (const p of patterns) {
+          factQ = factQ.ilike("fact", p);
+          sessQ = sessQ.ilike("summary", p);
+        }
+      } else {
+        factQ = factQ.or(patterns.map((p) => `fact.ilike.${p}`).join(","));
+        sessQ = sessQ.or(patterns.map((p) => `summary.ilike.${p}`).join(","));
+      }
+      if (this.tenancy.mode === "managed") {
+        factQ = factQ.eq("api_key_hash", this.tenancy.apiKeyHash);
+        sessQ = sessQ.eq("api_key_hash", this.tenancy.apiKeyHash);
+      }
+      factQ = factQ
+        .order("confidence", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(maxResults);
+      sessQ = sessQ.order("created_at", { ascending: false }).limit(maxResults);
 
-    const [factsRes, sessRes] = await Promise.all([factQ, sessQ]);
-    type FactRow = { id: string; fact: string; category: string; confidence: number; created_at: string };
-    type SessRow = { id: string; summary: string; created_at: string };
-    const facts = ((factsRes.data ?? []) as FactRow[]).map((r) => ({
-      id: r.id,
-      source: "fact",
-      content: r.fact,
-      category: r.category,
-      confidence: r.confidence,
-      created_at: r.created_at,
-      final_score: r.confidence ?? 0,
-      rrf_score: 0,
-      kw_score: 1,
-      cosine_score: 0,
-    }));
-    const sessions = ((sessRes.data ?? []) as SessRow[]).map((r) => ({
-      id: r.id,
-      source: "session",
-      content: r.summary,
-      category: "session",
-      confidence: 1,
-      created_at: r.created_at,
-      final_score: 0.5,
-      rrf_score: 0,
-      kw_score: 1,
-      cosine_score: 0,
-    }));
-    return [...facts, ...sessions]
-      .sort((a, b) => (b.final_score ?? 0) - (a.final_score ?? 0))
-      .slice(0, maxResults);
+      const [factsRes, sessRes] = await Promise.all([factQ, sessQ]);
+      type FactRow = { id: string; fact: string; category: string; confidence: number; created_at: string };
+      type SessRow = { id: string; summary: string; created_at: string };
+      const facts = ((factsRes.data ?? []) as FactRow[]).map((r) => {
+        const s = score(r.fact);
+        return {
+          id: r.id,
+          source: "fact",
+          content: r.fact,
+          category: r.category,
+          confidence: r.confidence,
+          created_at: r.created_at,
+          final_score: (s / tokens.length) * (r.confidence ?? 0),
+          rrf_score: 0,
+          kw_score: s,
+          cosine_score: 0,
+        };
+      });
+      const sessions = ((sessRes.data ?? []) as SessRow[]).map((r) => {
+        const s = score(r.summary);
+        return {
+          id: r.id,
+          source: "session",
+          content: r.summary,
+          category: "session",
+          confidence: 1,
+          created_at: r.created_at,
+          final_score: (s / tokens.length) * 0.5,
+          rrf_score: 0,
+          kw_score: s,
+          cosine_score: 0,
+        };
+      });
+      return [...facts, ...sessions]
+        .sort((a, b) => {
+          const d = (b.final_score ?? 0) - (a.final_score ?? 0);
+          return d !== 0 ? d : (b.created_at ?? "").localeCompare(a.created_at ?? "");
+        })
+        .slice(0, maxResults);
+    };
+
+    const andResults = await runScan("and");
+    if (andResults.length > 0 || tokens.length < 2) return andResults;
+    return runScan("or");
   }
 
   async searchFacts(query: string): Promise<unknown> {

@@ -166,6 +166,106 @@ describe("acceptance: keyword fallback restores search when hybrid returns []", 
       await supabase.from("extracted_facts").delete().eq("id", factId);
     }
   });
+
+  // Phrase-query regression: a multi-word query like "active Fishbowl topic"
+  // used to ILIKE the literal whole string and miss any fact whose words were
+  // present but interleaved with other words. The fix tokenizes the query and
+  // ANDs each token; if AND returns nothing it degrades to OR-of-tokens.
+  test("multi-word query finds facts containing all tokens in any order (AND mode)", async () => {
+    const url = process.env.TEST_SUPABASE_URL ?? process.env.SUPABASE_URL;
+    const key = process.env.TEST_SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      console.log("    [skipped] set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to run");
+      return;
+    }
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    const factText = "Current Fishbowl thread tracks the active topic for Phase 1.1 hotfix";
+    const { data: inserted, error: insertErr } = await supabase
+      .from("extracted_facts")
+      .insert({
+        fact: factText,
+        category: "test",
+        confidence: 0.9,
+        status: "active",
+        source_type: "test",
+        decay_tier: "hot",
+      })
+      .select("id")
+      .single();
+    assert.ok(!insertErr, `insert failed: ${insertErr?.message}`);
+    const factId = (inserted as { id: string }).id;
+
+    try {
+      const savedOpenAI = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      try {
+        const { SupabaseBackend } = await import("../supabase.js");
+        const backend = new SupabaseBackend({ url, serviceRoleKey: key, tenancy: { mode: "byod" } });
+        // All three tokens appear in the fact, but not as a contiguous phrase.
+        const results = (await backend.searchMemory("active Fishbowl topic", 10)) as Array<{ id: string }>;
+        const ids = results.map((r) => r.id);
+        assert.ok(
+          ids.includes(factId),
+          `Expected fact ${factId} via tokenized AND. Got: ${JSON.stringify(results.slice(0, 3))}`
+        );
+      } finally {
+        if (savedOpenAI !== undefined) process.env.OPENAI_API_KEY = savedOpenAI;
+      }
+    } finally {
+      await supabase.from("extracted_facts").delete().eq("id", factId);
+    }
+  });
+
+  test("OR fallback surfaces best partial match when no fact contains every token", async () => {
+    const url = process.env.TEST_SUPABASE_URL ?? process.env.SUPABASE_URL;
+    const key = process.env.TEST_SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      console.log("    [skipped] set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to run");
+      return;
+    }
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    // Fact contains "architecture" but not "thread". Query is "architecture
+    // thread nonexistent" so AND-of-tokens returns []; OR-of-tokens should
+    // still surface this row because it matches one token.
+    const factText = "Memory architecture uses six layers including bitemporal facts";
+    const { data: inserted, error: insertErr } = await supabase
+      .from("extracted_facts")
+      .insert({
+        fact: factText,
+        category: "test",
+        confidence: 0.8,
+        status: "active",
+        source_type: "test",
+        decay_tier: "hot",
+      })
+      .select("id")
+      .single();
+    assert.ok(!insertErr, `insert failed: ${insertErr?.message}`);
+    const factId = (inserted as { id: string }).id;
+
+    try {
+      const savedOpenAI = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      try {
+        const { SupabaseBackend } = await import("../supabase.js");
+        const backend = new SupabaseBackend({ url, serviceRoleKey: key, tenancy: { mode: "byod" } });
+        const results = (await backend.searchMemory("architecture thread zzznonexistentzzz", 10)) as Array<{ id: string }>;
+        const ids = results.map((r) => r.id);
+        assert.ok(
+          ids.includes(factId),
+          `Expected fact ${factId} via OR-of-tokens fallback. Got: ${JSON.stringify(results.slice(0, 3))}`
+        );
+      } finally {
+        if (savedOpenAI !== undefined) process.env.OPENAI_API_KEY = savedOpenAI;
+      }
+    } finally {
+      await supabase.from("extracted_facts").delete().eq("id", factId);
+    }
+  });
 });
 
 // ─── 3. Acceptance test (LOCOMO-style) ────────────────────────────────────────
