@@ -1816,6 +1816,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const agentId = String(req.body?.agent_id ?? req.query.agent_id ?? "").trim();
         if (!agentId) return res.status(400).json({ error: "agent_id required" });
 
+        // SECURITY: audit log BEFORE destructive op; abort if insert fails. audit PR #128
+        const { error: auditErr } = await supabase.from("mc_admin_audit").insert({
+          api_key_hash: apiKeyHash,
+          action: "admin_agent_delete",
+          payload: { agent_id: agentId },
+        });
+        if (auditErr) {
+          console.error("admin_agent_delete: audit insert failed, aborting:", auditErr.message);
+          return res.status(500).json({ error: "Audit log failed; delete aborted for safety." });
+        }
+
         const { error } = await supabase
           .from("agents")
           .delete()
@@ -2050,6 +2061,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       case "admin_connectors_list": {
+        // SECURITY: platform_connectors is a global connector catalog with no per-tenant rows.
+        // anon_read_connectors RLS allows public read by design. audit PR #128
         const { data, error } = await supabase
           .from("platform_connectors")
           .select("id, name, category, description, icon, sort_order")
@@ -3469,6 +3482,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (!existing) return res.status(404).json({ error: "No API key to reset" });
 
+        // SECURITY: audit log BEFORE key rotation; abort if insert fails. audit PR #128
+        const existingKeyHash = (await supabase
+          .from("api_keys")
+          .select("key_hash")
+          .eq("id", existing.id)
+          .maybeSingle()).data?.key_hash as string | null;
+        const { error: auditErr } = await supabase.from("mc_admin_audit").insert({
+          api_key_hash: existingKeyHash ?? "unknown",
+          action: "reset_api_key",
+          payload: { key_id: existing.id, tier: existing.tier },
+        });
+        if (auditErr) {
+          console.error("reset_api_key: audit insert failed, aborting:", auditErr.message);
+          return res.status(500).json({ error: "Audit log failed; reset aborted for safety." });
+        }
+
         const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
         const { error: updateError } = await supabase
           .from("api_keys")
@@ -3656,11 +3685,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           meteringMap[op].count++;
         }
 
-        // Platform connectors with user's credential status
+        // SECURITY: platform_connectors is a global connector catalog with no per-tenant rows.
+        // anon_read_connectors RLS allows public read by design. audit PR #128
         const { data: connectors } = await supabase
           .from("platform_connectors")
           .select("*");
 
+        // SECURITY: tenant scope required, audit PR #128
         const { data: creds } = await supabase
           .from("platform_credentials")
           .select("platform, is_valid, last_tested_at")
@@ -4055,6 +4086,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "mc_knowledge_library",
           "mc_knowledge_library_history",
         ];
+
+        // SECURITY: audit log BEFORE destructive op; abort if insert fails. audit PR #128
+        const { error: auditErr } = await supabase.from("mc_admin_audit").insert({
+          api_key_hash: apiKeyHash,
+          action: "admin_clear_all",
+          payload: { tables_affected: tables },
+        });
+        if (auditErr) {
+          console.error("admin_clear_all: audit insert failed, aborting:", auditErr.message);
+          return res.status(500).json({ error: "Audit log failed; delete aborted for safety." });
+        }
 
         const deleted: Record<string, number | null> = {};
         for (const t of tables) {
