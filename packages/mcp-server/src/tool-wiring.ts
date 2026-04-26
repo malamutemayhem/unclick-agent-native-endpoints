@@ -750,6 +750,16 @@ import {
 // ─── TestPass ─────────────────────────────────────────────────────────────────
 import { testpassRun, testpassStatus, testpassSavePack, testpassEditItem } from "./testpass-tool.js";
 
+// ─── UXPass (sister to TestPass, UI/UX QC) ───────────────────────────────────
+import {
+  uxpassRun,
+  uxpassStatus,
+  uxpassReportHtml,
+  uxpassReportJson,
+  uxpassReportMd,
+  uxpassRegisterPack,
+} from "./uxpass-tool.js";
+
 // ─── Crews (Orchestrator Wizard) ──────────────────────────────────────────────
 import { crewsStartRun, crewsGetRun, crewsListRuns } from "./crews-tool.js";
 
@@ -11113,6 +11123,79 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── uxpass-tool.ts (UI/UX QC, sister to TestPass) ──────────────────────────
+  {
+    name: "uxpass_run",
+    description: "Run a UI/UX quality check on a URL or saved pack. Returns a run id and a queued status. Pass either pack_name (a registered pack) or url (a one-off check), and an optional list of hat ids to scope the panel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pack_name: { type: "string", description: "Name of a registered UXPass pack" },
+        url: { type: "string", description: "Target URL for a one-off run" },
+        hats: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional list of hat ids to run (e.g. accessibility, agent-readability). Defaults to the pack's hats or the MVP hat set.",
+        },
+      },
+    },
+  },
+  {
+    name: "uxpass_status",
+    description: "Fetch the status, UX Score, and summary for a UXPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by uxpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "uxpass_report_html",
+    description: "Get the HTML report for a UXPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by uxpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "uxpass_report_json",
+    description: "Get the JSON report for a UXPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by uxpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "uxpass_report_md",
+    description: "Get the Markdown report for a UXPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by uxpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "uxpass_register_pack",
+    description: "Register a UXPass pack from a YAML string. Validates the basic shape (required keys: name, url, viewports, themes, hats, synthesiser, budgets, remediation) and persists the pack so uxpass_run can reference it by name. Returns the assigned pack_id.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pack_yaml: { type: "string", description: "Full pack definition as a YAML string" },
+      },
+      required: ["pack_yaml"],
+    },
+  },
+
   // ── crews-tool.ts (Orchestrator Wizard) ──────────────────────────────────────
   {
     name: "start_crew_run",
@@ -12263,6 +12346,14 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   testpass_status:    (args) => testpassStatus(args),
   testpass_save_pack: (args) => testpassSavePack(args),
   testpass_edit_item: (args) => testpassEditItem(args),
+
+  // uxpass-tool.ts
+  uxpass_run:           (args) => uxpassRun(args),
+  uxpass_status:        (args) => uxpassStatus(args),
+  uxpass_report_html:   (args) => uxpassReportHtml(args),
+  uxpass_report_json:   (args) => uxpassReportJson(args),
+  uxpass_report_md:     (args) => uxpassReportMd(args),
+  uxpass_register_pack: (args) => uxpassRegisterPack(args),
 
   // crews-tool.ts
   start_crew_run: (args) => crewsStartRun(args),
