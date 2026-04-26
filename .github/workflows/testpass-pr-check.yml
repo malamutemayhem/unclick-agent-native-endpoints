@@ -32,6 +32,10 @@ jobs:
 
       - name: Run TestPass
         id: testpass
+        # Don't abort the workflow on infra failures - we still want to post a
+        # PR comment that explains what happened so reviewers can tell infra
+        # noise (stale token, transport blip) from a real product regression.
+        continue-on-error: true
         uses: ./.github/actions/testpass
         with:
           token: ${{ secrets.TESTPASS_TOKEN }}
@@ -40,7 +44,9 @@ jobs:
           server_url: ${{ inputs.server_url || '' }}
 
       - name: Post PR comment
-        if: github.event_name == 'pull_request'
+        # Run regardless of TestPass step outcome - infra failures still need a
+        # human-readable comment so the PR doesn't look mysteriously broken.
+        if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
         env:
           RUN_ID: ${{ steps.testpass.outputs.run_id }}
@@ -49,6 +55,8 @@ jobs:
           FAIL_COUNT: ${{ steps.testpass.outputs.fail_count }}
           TOTAL: ${{ steps.testpass.outputs.total }}
           RESPONSE: ${{ steps.testpass.outputs.response }}
+          FAILURE_KIND: ${{ steps.testpass.outputs.failure_kind }}
+          HTTP_CODE: ${{ steps.testpass.outputs.http_code }}
         with:
           script: |
             const runId = process.env.RUN_ID || '(unknown)';
@@ -57,11 +65,58 @@ jobs:
             const passRate = Number.isFinite(passRateRaw) ? passRateRaw : 0;
             const failCount = parseInt(process.env.FAIL_COUNT || '0', 10) || 0;
             const total = parseInt(process.env.TOTAL || '0', 10) || 0;
+            const failureKind = process.env.FAILURE_KIND || 'unknown';
+            const httpCode = process.env.HTTP_CODE || '000';
 
             let summary = {};
             try { summary = JSON.parse(process.env.RESPONSE || '{}').verdict_summary || {}; }
             catch { summary = {}; }
 
+            const isInfra = failureKind && failureKind.startsWith('infra_');
+
+            // Infra path: short, friendly, "retry the workflow" tone. Don't
+            // dump a verdict table - the numbers are all zero and would just
+            // look like a real failure.
+            if (isInfra) {
+              const headlines = {
+                infra_auth:      ':warning: TestPass: infra issue (auth)',
+                infra_http:      ':warning: TestPass: infra issue (API error)',
+                infra_transport: ':warning: TestPass: infra issue (transport)',
+              };
+              const explanations = {
+                infra_auth:
+                  `The TestPass API rejected our token (HTTP ${httpCode}). ` +
+                  `This is almost always a stale \`TESTPASS_TOKEN\` secret, ` +
+                  `**not** a problem with this PR. Refresh the secret in repo ` +
+                  `settings and re-run the workflow.`,
+                infra_http:
+                  `The TestPass API returned HTTP ${httpCode}. This is a ` +
+                  `service-side issue, **not** a problem with this PR. ` +
+                  `Re-run the workflow in a few minutes.`,
+                infra_transport:
+                  `Could not reach the TestPass API (DNS, connection, or ` +
+                  `timeout). This is **not** a problem with this PR. ` +
+                  `Re-run the workflow.`,
+              };
+
+              const body = [
+                `### ${headlines[failureKind] || ':warning: TestPass: infra issue'}`,
+                ``,
+                explanations[failureKind] || `Infra failure: \`${failureKind}\` (HTTP ${httpCode}).`,
+                ``,
+                `_This comment is posted automatically because TestPass failed before it could check anything. The PR itself has not been evaluated._`,
+              ].join('\n');
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              return;
+            }
+
+            // Product path: real verdicts, real table.
             const statusEmoji =
               status === 'complete' && failCount === 0 ? ':white_check_mark: PASS' :
               status === 'failed' || failCount > 0    ? ':x: FAIL' :
@@ -96,7 +151,10 @@ jobs:
             });
 
       - name: Fail job if checks failed
-        if: ${{ steps.testpass.outputs.fail_count != '0' }}
+        # Only block the PR on real product regressions. Infra failures
+        # (stale token, transport, 5xx) are surfaced via the comment above
+        # and don't gate the merge.
+        if: ${{ steps.testpass.outputs.failure_kind == 'product' && steps.testpass.outputs.fail_count != '0' }}
         shell: bash
         run: |
           echo "TestPass reported ${{ steps.testpass.outputs.fail_count }} failed checks" >&2

@@ -27,7 +27,7 @@ outputs:
     description: UUID of the created TestPass run.
     value: ${{ steps.call.outputs.run_id }}
   status:
-    description: Run status (running, complete, failed).
+    description: Run status (running, complete, failed, infra_auth_error, infra_http_error, infra_transport_error).
     value: ${{ steps.call.outputs.status }}
   pass_rate:
     description: Fraction of decided checks that passed (0-1).
@@ -39,8 +39,14 @@ outputs:
     description: Total checks in the run.
     value: ${{ steps.call.outputs.total }}
   response:
-    description: Raw JSON response from the API.
+    description: Raw JSON response from the API (or "{}" if no body).
     value: ${{ steps.call.outputs.response }}
+  failure_kind:
+    description: Bucket for the outcome - product, infra_auth, infra_http, infra_transport, or none.
+    value: ${{ steps.call.outputs.failure_kind }}
+  http_code:
+    description: HTTP status from the API call ("000" on transport failure).
+    value: ${{ steps.call.outputs.http_code }}
 
 runs:
   using: composite
@@ -54,7 +60,9 @@ runs:
         SERVER_URL: ${{ inputs.server_url }}
         API_URL: ${{ inputs.api_url }}
       run: |
-        set -euo pipefail
+        # Note: -e intentionally omitted so curl/jq failures don't abort
+        # before outputs are written. We classify failures explicitly below.
+        set -uo pipefail
 
         payload=$(jq -n \
           --arg pack_id "$PACK_ID" \
@@ -62,35 +70,72 @@ runs:
           --arg server_url "$SERVER_URL" \
           '{pack_id: $pack_id, profile: $profile} + (if $server_url == "" then {} else {server_url: $server_url} end)')
 
+        # Capture curl transport exit code separately from HTTP status.
+        # curl exits non-zero on DNS failure, connection refused, timeout, etc.
+        curl_exit=0
         http_code=$(curl -sS -o response.json -w "%{http_code}" \
+          --connect-timeout 10 \
+          --max-time 60 \
           -X POST "$API_URL" \
           -H "Authorization: Bearer $TESTPASS_TOKEN" \
           -H "Content-Type: application/json" \
-          -d "$payload")
+          -d "$payload") || curl_exit=$?
+        http_code="${http_code:-000}"
 
+        echo "curl exit: $curl_exit"
         echo "HTTP $http_code"
-        cat response.json
-        echo
+        if [ -f response.json ]; then cat response.json; echo; fi
 
-        if [ "$http_code" -ge 400 ]; then
-          echo "TestPass API call failed with status $http_code" >&2
-          exit 1
+        # Defaults for outputs - written even if every parse below fails.
+        run_id=""
+        status=""
+        pass_rate=0
+        fail_count=0
+        total=0
+        response="{}"
+        failure_kind="none"
+
+        if [ "$curl_exit" -ne 0 ]; then
+          echo "::warning::TestPass transport failure (curl exit $curl_exit) - DNS, connection, or timeout. Retry the workflow." >&2
+          status="infra_transport_error"
+          failure_kind="infra_transport"
+        elif [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+          echo "::warning::TestPass auth failure (HTTP $http_code) - TESTPASS_TOKEN is likely stale. Refresh the secret and retry." >&2
+          status="infra_auth_error"
+          failure_kind="infra_auth"
+          response=$(jq -c '.' response.json 2>/dev/null || echo "{}")
+        elif [ "$http_code" -ge 400 ]; then
+          echo "::warning::TestPass API error (HTTP $http_code) - service-side issue, not a product regression." >&2
+          status="infra_http_error"
+          failure_kind="infra_http"
+          response=$(jq -c '.' response.json 2>/dev/null || echo "{}")
+        else
+          run_id=$(jq -r '.run_id // ""' response.json 2>/dev/null || echo "")
+          status=$(jq -r '.status // ""' response.json 2>/dev/null || echo "")
+          pass_rate=$(jq -r '.verdict_summary.pass_rate // 0' response.json 2>/dev/null || echo "0")
+          fail_count=$(jq -r '.verdict_summary.fail // 0' response.json 2>/dev/null || echo "0")
+          total=$(jq -r '.verdict_summary.total // 0' response.json 2>/dev/null || echo "0")
+          response=$(jq -c '.' response.json 2>/dev/null || echo "{}")
+          failure_kind="product"
         fi
 
-        run_id=$(jq -r '.run_id // ""' response.json)
-        status=$(jq -r '.status // ""' response.json)
-        pass_rate=$(jq -r '.verdict_summary.pass_rate // 0' response.json)
-        fail_count=$(jq -r '.verdict_summary.fail // 0' response.json)
-        total=$(jq -r '.verdict_summary.total // 0' response.json)
-        response=$(jq -c '.' response.json)
-
+        # Always write outputs, even on infra failure, so downstream
+        # comment / decision steps have something to read.
         {
           echo "run_id=$run_id"
           echo "status=$status"
           echo "pass_rate=$pass_rate"
           echo "fail_count=$fail_count"
           echo "total=$total"
+          echo "failure_kind=$failure_kind"
+          echo "http_code=$http_code"
           echo "response<<TESTPASS_EOF"
           echo "$response"
           echo "TESTPASS_EOF"
         } >> "$GITHUB_OUTPUT"
+
+        # Surface infra failures in the step status (red X), but the workflow
+        # decides whether to block the PR via failure_kind in a downstream step.
+        if [ "$failure_kind" != "product" ] && [ "$failure_kind" != "none" ]; then
+          exit 1
+        fi
