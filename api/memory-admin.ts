@@ -6189,6 +6189,129 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ message: inserted });
       }
 
+      // Read the unread drafts inbox. Two visibility modes, both gated by
+      // the same anti-spoof rule used by fishbowl_post (PR #155):
+      //
+      //   admin    - caller passes a 'human-*' agent_id whose profile in
+      //              this tenant has user_agent_hint='admin-ui'. Returns
+      //              ALL unread drafts so the human admin viewer can see
+      //              who has work waiting across every agent.
+      //   agent    - caller passes their own agent_id. Returns only drafts
+      //              where recipient_agent_id matches.
+      //
+      // No auth widening: an AI agent passing 'human-*' without a matching
+      // admin-ui profile is rejected with 403, identical to fishbowl_post.
+      case "fishbowl_list_drafts": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as { agent_id?: string | null };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({
+              error: "human-* agent_id is reserved for the admin UI",
+            });
+          }
+          isAdmin = true;
+        }
+
+        const nowIso = new Date().toISOString();
+        let q = supabase
+          .from("mc_fishbowl_drafts")
+          .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, expires_at")
+          .eq("api_key_hash", apiKeyHash)
+          .is("acknowledged_at", null)
+          .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (!isAdmin) q = q.eq("recipient_agent_id", agentId);
+        const { data, error } = await q;
+        if (error) {
+          // Table may not exist in main yet (PR #165 ships the migration).
+          // Surface the same shape with an empty list so the UI degrades
+          // gracefully rather than blanking out.
+          console.warn("[fishbowl_list_drafts] query failed:", error.message);
+          return res.status(200).json({ drafts: [], admin_mode: isAdmin });
+        }
+        return res.status(200).json({ drafts: data ?? [], admin_mode: isAdmin });
+      }
+
+      // Acknowledge a draft. Two paths share the same anti-spoof rule:
+      //   - admin caller (human-* + admin-ui profile): may ack any draft in
+      //     this tenant on behalf of the recipient.
+      //   - agent caller: may only ack drafts addressed to their own
+      //     agent_id (the recipient self-ack path).
+      case "fishbowl_acknowledge_draft": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({ error: "Authorization header required" });
+        }
+        const body = (req.body ?? {}) as {
+          agent_id?: string | null;
+          draft_id?: string | null;
+          status?: string | null;
+        };
+        const agentId = (body.agent_id ?? "").toString().trim();
+        if (!agentId) return res.status(400).json({ error: "agent_id required" });
+        if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
+
+        const draftId = (body.draft_id ?? "").toString().trim();
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!draftId || !UUID_RE.test(draftId)) {
+          return res.status(400).json({ error: "draft_id must be a valid uuid" });
+        }
+        const status = (body.status ?? "").toString().trim();
+        if (!["received", "accepted", "declined"].includes(status)) {
+          return res.status(400).json({ error: "status must be one of 'received', 'accepted', 'declined'" });
+        }
+
+        let isAdmin = false;
+        if (agentId.startsWith("human-")) {
+          const { data: profile } = await supabase
+            .from("mc_fishbowl_profiles")
+            .select("user_agent_hint")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (profile?.user_agent_hint !== "admin-ui") {
+            return res.status(403).json({ error: "human-* agent_id is reserved for the admin UI" });
+          }
+          isAdmin = true;
+        }
+
+        let updateQ = supabase
+          .from("mc_fishbowl_drafts")
+          .update({ acknowledged_at: new Date().toISOString(), acknowledgement_status: status })
+          .eq("api_key_hash", apiKeyHash)
+          .eq("id", draftId);
+        if (!isAdmin) updateQ = updateQ.eq("recipient_agent_id", agentId);
+        const { data: updated, error: updateErr } = await updateQ
+          .select("id, recipient_agent_id, sender_agent_id, sender_emoji, text, priority, tags, created_at, acknowledged_at, acknowledgement_status, expires_at")
+          .maybeSingle();
+        if (updateErr) throw updateErr;
+        if (!updated) {
+          return res.status(404).json({ error: "draft not found, already acknowledged, or not addressed to you" });
+        }
+        return res.status(200).json({ draft: updated });
+      }
+
       case "fishbowl_read": {
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) {

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Loader2, Send } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import FishbowlTodos from "./fishbowl/Todos";
 import FishbowlIdeas from "./fishbowl/Ideas";
+import FishbowlDrafts from "./fishbowl/Drafts";
 
 interface FishbowlMessage {
   id: string;
@@ -546,6 +547,8 @@ export default function Fishbowl() {
       <FishbowlTodos authHeader={authHeader} humanAgentId={humanAgentId} />
 
       <FishbowlIdeas authHeader={authHeader} humanAgentId={humanAgentId} />
+
+      <FishbowlDrafts authHeader={authHeader} humanAgentId={humanAgentId} profiles={profiles} />
 
       <PostBox disabled={!humanAgentId} onPost={postMessage} />
 
