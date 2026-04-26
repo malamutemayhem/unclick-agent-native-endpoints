@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Send } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import FishbowlTodos from "./fishbowl/Todos";
 import FishbowlIdeas from "./fishbowl/Ideas";
 import FishbowlSettings from "./fishbowl/Settings";
+import { clusterProfiles, type ProfileCluster } from "./fishbowl/clusterProfiles";
 
 interface FishbowlMessage {
   id: string;
@@ -81,7 +82,13 @@ function formatUtcTime(iso: string): string {
   return `${hh}:${mm} UTC`;
 }
 
-function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
+function ExplainerPanel({
+  profiles,
+  clusters,
+}: {
+  profiles: FishbowlProfile[];
+  clusters: ProfileCluster<FishbowlProfile>[];
+}) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(EXPLAINER_STORAGE_KEY) === "1";
@@ -172,20 +179,43 @@ function ExplainerPanel({ profiles }: { profiles: FishbowlProfile[] }) {
               </p>
             ) : (
               <ul className="flex flex-wrap gap-2">
-                {profiles.map((p) => (
-                  <li
-                    key={p.agent_id}
-                    className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-xs"
-                  >
-                    <span aria-hidden className="text-base leading-none">{p.emoji}</span>
-                    <span className="text-[#ccc]">{p.display_name ?? p.agent_id}</span>
-                    {isHumanAgentId(p.agent_id) && (
-                      <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]">
-                        you
-                      </span>
+                {clusters.map((c) => (
+                  <Fragment key={c.key}>
+                    {c.primaries.map((p) => (
+                      <li
+                        key={p.agent_id}
+                        className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-xs"
+                      >
+                        <span aria-hidden className="text-base leading-none">{p.emoji}</span>
+                        <span className="text-[#ccc]">{p.display_name ?? p.agent_id}</span>
+                        {c.primaries.length > 1 && (
+                          <span
+                            className="rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-[#888]"
+                            title={p.agent_id}
+                          >
+                            {p.agent_id.slice(0, 8)}
+                          </span>
+                        )}
+                        {isHumanAgentId(p.agent_id) && (
+                          <span className="rounded bg-[#E2B93B]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#E2B93B]">
+                            you
+                          </span>
+                        )}
+                        <span className="text-[#666]" title="recently seen">
+                          {relativeTime(p.last_seen_at)}
+                        </span>
+                      </li>
+                    ))}
+                    {c.staleAliasCount > 0 && (
+                      <li
+                        key={`${c.key}-stale`}
+                        className="flex items-center gap-1 rounded-full border border-white/[0.04] bg-white/[0.01] px-3 py-1 text-[11px] italic text-[#666]"
+                        title="Older agent_ids that share this emoji and name but have not been seen recently."
+                      >
+                        +{c.staleAliasCount} stale alias{c.staleAliasCount === 1 ? "" : "es"}
+                      </li>
                     )}
-                    <span className="text-[#666]">{relativeTime(p.last_seen_at)}</span>
-                  </li>
+                  </Fragment>
                 ))}
               </ul>
             )}
@@ -201,7 +231,13 @@ function isStale(profile: FishbowlProfile, nowMs: number): boolean {
   return nowMs - new Date(profile.last_seen_at).getTime() > STALE_THRESHOLD_MS;
 }
 
-function NowPlayingStrip({ profiles }: { profiles: FishbowlProfile[] }) {
+function NowPlayingStrip({
+  profiles,
+  clusters,
+}: {
+  profiles: FishbowlProfile[];
+  clusters: ProfileCluster<FishbowlProfile>[];
+}) {
   // Re-render every 30s so the relative timestamps and stale state stay fresh
   // even if no new poll has come back from the server.
   const [tick, setTick] = useState(0);
@@ -229,63 +265,87 @@ function NowPlayingStrip({ profiles }: { profiles: FishbowlProfile[] }) {
       </div>
       <div className="overflow-x-auto">
         <ul className="flex gap-2 px-3 py-3">
-          {profiles.map((p) => {
-            const stale = isStale(p, nowMs);
-            const statusText = p.current_status?.trim();
-            const hasStatus = statusText && statusText.length > 0;
-            const timeIso = p.current_status_updated_at ?? p.last_seen_at;
-            const checkinMs = p.next_checkin_at ? new Date(p.next_checkin_at).getTime() : null;
-            const seenMs = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
-            const isMia = checkinMs !== null && checkinMs < nowMs && seenMs < checkinMs;
-            const isComingBack = checkinMs !== null && checkinMs >= nowMs;
-            return (
-              <li
-                key={p.agent_id}
-                className={`flex w-56 shrink-0 flex-col gap-1 rounded-lg border border-[#222] bg-black/30 px-3 py-2 ${stale && !isMia ? "opacity-50" : ""}`}
-                title={p.agent_id}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-base leading-none" aria-hidden>{p.emoji}</span>
-                  <span
-                    className={`flex-1 truncate text-xs font-medium ${isMia ? "text-red-400" : stale ? "text-[#888]" : "text-[#E2B93B]"}`}
+          {clusters.map((c) => (
+            <Fragment key={c.key}>
+              {c.primaries.map((p) => {
+                const stale = isStale(p, nowMs);
+                const statusText = p.current_status?.trim();
+                const hasStatus = statusText && statusText.length > 0;
+                const timeIso = p.current_status_updated_at ?? p.last_seen_at;
+                const checkinMs = p.next_checkin_at ? new Date(p.next_checkin_at).getTime() : null;
+                const seenMs = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
+                const isMia = checkinMs !== null && checkinMs < nowMs && seenMs < checkinMs;
+                const isComingBack = checkinMs !== null && checkinMs >= nowMs;
+                return (
+                  <li
+                    key={p.agent_id}
+                    className={`flex w-56 shrink-0 flex-col gap-1 rounded-lg border border-[#222] bg-black/30 px-3 py-2 ${stale && !isMia ? "opacity-50" : ""}`}
+                    title={p.agent_id}
                   >
-                    {p.display_name ?? p.agent_id}
-                  </span>
-                  <span
-                    aria-hidden
-                    className={`text-[10px] leading-none ${isMia ? "text-red-400" : stale ? "text-[#555]" : "text-[#E2B93B]"}`}
-                  >
-                    {stale ? "○" : "●"}
-                  </span>
-                </div>
-                <p
-                  className={`truncate text-xs ${hasStatus ? "text-[#bbb]" : "italic text-[#555]"}`}
-                  title={hasStatus ? statusText : "idle"}
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none" aria-hidden>{p.emoji}</span>
+                      <span
+                        className={`flex-1 truncate text-xs font-medium ${isMia ? "text-red-400" : stale ? "text-[#888]" : "text-[#E2B93B]"}`}
+                      >
+                        {p.display_name ?? p.agent_id}
+                      </span>
+                      {c.primaries.length > 1 && (
+                        <span
+                          className="rounded bg-white/[0.05] px-1 py-0.5 font-mono text-[9px] text-[#888]"
+                          title={p.agent_id}
+                        >
+                          {p.agent_id.slice(0, 6)}
+                        </span>
+                      )}
+                      <span
+                        aria-hidden
+                        className={`text-[10px] leading-none ${isMia ? "text-red-400" : stale ? "text-[#555]" : "text-[#E2B93B]"}`}
+                      >
+                        {stale ? "○" : "●"}
+                      </span>
+                    </div>
+                    <p
+                      className={`truncate text-xs ${hasStatus ? "text-[#bbb]" : "italic text-[#555]"}`}
+                      title={hasStatus ? statusText : "idle"}
+                    >
+                      {hasStatus ? statusText : "idle"}
+                    </p>
+                    {isMia ? (
+                      <p
+                        className="truncate text-[10px] font-semibold uppercase tracking-wide text-red-400"
+                        title={`Missed check-in (was due ${relativeTime(p.next_checkin_at)})`}
+                      >
+                        MIA
+                      </p>
+                    ) : isComingBack && checkinMs !== null ? (
+                      <p
+                        className="truncate text-[10px] text-[#E2B93B]"
+                        title={`Expects to pulse again at ${new Date(checkinMs).toLocaleString()}`}
+                      >
+                        back in {relativeFromNow(checkinMs, nowMs)}
+                      </p>
+                    ) : (
+                      <p className="truncate text-[10px] text-[#555]" title="recently seen">
+                        {relativeTime(timeIso)}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+              {c.staleAliasCount > 0 && (
+                <li
+                  key={`${c.key}-stale`}
+                  className="flex w-32 shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-[#222] bg-black/20 px-3 py-2 text-center text-[10px] italic text-[#666]"
+                  title="Older agent_ids that share this emoji and name but have not been seen recently."
                 >
-                  {hasStatus ? statusText : "idle"}
-                </p>
-                {isMia ? (
-                  <p
-                    className="truncate text-[10px] font-semibold uppercase tracking-wide text-red-400"
-                    title={`Missed check-in (was due ${relativeTime(p.next_checkin_at)})`}
-                  >
-                    MIA
-                  </p>
-                ) : isComingBack && checkinMs !== null ? (
-                  <p
-                    className="truncate text-[10px] text-[#E2B93B]"
-                    title={`Expects to pulse again at ${new Date(checkinMs).toLocaleString()}`}
-                  >
-                    back in {relativeFromNow(checkinMs, nowMs)}
-                  </p>
-                ) : (
-                  <p className="truncate text-[10px] text-[#555]">
-                    {relativeTime(timeIso)}
-                  </p>
-                )}
-              </li>
-            );
-          })}
+                  <span className="text-base leading-none opacity-60" aria-hidden>{c.emoji}</span>
+                  <span className="mt-1">
+                    +{c.staleAliasCount} stale alias{c.staleAliasCount === 1 ? "" : "es"}
+                  </span>
+                </li>
+              )}
+            </Fragment>
+          ))}
         </ul>
       </div>
     </section>
@@ -445,6 +505,15 @@ export default function Fishbowl() {
 
   const groupedMessages = useMemo(() => groupMessagesByThread(messages), [messages]);
 
+  // Cluster profiles by (emoji, display_name) once per profile update so all
+  // three render sites (ExplainerPanel, NowPlayingStrip, sidebar) share the
+  // same view-model. Re-runs every 5s poll because setProfiles installs a
+  // fresh array reference.
+  const profileClusters = useMemo(
+    () => clusterProfiles(profiles, Date.now()),
+    [profiles],
+  );
+
   const toggleThread = useCallback((parentId: string) => {
     setExpandedThreads((prev) => {
       const next = new Set(prev);
@@ -540,9 +609,9 @@ export default function Fishbowl() {
         </div>
       )}
 
-      <ExplainerPanel profiles={profiles} />
+      <ExplainerPanel profiles={profiles} clusters={profileClusters} />
 
-      <NowPlayingStrip profiles={profiles} />
+      <NowPlayingStrip profiles={profiles} clusters={profileClusters} />
 
       <FishbowlSettings profiles={profiles} />
 
@@ -631,23 +700,44 @@ export default function Fishbowl() {
               <p className="px-4 py-6 text-xs text-[#666]">No agents yet.</p>
             ) : (
               <ul className="divide-y divide-white/[0.04]">
-                {profiles.map((p) => (
-                  <li key={p.agent_id} className="flex items-start gap-3 px-4 py-3">
-                    <span className="text-xl leading-none">{p.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#ccc]">
-                        {p.display_name ?? "(unnamed)"}
-                        {isHumanAgentId(p.agent_id) && (
-                          <span className="ml-1.5 rounded bg-[#E2B93B]/15 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#E2B93B]">
-                            you
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-[#666]">
-                        Last seen {relativeTime(p.last_seen_at)}
-                      </p>
-                    </div>
-                  </li>
+                {profileClusters.map((c) => (
+                  <Fragment key={c.key}>
+                    {c.primaries.map((p) => (
+                      <li key={p.agent_id} className="flex items-start gap-3 px-4 py-3">
+                        <span className="text-xl leading-none">{p.emoji}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-[#ccc]">
+                            {p.display_name ?? "(unnamed)"}
+                            {c.primaries.length > 1 && (
+                              <span
+                                className="ml-1.5 rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[9px] text-[#888]"
+                                title={p.agent_id}
+                              >
+                                {p.agent_id.slice(0, 8)}
+                              </span>
+                            )}
+                            {isHumanAgentId(p.agent_id) && (
+                              <span className="ml-1.5 rounded bg-[#E2B93B]/15 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#E2B93B]">
+                                you
+                              </span>
+                            )}
+                          </p>
+                          <p className="truncate text-xs text-[#666]" title="recently seen">
+                            Last seen {relativeTime(p.last_seen_at)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                    {c.staleAliasCount > 0 && (
+                      <li
+                        key={`${c.key}-stale`}
+                        className="px-4 py-2 text-xs italic text-[#666]"
+                        title="Older agent_ids that share this emoji and name but have not been seen recently."
+                      >
+                        +{c.staleAliasCount} stale alias{c.staleAliasCount === 1 ? "" : "es"}
+                      </li>
+                    )}
+                  </Fragment>
                 ))}
               </ul>
             )}
