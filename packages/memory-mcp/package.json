@@ -1,6 +1,6 @@
 {
   "name": "@unclick/memory-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Persistent cross-session memory for AI agents. Zero-config local mode or Supabase cloud sync. 6-layer architecture, 17 MCP tools.",
   "type": "module",
   "bin": {
@@ -15,6 +15,8 @@
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "setup": "node dist/setup.js setup",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "keywords": ["mcp", "memory", "ai-agent", "claude-code", "supabase", "persistent-memory", "unclick", "zero-config"],
@@ -31,7 +33,8 @@
   },
   "devDependencies": {
     "typescript": "^5.7.3",
-    "@types/node": "^22.15.3"
+    "@types/node": "^22.15.3",
+    "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">=18"
