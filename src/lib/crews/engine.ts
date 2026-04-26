@@ -1,7 +1,46 @@
+/// <reference types="node" />
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 const MAX_PER_CALL = 2048;
 const LABELS = "ABCDEFGHIJKLMNOP".split("");
+
+/**
+ * Postgres returns rows from `.in('id', ids)` in arbitrary order, which would
+ * make advisor labels (Opinion A/B/C) drift between runs of the same crew.
+ * Reorder fetched rows to match the stored id list so labels stay stable and
+ * Pass-template scoring can compare like-for-like runs.
+ */
+export function reorderAgentsByIds<T extends { id: string }>(
+  storedIds: readonly string[],
+  fetched: readonly T[],
+): T[] {
+  const byId = new Map(fetched.map((a) => [a.id, a]));
+  const out: T[] = [];
+  for (const id of storedIds) {
+    const a = byId.get(id);
+    if (a) out.push(a);
+  }
+  return out;
+}
+
+/**
+ * Deterministic snapshot hash for a run. Inputs are serialised in a fixed key
+ * order so two runs with the same template + version + resolved roster always
+ * produce the same hash regardless of caller-supplied object shape.
+ */
+export function computeConfigHash(input: {
+  templateKey: string | null;
+  templateVersion: string | null;
+  resolvedAgentIds: readonly string[];
+}): string {
+  const canonical = JSON.stringify({
+    template_key: input.templateKey,
+    template_version: input.templateVersion,
+    resolved_agent_ids: input.resolvedAgentIds,
+  });
+  return createHash("sha256").update(canonical).digest("hex");
+}
 
 export interface SamplerResult {
   content: string;
@@ -38,6 +77,10 @@ export interface EngineCtx {
   sampler?: Sampler;
   /** Explicit capability flag from MCP `initialize`. When false the engine aborts. */
   supportsSampling?: boolean;
+  /** Pass-template identifier (e.g. "uxpass.v1"). Snapshotted on the run row. */
+  templateKey?: string;
+  /** Pass-template version (e.g. "1.0.0"). Snapshotted on the run row. */
+  templateVersion?: string;
 }
 
 interface AgentRow {
@@ -122,18 +165,24 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
     // Load crew (api_key_hash filter is mandatory - service_role bypasses RLS)
     const { data: crew } = await sb
       .from("mc_crews")
-      .select("agent_ids")
+      .select("agent_ids,template")
       .eq("id", crewId)
       .eq("api_key_hash", apiKeyHash)
       .single();
     if (!crew) throw new Error("Crew not found");
 
-    const agentIds: string[] = (crew as { agent_ids: string[] }).agent_ids ?? [];
+    const crewRow = crew as { agent_ids: string[]; template?: string | null };
+    const agentIds: string[] = crewRow.agent_ids ?? [];
     const { data: rawAgents } = await sb
       .from("mc_agents")
       .select("id,slug,name,category,seed_prompt")
       .in("id", agentIds);
-    const agents: AgentRow[] = (rawAgents ?? []) as AgentRow[];
+    // Postgres returns .in() rows in arbitrary order; restore the stored
+    // order so advisor labels (Opinion A/B/C) are stable across runs.
+    const agents: AgentRow[] = reorderAgentsByIds(
+      agentIds,
+      (rawAgents ?? []) as AgentRow[],
+    );
 
     const advisors = agents.filter((a) => a.category !== "meta");
     let chairman: AgentRow | null = agents.find((a) => a.slug === "chairman") ?? null;
@@ -148,6 +197,23 @@ export async function runCouncilEngine(ctx: EngineCtx): Promise<void> {
         .maybeSingle();
       chairman = (sys as AgentRow | null) ?? null;
     }
+
+    // Snapshot the run config so Pass-template scoring can compare
+    // like-for-like runs even after a crew is edited or an agent is rotated.
+    const resolvedRoster: AgentRow[] = chairman ? [...advisors, chairman] : [...advisors];
+    const resolvedAgentIds = resolvedRoster.map((a) => a.id);
+    const templateKey = ctx.templateKey ?? crewRow.template ?? null;
+    const templateVersion = ctx.templateVersion ?? null;
+    await updateRun({
+      template_key: templateKey,
+      template_version: templateVersion,
+      resolved_agent_ids: resolvedAgentIds,
+      config_hash: computeConfigHash({
+        templateKey,
+        templateVersion,
+        resolvedAgentIds,
+      }),
+    });
 
     // Pre-run: load relevant facts from UnClick Memory (search_memory equivalent)
     const { data: factRows } = await sb
