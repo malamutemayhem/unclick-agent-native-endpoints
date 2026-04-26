@@ -272,6 +272,12 @@ const VISIBLE_TOOLS = [
         query: { type: "string", description: "Search query" },
         max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
         as_of: { type: "string", description: "ISO 8601 timestamp for point-in-time queries (returns facts valid at that moment)" },
+        include_card: {
+          type: "boolean",
+          default: false,
+          description:
+            "Phase 1 Wizard opt-in. When true, the response is { results, card } where card is a ConversationalCard summarising the matches for friendly chat surfaces. When false (default), returns the raw results array unchanged for backward compatibility.",
+        },
       },
       required: ["query"],
     },

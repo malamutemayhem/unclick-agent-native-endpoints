@@ -1,0 +1,18 @@
+{
+  "name": "@unclick/wizard",
+  "version": "0.0.1",
+  "description": "UnClick Orchestrator Wizard - shared types for ConversationalCard responses across every UnClick MCP tool. Phase 1 ships types only.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types/card": "./src/types/card.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
