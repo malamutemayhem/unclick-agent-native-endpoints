@@ -49,3 +49,6 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Typecheck + build
         run: npm run build
+      - name: Tests
+        run: npm test
+        continue-on-error: true

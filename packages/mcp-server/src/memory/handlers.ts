@@ -14,6 +14,7 @@ import {
 } from "./tool-awareness.js";
 import { resolveAgent, filterContextByLayers } from "./agent.js";
 import { emitSignal } from "../signals/emit.js";
+import { buildSearchMemoryCard } from "../cards/search-memory-card.js";
 
 function currentApiKeyHash(): string | null {
   return process.env.UNCLICK_API_KEY_HASH ?? null;
@@ -89,7 +90,14 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
   async search_memory(args) {
     const db = await getBackend();
     const asOf = typeof args.as_of === "string" ? args.as_of : undefined;
-    return db.searchMemory(str(args.query), num(args.max_results, 10), asOf);
+    const query = str(args.query);
+    const results = await db.searchMemory(query, num(args.max_results, 10), asOf);
+    // Phase 1 Wizard wrap: opt-in card alongside the existing array payload.
+    // Defaults off to keep backward compatibility for current consumers.
+    if (bool(args.include_card, false)) {
+      return { results, card: buildSearchMemoryCard(query, results) };
+    }
+    return results;
   },
 
   async search_facts(args) {
