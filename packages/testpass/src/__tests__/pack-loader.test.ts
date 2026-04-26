@@ -10,7 +10,7 @@ describe("loadPackFromFile", () => {
     const pack = loadPackFromFile(CORE_PACK_PATH);
     expect(pack.id).toBe("testpass-core");
     expect(pack.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(pack.items.length).toBeGreaterThanOrEqual(12);
+    expect(pack.items.length).toBeGreaterThanOrEqual(26);
   });
 
   it("throws when file does not exist", () => {
