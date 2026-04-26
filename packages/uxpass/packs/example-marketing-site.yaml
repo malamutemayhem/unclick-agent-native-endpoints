@@ -1,0 +1,25 @@
+# Example UXPass pack from product brief Section 7.2.
+# This is the canonical reference pack used by the schema tests.
+name: marketing-site-baseline
+url: https://example.com
+viewports: [mobile, tablet, desktop]
+themes: [light, dark]
+hats:
+  - graphic-designer
+  - ux-specialist
+  - frontend
+  - accessibility
+  - performance
+  - motion
+  - mobile
+  - agent-readability
+  - dark-pattern-detector
+synthesiser: default
+budgets:
+  ux-score: ">= 80"
+  performance: ">= 90"
+  accessibility: "no critical"
+  dark-patterns: "zero"
+remediation:
+  high-severity: fishbowl-todos
+  all: report-only
