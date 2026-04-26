@@ -113,6 +113,10 @@ function sha256hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+function normalizeFishbowlText(input: string): string {
+  return input.replace(/[\u2013\u2014]/g, "-");
+}
+
 function deriveKey(apiKey: string, salt: Buffer): Buffer {
   return crypto.pbkdf2Sync(apiKey, salt, PBKDF2_ITERATIONS, KEY_BYTES, "sha256");
 }
@@ -403,6 +407,7 @@ async function postFishbowlEvent(
   text: string,
 ): Promise<void> {
   try {
+    const eventText = normalizeFishbowlText(text);
     const { data: profile } = await supabase
       .from("mc_fishbowl_profiles")
       .select("emoji, display_name")
@@ -434,7 +439,7 @@ async function postFishbowlEvent(
       author_name: profile?.display_name ?? null,
       author_agent_id: agentId,
       recipients: ["all"],
-      text,
+      text: eventText,
       tags: ["event", eventTag],
     });
   } catch (err) {
@@ -5997,7 +6002,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (agentId.length > 128) return res.status(400).json({ error: "agent_id must be at most 128 characters" });
 
-        const text = (body.text ?? "").toString().trim();
+        const text = normalizeFishbowlText((body.text ?? "").toString().trim());
         if (!text) return res.status(400).json({ error: "text required" });
         if (text.length > 2000) return res.status(400).json({ error: "text must be at most 2000 characters" });
 
