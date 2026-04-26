@@ -140,3 +140,250 @@ items:
     on_fail: A crash on unknown methods makes the server unusable after the first agent exploration call.
     tags: [lifecycle, resilience, error-handling]
     profiles: [smoke, standard, deep]
+
+  - id: MCP-007
+    title: tools/list returns at least one tool with a name, description, and inputSchema
+    category: mcp-lifecycle
+    severity: critical
+    check_type: agent
+    description: >
+      Call the tools/list method. The response must contain a non-empty tools array.
+      Every entry must have a string name, a string description, and an inputSchema
+      object. Missing any of these stops AI clients from rendering or calling the tool.
+    expected: { min_tools: 1, required_fields: [name, description, inputSchema] }
+    on_fail: >
+      tools/list did not return tools with name + description + inputSchema. Check that
+      every registered tool in the server defines all three fields and that the registry
+      is included in the tools/list response.
+    tags: [lifecycle, tools, discovery]
+    profiles: [smoke, standard, deep]
+
+  - id: MCP-008
+    title: ping method round-trips and returns an empty result
+    category: mcp-lifecycle
+    severity: high
+    check_type: agent
+    description: >
+      Call the ping method with no params. The server must return a JSON-RPC response
+      whose result is an empty object {} within 2 seconds. ping is the standard MCP
+      health probe and must always succeed when the server is alive.
+    expected: { result: {}, max_latency_ms: 2000 }
+    on_fail: >
+      ping did not round-trip cleanly. Check the request reached the server, the method
+      handler is registered, and the response shape is exactly { jsonrpc, id, result: {} }.
+    tags: [lifecycle, health, ping]
+    profiles: [smoke, standard, deep]
+
+  - id: MCP-009
+    title: Server advertises tools, resources, and prompts capabilities correctly
+    category: mcp-lifecycle
+    severity: high
+    check_type: agent
+    description: >
+      Per the Streamable HTTP MCP spec, InitializeResult.capabilities must declare
+      every category the server actually serves. If the server answers tools/list,
+      capabilities.tools must be present. Same for resources/list and prompts/list.
+      Mismatched capabilities cause clients to skip features or call missing methods.
+    expected: { capability_keys: [tools, resources, prompts], match_actual_methods: true }
+    on_fail: >
+      Server's declared capabilities do not match the methods it answers. Add the
+      missing capability key (tools, resources, or prompts) to InitializeResult, or
+      remove the corresponding list method handler if you did not mean to support it.
+    tags: [lifecycle, capabilities, spec-compliance]
+    profiles: [standard, deep]
+
+  # ── UnClick tool surface ───────────────────────────────────────────────────
+
+  - id: TOOL-001
+    title: search_memory returns the right shape for any query
+    category: tools
+    severity: high
+    check_type: agent
+    description: >
+      Call search_memory with any query string. The response must be a JSON object
+      with a results array (may be empty) and a numeric total field. Agents rely on
+      this exact shape to render recall results without crashing.
+    expected: { shape: { results: array, total: number } }
+    on_fail: >
+      search_memory did not return { results: [], total: number }. Check the handler
+      response in packages/mcp-server/src/memory/handlers.ts and confirm both fields
+      are always present, even on empty results.
+    tags: [tools, memory, contract]
+    profiles: [smoke, standard, deep]
+
+  - id: TOOL-002
+    title: save_fact accepts fact + tags and returns the inserted row id
+    category: tools
+    severity: high
+    check_type: agent
+    description: >
+      Call save_fact with { fact: "test fact", tags: ["testpass"] }. The server must
+      persist the fact and return an id (string or number) identifying the inserted
+      row. Without an id, agents cannot link, supersede, or audit the fact later.
+    expected: { input: { fact, tags }, output_contains: [id] }
+    on_fail: >
+      save_fact did not return an id for the inserted fact. Check the handler in
+      packages/mcp-server/src/memory/handlers.ts wraps the Supabase insert and
+      surfaces the row id back to the caller.
+    tags: [tools, memory, write]
+    profiles: [smoke, standard, deep]
+
+  - id: TOOL-003
+    title: post_message accepts agent_id + text and returns a message id
+    category: tools
+    severity: high
+    check_type: agent
+    description: >
+      Call post_message with { agent_id: "testpass-probe", text: "hello fishbowl" }.
+      The server must persist the message into the user's Fishbowl and return a
+      message id. Without an id agents cannot reference or thread their own posts.
+    expected: { input: { agent_id, text }, output_contains: [id] }
+    on_fail: >
+      post_message did not return a message id. Check the Fishbowl handler in
+      api/memory-admin.ts (action=fishbowl_post) returns the inserted row id and
+      that the MCP wrapper passes it back unchanged.
+    tags: [tools, fishbowl, write]
+    profiles: [smoke, standard, deep]
+
+  - id: TOOL-004
+    title: set_my_emoji accepts agent_id + emoji and confirms registration
+    category: tools
+    severity: high
+    check_type: agent
+    description: >
+      Call set_my_emoji with { agent_id: "testpass-probe", emoji: "🤖" }. The server
+      must register the agent in the Fishbowl and return a confirmation (ok flag or
+      the registered row). This is the handshake every agent runs once on first connect.
+    expected: { input: { agent_id, emoji }, output_contains_one_of: [ok, agent_id, id] }
+    on_fail: >
+      set_my_emoji did not confirm the registration. Check the Fishbowl handler
+      (action=fishbowl_set_emoji) returns a success indicator and that the MCP
+      wrapper is not swallowing the response.
+    tags: [tools, fishbowl, identity]
+    profiles: [standard, deep]
+
+  - id: TOOL-005
+    title: read_messages returns a list of messages for the calling agent
+    category: tools
+    severity: medium
+    check_type: agent
+    description: >
+      Call read_messages with { agent_id: "testpass-probe" }. The server must return
+      a JSON object containing an array of recent Fishbowl messages. Each message
+      should expose at minimum text + timestamp + author (emoji or agent_id).
+    expected: { input: { agent_id }, output_contains: [messages] }
+    on_fail: >
+      read_messages did not return a messages array. Confirm the Fishbowl read
+      handler (action=fishbowl_read) returns { messages: [] } even when empty,
+      and that each row carries text, timestamp, and author fields.
+    tags: [tools, fishbowl, read]
+    profiles: [standard, deep]
+
+  - id: TOOL-006
+    title: check_signals returns the right shape with no auth surprises
+    category: tools
+    severity: medium
+    check_type: agent
+    description: >
+      Call check_signals with no params. The server must return a JSON object with a
+      signals array (may be empty). check_signals is the start-of-session catch-up
+      tool and a broken shape blocks every agent from narrating updates.
+    expected: { shape: { signals: array } }
+    on_fail: >
+      check_signals did not return { signals: [] }. Check the handler in
+      packages/mcp-server/src/server.ts and the api/memory-admin.ts (action=check_signals)
+      branch always emit a signals array, even when there is nothing new.
+    tags: [tools, signals, contract]
+    profiles: [standard, deep]
+
+  # ── Auth ───────────────────────────────────────────────────────────────────
+
+  - id: AUTH-001
+    title: Missing Authorization header returns auth error -32001
+    category: auth
+    severity: critical
+    check_type: agent
+    description: >
+      Send any tool call without an Authorization header. The server must reject the
+      request with JSON-RPC error code -32001 (or the project's defined auth error
+      code) and must NOT execute the tool. Silent acceptance breaks tenancy.
+    expected: { error_code: -32001 }
+    on_fail: >
+      A request with no Authorization header was not rejected with -32001. Check the
+      auth middleware runs before the tool dispatcher and returns a structured JSON-RPC
+      error rather than a 401, an empty body, or a generic exception.
+    tags: [auth, security, mandatory]
+    profiles: [smoke, standard, deep]
+
+  - id: AUTH-002
+    title: Malformed bearer token returns auth error -32001
+    category: auth
+    severity: critical
+    check_type: agent
+    description: >
+      Send a tool call with Authorization "Bearer notarealtoken". The server must
+      reject with JSON-RPC error -32001 (or the project's defined auth error code)
+      and must NOT execute the tool. Garbage tokens must never fall through.
+    expected: { error_code: -32001 }
+    on_fail: >
+      A request with a malformed bearer token was not rejected with -32001. Confirm
+      the auth middleware validates the token shape (and signature) before tool
+      dispatch and returns a JSON-RPC error rather than passing through.
+    tags: [auth, security, mandatory]
+    profiles: [smoke, standard, deep]
+
+  - id: AUTH-003
+    title: Valid token plus correct tenant returns success
+    category: auth
+    severity: high
+    check_type: agent
+    description: >
+      Send a tool call with a known good Authorization header that maps to the
+      tenant under test. The server must accept the call and return the tool's
+      normal response. This pins the happy-path so the AUTH-001 / AUTH-002 fail
+      paths are not just blanket rejections.
+    expected: { success: true }
+    on_fail: >
+      A valid Authorization header was rejected. Confirm the token map / RLS policy
+      correctly recognises the test tenant and that the auth middleware is not
+      throwing on legitimate requests.
+    tags: [auth, security, happy-path]
+    profiles: [smoke, standard, deep]
+
+  # ── Tenancy ────────────────────────────────────────────────────────────────
+
+  - id: TENANT-001
+    title: Tenant scoping by api_key_hash holds across calls
+    category: tenancy
+    severity: critical
+    check_type: agent
+    description: >
+      Write a fact as tenant A. Read it back as tenant B (different api_key_hash).
+      Tenant B must NOT see tenant A's fact. This proves the api_key_hash scoping
+      and Supabase RLS policies actually isolate tenants.
+    expected: { cross_tenant_visibility: false }
+    on_fail: >
+      Tenant B saw tenant A's fact. This is a CRITICAL data-isolation failure.
+      Audit the RLS policies on every memory table and confirm api_key_hash is
+      part of every read and write query in packages/mcp-server/src/memory/db.ts.
+    tags: [tenancy, security, isolation, mandatory]
+    profiles: [smoke, standard, deep]
+
+  # ── Performance ────────────────────────────────────────────────────────────
+
+  - id: PERF-001
+    title: initialize handshake completes in under 2000ms
+    category: performance
+    severity: medium
+    check_type: agent
+    description: >
+      Time the initialize call from request send to response received. Must complete
+      in under 2000ms on a warm connection. Slow init blocks every downstream tool
+      call and makes the server feel broken to agent runtimes that use short timeouts.
+    expected: { max_latency_ms: 2000 }
+    on_fail: >
+      initialize took longer than 2000ms. Profile the handshake path: cold starts on
+      Vercel, Supabase connection setup, or large InitializeResult payloads are the
+      usual culprits. Cache what you can or move work out of the handshake.
+    tags: [performance, lifecycle, latency]
+    profiles: [standard, deep]
