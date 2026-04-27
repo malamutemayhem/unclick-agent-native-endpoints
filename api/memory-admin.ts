@@ -232,7 +232,10 @@ async function ensureStarterCrews(
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
   if (rows.length === 0) return;
-  const { error } = await supabase.from("mc_crews").insert(rows);
+  const { error } = await supabase.from("mc_crews").upsert(rows, {
+    onConflict: "api_key_hash,name,template",
+    ignoreDuplicates: true,
+  });
   if (error) throw error;
 }
 
