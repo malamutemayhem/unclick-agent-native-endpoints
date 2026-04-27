@@ -97,7 +97,8 @@ jobs:
       - name: Bump patch version
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
         working-directory: packages/mcp-server
-        run: npm version patch -m "chore: bump mcp-server to %s [skip ci]"
+        run: |
+          npm version patch -m "chore: bump mcp-server to %s [skip ci]"
 
       - name: Push version bump
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
