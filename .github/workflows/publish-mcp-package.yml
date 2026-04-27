@@ -1,6 +1,9 @@
 name: Publish MCP server
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-mcp-package.yml'
   push:
     branches:
       - main
@@ -33,6 +36,12 @@ jobs:
       - name: Detect publish scope
         id: scope
         run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "PR registry check only; skipping publish."
+            exit 0
+          fi
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             exit 0
