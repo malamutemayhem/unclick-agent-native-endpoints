@@ -130,3 +130,26 @@ items:
       and the read handler selects it. PR 157 added the wire-up.
     tags: [fishbowl, threading]
     profiles: [standard, deep]
+
+  - id: FB-009
+    title: needs-doing posts surface as warning signals
+    category: fishbowl-signals
+    severity: high
+    check_type: agent
+    description: |
+      Posting a Fishbowl message tagged needs-doing must create a signal whose
+      persisted severity stays action_needed, while policy_label and
+      display_severity are exposed as warning through list_signals and
+      check_signals. The check_signals narrative should count warning
+      separately from generic action_needed.
+    expected:
+      persisted_severity: action_needed
+      policy_label: warning
+      display_severity: warning
+      narrative_hint_contains: warning
+    on_fail: |
+      Recheck the Fishbowl signal publisher and the signal read APIs. The
+      warning label should remain a policy/read label, not a fourth stored
+      severity value.
+    tags: [fishbowl, signals, warning, regression-check]
+    profiles: [smoke, standard, deep]
