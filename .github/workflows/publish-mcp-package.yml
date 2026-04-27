@@ -98,11 +98,41 @@ jobs:
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
         working-directory: packages/mcp-server
         run: |
-          npm version patch -m "chore: bump mcp-server to %s [skip ci]"
+          remote_ver=$(npm view @unclick/mcp-server version 2>/dev/null || echo "")
+          new_ver=$(node - "$remote_ver" <<'NODE'
+          const fs = require("fs");
+          const remote = process.argv[2] || "";
+          const pkgPath = "package.json";
+          const lockPath = "../../package-lock.json";
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+          const parts = (version) => version.split(".").map((part) => Number(part));
+          const compare = (a, b) => {
+            const aa = parts(a);
+            const bb = parts(b);
+            for (let i = 0; i < 3; i += 1) {
+              if ((aa[i] || 0) !== (bb[i] || 0)) return (aa[i] || 0) - (bb[i] || 0);
+            }
+            return 0;
+          };
+          const base = remote && compare(remote, pkg.version) > 0 ? remote : pkg.version;
+          const next = parts(base);
+          next[2] = (next[2] || 0) + 1;
+          pkg.version = next.join(".");
+          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+          const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+          if (lock.packages?.["packages/mcp-server"]) {
+            lock.packages["packages/mcp-server"].version = pkg.version;
+          }
+          fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+          console.log(pkg.version);
+          NODE
+          )
+          git add package.json ../../package-lock.json
+          git commit -m "chore: bump mcp-server to v${new_ver} [skip ci]"
 
       - name: Push version bump
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
-        run: git push --follow-tags
+        run: git push
 
       - name: Publish to npm
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
