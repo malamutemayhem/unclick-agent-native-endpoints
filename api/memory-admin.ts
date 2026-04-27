@@ -150,6 +150,95 @@ function queueMemoryEmbedding(req: VercelRequest, table: string, id: string, tex
   });
 }
 
+const STARTER_CREW_DEFS = [
+  {
+    name: "Business Council",
+    description:
+      "CEO, CFO, CMO, CTO, and Creative Director deliberate your business decision together. Each brings their own lens. The Chairman synthesises.",
+    template: "council",
+    agentSlugs: ["ceo", "cfo", "cmo", "cto", "cco-creative"],
+  },
+  {
+    name: "Launch Stress Test",
+    description:
+      "A Contrarian, Security Engineer, Growth Hacker, and Customer Success Manager attack and defend your launch plan. Red attacks, blue defends, white scores.",
+    template: "red_blue",
+    agentSlugs: ["contrarian", "security-engineer", "growth-hacker", "csm"],
+  },
+  {
+    name: "Creative Studio",
+    description:
+      "Creative Director, Copywriter, Art Director, and Brand Strategist collaborate on your brief. Draft, shape, verify, stress-test.",
+    template: "editorial",
+    agentSlugs: ["creative-director", "copywriter", "art-director", "brand-strategist"],
+  },
+  {
+    name: "Decision Desk",
+    description:
+      "First Principles Thinker, Pragmatist, Outsider, Executor, and Chairman reason through your decision from five independent angles.",
+    template: "council",
+    agentSlugs: ["first-principles", "pragmatist", "outsider", "executor", "chairman"],
+  },
+] as const;
+
+async function ensureStarterCrews(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+): Promise<void> {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("mc_crews")
+    .select("name,template")
+    .eq("api_key_hash", apiKeyHash);
+  if (existingError) throw existingError;
+
+  const existing = new Set(
+    ((existingRows ?? []) as Array<{ name: string; template: string }>).map(
+      (row) => `${row.name}::${row.template}`,
+    ),
+  );
+  const missingDefs = STARTER_CREW_DEFS.filter(
+    (crew) => !existing.has(`${crew.name}::${crew.template}`),
+  );
+  if (missingDefs.length === 0) return;
+
+  const slugs = Array.from(new Set(missingDefs.flatMap((crew) => crew.agentSlugs)));
+  const [systemAgents, tenantAgents] = await Promise.all([
+    supabase.from("mc_agents").select("id,slug").is("api_key_hash", null).in("slug", slugs),
+    supabase.from("mc_agents").select("id,slug").eq("api_key_hash", apiKeyHash).in("slug", slugs),
+  ]);
+  if (systemAgents.error) throw systemAgents.error;
+  if (tenantAgents.error) throw tenantAgents.error;
+
+  const bySlug = new Map<string, string>();
+  for (const row of (systemAgents.data ?? []) as Array<{ id: string; slug: string }>) {
+    bySlug.set(row.slug, row.id);
+  }
+  for (const row of (tenantAgents.data ?? []) as Array<{ id: string; slug: string }>) {
+    bySlug.set(row.slug, row.id);
+  }
+
+  const rows = missingDefs
+    .map((crew) => {
+      const agentIds = crew.agentSlugs.map((slug) => bySlug.get(slug));
+      if (agentIds.some((id) => !id)) return null;
+      return {
+        api_key_hash: apiKeyHash,
+        name: crew.name,
+        description: crew.description,
+        template: crew.template,
+        agent_ids: agentIds,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("mc_crews").upsert(rows, {
+    onConflict: "api_key_hash,name,template",
+    ignoreDuplicates: true,
+  });
+  if (error) throw error;
+}
+
 function deriveKey(apiKey: string, salt: Buffer): Buffer {
   return crypto.pbkdf2Sync(apiKey, salt, PBKDF2_ITERATIONS, KEY_BYTES, "sha256");
 }
@@ -5063,6 +5152,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "list_crews": {
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        await ensureStarterCrews(supabase, apiKeyHash);
 
         const { data, error } = await supabase
           .from("mc_crews")
