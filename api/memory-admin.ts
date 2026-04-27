@@ -5660,6 +5660,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ success: true });
       }
 
+      case "mark_many_signals_read": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { signal_ids, read_via } = (req.body ?? {}) as { signal_ids?: string[]; read_via?: string };
+        const ids = Array.isArray(signal_ids)
+          ? signal_ids.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        if (ids.length === 0) return res.status(400).json({ error: "signal_ids required" });
+        const { data, error } = await supabase
+          .from("mc_signals")
+          .update({ read_at: new Date().toISOString(), read_via: read_via ?? "agent" })
+          .eq("api_key_hash", apiKeyHash)
+          .is("read_at", null)
+          .in("id", ids)
+          .select("id");
+        if (error) throw error;
+        return res.status(200).json({
+          success: true,
+          updated_count: data?.length ?? 0,
+          signal_ids: data?.map((row) => row.id) ?? [],
+        });
+      }
+
       case "mark_all_read": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
@@ -5754,15 +5778,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (fetchErr) throw fetchErr;
 
         const signals = rows ?? [];
-        if (signals.length > 0) {
-          const ids = signals.map((s) => s.id);
-          const { error: updateErr } = await supabase
-            .from("mc_signals")
-            .update({ read_at: new Date().toISOString(), read_via: "agent" })
-            .in("id", ids)
-            .eq("api_key_hash", apiKeyHash);
-          if (updateErr) throw updateErr;
-        }
 
         const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, info: 0 };
         const byTool: Record<string, number> = {};

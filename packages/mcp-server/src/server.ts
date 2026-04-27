@@ -1210,6 +1210,25 @@ export function createServer(): Server {
           body: "{}",
         });
         const body = await resp.json().catch(() => ({}));
+        const signalIds = Array.isArray((body as { signals?: unknown }).signals)
+          ? (body as { signals: Array<{ id?: unknown }> }).signals
+              .map((signal) => signal.id)
+              .filter((id): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        if (resp.ok && signalIds.length > 0) {
+          const ackResp = await fetch(`${base}/api/memory-admin?action=mark_many_signals_read`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ signal_ids: signalIds, read_via: "agent" }),
+          });
+          if (!ackResp.ok) {
+            const ackBody = await ackResp.json().catch(() => ({}));
+            (body as { ack_warning?: unknown }).ack_warning = ackBody;
+          }
+        }
         return {
           content: [{ type: "text", text: JSON.stringify(body, null, 2) }],
           isError: !resp.ok,
