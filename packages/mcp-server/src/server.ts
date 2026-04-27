@@ -367,7 +367,6 @@ const VISIBLE_TOOLS = [
           description: "Stable Fishbowl agent_id for read attribution, e.g. chatgpt-codex-worker2.",
         },
       },
-      required: ["agent_id"],
     },
   },
   {
@@ -1211,23 +1210,6 @@ export function createServer(): Server {
           typeof args.agent_id === "string" && args.agent_id.trim()
             ? args.agent_id.trim()
             : process.env.UNCLICK_AGENT_ID?.trim();
-        if (!callerAgentId) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  error: "agent_id required",
-                  unread_count: 0,
-                  signals: [],
-                  narrative_hint:
-                    "Signals were not checked because agent_id was missing; this prevents consuming signals without read attribution.",
-                }, null, 2),
-              },
-            ],
-            isError: true,
-          };
-        }
         const resp = await fetch(`${base}/api/memory-admin?action=check_signals`, {
           method: "POST",
           headers: {
@@ -1252,7 +1234,7 @@ export function createServer(): Server {
             body: JSON.stringify({
               signal_ids: signalIds,
               read_via: "agent",
-              read_by_agent_id: callerAgentId,
+              ...(callerAgentId ? { read_by_agent_id: callerAgentId } : {}),
             }),
           });
           if (!ackResp.ok) {
