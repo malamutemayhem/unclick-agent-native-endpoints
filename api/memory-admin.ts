@@ -5634,7 +5634,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const toolFilter = (body.tool ?? req.query.tool ?? "") as string;
         let q = supabase
           .from("mc_signals")
-          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via, read_by_agent_id")
           .eq("api_key_hash", apiKeyHash)
           .order("created_at", { ascending: false })
           .limit(limit);
@@ -5710,9 +5710,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { read_via, read_by_agent_id } = (req.body ?? {}) as {
+          read_via?: string;
+          read_by_agent_id?: string;
+        };
+        const patch: Record<string, string> = {
+          read_at: new Date().toISOString(),
+          read_via: read_via ?? "dismiss",
+        };
+        if (typeof read_by_agent_id === "string" && read_by_agent_id.length > 0) {
+          patch.read_by_agent_id = read_by_agent_id;
+        }
         const { data, error } = await supabase
           .from("mc_signals")
-          .update({ read_at: new Date().toISOString(), read_via: "dismiss" })
+          .update(patch)
           .eq("api_key_hash", apiKeyHash)
           .is("read_at", null)
           .select("id");
