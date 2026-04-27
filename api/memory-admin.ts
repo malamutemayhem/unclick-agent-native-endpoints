@@ -1098,7 +1098,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
         value: z.string().describe("The context value as a JSON-encoded string or plain text"),
       }),
       execute: async ({ category, key, value }) => {
-        let stored: unknown = value;
+        let stored: unknown;
         try {
           stored = JSON.parse(value);
         } catch {
@@ -1776,8 +1776,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (error) throw error;
 
         const ids = (agents ?? []).map((a: { id: string }) => a.id);
-        let toolCounts: Record<string, number> = {};
-        let layerCounts: Record<string, number> = {};
+        const toolCounts: Record<string, number> = {};
+        const layerCounts: Record<string, number> = {};
 
         if (ids.length > 0) {
           const [toolsRes, layersRes] = await Promise.all([
@@ -5245,6 +5245,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         if (!crew_id || !task_prompt?.trim()) {
           return res.status(400).json({ error: "crew_id and task_prompt required" });
+        }
+        const { data: crewRow, error: crewErr } = await supabase
+          .from("mc_crews")
+          .select("id")
+          .eq("id", crew_id)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (crewErr) throw crewErr;
+        if (!crewRow) {
+          return res.status(404).json({ error: "crew_id not found for tenant" });
         }
         // User-facing runs now route LLM traffic through MCP sampling. The HTTP
         // path cannot do bidirectional sampling, so we create the run row for
