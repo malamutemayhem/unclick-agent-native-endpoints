@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 # Auto-publishes @unclick/mcp-server to npm whenever files under
@@ -35,7 +33,7 @@ jobs:
       - name: Detect publish scope
         id: scope
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
