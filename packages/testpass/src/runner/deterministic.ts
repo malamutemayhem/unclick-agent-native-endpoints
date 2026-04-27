@@ -12,6 +12,7 @@
 import type { Pack, RunProfile } from "../types.js";
 import type { RunManagerConfig } from "../run-manager.js";
 import { updateItem, createEvidence } from "../run-manager.js";
+import { createHash } from "node:crypto";
 
 // ─── Internal types ────────────────────────────────────────────────
 
@@ -74,7 +75,45 @@ function rpcReq(method: string, params: unknown, id?: number): unknown {
 
 // ─── Check handlers ────────────────────────────────────────────────
 
-type CheckHandler = (targetUrl: string) => Promise<CheckOutcome>;
+type CheckHandler = (targetUrl: string, config: RunManagerConfig) => Promise<CheckOutcome>;
+
+function apiKeyHash(): string | null {
+  const token = process.env.TESTPASS_TOKEN?.trim();
+  if (!token) return null;
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function fetchSignals(
+  config: RunManagerConfig,
+  hash: string,
+): Promise<Array<Record<string, unknown>>> {
+  const select = "id,tool,action,severity,summary,deep_link,payload,created_at";
+  const path = [
+    "mc_signals",
+    `?api_key_hash=eq.${encodeURIComponent(hash)}`,
+    "&tool=eq.github_action",
+    `&select=${encodeURIComponent(select)}`,
+    "&order=created_at.desc",
+    "&limit=20",
+  ].join("");
+  const res = await fetch(`${config.supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+    },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Supabase GET ${path} -> ${res.status}: ${text}`);
+  return text ? JSON.parse(text) as Array<Record<string, unknown>> : [];
+}
+
+function matchingGithubSignal(rows: Array<Record<string, unknown>>, owner: string): Record<string, unknown> | undefined {
+  return rows.find((row) => {
+    const payload = row.payload as Record<string, unknown> | undefined;
+    const githubAction = payload?.github_action as Record<string, unknown> | undefined;
+    return githubAction?.owner === owner;
+  });
+}
 
 const HANDLERS: Record<string, CheckHandler> = {
 
@@ -273,6 +312,51 @@ const HANDLERS: Record<string, CheckHandler> = {
     if (err) return { verdict: "fail", note: `Expected error.code -32601, got ${JSON.stringify(err.code)}`, traces: [trace] };
     return { verdict: "fail", note: `Unknown method must return error, got ${JSON.stringify(body)}`, traces: [trace] };
   },
+
+  // FB-010: github_action failures must create tenant-scoped Signals with
+  // an /admin/signals fallback and fixture marker context.
+  "FB-010": async (url, config) => {
+    const hash = apiKeyHash();
+    if (!hash) {
+      return { verdict: "na", note: "TESTPASS_TOKEN is unset, cannot run authenticated signal smoke.", traces: [] };
+    }
+
+    const fixtureOwner = `unclick-fb010-fixture-${Date.now()}`;
+    const fixtureRepo = "missing-repo";
+    const req = rpcReq("tools/call", {
+      name: "github_action",
+      arguments: {
+        action: "get_repo",
+        owner: fixtureOwner,
+        repo: fixtureRepo,
+      },
+    }, 410);
+    const r = await send(url, req, 15_000);
+    const trace: HttpTrace = { request: { url, body: req }, response: r };
+
+    let lastRows: Array<Record<string, unknown>> = [];
+    for (let attempt = 0; attempt < 10; attempt++) {
+      lastRows = await fetchSignals(config, hash);
+      const match = matchingGithubSignal(lastRows, fixtureOwner);
+      if (match) {
+        if (match.deep_link === "/admin/signals") {
+          return { verdict: "check", traces: [trace] };
+        }
+        return {
+          verdict: "fail",
+          note: `Expected deep_link /admin/signals for ${fixtureOwner}, got ${JSON.stringify(match.deep_link)}`,
+          traces: [trace],
+        };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    return {
+      verdict: "fail",
+      note: `No github_action signal found for fixture owner ${fixtureOwner}; recent rows: ${JSON.stringify(lastRows.slice(0, 3))}`,
+      traces: [trace],
+    };
+  },
 };
 
 // ─── Public API ─────────────────────────────────────────────────────
@@ -301,7 +385,7 @@ export async function runDeterministicChecks(
       const checkStart = Date.now();
       let outcome: CheckOutcome;
       try {
-        outcome = await handler(targetUrl);
+        outcome = await handler(targetUrl, config);
       } catch (err) {
         outcome = {
           verdict: "other",

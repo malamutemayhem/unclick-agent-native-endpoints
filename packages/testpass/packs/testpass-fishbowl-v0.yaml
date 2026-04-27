@@ -153,3 +153,25 @@ items:
       severity value.
     tags: [fishbowl, signals, warning, regression-check]
     profiles: [smoke, standard, deep]
+
+  - id: FB-010
+    title: github_action failures carry deterministic Signals fallback context
+    category: fishbowl-signals
+    severity: high
+    check_type: deterministic
+    description: |
+      Trigger a controlled github_action get_repo failure through the live MCP
+      tool wrapper, then verify the tenant-scoped mc_signals row includes the
+      synthetic owner marker and deep_link='/admin/signals'. This guards the
+      PR 214/215 fallback path without racing on newest-row timing.
+    expected:
+      tool: github_action
+      payload.github_action.owner: unclick-fb010-fixture-*
+      deep_link: /admin/signals
+      api_key_hash: matches TESTPASS_TOKEN tenant
+    on_fail: |
+      Check packages/mcp-server/src/server.ts. github_action failure signals
+      must preserve sanitized action/owner/repo payload context and use the
+      /admin/signals fallback deep link.
+    tags: [fishbowl, signals, github-action, regression-check]
+    profiles: [smoke, standard, deep]
