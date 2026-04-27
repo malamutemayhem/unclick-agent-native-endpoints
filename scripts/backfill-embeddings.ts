@@ -12,6 +12,8 @@
  *   ADMIN_EMBED_SECRET  - the x-embed-secret header value
  *   PAGE_SIZE           - rows per page (default: 50)
  *   MC_API_KEY_HASH     - if set, only backfill rows for this tenant (managed mode)
+ *   BACKFILL_UNPREFIXED_TABLES=1
+ *                       - explicitly target BYOD unprefixed tables
  *
  * The script is safely re-runnable: it skips rows that already have an embedding.
  */
@@ -25,6 +27,7 @@ const EMBED_API_URL = (process.env.EMBED_API_URL ?? "http://localhost:3000").rep
 const ADMIN_EMBED_SECRET = process.env.ADMIN_EMBED_SECRET ?? "";
 const PAGE_SIZE = parseInt(process.env.PAGE_SIZE ?? "50", 10);
 const MC_API_KEY_HASH = process.env.MC_API_KEY_HASH ?? "";
+const BACKFILL_UNPREFIXED_TABLES = process.env.BACKFILL_UNPREFIXED_TABLES === "1";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const MAX_INPUT_CHARS = 32_000;
@@ -35,6 +38,12 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 if (!OPENAI_API_KEY) {
   console.error("OPENAI_API_KEY is required");
+  process.exit(1);
+}
+if (!MC_API_KEY_HASH && !BACKFILL_UNPREFIXED_TABLES) {
+  console.error(
+    "MC_API_KEY_HASH is required for managed backfills. Set BACKFILL_UNPREFIXED_TABLES=1 only when intentionally backfilling BYOD legacy tables."
+  );
   process.exit(1);
 }
 
@@ -53,7 +62,7 @@ interface TableConfig {
   textCol: string;
 }
 
-// Determine which tables to backfill based on managed vs BYOD mode
+// Determine which tables to backfill based on managed vs explicitly requested BYOD mode
 const TABLES: TableConfig[] = MC_API_KEY_HASH
   ? [
       { table: "mc_extracted_facts", textCol: "fact" },
@@ -129,7 +138,7 @@ async function backfillTable(config: TableConfig): Promise<void> {
     }
     if (!rows || rows.length === 0) break;
 
-    for (const row of rows as Row[]) {
+    for (const row of rows as unknown as Row[]) {
       const text = (row[textCol as keyof Row] as string | undefined) ?? "";
       if (!text.trim()) {
         totalSkipped++;
@@ -176,7 +185,9 @@ async function backfillTable(config: TableConfig): Promise<void> {
 
 async function main() {
   console.log("UnClick memory embedding backfill");
-  console.log(`  mode: ${MC_API_KEY_HASH ? `managed (hash: ${MC_API_KEY_HASH.slice(0, 8)}...)` : "BYOD"}`);
+  console.log(
+    `  mode: ${MC_API_KEY_HASH ? `managed (hash: ${MC_API_KEY_HASH.slice(0, 8)}...)` : "BYOD legacy tables"}`
+  );
   console.log(`  embed: ${ADMIN_EMBED_SECRET ? "via API endpoint" : "direct OpenAI + DB write"}`);
   console.log(`  page size: ${PAGE_SIZE}`);
 
