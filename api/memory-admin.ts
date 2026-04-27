@@ -5680,7 +5680,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (unreadOnly) q = q.is("read_at", null);
         const { data, error } = await q;
         if (error) throw error;
-        return res.status(200).json({ signals: data ?? [] });
+        const signals = (data ?? []).map((signal) => {
+          const payload = (signal.payload ?? {}) as Record<string, unknown>;
+          const policyLabel =
+            signal.tool === "fishbowl" && payload.policy_label === "warning"
+              ? "warning"
+              : signal.severity;
+          return {
+            ...signal,
+            policy_label: policyLabel,
+            display_severity: policyLabel,
+          };
+        });
+        return res.status(200).json({ signals });
       }
 
       case "mark_signal_read": {
@@ -5841,24 +5853,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const { data: rows, error: fetchErr } = await supabase
           .from("mc_signals")
-          .select("id, tool, action, severity, summary, deep_link, created_at")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at")
           .eq("api_key_hash", apiKeyHash)
           .is("read_at", null)
           .order("created_at", { ascending: false })
           .limit(10);
         if (fetchErr) throw fetchErr;
 
-        const signals = rows ?? [];
+        const signals = (rows ?? []).map((signal) => {
+          const payload = (signal.payload ?? {}) as Record<string, unknown>;
+          const policyLabel =
+            signal.tool === "fishbowl" && payload.policy_label === "warning"
+              ? "warning"
+              : signal.severity;
+          return {
+            ...signal,
+            policy_label: policyLabel,
+            display_severity: policyLabel,
+          };
+        });
 
-        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, info: 0 };
+        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, warning: 0, info: 0 };
         const byTool: Record<string, number> = {};
         for (const s of signals) {
-          if (s.severity in bySeverity) bySeverity[s.severity]++;
+          if (s.display_severity in bySeverity) bySeverity[s.display_severity]++;
           byTool[s.tool] = (byTool[s.tool] ?? 0) + 1;
         }
         const parts: string[] = [];
         if (bySeverity.critical > 0) parts.push(`${bySeverity.critical} critical`);
         if (bySeverity.action_needed > 0) parts.push(`${bySeverity.action_needed} needing action`);
+        if (bySeverity.warning > 0) parts.push(`${bySeverity.warning} warning`);
         if (bySeverity.info > 0) parts.push(`${bySeverity.info} info`);
         const toolList = Object.entries(byTool)
           .map(([t, c]) => `${c} from ${t}`)
@@ -6264,6 +6288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const tagList = inserted.tags ?? [];
             const tagSet = new Set(tagList);
             const isBlocker = tagSet.has("blocker") || tagSet.has("tripwire");
+            const needsDoing = tagSet.has("needs-doing");
             const broadcastsAll = recipientList.includes("all");
 
             // Discover this tenant's human admin profiles so we can match
@@ -6290,6 +6315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             let severity: "info" | "action_needed" | "critical" = "info";
             if (targetsHuman) severity = "action_needed";
+            else if (needsDoing) severity = "action_needed";
             else if (broadcastsAll && isBlocker) severity = "action_needed";
             else if (isBlocker) severity = "action_needed";
 
@@ -6310,6 +6336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 recipients: recipientList,
                 tags: tagList,
                 message_id: inserted.id,
+                policy_label: needsDoing ? "warning" : severity,
               },
             });
           } catch (publishErr) {

@@ -16,7 +16,8 @@ interface Signal {
   read_via: string | null;
 }
 
-type SeverityFilter = "all" | "info" | "action_needed" | "critical";
+type SeverityLabel = Signal["severity"] | "warning";
+type SeverityFilter = "all" | SeverityLabel;
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -38,11 +39,21 @@ const SEVERITY_STYLE: Record<Signal["severity"], string> = {
   info: "border-[#61C1C4]/30 bg-[#61C1C4]/10 text-[#61C1C4]",
 };
 
-const SEVERITY_LABEL: Record<Signal["severity"], string> = {
+const WARNING_STYLE = "border-[#E2B93B]/30 bg-[#E2B93B]/10 text-[#E2B93B]";
+
+const SEVERITY_LABEL: Record<SeverityLabel, string> = {
   critical: "Critical",
   action_needed: "Action needed",
+  warning: "Warning",
   info: "Info",
 };
+
+function displaySeverity(signal: Signal): SeverityLabel {
+  if (signal.tool === "fishbowl" && signal.payload?.policy_label === "warning") {
+    return "warning";
+  }
+  return signal.severity;
+}
 
 function toolBadgeColor(tool: string): string {
   let hash = 0;
@@ -96,7 +107,7 @@ export default function SignalsCatalog() {
   }, [token, fetchSignals]);
 
   const filtered = useMemo(
-    () => signals.filter((s) => severityFilter === "all" || s.severity === severityFilter),
+    () => signals.filter((s) => severityFilter === "all" || displaySeverity(s) === severityFilter),
     [signals, severityFilter],
   );
 
@@ -176,6 +187,7 @@ export default function SignalsCatalog() {
         >
           <option value="all">All severities</option>
           <option value="info">Info</option>
+          <option value="warning">Warning</option>
           <option value="action_needed">Action needed</option>
           <option value="critical">Critical</option>
         </select>
@@ -209,13 +221,16 @@ export default function SignalsCatalog() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtered.map((s) => (
-            <div
-              key={s.id}
-              className={`rounded-xl border p-4 transition-colors ${
-                s.read_at ? "border-white/[0.06] bg-[#0f0f0f]" : "border-white/[0.12] bg-[#141414]"
-              }`}
-            >
+          {filtered.map((s) => {
+            const severityLabel = displaySeverity(s);
+            const severityStyle = severityLabel === "warning" ? WARNING_STYLE : SEVERITY_STYLE[s.severity];
+            return (
+              <div
+                key={s.id}
+                className={`rounded-xl border p-4 transition-colors ${
+                  s.read_at ? "border-white/[0.06] bg-[#0f0f0f]" : "border-white/[0.12] bg-[#141414]"
+                }`}
+              >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium ${s.read_at ? "text-[#aaa]" : "text-white"}`}>
@@ -225,8 +240,8 @@ export default function SignalsCatalog() {
                     <span className={`rounded-md px-2 py-0.5 font-semibold ${toolBadgeColor(s.tool)}`}>
                       {s.tool}
                     </span>
-                    <span className={`rounded-md border px-2 py-0.5 font-medium ${SEVERITY_STYLE[s.severity]}`}>
-                      {SEVERITY_LABEL[s.severity]}
+                    <span className={`rounded-md border px-2 py-0.5 font-medium ${severityStyle}`}>
+                      {SEVERITY_LABEL[severityLabel]}
                     </span>
                     <span className="text-[#666]">{relativeTime(s.created_at)}</span>
                   </div>
@@ -250,8 +265,9 @@ export default function SignalsCatalog() {
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
