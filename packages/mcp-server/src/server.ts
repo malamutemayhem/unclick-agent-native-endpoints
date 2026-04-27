@@ -361,7 +361,12 @@ const VISIBLE_TOOLS = [
       "Automatically marks them as read so you do not re-narrate later.",
     inputSchema: {
       type: "object" as const,
-      properties: {},
+      properties: {
+        agent_id: {
+          type: "string",
+          description: "Stable Fishbowl agent_id for read attribution, e.g. chatgpt-codex-worker2.",
+        },
+      },
     },
   },
   {
@@ -1222,7 +1227,11 @@ export function createServer(): Server {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ signal_ids: signalIds, read_via: "agent" }),
+            body: JSON.stringify({
+              signal_ids: signalIds,
+              read_via: "agent",
+              read_by_agent_id: typeof args.agent_id === "string" ? args.agent_id : undefined,
+            }),
           });
           if (!ackResp.ok) {
             const ackBody = await ackResp.json().catch(() => ({}));
