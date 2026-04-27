@@ -67,9 +67,11 @@ function failureSummary(toolName: string, result: unknown): string | null {
   return null;
 }
 
-function signalDeepLink(toolName: string): string | undefined {
-  if (toolName === "github_action") return "/admin/signals";
-  return undefined;
+function signalDeepLink(toolName: string): string {
+  const explicitLinks: Record<string, string> = {
+    github_action: "/admin/signals",
+  };
+  return explicitLinks[toolName] ?? "/admin/signals";
 }
 
 function signalPayload(toolName: string, args?: unknown): Record<string, unknown> {
