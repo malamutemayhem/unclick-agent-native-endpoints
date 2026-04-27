@@ -217,6 +217,7 @@ async function performStartRun(
   const config = { supabaseUrl: ctx.supabaseUrl, serviceRoleKey: ctx.serviceKey };
   const runId = await createRun(config, {
     packId,
+    packName: pack.name ?? slug,
     target: body.target,
     profile,
     actorUserId: ctx.actorUserId,

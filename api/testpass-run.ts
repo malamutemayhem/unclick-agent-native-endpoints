@@ -4,7 +4,7 @@
  * Bearer-auth (Supabase JWT) entry point for CI pipelines. Runs a named
  * pack against a target MCP server without going through MCP.
  *
- * Body: { pack_id: string, profile?: "smoke"|"standard"|"deep", server_url?: string }
+ * Body: { pack_id: string, pack_name?: string, profile?: "smoke"|"standard"|"deep", server_url?: string }
  * Returns: { run_id: string, status: RunStatus, verdict_summary?: VerdictSummary }
  *
  * Smoke profile runs synchronously and returns the final verdict.
@@ -88,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as {
     pack_id?: string;
+    pack_name?: string;
     profile?: RunProfile;
     server_url?: string;
   };
@@ -117,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const runId = await createRun(config, {
     packId,
+    packName: body.pack_name ?? pack.name ?? packSlug,
     target,
     profile,
     actorUserId,
