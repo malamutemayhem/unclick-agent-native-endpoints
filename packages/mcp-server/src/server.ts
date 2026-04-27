@@ -72,7 +72,27 @@ function signalDeepLink(toolName: string): string | undefined {
   return undefined;
 }
 
-function signalToolFailure(toolName: string, result: unknown): void {
+function signalPayload(toolName: string, args?: unknown): Record<string, unknown> {
+  const payload: Record<string, unknown> = { source: "mcp-server" };
+  if (toolName !== "github_action" || !args || typeof args !== "object") {
+    return payload;
+  }
+
+  const record = args as Record<string, unknown>;
+  const githubAction: Record<string, string> = {};
+  for (const key of ["action", "owner", "repo"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      githubAction[key] = value.trim();
+    }
+  }
+  if (Object.keys(githubAction).length > 0) {
+    payload.github_action = githubAction;
+  }
+  return payload;
+}
+
+function signalToolFailure(toolName: string, result: unknown, args?: unknown): void {
   const apiKeyHash = currentApiKeyHash();
   const summary = failureSummary(toolName, result);
   if (!apiKeyHash || !summary) return;
@@ -83,7 +103,7 @@ function signalToolFailure(toolName: string, result: unknown): void {
     severity: "action_needed",
     summary: summary.slice(0, 500),
     deepLink: signalDeepLink(toolName),
-    payload: { source: "mcp-server" },
+    payload: signalPayload(toolName, args),
   });
 }
 
@@ -1504,7 +1524,7 @@ export function createServer(): Server {
         const additionalHandler = ADDITIONAL_HANDLERS[handlerKey];
         if (additionalHandler) {
           const result = await additionalHandler(params);
-          signalToolFailure(handlerKey, result);
+          signalToolFailure(handlerKey, result, params);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };
@@ -1544,7 +1564,7 @@ export function createServer(): Server {
       const additionalHandler = ADDITIONAL_HANDLERS[name];
       if (additionalHandler) {
         const result = await additionalHandler(args);
-        signalToolFailure(name, result);
+        signalToolFailure(name, result, args);
         return {
           content: [
             {
@@ -1584,7 +1604,7 @@ export function createServer(): Server {
           severity: "action_needed",
           summary: `${name}: ${message}`.slice(0, 500),
           deepLink: signalDeepLink(name),
-          payload: { source: "mcp-server" },
+          payload: signalPayload(name, args),
         });
       }
       return {
