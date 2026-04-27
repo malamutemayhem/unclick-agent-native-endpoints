@@ -5237,6 +5237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        await ensureStarterCrews(supabase, apiKeyHash);
         const { crew_id, task_prompt, token_budget } = (req.body ?? {}) as {
           crew_id?: string;
           task_prompt?: string;
