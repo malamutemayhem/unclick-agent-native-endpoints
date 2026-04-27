@@ -40,19 +40,22 @@ export async function createRun(
   config: RunManagerConfig,
   params: {
     packId: string;
+    packName?: string;
     target: RunTarget;
     profile: RunProfile;
     actorUserId: string;
   }
 ): Promise<string> {
-  const rows = (await supaFetch(config, "testpass_runs", "POST", {
+  const payload: Record<string, unknown> = {
     pack_id: params.packId,
     target: params.target,
     profile: params.profile,
     actor_user_id: params.actorUserId,
     status: "running",
     verdict_summary: { total: 0, check: 0, na: 0, fail: 0, other: 0, pending: 0, pass_rate: 0 },
-  })) as Array<{ id: string }>;
+  };
+  if (params.packName) payload.pack_name = params.packName;
+  const rows = (await supaFetch(config, "testpass_runs", "POST", payload)) as Array<{ id: string }>;
   return rows[0].id;
 }
 
