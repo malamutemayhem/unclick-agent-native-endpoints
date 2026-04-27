@@ -118,6 +118,38 @@ function normalizeFishbowlText(input: string): string {
   return input.replace(/[\u2013\u2014]/g, "-");
 }
 
+function getRequestBaseUrl(req: VercelRequest): string | null {
+  const explicit = process.env.EMBED_API_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+
+  const vercelUrl = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercelUrl) return `https://${vercelUrl}`;
+
+  const host = typeof req.headers.host === "string" ? req.headers.host : "";
+  if (!host) return null;
+
+  const protoHeader = req.headers["x-forwarded-proto"];
+  const proto = typeof protoHeader === "string" ? protoHeader : host.includes("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
+function queueMemoryEmbedding(req: VercelRequest, table: string, id: string, text: string): void {
+  const secret = process.env.ADMIN_EMBED_SECRET;
+  const baseUrl = getRequestBaseUrl(req);
+  if (!secret || !baseUrl || text.trim().length === 0) return;
+
+  void fetch(`${baseUrl}/api/memory/embed`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-embed-secret": secret,
+    },
+    body: JSON.stringify({ table, id, text }),
+  }).catch((err) => {
+    console.error("[memory_embed] queued embedding failed", err);
+  });
+}
+
 function deriveKey(apiKey: string, salt: Buffer): Buffer {
   return crypto.pbkdf2Sync(apiKey, salt, PBKDF2_ITERATIONS, KEY_BYTES, "sha256");
 }
@@ -896,7 +928,7 @@ function isAdminChatEnabled(): boolean {
   return flag === "1" || flag === "true" || flag === "yes";
 }
 
-function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null) {
+function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null, req: VercelRequest) {
   const requireKey = () =>
     apiKeyHash
       ? null
@@ -963,6 +995,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
           .select("id")
           .single();
         if (error) return { success: false, error: error.message };
+        queueMemoryEmbedding(req, "extracted_facts", data.id, value);
         return { success: true, fact_id: data.id };
       },
     }),
@@ -1081,6 +1114,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
           .select("id")
           .single();
         if (error) return { success: false, error: error.message };
+        queueMemoryEmbedding(req, "session_summaries", data.id, summary);
         return { success: true, summary_id: data.id };
       },
     }),
@@ -3750,6 +3784,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", tenant.apiKeyHash);
 
         if (error) throw error;
+        if (typeof updates.fact === "string") {
+          queueMemoryEmbedding(req, "mc_extracted_facts", String(fId), updates.fact);
+        }
         return res.status(200).json({ success: true });
       }
 
@@ -3943,6 +3980,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
 
         if (error) throw error;
+        queueMemoryEmbedding(req, "mc_extracted_facts", data.id, fact);
         return res.status(200).json({ success: true, data });
       }
 
@@ -4678,7 +4716,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const apiKeyHash = rawApiKey ? sha256hex(rawApiKey) : null;
 
         const systemPrompt = await buildAdminChatSystemPrompt(supabase);
-        const tools = buildAdminChatTools(supabase, apiKeyHash);
+        const tools = buildAdminChatTools(supabase, apiKeyHash, req);
 
         const modelMessages = await convertToModelMessages(messages);
         const result = streamText({
