@@ -2129,10 +2129,13 @@ export const ADDITIONAL_TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        projectId: { type: "string" },
+        project_id: { type: "string" },
+        projectId: { type: "string", description: "Legacy alias for project_id." },
+        team_id: { type: "string" },
+        decrypt: { type: "boolean" },
         api_key: { type: "string" },
       },
-      required: ["projectId"],
+      anyOf: [{ required: ["project_id"] }, { required: ["projectId"] }],
     },
   },
   {
