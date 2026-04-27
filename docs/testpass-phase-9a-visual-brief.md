@@ -1,300 +1,330 @@
-# TestPass Phase 9A — Visual Brief
+# TestPass Phase 9A — Visual Overhaul Brief
 
-Status: design intent for 🍿 (frontend specialist). Do NOT start React work
-from this doc — Chris reviews and approves first. Implementation is Phase 9B.
-
-Owner: 🐺 (Claude Opus, repo author of pack expansion)
-Reviewer: Chris Byrne
-Implementer: 🍿 (frontend, Phase 9B)
-Related: Phase 9D = marketplace tile badge integration (separate, out of scope)
+**Status:** Draft, ready for review
+**Owner:** Chris Byrne / Malamute Mayhem
+**Implementer:** 🍿 Plex (Claude on Plex PC, todo `c116075a`)
+**Related:** TestPass Phase 9 plan (`agent/memory/project-testpass-phase-9.md`), Idiot-proof examples (`agent/memory/feedback-idiot-proof-examples.md`), UnClick brand copy (`agent/memory/reference-unclick-brand-copy.md`)
 
 ---
 
-## North star
+## 1. Intent
 
-TestPass is a **public-facing product**. End users — not engineers — will see
-the result page after an agent or operator clicks "Run TestPass" against an
-MCP server, an UnClick tile, or any third-party endpoint.
+TestPass Phase 9A is the visual overhaul of the TestPass run UI. The product graduates from "YAML-editor with logs" to a conversational, idiot-proof QC product that any non-developer can use.
 
-The page must be:
+The end-user pitch in one sentence: *"Run a check on your AI agent. Get a checkbox-style verdict in plain English. Click the badge to share."*
 
-- **Idiot-proof.** Anyone reading it should understand the result in 5 seconds
-  without knowing what JSON-RPC, capabilities, or RLS even mean.
-- **Shareable.** A run produces a URL. That URL is what gets pasted into Slack,
-  X, or onto the marketplace tile (9D wires the badge image, not 9A).
-- **Aligned with the existing UnClick admin look.** Dark theme, gold accent,
-  teal info pill. Not a new design language.
+Phase 9A delivers:
+- A checkbox-style result grid, one card per check
+- Per-check states: ✅ pass, ❌ fail, ⚠️ warn, ⏸ skipped
+- Plain-English status copy on every card with expandable detail
+- A friendly empty state with a starter pack picker
+- A single Run TestPass button (no jargon, no settings popovers)
+- A score badge that says "12/14 passing" and is publicly shareable
+- A shareable URL for any run, ready for the marketplace badge play in Phase 9B
 
-The current `RunDetail.tsx` is functional but reads like an engineer's
-debug view. Phase 9A replaces that with a clean checkbox grid that an end
-user can scan, share, and trust.
+This is a public-facing product surface. End users will see it. The bar is high.
 
----
+## 2. Scope
 
-## Layout
+### 2.1 In scope
 
-A single page, three regions stacked vertically:
+- React UI (TypeScript, strict mode) for the TestPass run page at `/run` and `/run/{run_id}`
+- Result grid component
+- Per-check card component (collapsed and expanded states)
+- Empty state with starter pack picker
+- Run button with loading, in-progress, and post-run states
+- Score badge with score number, severity colour, and shareable link
+- Shareable URL generation (deep link to a run report)
+- Mobile-responsive layout (works at 375 px wide and up)
+- All copy in plain English, no jargon, no em dashes
 
-1. **Header** — target name, score badge, single "Run TestPass" button, share
-   link affordance.
-2. **Checkbox grid** — one card per check (currently 26 in `testpass-core`).
-   Cards reflow into 2 / 3 / 4 columns by viewport.
-3. **Footer** — pack version, profile (smoke / standard / deep), elapsed time,
-   "Powered by UnClick TestPass" link.
+### 2.2 Out of scope (Phase 9B / 9C)
 
-No tabs, no left sidebar on the public view. The admin view (under
-`/admin/testpass/runs/:id`) keeps its sidebar; the public route is
-`/testpass/r/:reportId` and is chrome-free apart from the UnClick top bar.
+- Server-side QC chip dispatch (Phase 9C)
+- Pack authoring UI (still YAML for now)
+- Run history list view (Phase 9B)
+- Real-time progress streaming (Phase 9B)
+- Marketplace badge embed code generator (Phase 9B)
+- Agent bridge polish (Phase 9B)
 
----
+### 2.3 Pre-existing work to NOT redo
 
-## State model — four visual states per check
+- `mc_testpass_runs` schema is correct, do not modify
+- `qc_run_checklist`, `qc_check_api`, `qc_copy_audit` MCP tools are correct, do not modify
+- `api/testpass-run` handler is correct, do not modify
+- The smoke dispatch gap (todo `4c5ee8d4`) is a separate fix lane, do not address here
 
-Every card lives in exactly one of these four states. Match the existing
-`VERDICT_ICON` map in `src/pages/admin/testpass/testpass-ui.ts` so we do not
-fork the icon set.
+## 3. Page structure and routing
 
-| State    | Icon | Meaning                                          | Border / glow                 |
-|----------|------|--------------------------------------------------|-------------------------------|
-| pass     | ✅   | The check ran and the server behaved correctly. | green (`#22C55E` @ 30% alpha) |
-| fail     | ❌   | The check ran and the server failed.            | red (`#EF4444` @ 30% alpha)   |
-| warning  | ⚠️    | The check passed with caveats (slow, partial).  | gold (`#E2B93B` @ 30% alpha)  |
-| skipped  | ⏸    | The check was skipped (profile excluded it).    | grey (`#6B7280` @ 25% alpha)  |
-| pending  | ⏳   | (transient) The check is still running.         | teal pulse (`#61C1C4`)        |
+### 3.1 Route map
 
-`pending` is transient — it shows during a live run and is replaced as soon
-as the verdict lands. Treat it as a fifth visual state in the component, not
-a fifth user-meaningful outcome.
+| Route | Purpose | Surface |
+|---|---|---|
+| `/testpass` | Marketing/landing for the product (separate from this brief) | Public, unauthenticated |
+| `/testpass/run` | Run a new TestPass check (logged-in user) | Authenticated |
+| `/testpass/run/{run_id}` | View a specific run's result grid | Public read, owner edit |
+| `/testpass/run/{run_id}/share` | Public shareable view of a run | Public read |
 
----
+### 3.2 Layout regions
 
-## Per-check card content
-
-Each card is a self-contained explainer. Anatomy:
+The `/testpass/run` and `/testpass/run/{run_id}` pages share a layout:
 
 ```
-┌──────────────────────────────────────────┐
-│ ✅  Server says hello back                │  ← friendly title (idiot-proof)
-│                                          │
-│ Your MCP server replied to the           │  ← plain-English status
-│ handshake in 412 ms.                     │     (1–2 sentences max)
-│                                          │
-│ ▸ What this means                        │  ← expandable detail (collapsed)
-│                                          │
-│ [How to fix →]                           │  ← only shown on fail / warning
-└──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Header: TestPass logo + run title (if any) + share button │
+├─────────────────────────────────────────────────────────────┤
+│  Score badge region: "12/14 passing" with green/amber/red  │
+├─────────────────────────────────────────────────────────────┤
+│  Run controls: pack picker + Run button (or "running…")    │
+├─────────────────────────────────────────────────────────────┤
+│  Result grid: one card per check, 1 column mobile / 2 desktop │
+│  ┌──────────────┐  ┌──────────────┐                        │
+│  │ ✅ Check 1   │  │ ❌ Check 2   │                        │
+│  └──────────────┘  └──────────────┘                        │
+│  ┌──────────────┐  ┌──────────────┐                        │
+│  │ ⚠️ Check 3   │  │ ⏸ Check 4    │                        │
+│  └──────────────┘  └──────────────┘                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Mapping to the YAML pack fields (already present in `testpass-core.yaml`):
+## 4. Component specifications
 
-- **Friendly title** = `title` (already rewritten to be idiot-proof in the
-  Phase 1 pack expansion).
-- **Plain-English status** = a one-liner generated from the verdict + measured
-  value, NOT the raw `description`. Example: a PASS on `MCP-008` reads
-  "Server replied to ping in 187 ms." A FAIL reads "Ping did not return within
-  2 seconds." 🍿 builds these formatters per check_type, with a generic
-  fallback derived from `description`.
-- **What this means** (expandable) = `description` from the YAML.
-- **How to fix** (link) = `on_fail` from the YAML, rendered as a panel that
-  slides in from the right when the user clicks the link. NOT a modal — a
-  modal interrupts; the slide-in keeps the grid context.
+### 4.1 ScoreBadge
 
-A FAIL card with no `on_fail` (none currently exist after Phase 1 expansion,
-but defensive) renders "Contact the server author" as the fallback.
-
----
-
-## Score badge
-
-Top-right of the header. Public-shareable, designed to be screenshotted.
-
-```
-┌─────────────────────┐
-│   24 / 26 passing   │
-│   ████████████░░    │
-│   testpass-core 0.1 │
-└─────────────────────┘
+**Props:**
+```ts
+interface ScoreBadgeProps {
+  passed: number          // e.g. 12
+  total: number           // e.g. 14
+  severity: "ok" | "warn" | "fail"   // computed: ok if passed===total, warn if any warn, fail if any fail
+  shareUrl?: string       // optional, presence enables click-to-copy
+}
 ```
 
-- Number is `pass / total_runnable` (skipped is excluded from total).
-- Bar is the same colour as the highest-severity failing check
-  (red for any critical/high fail, gold for medium/low fail, green for all
-  pass). This makes screenshots self-explanatory.
-- Pack name + version sits underneath in the existing teal `#61C1C4`.
-- Hover reveals a tooltip: "X failed, Y skipped, Z warnings."
+**Visual:**
+- Pill shape, ~120 px wide × 40 px tall
+- Background colour by severity (green / amber / red, brand tokens)
+- Bold text: `{passed}/{total} passing`
+- Optional sub-text in smaller weight: `last run {timeago}`
+- Shareable variant: clicking copies the share URL to clipboard, brief toast "Link copied"
 
----
+**States:**
+- `loading` — pulsing skeleton placeholder
+- `idle` — full badge
+- `copied` — green flash on click for 800 ms
 
-## Run button
+### 4.2 RunButton
 
-Single primary button, header-right, replacing the wizard for the public flow.
-
-```
-┌──────────────────────┐
-│  ▶  Run TestPass     │
-└──────────────────────┘
-```
-
-- Background: gold `#E2B93B`. Text: black. Match the existing primary CTA
-  treatment in `AdminShell`.
-- Disabled while a run is in progress; replaced by a `Loader2` spinner +
-  "Running… (4 / 26)" counter that ticks as cards resolve.
-- No "select profile" dropdown on the public flow. The default profile is
-  `standard`. Power users go via the admin view to pick `smoke` or `deep`.
-
----
-
-## Empty state — starter pack picker
-
-When the user lands on the public page with no run yet (e.g.
-`/testpass/r/new?target=https://example.com`), show a starter pack picker.
-
-```
-┌──────────────────────────────────────────────────────┐
-│  Pick a checklist to run                             │
-│                                                      │
-│  ┌──────────────────┐  ┌──────────────────┐          │
-│  │ TestPass Core    │  │ Anti-Stomp v0    │          │
-│  │                  │  │                  │          │
-│  │ The basics every │  │ Catches silent   │          │
-│  │ MCP server must  │  │ deletions and    │          │
-│  │ get right. 26    │  │ orphaned code    │          │
-│  │ checks, ~30 sec. │  │ in PRs. 12 checks│          │
-│  └──────────────────┘  └──────────────────┘          │
-│                                                      │
-│           [▶ Run TestPass Core]                      │
-└──────────────────────────────────────────────────────┘
+**Props:**
+```ts
+interface RunButtonProps {
+  state: "idle" | "starting" | "running" | "complete" | "error"
+  packId?: string
+  onClick: () => void
+}
 ```
 
-- One tile per available pack (read from the packs registry, do not hard-code).
-- Each tile shows: pack name, plain-English description, check count,
-  approximate run time.
-- The selected tile is highlighted with the gold accent border.
-- Default selection is `testpass-core`.
-- Run button text updates to match the selection ("Run Anti-Stomp", etc.).
+**States and copy:**
+| State | Button text | Disabled? |
+|---|---|---|
+| idle | "Run TestPass" | no |
+| starting | "Getting ready…" | yes |
+| running | "Running checks ({n}/{total})" | yes |
+| complete | "Run again" | no |
+| error | "Try again" | no |
 
----
+Single button, full-width on mobile, fixed-width 240 px on desktop. No dropdown menu, no advanced options. The pack picker lives separately; this button only fires the run.
 
-## Export / share
+### 4.3 PackPicker
 
-A run is identified by `report_id` and lives at `/testpass/r/:reportId`.
-
-- **Share link button** in the header next to the score badge. Click =
-  copies the canonical URL to clipboard, fires a toast "Link copied" on
-  the existing toast system. No social-share dropdown — one URL is enough.
-- **Download report** as JSON (existing capability in `RunDetail.tsx` —
-  preserve the `Download` icon button, just restyle to fit).
-- **Embed snippet** is **out of scope for 9A**. Phase 9D wires the badge
-  image / iframe target. 9A only needs the public URL to exist and look
-  good when opened directly.
-
----
-
-## Color palette — anchor to existing UnClick admin
-
-Do not invent new colours. Pull from `testpass-ui.ts` and the existing
-admin shell. Reference values:
-
-| Use                     | Value                |
-|-------------------------|----------------------|
-| Page background         | `#0B0E14` (existing) |
-| Card background         | `#11151D` (existing) |
-| Card border (resting)   | `#1F2937` @ 60% alpha|
-| Primary accent (gold)   | `#E2B93B`            |
-| Info accent (teal)      | `#61C1C4`            |
-| Pass green              | `#22C55E`            |
-| Fail red                | `#EF4444`            |
-| Warning gold            | `#E2B93B` (reuse)    |
-| Skipped grey            | `#6B7280`            |
-| Body text               | `#E5E7EB`            |
-| Muted text              | `#9CA3AF`            |
-
-Verify exact values against `tailwind.config.ts` and `AdminShell.tsx`
-during implementation — these are the intent, not the source of truth.
-
----
-
-## ASCII wireframe — full run dashboard
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  UnClick                                                       [Sign in]   │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│   TestPass · example.com/mcp                          ┌──────────────────┐ │
-│   testpass-core 0.1 · standard profile · 28 sec       │  24 / 26 passing │ │
-│                                                       │  ████████████░░  │ │
-│   [▶ Run TestPass]   [🔗 Share]   [⬇ Download]        │  testpass-core   │ │
-│                                                       └──────────────────┘ │
-│                                                                            │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
-│  │ ✅ jsonrpc field  │  │ ✅ id field set  │  │ ✅ error shape   │          │
-│  │ Every request    │  │ Requests carry   │  │ Errors return    │          │
-│  │ tags 2.0.        │  │ an id field.     │  │ code + message.  │          │
-│  │ ▸ What this means│  │ ▸ What this means│  │ ▸ What this means│          │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘          │
-│                                                                            │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
-│  │ ❌ ping too slow  │  │ ✅ tools/list ok  │  │ ⚠️ slow init     │          │
-│  │ Ping took 4.1s,  │  │ 9 tools, all     │  │ Took 1.8s. Watch │          │
-│  │ over 2s budget.  │  │ have schemas.    │  │ for cold starts. │          │
-│  │ ▸ What this means│  │ ▸ What this means│  │ ▸ What this means│          │
-│  │ [How to fix →]   │  │                  │  │                  │          │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘          │
-│                                                                            │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
-│  │ ✅ search_memory │  │ ✅ save_fact ok   │  │ ⏸ post_message  │          │
-│  │ Returns the     │  │ Returned an id   │  │ Skipped (deep    │          │
-│  │ right shape.    │  │ for new fact.    │  │ profile only).   │          │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘          │
-│                                                                            │
-│  … 17 more cards reflow below at 3 / 2 / 1 columns by viewport             │
-│                                                                            │
-├────────────────────────────────────────────────────────────────────────────┤
-│  testpass-core 0.1 · 26 checks · 28 sec · Powered by UnClick TestPass      │
-└────────────────────────────────────────────────────────────────────────────┘
+**Props:**
+```ts
+interface PackPickerProps {
+  packs: Pack[]
+  selectedPackId?: string
+  onSelect: (packId: string) => void
+}
 ```
 
-Notes on the wireframe:
+**Behaviour:**
+- If `packs` is empty: show empty state (see 4.5)
+- If only one pack: render as locked label, no dropdown
+- If multiple packs: dropdown with friendly names, no UUIDs visible
 
-- Header score badge sits to the right of the action buttons, not inside
-  the button row. Gives it enough whitespace to read at a glance.
-- "How to fix →" only appears on `fail` and `warning` cards; pass / skipped
-  cards are shorter, so the grid does NOT need to enforce a fixed card
-  height. Let cards size to their content; CSS grid `auto-rows: min-content`.
-- Footer is muted text only. No logo, no extra CTA — the score badge is
-  the only thing worth screenshotting.
+**Friendly name source:** `pack.display_name` (fall back to title-cased pack id if missing).
 
----
+### 4.4 CheckCard
 
-## Out of scope for Phase 9A
+The headline component of Phase 9A. One card per check.
 
-- **Marketplace tile badge integration** — that is Phase 9D. 9A only needs
-  the shareable URL to exist; 9D wires the embeddable badge that links to it.
-- **Re-running individual checks** — out of scope. A run is atomic.
-- **Diffing two runs** — admin view already has this; do not port it to
-  the public view.
-- **Editing the pack from the UI** — packs are YAML, edited via PR.
-- **Auth UI on the public route** — the public report URL is anonymous-
-  readable. Auth-gated rerun is the existing admin flow.
+**Props:**
+```ts
+interface CheckCardProps {
+  state: "pass" | "fail" | "warn" | "skip"
+  title: string                  // friendly title, e.g. "Your MCP server replies in JSON"
+  status: string                 // plain-English one-liner
+  detail?: string                // optional expanded explanation
+  fixUrl?: string                // optional link to "how to fix this"
+  evidenceJson?: unknown         // raw evidence, hidden by default, expandable
+}
+```
 
----
+**Layout (collapsed):**
+```
+┌────────────────────────────────────────────┐
+│ [icon] Title                               │
+│        Plain-English status                │
+│                              [show detail] │
+└────────────────────────────────────────────┘
+```
 
-## Hand-off checklist for 🍿
+**Layout (expanded):**
+```
+┌────────────────────────────────────────────┐
+│ [icon] Title                               │
+│        Plain-English status                │
+│                                            │
+│ What this means:                           │
+│ {detail paragraph}                         │
+│                                            │
+│ How to fix: → {fixUrl}                     │
+│                                            │
+│ ▸ See raw evidence (JSON)                  │
+└────────────────────────────────────────────┘
+```
 
-When Chris approves this brief, 🍿 should:
+**Icon and colour by state:**
+| State | Icon | Border | Background |
+|---|---|---|---|
+| pass | ✅ | green | white |
+| fail | ❌ | red | very pale red |
+| warn | ⚠️ | amber | very pale amber |
+| skip | ⏸ | grey | very pale grey |
 
-1. Create `src/pages/testpass/PublicReport.tsx` (new public route).
-2. Extract reusable `<CheckCard />` and `<ScoreBadge />` components into
-   `src/pages/testpass/components/`.
-3. Reuse `testpass-ui.ts` constants — do not fork the icon / colour maps.
-4. Wire the route into `App.tsx` at `/testpass/r/:reportId`.
-5. Add a starter-pack picker at `/testpass/r/new`.
-6. Leave the admin view (`src/pages/admin/testpass/RunDetail.tsx`) alone.
-   The two views can share components but should not share routes.
+**Copy rules:**
+- Titles speak to the user, not the system. Bad: `mcp_jsonrpc_envelope_check`. Good: `Your MCP server replies in JSON`.
+- Status is one sentence, ends with a period. Bad: `200 OK on /api/mcp`. Good: `Your server responded successfully.`
+- "What this means" explains the check in plain English to a non-developer.
+- "How to fix" is always actionable, never theoretical. Bad: `Check your auth header.` Good: `Add the line `Authorization: Bearer your-key` to your config file.`
 
-Estimated effort: 1–2 sessions (~400 LOC component work + ~150 LOC route
-wiring). Test plan: Storybook stories for each card state, plus a
-Playwright smoke run against a known good MCP server.
+### 4.5 EmptyState
+
+When the user has no runs yet, render the empty state:
+
+```
+┌────────────────────────────────────────────┐
+│         🧪                                 │
+│                                            │
+│  No checks yet                             │
+│  Pick a starter pack to run your first    │
+│  TestPass check. It takes about 30 sec.   │
+│                                            │
+│  ┌────────────────────────────────────┐   │
+│  │ Starter packs:                     │   │
+│  │ • UnClick Core (8 checks)          │   │
+│  │ • Vercel deploy health (5 checks)  │   │
+│  │ • Supabase RLS sanity (6 checks)   │   │
+│  └────────────────────────────────────┘   │
+│                                            │
+│  [Run Starter Pack]                       │
+└────────────────────────────────────────────┘
+```
+
+The starter pack list is hardcoded for Phase 9A; pack discovery via API ships in Phase 9B.
+
+## 5. Data flow
+
+### 5.1 Page load (`/testpass/run/{run_id}`)
+
+1. Fetch run by id from `/api/testpass-run/{id}` (existing endpoint)
+2. If run not found → 404 page with "Run not found" message
+3. Otherwise render the result grid with the run's checks
+
+### 5.2 New run flow (`/testpass/run`)
+
+1. User selects pack from PackPicker
+2. User clicks Run button → button transitions to `starting` state
+3. Frontend calls `POST /api/testpass-run` with `{ pack_id }`
+4. Backend returns `{ run_id, status: "queued" }`
+5. Frontend redirects to `/testpass/run/{run_id}`
+6. Page polls `/api/testpass-run/{id}` every 2 sec until `status === "complete"` or `status === "error"`
+7. While polling, RunButton shows running state with progress
+
+### 5.3 Share URL
+
+Each run gets a deterministic shareable URL: `https://unclick.world/testpass/run/{run_id}/share` — public read, no auth required, anonymised (no api_key visible). The ScoreBadge's share button copies this URL.
+
+## 6. Visual standards
+
+### 6.1 Brand alignment
+
+- All colours from existing brand tokens (no new hex values)
+- All copy banned-word-clean (no em dashes, no AI-slop terms per `feedback-writing-style.md`)
+- All icons from the existing icon set (Lucide), no new SVGs
+
+### 6.2 Idiot-proof checklist (per `feedback-idiot-proof-examples.md`)
+
+- Every input pre-filled with a sensible default
+- Every card has a "use when" hint visible in expanded state
+- Empty states show what to do next, not "no data"
+- Plain English everywhere, no jargon
+- Zero em dashes
+- Run button has one job, one click
+
+### 6.3 Mobile-first
+
+- Layout works at 375 px wide
+- Cards stack to single column on mobile
+- ScoreBadge stays at top, fixed if needed
+- No horizontal scroll anywhere
+
+## 7. Tech stack
+
+- **React 18** with TypeScript strict mode
+- **TailwindCSS** for layout and brand tokens
+- **shadcn/ui** for primitive components (Button, Card, Badge)
+- **Lucide React** for icons
+- Existing routing in the React app, no new router introduced
+- Existing Supabase client in `src/lib/supabase.ts`, no new client needed
+
+## 8. Acceptance criteria
+
+Phase 9A is complete when ALL of these are true:
+
+1. A user can navigate to `/testpass/run` and see the EmptyState if they have no runs
+2. A user can pick a starter pack and click "Run Starter Pack" → run starts → user redirects to result page
+3. The result page polls and shows status updates while running
+4. Each check renders as a CheckCard with the correct icon, copy, and colour
+5. The ScoreBadge shows the correct count and severity
+6. The share URL works for an unauthenticated visitor
+7. Mobile layout works at 375 px wide
+8. Zero em dashes anywhere in the UI copy
+9. All component tests pass (vitest, ≥80% line coverage on new components)
+10. No TypeScript strict-mode errors
+
+## 9. Test plan
+
+- **Unit tests:** ScoreBadge severity logic, RunButton state transitions, CheckCard expanded/collapsed states, PackPicker selection
+- **Integration tests:** End-to-end run flow on a mock server, shareable URL accessibility
+- **Visual tests:** Storybook stories for each component, all four CheckCard states, ScoreBadge in all severity buckets
+- **Manual QA:** Mobile layout at 375 px, copy review by Bailey/Chris before merge
+
+## 10. Estimated effort
+
+- 🍿 Plex on dedicated focus: 2-3 chip-days
+- Components: ~6 new (ScoreBadge, RunButton, PackPicker, CheckCard, EmptyState, ResultGrid)
+- New routes: 2 (`/testpass/run`, `/testpass/run/{run_id}/share`)
+- New tests: ~30 unit, 4 integration
+
+## 11. Open decisions
+
+None blocking. The pack picker behaviour for a single pack (lock as label, no dropdown) is the only call worth flagging. If you (Chris) prefer "always show dropdown for consistency," call it. Default in this brief is single-pack-as-label.
+
+## 12. Phase 9B / 9C preview
+
+For context only, not in scope here:
+
+- **Phase 9B** — Run history list, real-time progress streaming via Supabase realtime, pack discovery API, badge embed code generator
+- **Phase 9C** — Server-side QC chip dispatch (the actual smoke dispatch fix that's currently blocking the dispatcher gap), agent bridge polish, marketplace badge ranking integration
+
+After Phase 9A merges, todo `c116075a` closes and 🍿 picks up Phase 9B per the project memory file.
