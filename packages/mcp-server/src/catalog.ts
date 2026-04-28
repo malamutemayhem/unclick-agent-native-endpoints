@@ -1918,19 +1918,23 @@ export const CATALOG: ToolDef[] = [
       {
         id: "memory.get_startup_context",
         name: "Load Session Context",
-        description: "Load Session Context - Loads business context, recent sessions, and hot facts. Call FIRST in every new session.",
+        description: "Load Session Context - compact by default for strict clients. Loads business context, hot facts, and counts; call search_memory for detail.",
         method: "POST",
         path: "/v1/memory/startup",
         requiresAuth: false,
         inputSchema: {
           type: "object",
-          properties: { num_sessions: { type: "number", minimum: 1, maximum: 20, default: 5 } },
+          properties: {
+            num_sessions: { type: "number", minimum: 1, maximum: 20, default: 3 },
+            lite: { type: "boolean", default: true },
+            full_content: { type: "boolean", default: false },
+          },
         },
       },
       {
         id: "memory.search_memory",
         name: "Search Conversations",
-        description: "Search Conversations - Full-text search across conversation logs.",
+        description: "Search Conversations - search facts and sessions. Result text is capped by default; pass full_content=true for full rows.",
         method: "POST",
         path: "/v1/memory/search",
         requiresAuth: false,
@@ -1939,6 +1943,7 @@ export const CATALOG: ToolDef[] = [
           properties: {
             query: { type: "string" },
             max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
+            full_content: { type: "boolean", default: false },
           },
           required: ["query"],
         },

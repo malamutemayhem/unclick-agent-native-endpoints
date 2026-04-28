@@ -235,6 +235,7 @@ const VISIBLE_TOOLS = [
     title: "Load memory",
     description:
       "Loads the user's identity, preferences, facts, and recent session history from persistent cross-session storage. " +
+      "Default output is compact for strict MCP clients; call search_memory for narrow questions or pass full_content=true only when the full raw payload is required. " +
       "Use IMMEDIATELY at the start of every session -- before responding to the user's first message, before calling any other tool. " +
       "Trigger even when the opening message looks trivial: keywords like 'remember', 'recall', 'context', 'profile', " +
       "'facts about me', 'who am I', 'last time', 'preferences', 'pick up where we left off' all signal stored context exists. " +
@@ -246,8 +247,18 @@ const VISIBLE_TOOLS = [
       properties: {
         num_sessions: {
           type: "number",
-          description: "Number of recent session summaries to load (1-20, default 5)",
-          default: 5,
+          description: "Number of recent session summaries to load when lite=false (1-20, default 3)",
+          default: 3,
+        },
+        lite: {
+          type: "boolean",
+          description: "When true, skips session summary bodies and returns compact identity, facts, and counts (default true)",
+          default: true,
+        },
+        full_content: {
+          type: "boolean",
+          description: "When true, returns the full raw memory payload. Use sparingly; strict clients may reject large tool results.",
+          default: false,
         },
       },
     },
@@ -287,6 +298,7 @@ const VISIBLE_TOOLS = [
     title: "Search memory",
     description:
       "Searches the user's stored facts and session history using hybrid semantic + keyword retrieval. " +
+      "Result content is capped to keep strict MCP clients under response limits; pass full_content=true only when the full matching row is required. " +
       "Use whenever the user asks about anything that might be stored: 'remember', 'recall', 'do you know', " +
       "'what did I say about', 'last time', 'context', 'profile', 'facts about me', 'who am I', 'my preferences', " +
       "'what have I told you', or when you need background on a topic before answering. " +
@@ -300,6 +312,11 @@ const VISIBLE_TOOLS = [
         query: { type: "string", description: "Search query" },
         max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
         as_of: { type: "string", description: "ISO 8601 timestamp for point-in-time queries (returns facts valid at that moment)" },
+        full_content: {
+          type: "boolean",
+          description: "When true, returns full result content instead of 800-character previews. Use sparingly for strict clients.",
+          default: false,
+        },
         include_card: {
           type: "boolean",
           default: false,
