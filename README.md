@@ -2,12 +2,12 @@
 
 **The app store for AI agents.** [unclick.world](https://unclick.world)
 
-450+ callable endpoints across 172+ tools, available to any MCP-compatible AI client. New tools ship to the API continuously. Your agent picks them up automatically, no package update needed.
+450+ callable endpoints across 172+ tools, available to any MCP-compatible AI client. New tools ship to the API continuously. Your agent picks them up automatically; no package update is needed.
 <!-- Update counts from src/config/site-stats.ts -->
 
 ## Install
 
-**npx (no install required):**
+**Using `npx` (no installation required):**
 ```json
 {
   "mcpServers": {
@@ -19,7 +19,7 @@
 }
 ```
 
-Add that to your `claude_desktop_config.json` (or equivalent for Cursor, Windsurf, etc).
+Add this to your `claude_desktop_config.json` (or equivalent for Cursor, Windsurf, etc).
 
 **Or install globally:**
 ```bash
@@ -28,7 +28,7 @@ npm install -g @unclick/mcp-server
 
 ## What it does
 
-Gives your agent access to a growing catalog of tools across developer utilities, social media, e-commerce, finance, messaging, media, security, and more. You don't install separate packages per integration. One server, everything in the catalog.
+Gives your agent access to a growing catalog of tools across developer utilities, social media, e-commerce, finance, messaging, media, security, and more. You don't need to install separate packages for each integration. One server provides access to everything in the catalog.
 
 ## The 3 tools
 
@@ -38,7 +38,7 @@ Gives your agent access to a growing catalog of tools across developer utilities
 | `unclick_tool_info` | Get the full schema and parameters for a specific tool |
 | `unclick_call` | Call any tool in the catalog |
 
-The agent searches for what it needs, checks the schema, then calls it. Discovery is built into the workflow.
+The agent searches for what it needs, checks the schema, and then calls the tool. Discovery is built into the workflow.
 
 ## Requirements
 
