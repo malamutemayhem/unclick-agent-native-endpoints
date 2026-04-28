@@ -9,6 +9,7 @@ import { createClient, type UnClickClient } from "./client.js";
 import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
+import { markContextLoaded, recordToolCall, sessionState } from "./memory/session-state.js";
 import { emitSignal } from "./signals/emit.js";
 import { createHash } from "node:crypto";
 
@@ -776,6 +777,18 @@ const MEMORY_TOOL_ALIASES: Record<string, string> = {
   // search_memory and invalidate_fact keep their names
 };
 
+const LOAD_MEMORY_HINT =
+  "[hint] No load_memory call detected this session -- call it for personalised context.\n\n";
+
+function memoryToolText(memoryKey: string, result: unknown): string {
+  if (memoryKey === "get_startup_context") {
+    markContextLoaded("manual");
+    return JSON.stringify(result, null, 2);
+  }
+  const text = JSON.stringify(result, null, 2);
+  return sessionState.contextLoaded ? text : `${LOAD_MEMORY_HINT}${text}`;
+}
+
 const DIRECT_TOOLS = [
   {
     name: "unclick_shorten_url",
@@ -1393,9 +1406,10 @@ export function createServer(): Server {
       // work unchanged.
       const memoryKey = MEMORY_TOOL_ALIASES[name] ?? name;
       if (MEMORY_HANDLERS[memoryKey]) {
+        recordToolCall(memoryKey);
         const result = await MEMORY_HANDLERS[memoryKey](args);
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [{ type: "text", text: memoryToolText(memoryKey, result) }],
         };
       }
 
@@ -1509,9 +1523,10 @@ export function createServer(): Server {
           const op = endpointId.slice("memory.".length);
           const memHandler = MEMORY_HANDLERS[op];
           if (memHandler) {
+            recordToolCall(op);
             const result = await memHandler(params);
             return {
-              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+              content: [{ type: "text", text: memoryToolText(op, result) }],
             };
           }
         }
