@@ -12,13 +12,11 @@
  *      operator; resolves the JWT to the calling user.
  *
  * Query/body: { url?: string, target_url?: string, pack_slug?: string }
- * Returns: { run_id, status, ux_score, summary }
- *
- * The deterministic runner is fast (~1-2 seconds per run). It runs
- * synchronously and returns the final verdict to the caller.
+ * Returns: { run_id, status, ux_score, stats }
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { CORE_CHECKS } from "../packages/uxpass/src/checks.js";
 import { createRun } from "../packages/uxpass/src/run-manager.js";
 import { runDeterministicChecks } from "../packages/uxpass/src/runner.js";
 
@@ -27,6 +25,8 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Authorization,Content-Type",
 };
+
+const CORE_HATS = Array.from(new Set(CORE_CHECKS.map((c) => c.hat))).sort();
 
 function json(res: VercelResponse, status: number, body: unknown) {
   res.status(status).setHeader("Content-Type", "application/json");
@@ -71,8 +71,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const isCron = Boolean(process.env.CRON_SECRET) && token === process.env.CRON_SECRET;
 
-  // Cron callers must declare a real owner via UXPASS_CRON_USER_ID so the run
-  // row passes the not-null FK on actor_user_id and is queryable later.
   let actorUserId: string | null = null;
   if (isCron) {
     actorUserId = process.env.UXPASS_CRON_USER_ID ?? null;
@@ -89,9 +87,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const input = req.method === "GET"
     ? {
         url: queryString(req.query.url) ?? queryString(req.query.target_url),
-        pack_slug: queryString(req.query.pack_slug),
       }
-    : ((req.body ?? {}) as { url?: string; target_url?: string; pack_slug?: string });
+    : ((req.body ?? {}) as { url?: string; target_url?: string });
 
   const targetUrl = input.url ?? input.target_url ?? "";
   if (!targetUrl) return json(res, 400, { error: "url required" });
@@ -108,9 +105,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const config = { supabaseUrl, serviceRoleKey: serviceKey };
   const runId = await createRun(config, {
-    target: { type: "url", url: targetUrl },
-    packSlug: input.pack_slug ?? "uxpass-core",
+    targetUrl,
     actorUserId,
+    hats: CORE_HATS,
+    viewports: ["desktop"],
+    themes: ["light"],
   });
 
   try {
@@ -119,8 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       run_id: runId,
       status: "complete",
       ux_score: result.uxScore,
-      summary: result.summary,
-      target: { type: "url", url: targetUrl },
+      target_url: targetUrl,
+      stats: result.stats,
     });
   } catch (err) {
     return json(res, 500, {

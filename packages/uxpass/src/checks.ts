@@ -12,9 +12,15 @@
  * hats can extend the same hat without renumbering.
  */
 
-import type { RuntimeFinding, Verdict } from "./types.js";
+import type {
+  CheckEvaluation,
+  RunBreakdown,
+  RuntimeFinding,
+  UXScoreBreakdown,
+  Verdict,
+} from "./types.js";
 
-type FindingSeverity = RuntimeFinding["severity"];
+type CheckSeverity = "critical" | "high" | "medium" | "low";
 
 export interface CheckContext {
   url: string;
@@ -35,7 +41,7 @@ export interface CheckSpec {
   id: string;
   hat: string;
   category: string;
-  severity: FindingSeverity;
+  severity: CheckSeverity;
   title: string;
   remediation: string;
   evaluate: (ctx: CheckContext) => CheckResult;
@@ -276,17 +282,15 @@ export const CORE_CHECKS: CheckSpec[] = [
 ];
 
 // Severity weights for the UX score. Higher severity dominates the score so
-// a critical fail drags the headline more than a low fail. Weights follow the
-// same shape that Lighthouse uses for category aggregation.
-export const SEVERITY_WEIGHT: Record<FindingSeverity, number> = {
+// a critical fail drags the headline more than a low fail.
+export const SEVERITY_WEIGHT: Record<CheckSeverity, number> = {
   critical: 5,
   high: 3,
   medium: 2,
   low: 1,
-  info: 0,
 };
 
-export function evaluateAllChecks(ctx: CheckContext): RuntimeFinding[] {
+export function evaluateAllChecks(ctx: CheckContext): CheckEvaluation[] {
   return CORE_CHECKS.map((spec) => {
     const start = Date.now();
     let result: CheckResult;
@@ -312,15 +316,84 @@ export function evaluateAllChecks(ctx: CheckContext): RuntimeFinding[] {
   });
 }
 
-export function computeUxScore(findings: RuntimeFinding[]): number {
+export function computeUxScore(evaluations: CheckEvaluation[]): number {
   let totalWeight = 0;
   let earnedWeight = 0;
-  for (const f of findings) {
-    if (f.verdict === "na" || f.verdict === "pending") continue;
-    const w = SEVERITY_WEIGHT[f.severity] ?? 1;
+  for (const e of evaluations) {
+    if (e.verdict === "na") continue;
+    const w = SEVERITY_WEIGHT[e.severity] ?? 1;
     totalWeight += w;
-    if (f.verdict === "pass") earnedWeight += w;
+    if (e.verdict === "pass") earnedWeight += w;
   }
   if (totalWeight === 0) return 0;
   return Math.round((earnedWeight / totalWeight) * 100 * 100) / 100;
+}
+
+/**
+ * Map the per-hat results onto the five UX Score components from the brief.
+ * Deterministic checks only cover agent-readability fully; the other four
+ * components are recorded as null so the LLM hats can populate them later
+ * without changing the breakdown shape.
+ */
+function computeScoreComponents(evaluations: CheckEvaluation[]): UXScoreBreakdown {
+  const arEvals = evaluations.filter((e) => e.hat === "agent-readability" && e.verdict !== "na");
+  let arScore: number | null = null;
+  if (arEvals.length > 0) {
+    let total = 0;
+    let earned = 0;
+    for (const e of arEvals) {
+      const w = SEVERITY_WEIGHT[e.severity] ?? 1;
+      total += w;
+      if (e.verdict === "pass") earned += w;
+    }
+    arScore = total > 0 ? Math.round((earned / total) * 100 * 100) / 100 : null;
+  }
+  return {
+    agent_readability: arScore,
+    dark_pattern_cleanliness: null,
+    aesthetic_coherence: null,
+    motion_quality: null,
+    first_run_quality: null,
+  };
+}
+
+export function buildBreakdown(evaluations: CheckEvaluation[]): RunBreakdown {
+  const byHat: Record<string, { pass: number; fail: number; na: number }> = {};
+  for (const e of evaluations) {
+    if (!byHat[e.hat]) byHat[e.hat] = { pass: 0, fail: 0, na: 0 };
+    byHat[e.hat][e.verdict]++;
+  }
+  return {
+    version: "deterministic-mvp",
+    score_components: computeScoreComponents(evaluations),
+    by_hat: byHat,
+    checks_run: evaluations.map((e) => e.check_id),
+  };
+}
+
+/**
+ * Convert each failing evaluation into a uxpass_findings row payload.
+ * Passes and na verdicts are not persisted; they are summarised via the
+ * breakdown jsonb on the run row instead.
+ */
+export function failingFindings(evaluations: CheckEvaluation[]): RuntimeFinding[] {
+  return evaluations
+    .filter((e) => e.verdict === "fail")
+    .map((e) => ({
+      hat_id: e.hat,
+      title: `${e.check_id}: ${e.title}`,
+      description: describeEvidence(e.evidence),
+      severity: e.severity,
+      evidence: { check_id: e.check_id, ...(e.evidence ?? {}) },
+      remediation: e.remediation ? [e.remediation] : [],
+    }));
+}
+
+function describeEvidence(evidence: Record<string, unknown> | undefined): string {
+  if (!evidence) return "";
+  const entries = Object.entries(evidence);
+  if (entries.length === 0) return "";
+  return entries
+    .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+    .join("; ");
 }

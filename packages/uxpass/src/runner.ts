@@ -1,10 +1,10 @@
 /**
- * runner - Deterministic UXPass executor (Chunk 2 MVP).
+ * runner - Deterministic UXPass executor.
  *
  * Fetches the target URL once plus a sidecar /llms.txt probe, then evaluates
- * every check in CORE_CHECKS against the captured context. Findings are
- * written to uxpass_findings via run-manager and the run row is updated
- * with the composite UX Score.
+ * every check in CORE_CHECKS against the captured context. Findings (failures
+ * only) are written to uxpass_findings and the run row is updated with the
+ * UX Score, breakdown jsonb, and summary text.
  *
  * No browser, no LLM. Playwright capture, hat-panel parallel LLM calls and
  * the Synthesiser land in later chunks; this runner is the bridge that
@@ -13,12 +13,14 @@
 
 import {
   CORE_CHECKS,
+  buildBreakdown,
   computeUxScore,
   evaluateAllChecks,
+  failingFindings,
   type CheckContext,
 } from "./checks.js";
 import { createFindings, updateRunStatus, type RunManagerConfig } from "./run-manager.js";
-import type { RunSummary, RuntimeFinding } from "./types.js";
+import type { CheckEvaluation, RunBreakdown, RunSummaryStats, RuntimeFinding } from "./types.js";
 
 export interface CaptureOptions {
   fetchTimeoutMs?: number;
@@ -78,92 +80,102 @@ export async function captureContext(
   return { url, status, headers, responseTimeMs, bodyText, bodySize, llmsTxtStatus };
 }
 
-export function summarise(findings: RuntimeFinding[]): RunSummary {
-  const summary: RunSummary = {
-    total: findings.length,
-    pass: 0,
-    fail: 0,
-    na: 0,
-    pending: 0,
-    pass_rate: 0,
-  };
-  for (const f of findings) {
-    if (f.verdict === "pass") summary.pass++;
-    else if (f.verdict === "fail") summary.fail++;
-    else if (f.verdict === "na") summary.na++;
-    else summary.pending++;
+export function summariseStats(evaluations: CheckEvaluation[]): RunSummaryStats {
+  const stats: RunSummaryStats = { total: evaluations.length, pass: 0, fail: 0, na: 0, pass_rate: 0 };
+  for (const e of evaluations) {
+    if (e.verdict === "pass") stats.pass++;
+    else if (e.verdict === "fail") stats.fail++;
+    else stats.na++;
   }
-  const decided = summary.pass + summary.fail;
-  summary.pass_rate = decided > 0 ? summary.pass / decided : 0;
-  return summary;
+  const decided = stats.pass + stats.fail;
+  stats.pass_rate = decided > 0 ? stats.pass / decided : 0;
+  return stats;
+}
+
+function buildSummaryText(stats: RunSummaryStats, uxScore: number): string {
+  if (stats.total === 0) return "No checks ran.";
+  return `${stats.pass} of ${stats.total} deterministic checks passed; ${stats.fail} failing. UX Score ${uxScore.toFixed(1)}.`;
+}
+
+function uniqueHats(evaluations: CheckEvaluation[]): string[] {
+  return Array.from(new Set(evaluations.map((e) => e.hat))).sort();
 }
 
 /**
  * Capture + evaluate without touching the database. Used by tests and any
- * caller that wants the raw findings (e.g. the local CLI when offline).
+ * caller that wants the raw evaluations (e.g. the local CLI when offline).
  */
 export async function evaluateUrl(
   targetUrl: string,
   opts: CaptureOptions = {},
 ): Promise<{
+  evaluations: CheckEvaluation[];
   findings: RuntimeFinding[];
-  summary: RunSummary;
+  stats: RunSummaryStats;
   uxScore: number;
+  breakdown: RunBreakdown;
   context: CheckContext;
 }> {
   const context = await captureContext(targetUrl, opts);
-  const findings = evaluateAllChecks(context);
+  const evaluations = evaluateAllChecks(context);
   return {
-    findings,
-    summary: summarise(findings),
-    uxScore: computeUxScore(findings),
+    evaluations,
+    findings: failingFindings(evaluations),
+    stats: summariseStats(evaluations),
+    uxScore: computeUxScore(evaluations),
+    breakdown: buildBreakdown(evaluations),
     context,
   };
 }
 
 /**
- * Full executor: capture, evaluate, persist findings, update the run row.
- * Returns the summary for the caller to surface to the agent.
+ * Full executor: capture, evaluate, persist failing findings, update run row.
  */
 export async function runDeterministicChecks(
   config: RunManagerConfig,
   runId: string,
   targetUrl: string,
   opts: CaptureOptions = {},
-): Promise<{ summary: RunSummary; uxScore: number; checkCount: number }> {
-  let findings: RuntimeFinding[];
+): Promise<{ stats: RunSummaryStats; uxScore: number; checkCount: number; hats: string[] }> {
+  let evaluations: CheckEvaluation[];
   try {
     const context = await captureContext(targetUrl, opts);
-    findings = evaluateAllChecks(context);
+    evaluations = evaluateAllChecks(context);
   } catch (err) {
     const message = (err as Error).message;
-    findings = CORE_CHECKS.map((spec) => ({
-      check_id: spec.id,
-      hat: spec.hat,
-      category: spec.category,
-      severity: spec.severity,
-      title: spec.title,
-      verdict: "na" as const,
-      evidence: { capture_error: message },
-      remediation: spec.remediation,
-    }));
-    await createFindings(config, runId, findings);
-    const summary = summarise(findings);
     await updateRunStatus(config, runId, {
       status: "failed",
       ux_score: null,
-      summary: { ...summary, capture_error: message },
+      summary: `Capture failed: ${message}`,
+      error: message,
     });
-    return { summary, uxScore: 0, checkCount: findings.length };
+    return {
+      stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
+      uxScore: 0,
+      checkCount: 0,
+      hats: uniqueHats(CORE_CHECKS as unknown as CheckEvaluation[]),
+    };
   }
 
+  const findings = failingFindings(evaluations);
   await createFindings(config, runId, findings);
-  const summary = summarise(findings);
-  const uxScore = computeUxScore(findings);
+
+  const stats = summariseStats(evaluations);
+  const uxScore = computeUxScore(evaluations);
+  const breakdown = buildBreakdown(evaluations);
+  const summary = buildSummaryText(stats, uxScore);
+
   await updateRunStatus(config, runId, {
     status: "complete",
     ux_score: uxScore,
+    breakdown,
     summary,
   });
-  return { summary, uxScore, checkCount: findings.length };
+
+  return {
+    stats,
+    uxScore,
+    checkCount: evaluations.length,
+    hats: uniqueHats(evaluations),
+  };
 }

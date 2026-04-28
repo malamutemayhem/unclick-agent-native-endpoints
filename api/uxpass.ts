@@ -4,17 +4,21 @@
  * Actions:
  *   POST ?action=start_run                            - create run, execute deterministic checks, return summary
  *   POST ?action=run                                  - alias of start_run with flat body shape used by the MCP tool
- *   GET  ?action=status&run_id=<uuid>                 - fetch run + findings
+ *   GET  ?action=status&run_id=<uuid>                 - fetch run + findings count
  *   GET  ?action=report_html&run_id=<uuid>            - self-contained HTML report
  *   GET  ?action=report_json&run_id=<uuid>            - JSON dump of run + findings
  *   GET  ?action=report_md&run_id=<uuid>              - markdown fix list
  *
  * Authentication: Bearer token (Supabase JWT or uc_ API key), same shape as
  * /api/testpass. Service role key is used server-side for DB writes.
+ *
+ * Schema: targets uxpass_runs and uxpass_findings from
+ * supabase/migrations/20260428100000_uxpass_schema.sql (PR #227).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as crypto from "node:crypto";
+import { CORE_CHECKS } from "../packages/uxpass/src/checks.js";
 import {
   createRun,
   getRunWithFindings,
@@ -32,6 +36,8 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Authorization,Content-Type",
 };
+
+const CORE_HATS = Array.from(new Set(CORE_CHECKS.map((c) => c.hat))).sort();
 
 function json(res: VercelResponse, status: number, body: unknown) {
   res.status(status).setHeader("Content-Type", "application/json");
@@ -89,6 +95,7 @@ async function resolveActorUserId(
 
 interface StartRunBody {
   target_url?: string;
+  url?: string;
   target?: { type?: string; url?: string };
   pack_slug?: string;
 }
@@ -120,11 +127,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       run_id: data.run.id,
       status: data.run.status,
       ux_score: data.run.ux_score,
-      target: data.run.target,
+      target_url: data.run.target_url,
       summary: data.run.summary,
+      breakdown: data.run.breakdown,
       started_at: data.run.started_at,
       completed_at: data.run.completed_at,
       finding_count: data.findings.length,
+      error: data.run.error,
     });
   }
 
@@ -165,45 +174,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST" && (action === "start_run" || action === "run")) {
     const body = (req.body ?? {}) as StartRunBody;
-    const targetUrl = body.target?.url ?? body.target_url ?? "";
-    if (!targetUrl) return json(res, 400, { error: "target.url or target_url required" });
+    const targetUrl = body.target?.url ?? body.target_url ?? body.url ?? "";
+    if (!targetUrl) return json(res, 400, { error: "url, target_url, or target.url required" });
 
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(targetUrl);
     } catch {
-      return json(res, 400, { error: "target_url must be an absolute URL" });
+      return json(res, 400, { error: "url must be an absolute URL" });
     }
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return json(res, 400, { error: "target_url must use http or https" });
+      return json(res, 400, { error: "url must use http or https" });
     }
 
     const runId = await createRun(config, {
-      target: { type: "url", url: targetUrl },
-      packSlug: body.pack_slug ?? "uxpass-core",
+      targetUrl,
       actorUserId,
+      hats: CORE_HATS,
+      viewports: ["desktop"],
+      themes: ["light"],
     });
 
-    let summary;
-    let uxScore = 0;
     try {
       const result = await runDeterministicChecks(config, runId, targetUrl);
-      summary = result.summary;
-      uxScore = result.uxScore;
+      return json(res, 201, {
+        run_id: runId,
+        status: "complete",
+        ux_score: result.uxScore,
+        target_url: targetUrl,
+        stats: result.stats,
+      });
     } catch (err) {
       return json(res, 500, {
         run_id: runId,
         error: `runner failed: ${(err as Error).message}`,
       });
     }
-
-    return json(res, 201, {
-      run_id: runId,
-      status: "complete",
-      ux_score: uxScore,
-      summary,
-      target: { type: "url", url: targetUrl },
-    });
   }
 
   return json(res, 404, { error: "Unknown action" });

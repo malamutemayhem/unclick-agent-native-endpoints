@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   CORE_CHECKS,
-  evaluateAllChecks,
+  buildBreakdown,
   computeUxScore,
+  evaluateAllChecks,
+  failingFindings,
   type CheckContext,
 } from "../checks.js";
 
@@ -56,85 +58,92 @@ describe("CORE_CHECKS", () => {
     const hats = new Set(CORE_CHECKS.map((c) => c.hat));
     expect(hats.size).toBeGreaterThanOrEqual(7);
   });
+
+  it("only uses severities allowed by the uxpass_findings schema", () => {
+    const allowed = new Set(["critical", "high", "medium", "low"]);
+    for (const c of CORE_CHECKS) {
+      expect(allowed.has(c.severity)).toBe(true);
+    }
+  });
 });
 
 describe("evaluateAllChecks - happy path", () => {
   it("passes every deterministic check on a well-formed page", () => {
-    const findings = evaluateAllChecks(baseCtx());
-    const failing = findings.filter((f) => f.verdict === "fail");
+    const evaluations = evaluateAllChecks(baseCtx());
+    const failing = evaluations.filter((e) => e.verdict === "fail");
     expect(failing).toEqual([]);
-    expect(findings).toHaveLength(CORE_CHECKS.length);
+    expect(evaluations).toHaveLength(CORE_CHECKS.length);
   });
 
   it("attaches non-empty remediation to every check", () => {
-    const findings = evaluateAllChecks(baseCtx());
-    for (const f of findings) {
-      expect(typeof f.remediation).toBe("string");
-      expect((f.remediation ?? "").length).toBeGreaterThan(0);
+    const evaluations = evaluateAllChecks(baseCtx());
+    for (const e of evaluations) {
+      expect(typeof e.remediation).toBe("string");
+      expect((e.remediation ?? "").length).toBeGreaterThan(0);
     }
   });
 
   it("yields a perfect UX Score for an all-pass run", () => {
-    const findings = evaluateAllChecks(baseCtx());
-    expect(computeUxScore(findings)).toBe(100);
+    const evaluations = evaluateAllChecks(baseCtx());
+    expect(computeUxScore(evaluations)).toBe(100);
   });
 });
 
 describe("evaluateAllChecks - failure paths", () => {
   it("flags a missing lang attribute", () => {
-    const findings = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
-    const a11y001 = findings.find((f) => f.check_id === "A11Y-001");
+    const evaluations = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
+    const a11y001 = evaluations.find((e) => e.check_id === "A11Y-001");
     expect(a11y001?.verdict).toBe("fail");
   });
 
   it("flags missing alt attributes on <img>", () => {
-    const findings = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
-    const a11y003 = findings.find((f) => f.check_id === "A11Y-003");
+    const evaluations = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
+    const a11y003 = evaluations.find((e) => e.check_id === "A11Y-003");
     expect(a11y003?.verdict).toBe("fail");
     expect(a11y003?.evidence).toMatchObject({ img_count: 1, missing_alt: 1 });
   });
 
   it("flags a missing title", () => {
-    const findings = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
-    const fe002 = findings.find((f) => f.check_id === "FE-002");
+    const evaluations = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
+    const fe002 = evaluations.find((e) => e.check_id === "FE-002");
     expect(fe002?.verdict).toBe("fail");
   });
 
   it("flags HTTP status non-200", () => {
-    const findings = evaluateAllChecks(baseCtx({ status: 500 }));
-    const fe001 = findings.find((f) => f.check_id === "FE-001");
+    const evaluations = evaluateAllChecks(baseCtx({ status: 500 }));
+    const fe001 = evaluations.find((e) => e.check_id === "FE-001");
     expect(fe001?.verdict).toBe("fail");
     expect(fe001?.evidence).toMatchObject({ status: 500 });
   });
 
   it("flags slow responses", () => {
-    const findings = evaluateAllChecks(baseCtx({ responseTimeMs: 5000 }));
-    const perf001 = findings.find((f) => f.check_id === "PERF-001");
+    const evaluations = evaluateAllChecks(baseCtx({ responseTimeMs: 5000 }));
+    const perf001 = evaluations.find((e) => e.check_id === "PERF-001");
     expect(perf001?.verdict).toBe("fail");
   });
 
   it("flags missing HSTS header", () => {
-    const findings = evaluateAllChecks(baseCtx({ headers: {} }));
-    const pt002 = findings.find((f) => f.check_id === "PT-002");
+    const evaluations = evaluateAllChecks(baseCtx({ headers: {} }));
+    const pt002 = evaluations.find((e) => e.check_id === "PT-002");
     expect(pt002?.verdict).toBe("fail");
   });
 
   it("flags non-HTTPS URLs", () => {
-    const findings = evaluateAllChecks(baseCtx({ url: "http://example.com" }));
-    const pt001 = findings.find((f) => f.check_id === "PT-001");
+    const evaluations = evaluateAllChecks(baseCtx({ url: "http://example.com" }));
+    const pt001 = evaluations.find((e) => e.check_id === "PT-001");
     expect(pt001?.verdict).toBe("fail");
   });
 
   it("flags missing /llms.txt", () => {
-    const findings = evaluateAllChecks(baseCtx({ llmsTxtStatus: 404 }));
-    const ar001 = findings.find((f) => f.check_id === "AR-001");
+    const evaluations = evaluateAllChecks(baseCtx({ llmsTxtStatus: 404 }));
+    const ar001 = evaluations.find((e) => e.check_id === "AR-001");
     expect(ar001?.verdict).toBe("fail");
   });
 });
 
 describe("computeUxScore", () => {
   it("returns 0 when every check fails", () => {
-    const findings = evaluateAllChecks(
+    const evaluations = evaluateAllChecks(
       baseCtx({
         bodyText: badHtml,
         bodySize: 600_000,
@@ -145,25 +154,78 @@ describe("computeUxScore", () => {
         llmsTxtStatus: 404,
       }),
     );
-    expect(computeUxScore(findings)).toBe(0);
+    expect(computeUxScore(evaluations)).toBe(0);
   });
 
   it("weights critical fails heavier than low fails", () => {
-    const baseFindings = evaluateAllChecks(baseCtx());
-    const oneCriticalFail = baseFindings.map((f, i) =>
-      i === 0 ? { ...f, severity: "critical" as const, verdict: "fail" as const } : f,
+    const baseEvals = evaluateAllChecks(baseCtx());
+    const oneCriticalFail = baseEvals.map((e, i) =>
+      i === 0 ? { ...e, severity: "critical" as const, verdict: "fail" as const } : e,
     );
-    const oneLowFail = baseFindings.map((f, i) =>
-      i === 0 ? { ...f, severity: "low" as const, verdict: "fail" as const } : f,
+    const oneLowFail = baseEvals.map((e, i) =>
+      i === 0 ? { ...e, severity: "low" as const, verdict: "fail" as const } : e,
     );
     expect(computeUxScore(oneCriticalFail)).toBeLessThan(computeUxScore(oneLowFail));
   });
 
   it("ignores na verdicts", () => {
-    const baseFindings = evaluateAllChecks(baseCtx());
-    const someNa = baseFindings.map((f, i) =>
-      i < 3 ? { ...f, verdict: "na" as const } : f,
+    const baseEvals = evaluateAllChecks(baseCtx());
+    const someNa = baseEvals.map((e, i) =>
+      i < 3 ? { ...e, verdict: "na" as const } : e,
     );
     expect(computeUxScore(someNa)).toBe(100);
+  });
+});
+
+describe("buildBreakdown", () => {
+  it("produces the five-component score shape from the brief", () => {
+    const evaluations = evaluateAllChecks(baseCtx());
+    const breakdown = buildBreakdown(evaluations);
+    expect(breakdown.score_components).toEqual({
+      agent_readability: 100,
+      dark_pattern_cleanliness: null,
+      aesthetic_coherence: null,
+      motion_quality: null,
+      first_run_quality: null,
+    });
+  });
+
+  it("groups pass/fail/na counts by hat", () => {
+    const evaluations = evaluateAllChecks(baseCtx());
+    const breakdown = buildBreakdown(evaluations);
+    expect(breakdown.by_hat["accessibility"]).toEqual({ pass: 3, fail: 0, na: 0 });
+    expect(breakdown.by_hat["agent-readability"]).toEqual({ pass: 3, fail: 0, na: 0 });
+  });
+
+  it("lists every check id that ran", () => {
+    const evaluations = evaluateAllChecks(baseCtx());
+    const breakdown = buildBreakdown(evaluations);
+    expect(breakdown.checks_run).toHaveLength(CORE_CHECKS.length);
+  });
+});
+
+describe("failingFindings", () => {
+  it("returns no findings when all checks pass", () => {
+    const evaluations = evaluateAllChecks(baseCtx());
+    expect(failingFindings(evaluations)).toEqual([]);
+  });
+
+  it("emits one finding per failing check, with severity and remediation", () => {
+    const evaluations = evaluateAllChecks(baseCtx({ bodyText: badHtml, bodySize: badHtml.length }));
+    const findings = failingFindings(evaluations);
+    expect(findings.length).toBeGreaterThan(0);
+    for (const f of findings) {
+      expect(["critical", "high", "medium", "low"]).toContain(f.severity);
+      expect(f.title).toMatch(/^[A-Z0-9-]+:/);
+      expect(Array.isArray(f.remediation)).toBe(true);
+      expect(f.evidence).toBeDefined();
+    }
+  });
+
+  it("includes the check_id in the evidence payload", () => {
+    const evaluations = evaluateAllChecks(baseCtx({ status: 500 }));
+    const findings = failingFindings(evaluations);
+    const fe001 = findings.find((f) => f.title.startsWith("FE-001:"));
+    expect(fe001?.evidence).toMatchObject({ check_id: "FE-001", status: 500 });
   });
 });
