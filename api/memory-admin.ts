@@ -6773,6 +6773,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (action === "fishbowl_list_todos") {
           const limit = Math.min(Math.max(Number(body.limit ?? 50) || 50, 1), 200);
+          const includeDescription = body.include_description === true || body.full_content === true;
           let q = supabase
             .from("mc_fishbowl_todos")
             .select("*")
@@ -6811,7 +6812,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }, {});
           }
           const decorated = todos.map((t) => ({ ...t, comment_count: countMap[t.id as string] ?? 0 }));
-          return res.status(200).json({ todos: decorated });
+          const compactTodos = decorated.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+            assigned_to_agent_id: t.assigned_to_agent_id,
+            created_by_agent_id: t.created_by_agent_id,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+            completed_at: t.completed_at,
+            comment_count: t.comment_count,
+          }));
+          return res.status(200).json({
+            todos: includeDescription ? decorated : compactTodos,
+            response_bounds: {
+              compact: !includeDescription,
+              descriptions_included: includeDescription,
+              todos_returned: decorated.length,
+            },
+          });
         }
 
         // ── Ideas ──────────────────────────────────────────────────────────
