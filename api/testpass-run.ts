@@ -119,8 +119,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const packRow = await getPackIdBySlug(supabaseUrl, serviceKey, packSlug);
   if (!packRow) return json(res, 404, { error: `Pack '${packSlug}' not found` });
 
-  const actorUserId = isCron ? packRow.owner_user_id : await getActorUserId(supabaseUrl, token);
-  if (!actorUserId) return json(res, 401, { error: "Invalid session" });
+  let actorUserId: string | null;
+  if (isCron) {
+    actorUserId = packRow.owner_user_id ?? process.env.TESTPASS_CRON_USER_ID ?? null;
+    if (!actorUserId) {
+      return json(res, 500, {
+        error:
+          "TESTPASS_CRON_USER_ID env var is not set; cron runs against system packs (owner_user_id NULL) cannot attribute runs to a user.",
+      });
+    }
+  } else {
+    actorUserId = await getActorUserId(supabaseUrl, token);
+    if (!actorUserId) return json(res, 401, { error: "Invalid session" });
+  }
 
   const packPath = path.resolve(__dirname, `../packages/testpass/packs/${packSlug}.yaml`);
   let pack;
