@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { captureContext, evaluateUrl, summarise } from "../runner.js";
+import { captureContext, evaluateUrl, summariseStats } from "../runner.js";
 
 interface MockServer {
   url: string;
@@ -85,37 +85,53 @@ describe("evaluateUrl - integration with live HTTP server", () => {
     const server = await makeMockServer(goodHtml, { llmsTxt: "# llms.txt" });
     try {
       const result = await evaluateUrl(server.url);
-      // The PT-001 (HTTPS) check fails because the mock server is on http://,
-      // so the score is high but not perfect. Everything else passes.
-      const failing = result.findings.filter((f) => f.verdict === "fail");
-      expect(failing.map((f) => f.check_id)).toEqual(["PT-001"]);
+      // PT-001 (HTTPS) fails because the mock server is on http://, so the
+      // score is high but not perfect. Everything else passes.
+      const failingIds = result.evaluations.filter((e) => e.verdict === "fail").map((e) => e.check_id);
+      expect(failingIds).toEqual(["PT-001"]);
       expect(result.uxScore).toBeGreaterThanOrEqual(85);
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0].hat_id).toBe("privacy-trust");
     } finally {
       server.close();
     }
   });
 
-  it("flags missing /llms.txt as fail", async () => {
+  it("flags missing /llms.txt as a finding", async () => {
     const server = await makeMockServer(goodHtml);
     try {
       const result = await evaluateUrl(server.url);
-      const ar001 = result.findings.find((f) => f.check_id === "AR-001");
-      expect(ar001?.verdict).toBe("fail");
+      const ar001 = result.findings.find((f) => f.title.startsWith("AR-001:"));
+      expect(ar001).toBeDefined();
+      expect(ar001?.severity).toBe("medium");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("populates the breakdown with checks_run and by_hat counts", async () => {
+    const server = await makeMockServer(goodHtml, { llmsTxt: "# llms.txt" });
+    try {
+      const result = await evaluateUrl(server.url);
+      expect(result.breakdown.checks_run.length).toBeGreaterThan(10);
+      expect(result.breakdown.by_hat["accessibility"]).toEqual({ pass: 3, fail: 0, na: 0 });
+      // PT-001 fails on http://; PT-002 passes (HSTS present).
+      expect(result.breakdown.by_hat["privacy-trust"]).toEqual({ pass: 1, fail: 1, na: 0 });
     } finally {
       server.close();
     }
   });
 });
 
-describe("summarise", () => {
+describe("summariseStats", () => {
   it("counts verdicts and computes pass_rate", () => {
-    const findings = [
+    const evaluations = [
       { check_id: "x", hat: "h", category: "c", severity: "low" as const, title: "t", verdict: "pass" as const },
       { check_id: "y", hat: "h", category: "c", severity: "low" as const, title: "t", verdict: "pass" as const },
       { check_id: "z", hat: "h", category: "c", severity: "low" as const, title: "t", verdict: "fail" as const },
       { check_id: "w", hat: "h", category: "c", severity: "low" as const, title: "t", verdict: "na" as const },
     ];
-    const s = summarise(findings);
+    const s = summariseStats(evaluations);
     expect(s.total).toBe(4);
     expect(s.pass).toBe(2);
     expect(s.fail).toBe(1);

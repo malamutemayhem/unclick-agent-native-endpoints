@@ -2,16 +2,16 @@
  * run-manager - Supabase REST wrapper for the UXPass run lifecycle.
  *
  * Mirrors packages/testpass/src/run-manager.ts: no Supabase SDK dependency,
- * keeps the package edge-compatible.
+ * keeps the package edge-compatible. Targets the schema landed by
+ * supabase/migrations/20260428100000_uxpass_schema.sql (PR #227).
  */
 
 import type {
+  RunBreakdown,
   RunStatus,
-  RunSummary,
-  RunTarget,
   RuntimeFinding,
-  UxpassRunRow,
   UxpassFindingRow,
+  UxpassRunRow,
 } from "./types.js";
 
 export interface RunManagerConfig {
@@ -45,19 +45,25 @@ async function supaFetch(
 export async function createRun(
   config: RunManagerConfig,
   params: {
-    target: RunTarget;
-    packSlug?: string;
+    targetUrl: string;
     actorUserId: string;
+    hats?: string[];
+    viewports?: string[];
+    themes?: string[];
+    packId?: string | null;
   },
 ): Promise<string> {
   const payload: Record<string, unknown> = {
-    target: params.target,
-    pack_slug: params.packSlug ?? "uxpass-core",
+    target_url: params.targetUrl,
     actor_user_id: params.actorUserId,
     status: "running",
+    hats: params.hats ?? [],
+    viewports: params.viewports ?? ["desktop"],
+    themes: params.themes ?? ["light"],
     started_at: new Date().toISOString(),
-    summary: {},
+    breakdown: {},
   };
+  if (params.packId) payload.pack_id = params.packId;
   const rows = (await supaFetch(config, "uxpass_runs", "POST", payload)) as Array<{ id: string }>;
   return rows[0].id;
 }
@@ -68,7 +74,9 @@ export async function updateRunStatus(
   update: {
     status: RunStatus;
     ux_score?: number | null;
-    summary?: RunSummary | Record<string, unknown>;
+    breakdown?: RunBreakdown | Record<string, unknown>;
+    summary?: string | null;
+    error?: string | null;
     cost_usd?: number;
     tokens_used?: number;
   },
@@ -78,7 +86,9 @@ export async function updateRunStatus(
     patch.completed_at = new Date().toISOString();
   }
   if (update.ux_score !== undefined) patch.ux_score = update.ux_score;
+  if (update.breakdown !== undefined) patch.breakdown = update.breakdown;
   if (update.summary !== undefined) patch.summary = update.summary;
+  if (update.error !== undefined) patch.error = update.error;
   if (update.cost_usd !== undefined) patch.cost_usd = update.cost_usd;
   if (update.tokens_used !== undefined) patch.tokens_used = update.tokens_used;
   await supaFetch(config, `uxpass_runs?id=eq.${runId}`, "PATCH", patch);
@@ -92,15 +102,15 @@ export async function createFindings(
   if (findings.length === 0) return 0;
   const rows = findings.map((f) => ({
     run_id: runId,
-    check_id: f.check_id,
-    hat: f.hat,
-    category: f.category,
-    severity: f.severity,
+    hat_id: f.hat_id,
     title: f.title,
-    verdict: f.verdict,
-    evidence: f.evidence ?? {},
-    remediation: f.remediation ?? null,
-    time_ms: f.time_ms ?? 0,
+    description: f.description,
+    severity: f.severity,
+    selector: f.selector ?? null,
+    viewport: f.viewport ?? null,
+    theme: f.theme ?? null,
+    evidence: f.evidence,
+    remediation: f.remediation,
   }));
   const inserted = (await supaFetch(config, "uxpass_findings", "POST", rows)) as unknown[];
   return inserted.length;

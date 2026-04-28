@@ -1,7 +1,7 @@
 import type { Severity, Theme, Viewport, UXPassPack } from "./schema.js";
 
-export type RunStatus = "queued" | "running" | "complete" | "failed";
-export type Verdict = "pass" | "fail" | "na" | "pending";
+export type RunStatus = "queued" | "running" | "complete" | "failed" | "budget_exceeded";
+export type Verdict = "pass" | "fail" | "na";
 
 export interface RunTarget {
   type: "url";
@@ -31,11 +31,11 @@ export interface HatVerdict {
 }
 
 export interface UXScoreBreakdown {
-  agent_readability: number;
-  dark_pattern_cleanliness: number;
-  aesthetic_coherence: number;
-  motion_quality: number;
-  first_run_quality: number;
+  agent_readability: number | null;
+  dark_pattern_cleanliness: number | null;
+  aesthetic_coherence: number | null;
+  motion_quality: number | null;
+  first_run_quality: number | null;
 }
 
 export interface RunResult {
@@ -52,24 +52,17 @@ export interface RunResult {
   error?: string;
 }
 
-// Runtime row shapes used by the runner and API. These match the columns in
-// the uxpass_runs and uxpass_findings tables defined in
-// supabase/migrations/20260428000000_uxpass_schema.sql.
+// Runtime shapes used by the deterministic runner. These map onto the
+// uxpass_runs and uxpass_findings tables defined in
+// supabase/migrations/20260428100000_uxpass_schema.sql (the schema landed by
+// PR #227). The deterministic runner only writes findings for FAIL outcomes;
+// passes are recorded in the breakdown jsonb on the run row, not as rows.
 
-export interface RunSummary {
-  total: number;
-  pass: number;
-  fail: number;
-  na: number;
-  pending: number;
-  pass_rate: number;
-}
-
-export interface RuntimeFinding {
+export interface CheckEvaluation {
   check_id: string;
   hat: string;
   category: string;
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "critical" | "high" | "medium" | "low";
   title: string;
   verdict: Verdict;
   evidence?: Record<string, unknown>;
@@ -77,23 +70,66 @@ export interface RuntimeFinding {
   time_ms?: number;
 }
 
+export interface RuntimeFinding {
+  hat_id: string;
+  title: string;
+  description: string;
+  severity: "critical" | "high" | "medium" | "low";
+  selector?: string;
+  viewport?: string;
+  theme?: string;
+  evidence: Record<string, unknown>;
+  remediation: string[];
+}
+
+export interface RunBreakdown {
+  version: string;
+  score_components: UXScoreBreakdown;
+  by_hat: Record<string, { pass: number; fail: number; na: number }>;
+  checks_run: string[];
+}
+
+export interface RunSummaryStats {
+  total: number;
+  pass: number;
+  fail: number;
+  na: number;
+  pass_rate: number;
+}
+
 export interface UxpassRunRow {
   id: string;
-  target: RunTarget;
-  pack_slug: string;
+  pack_id: string | null;
+  target_url: string;
+  hats: string[];
+  viewports: string[];
+  themes: string[];
   status: RunStatus;
   ux_score: number | null;
-  summary: RunSummary | Record<string, unknown>;
+  breakdown: RunBreakdown | Record<string, unknown>;
+  summary: string | null;
   started_at: string;
   completed_at: string | null;
   actor_user_id: string;
   cost_usd: number;
   tokens_used: number;
+  error: string | null;
 }
 
-export interface UxpassFindingRow extends RuntimeFinding {
+export interface UxpassFindingRow {
   id: string;
   run_id: string;
+  hat_id: string;
+  title: string;
+  description: string;
+  severity: "critical" | "high" | "medium" | "low";
+  selector: string | null;
+  viewport: string | null;
+  theme: string | null;
+  evidence_ref: string | null;
+  evidence: Record<string, unknown>;
+  remediation: string[];
+  cost_usd: number;
   created_at: string;
 }
 

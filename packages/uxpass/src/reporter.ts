@@ -2,12 +2,12 @@
  * reporter - HTML, JSON, and Markdown reports for a UXPass run.
  *
  * Reads the run + findings via run-manager and renders self-contained
- * output. Mirrors the testpass reporter shape so the API can serve the
- * same three formats agents already expect.
+ * output. The JSON shape is the natural superset (run row plus findings array)
+ * and the HTML/Markdown reports format the same data for humans.
  */
 
 import { getRunWithFindings, type RunManagerConfig } from "./run-manager.js";
-import type { UxpassRunRow, UxpassFindingRow } from "./types.js";
+import type { RunBreakdown, UxpassFindingRow, UxpassRunRow } from "./types.js";
 
 function escapeHtml(s: string): string {
   return s
@@ -24,16 +24,8 @@ function severityBadge(severity: string): string {
     high: "#dc2626",
     medium: "#d97706",
     low: "#65a30d",
-    info: "#525252",
   };
   return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:${colour[severity] ?? "#525252"};color:#fff;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">${escapeHtml(severity)}</span>`;
-}
-
-function verdictGlyph(verdict: string): string {
-  if (verdict === "pass") return "✓";
-  if (verdict === "fail") return "✗";
-  if (verdict === "na") return "-";
-  return "?";
 }
 
 export async function generateJsonReport(
@@ -52,31 +44,50 @@ export async function generateMarkdownReport(
   actorUserId: string,
 ): Promise<string> {
   const { run, findings } = await generateJsonReport(config, runId, actorUserId);
-  const targetUrl = (run.target as { url?: string })?.url ?? "(unknown)";
   const score = run.ux_score === null ? "-" : run.ux_score.toFixed(1);
-  const fails = findings.filter((f) => f.verdict === "fail");
+  const breakdown = run.breakdown as RunBreakdown | undefined;
 
   const lines: string[] = [];
   lines.push(`# UXPass Report ${run.id}`);
   lines.push("");
-  lines.push(`- Target: \`${targetUrl}\``);
+  lines.push(`- Target: \`${run.target_url}\``);
   lines.push(`- Status: \`${run.status}\``);
   lines.push(`- UX Score: **${score}**`);
+  if (run.summary) lines.push(`- Summary: ${run.summary}`);
   lines.push(`- Started: ${run.started_at}`);
   if (run.completed_at) lines.push(`- Completed: ${run.completed_at}`);
-  lines.push(`- Findings: ${findings.length} total, ${fails.length} failing`);
+  if (run.error) lines.push(`- Error: ${run.error}`);
+  lines.push(`- Findings: ${findings.length} failing`);
   lines.push("");
 
-  if (fails.length === 0) {
-    lines.push("_All deterministic checks passed._");
+  if (breakdown && typeof breakdown === "object" && "by_hat" in breakdown) {
+    const byHat = breakdown.by_hat ?? {};
+    if (Object.keys(byHat).length > 0) {
+      lines.push("## Hat breakdown");
+      lines.push("");
+      lines.push("| Hat | Pass | Fail | N/A |");
+      lines.push("| --- | ---: | ---: | ---: |");
+      for (const [hat, stats] of Object.entries(byHat)) {
+        lines.push(`| ${hat} | ${stats.pass} | ${stats.fail} | ${stats.na} |`);
+      }
+      lines.push("");
+    }
+  }
+
+  if (findings.length === 0) {
+    lines.push("_No failing checks._");
     return lines.join("\n") + "\n";
   }
 
   lines.push("## Failing checks");
   lines.push("");
-  for (const f of fails) {
-    lines.push(`- [ ] **${f.check_id}** (${f.severity}, ${f.hat}) - ${f.title}`);
-    if (f.remediation) lines.push(`  - ${f.remediation.trim()}`);
+  for (const f of findings) {
+    lines.push(`- [ ] **${f.title}** (${f.severity}, ${f.hat_id})`);
+    if (f.description) lines.push(`  - ${f.description}`);
+    const remediation = Array.isArray(f.remediation) ? f.remediation : [];
+    for (const r of remediation) {
+      lines.push(`  - Fix: ${r}`);
+    }
   }
   lines.push("");
   return lines.join("\n") + "\n";
@@ -88,23 +99,29 @@ export async function generateHtmlReport(
   actorUserId: string,
 ): Promise<string> {
   const { run, findings } = await generateJsonReport(config, runId, actorUserId);
-  const targetUrl = (run.target as { url?: string })?.url ?? "(unknown)";
   const score = run.ux_score === null ? "-" : run.ux_score.toFixed(1);
+  const breakdown = run.breakdown as RunBreakdown | undefined;
 
-  const rows = findings
+  const findingRows = findings
     .map((f) => {
-      const evidence = f.evidence && Object.keys(f.evidence).length > 0
-        ? `<pre style="margin:0;font-size:11px;color:#525252;">${escapeHtml(JSON.stringify(f.evidence))}</pre>`
+      const remediation = Array.isArray(f.remediation) ? f.remediation : [];
+      const remediationHtml = remediation.length > 0
+        ? `<ul style="margin:.25rem 0 0 1rem;padding:0;color:#1f2937;">${remediation.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul>`
         : "";
+      const desc = f.description ? `<div style="font-size:11px;color:#525252;margin-top:.25rem;">${escapeHtml(f.description)}</div>` : "";
       return `<tr>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;">${escapeHtml(f.check_id)}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(f.hat)}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;font-family:ui-monospace,monospace;">${escapeHtml(f.hat_id)}</td>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${severityBadge(f.severity)}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:18px;">${verdictGlyph(f.verdict)}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(f.title)}${evidence}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(f.title)}${desc}${remediationHtml}</td>
       </tr>`;
     })
     .join("\n");
+
+  const breakdownRows = breakdown && typeof breakdown === "object" && "by_hat" in breakdown
+    ? Object.entries(breakdown.by_hat ?? {})
+        .map(([hat, s]) => `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(hat)}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;color:#15803d;">${s.pass}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;color:#b91c1c;">${s.fail}</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;color:#525252;">${s.na}</td></tr>`)
+        .join("\n")
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -115,28 +132,33 @@ export async function generateHtmlReport(
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
   h1 { margin-bottom: .25rem; }
+  h2 { margin-top: 2rem; }
   .meta { color: #6b7280; font-size: 14px; }
   .score { display:inline-block; margin-top:.5rem; padding:.5rem 1rem; border-radius:8px; background:#0f172a; color:#fff; font-size:1.25rem; font-weight:600; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 14px; }
   th { text-align: left; padding: 8px; border-bottom: 2px solid #1f2937; background:#f9fafb; }
 </style>
 </head>
 <body>
   <h1>UXPass Report</h1>
   <div class="meta">Run id: <code>${escapeHtml(run.id)}</code></div>
-  <div class="meta">Target: <a href="${escapeHtml(targetUrl)}">${escapeHtml(targetUrl)}</a></div>
+  <div class="meta">Target: <a href="${escapeHtml(run.target_url)}">${escapeHtml(run.target_url)}</a></div>
   <div class="meta">Status: ${escapeHtml(run.status)}</div>
+  ${run.summary ? `<div class="meta">${escapeHtml(run.summary)}</div>` : ""}
   <div class="score">UX Score ${escapeHtml(score)}</div>
+
+  ${breakdownRows ? `<h2>Hat breakdown</h2>
   <table>
-    <thead>
-      <tr>
-        <th>Check</th><th>Hat</th><th>Severity</th><th>Verdict</th><th>Title</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
+    <thead><tr><th>Hat</th><th style="text-align:right;">Pass</th><th style="text-align:right;">Fail</th><th style="text-align:right;">N/A</th></tr></thead>
+    <tbody>${breakdownRows}</tbody>
+  </table>` : ""}
+
+  <h2>Findings (${findings.length})</h2>
+  ${findings.length === 0 ? `<p class="meta">No failing checks.</p>` : `<table>
+    <thead><tr><th>Hat</th><th>Severity</th><th>Detail</th></tr></thead>
+    <tbody>${findingRows}</tbody>
+  </table>`}
+
   <p class="meta" style="margin-top:2rem;">Generated by UXPass deterministic runner. LLM hat panel and Playwright capture land in later chunks.</p>
 </body>
 </html>`;
