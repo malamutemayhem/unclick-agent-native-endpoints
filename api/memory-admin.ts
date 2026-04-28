@@ -5295,6 +5295,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (runErr) {
           const errCode = (runErr as { code?: string }).code;
           if (normalizedTaskId && errCode === "23505") {
+            // STALE_RUN check intentionally omitted — relies on synchronous handler invariant.
+            // If a runner is ever made async, add a `last_heartbeat`-based stale-run gate here
+            // before returning was_duplicate=true on a still-running task_id.
             const { data: existing } = await supabase
               .from("mc_crew_runs")
               .select("id")

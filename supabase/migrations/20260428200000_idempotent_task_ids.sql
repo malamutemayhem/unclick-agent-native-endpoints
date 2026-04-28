@@ -6,13 +6,6 @@
 -- collide on a single NULL value. The index is compound (actor + task_id)
 -- so that a UUIDv5 collision across two different actors is treated as
 -- two distinct rows, not a 23505 leaked across tenants.
---
--- This file lives outside supabase/migrations/ on purpose. The repo's
--- apply-migrations workflow had a 4-day silent failure that PR #229 just
--- unblocked, so this migration is intended to be applied via Supabase
--- MCP `apply_migration` rather than the file-based workflow. After it
--- lands in production, the file may be moved into supabase/migrations/
--- (or deleted) at the maintainer's discretion.
 
 -- ── testpass_runs ───────────────────────────────────────────────────────────
 alter table testpass_runs add column if not exists task_id text;
