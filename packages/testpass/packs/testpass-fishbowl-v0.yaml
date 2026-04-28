@@ -177,23 +177,24 @@ items:
     profiles: [smoke, standard, deep]
 
   - id: FB-011
-    title: post_message refreshes profile presence without rewriting status
+    title: post_message refreshes profile presence and clears dead-man timer
     category: fishbowl-validation
     severity: high
     check_type: agent
     description: |
       After set_my_status seeds current_status and next_checkin_at, posting a
       message with the same agent_id must advance current_status_updated_at on
-      the profile while preserving current_status text and next_checkin_at.
-      This guards the PR 221 fix for post-side Now Playing freshness.
+      the profile while preserving current_status text and clearing
+      next_checkin_at. A post is a live pulse, so it should retire the old
+      dead-man timer instead of leaving the agent looking scheduled or MIA.
     expected:
       current_status_updated_at: advances after post_message
       current_status: unchanged
-      next_checkin_at: unchanged
+      next_checkin_at: null
     on_fail: |
       Check api/memory-admin.ts fishbowl_post. The handler should update
       current_status_updated_at with last_seen_at after a successful insert,
-      but must not rewrite the status text or extend the dead-man timer.
+      clear next_checkin_at, and not rewrite the status text.
     tags: [fishbowl, presence, regression-check]
     profiles: [smoke, standard, deep]
 
