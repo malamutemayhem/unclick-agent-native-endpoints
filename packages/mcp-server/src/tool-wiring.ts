@@ -11129,16 +11129,16 @@ export const ADDITIONAL_TOOLS = [
   // ── uxpass-tool.ts (UI/UX QC, sister to TestPass) ──────────────────────────
   {
     name: "uxpass_run",
-    description: "Run a UI/UX quality check on a URL or saved pack. Returns a run id and a queued status. Pass either pack_name (a registered pack) or url (a one-off check), and an optional list of hat ids to scope the panel.",
+    description: "Run a UI/UX quality check synchronously against a URL. Executes the deterministic uxpass-core check set (HTTP, HTML, accessibility, agent readability, performance, security) against the target and returns the run id, status, UX Score, and summary. Pass either url (a one-off check) or pack_name (resolves the registered pack's url). The hats parameter is accepted for forward compatibility but is currently ignored; LLM hats land in a later chunk.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        pack_name: { type: "string", description: "Name of a registered UXPass pack" },
-        url: { type: "string", description: "Target URL for a one-off run" },
+        pack_name: { type: "string", description: "Name of a registered UXPass pack; the pack's url is used as the target" },
+        url: { type: "string", description: "Target URL for a one-off run (takes precedence over pack_name)" },
         hats: {
           type: "array",
           items: { type: "string" },
-          description: "Optional list of hat ids to run (e.g. accessibility, agent-readability). Defaults to the pack's hats or the MVP hat set.",
+          description: "Reserved for future use. Currently ignored; the deterministic runner evaluates the full uxpass-core check set on every run.",
         },
       },
     },

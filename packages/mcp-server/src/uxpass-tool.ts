@@ -1,19 +1,15 @@
 /**
- * uxpass-tool - MCP handlers for UXPass (Chunk 1 stubs).
+ * uxpass-tool - MCP handlers for UXPass.
  *
- * UXPass is the UI/UX sister to TestPass. The full execution pipeline
- * (capture, hat panel, synthesiser, reports) ships in Chunks 2 to 4.
- * Chunk 1 wires the MCP surface so agents can discover the contract,
- * does a minimal pack YAML validity check, and persists registered packs
- * to a local file under packs/registered/ so the wiring is end-to-end
- * testable before the backend lands.
+ * UXPass is the UI/UX sister to TestPass. uxpass_run, uxpass_status, and
+ * the three uxpass_report_* tools call back into the UnClick Vercel API at
+ * /api/uxpass using the caller's UNCLICK_API_KEY as a Bearer token (same
+ * pattern as the testpass tool). The API resolves the key to a user id and
+ * persists run + finding rows under that user.
  *
- * Note on schema validation: the canonical zod schema for UXPass packs
- * lives in @unclick/uxpass and is unit-tested there. This MCP wrapper
- * cannot depend on the workspace package because mcp-server is published
- * standalone to npm. The check here is intentionally shallow (parse YAML,
- * confirm the required top-level keys exist). Full validation runs server
- * side when the UXPass API ships in a later chunk.
+ * uxpass_register_pack still validates and persists packs to a local file
+ * under packs/registered/. The full server-side packs table lands in a
+ * later chunk; until then the local persistence keeps the wiring testable.
  */
 
 import * as fs from "node:fs";
@@ -21,8 +17,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import yaml from "js-yaml";
 
-const STUB_NOTE =
-  "UXPass run execution lands in Chunks 2 to 4. Chunk 1 wires the MCP surface and schema only.";
+const API_BASE = (process.env.UNCLICK_API_URL ?? "https://unclick.world").replace(/\/$/, "");
 
 const PACKS_DIR = path.resolve(
   process.env.UXPASS_PACKS_DIR ??
@@ -40,6 +35,38 @@ const REQUIRED_PACK_KEYS = [
   "remediation",
 ] as const;
 
+function getApiKey(): string {
+  const key = process.env.UNCLICK_API_KEY?.trim();
+  if (!key) {
+    throw new Error("UNCLICK_API_KEY env var is not set. Get your install config at https://unclick.world");
+  }
+  return key;
+}
+
+async function callApi(
+  pathAndQuery: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<unknown> {
+  const apiKey = getApiKey();
+  const res = await fetch(`${API_BASE}/api/uxpass${pathAndQuery}`, {
+    method: init.method ?? "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+  });
+  const text = await res.text();
+  let body: unknown = text;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    /* keep text */
+  }
+  if (!res.ok) return { error: `uxpass API failed (HTTP ${res.status})`, body };
+  return body;
+}
+
 function ensurePacksDir(): void {
   try {
     fs.mkdirSync(PACKS_DIR, { recursive: true });
@@ -53,85 +80,75 @@ function safeFilename(name: string): string {
 }
 
 export async function uxpassRun(args: Record<string, unknown>): Promise<unknown> {
-  const packName = typeof args.pack_name === "string" ? args.pack_name : undefined;
   const url = typeof args.url === "string" ? args.url : undefined;
-  const hats = Array.isArray(args.hats)
-    ? args.hats.filter((h): h is string => typeof h === "string")
-    : undefined;
+  const packName = typeof args.pack_name === "string" ? args.pack_name : undefined;
 
-  if (!packName && !url) {
-    return { error: "Either pack_name or url is required" };
+  if (!url && !packName) {
+    return { error: "Either url or pack_name is required" };
   }
 
-  const runId = `uxpass_${crypto.randomBytes(8).toString("hex")}`;
-  return {
-    run_id: runId,
-    status: "queued",
-    pack_name: packName ?? null,
-    url: url ?? null,
-    hats: hats ?? null,
-    note: STUB_NOTE,
-  };
+  // pack_name still resolves locally because pack persistence is file-based
+  // until the server-side packs table lands. We resolve it to the pack's
+  // declared url and submit a run for that.
+  let targetUrl = url;
+  if (!targetUrl && packName) {
+    try {
+      ensurePacksDir();
+      const candidate = fs.readdirSync(PACKS_DIR).find((f) => f.startsWith(`${safeFilename(packName)}-`));
+      if (!candidate) return { error: `No registered pack found for name '${packName}'` };
+      const packYaml = fs.readFileSync(path.join(PACKS_DIR, candidate), "utf8");
+      const parsed = yaml.load(packYaml) as { url?: string } | undefined;
+      if (!parsed?.url) return { error: `Pack '${packName}' has no url field` };
+      targetUrl = parsed.url;
+    } catch (err) {
+      return { error: `failed to read pack '${packName}': ${(err as Error).message}` };
+    }
+  }
+
+  return callApi("?action=start_run", {
+    method: "POST",
+    body: { target_url: targetUrl, pack_slug: "uxpass-core" },
+  });
 }
 
 export async function uxpassStatus(args: Record<string, unknown>): Promise<unknown> {
   const runId = typeof args.run_id === "string" ? args.run_id : "";
   if (!runId) return { error: "run_id is required" };
-
-  return {
-    run_id: runId,
-    status: "queued",
-    ux_score: null,
-    summary: STUB_NOTE,
-  };
+  return callApi(`?action=status&run_id=${encodeURIComponent(runId)}`);
 }
 
 export async function uxpassReportHtml(args: Record<string, unknown>): Promise<unknown> {
   const runId = typeof args.run_id === "string" ? args.run_id : "";
   if (!runId) return { error: "run_id is required" };
-
-  const html = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>UXPass Report ${runId}</title></head>
-<body>
-  <h1>UXPass Report</h1>
-  <p>Run id: <code>${runId}</code></p>
-  <p>Run not yet implemented. ${STUB_NOTE}</p>
-</body>
-</html>`;
-  return { run_id: runId, format: "html", body: html };
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${API_BASE}/api/uxpass?action=report_html&run_id=${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    let body: unknown = text;
+    try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+    return { error: `uxpass report_html failed (HTTP ${res.status})`, body };
+  }
+  return { run_id: runId, format: "html", body: text };
 }
 
 export async function uxpassReportJson(args: Record<string, unknown>): Promise<unknown> {
   const runId = typeof args.run_id === "string" ? args.run_id : "";
   if (!runId) return { error: "run_id is required" };
-
-  return {
-    run_id: runId,
-    format: "json",
-    body: {
-      run_id: runId,
-      status: "queued",
-      ux_score: null,
-      hat_verdicts: [],
-      note: STUB_NOTE,
-    },
-  };
+  const data = await callApi(`?action=report_json&run_id=${encodeURIComponent(runId)}`);
+  return { run_id: runId, format: "json", body: data };
 }
 
 export async function uxpassReportMd(args: Record<string, unknown>): Promise<unknown> {
   const runId = typeof args.run_id === "string" ? args.run_id : "";
   if (!runId) return { error: "run_id is required" };
-
-  const md = [
-    `# UXPass Report ${runId}`,
-    "",
-    "Run not yet implemented.",
-    "",
-    STUB_NOTE,
-    "",
-  ].join("\n");
-  return { run_id: runId, format: "md", body: md };
+  const data = await callApi(`?action=report_md&run_id=${encodeURIComponent(runId)}`);
+  if (data && typeof data === "object" && "markdown" in data) {
+    return { run_id: runId, format: "md", body: (data as { markdown: string }).markdown };
+  }
+  return data;
 }
 
 export async function uxpassRegisterPack(args: Record<string, unknown>): Promise<unknown> {
@@ -176,6 +193,6 @@ export async function uxpassRegisterPack(args: Record<string, unknown>): Promise
     pack_id: packId,
     name,
     file: filePath,
-    note: "Persisted to local file. Database-backed persistence and full schema validation land with the backend in a later chunk.",
+    note: "Persisted to local file. Database-backed pack persistence lands in a later chunk; uxpass_run currently resolves pack_name to its declared url and submits a deterministic run.",
   };
 }
