@@ -268,16 +268,36 @@ async function writeAudit(params: {
       success:       params.success ?? true,
       metadata:      params.metadata ?? {},
     };
-    await supaFetch(
+    const { ok, status, data } = await supaFetch(
       `${params.supabaseUrl}/rest/v1/backstagepass_audit`,
       "POST",
       supaHeaders(params.serviceRoleKey),
       row,
     );
-  } catch {
+    if (!ok) {
+      // Audit failures must stay non-blocking, but they must be visible.
+      // Never log credential values. Supabase error payloads include only
+      // database error metadata such as message, details, hint, and code.
+      // eslint-disable-next-line no-console
+      console.error("backstagepass_audit write failed", {
+        status,
+        action: params.action,
+        credential_id: params.credentialId ?? null,
+        platform_slug: params.platformSlug ?? null,
+        success: params.success ?? true,
+        error: data,
+      });
+    }
+  } catch (err) {
     // Audit must never break the caller's request. Log and move on.
     // eslint-disable-next-line no-console
-    console.error("backstagepass_audit write failed");
+    console.error("backstagepass_audit write threw", {
+      action: params.action,
+      credential_id: params.credentialId ?? null,
+      platform_slug: params.platformSlug ?? null,
+      success: params.success ?? true,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
