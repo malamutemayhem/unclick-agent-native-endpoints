@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS mc_admin_audit (
 );
 
 ALTER TABLE mc_admin_audit ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "mc_admin_audit_service_role_all" ON mc_admin_audit FOR ALL USING (auth.role() = 'service_role');
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='mc_admin_audit' AND policyname='mc_admin_audit_service_role_all') THEN
+    CREATE POLICY "mc_admin_audit_service_role_all" ON mc_admin_audit FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS mc_admin_audit_api_key_hash_idx ON mc_admin_audit(api_key_hash);
 CREATE INDEX IF NOT EXISTS mc_admin_audit_performed_at_idx ON mc_admin_audit(performed_at DESC);
