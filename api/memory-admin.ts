@@ -6373,10 +6373,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
         if (insertErr) throw insertErr;
 
-        // Bump last_seen_at so the admin sidebar shows accurate activity.
+        // Bump post-side presence so active authors do not look stale on Now Playing.
+        const postedAtIso = new Date().toISOString();
         await supabase
           .from("mc_fishbowl_profiles")
-          .update({ last_seen_at: new Date().toISOString() })
+          .update({ last_seen_at: postedAtIso, current_status_updated_at: postedAtIso })
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId);
 
