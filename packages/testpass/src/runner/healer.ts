@@ -71,7 +71,7 @@ export async function healFailedChecks(
         `Check ID: ${checkId}`,
         `Title: ${spec.title}`,
         spec.description ? `Description: ${spec.description}` : null,
-        spec.expected ? `Expected: ${JSON.stringify(spec.expected)}` : null,
+        spec.expected !== undefined ? `Expected: ${JSON.stringify(spec.expected)}` : null,
         spec.on_fail ? `On fail guidance: ${spec.on_fail}` : null,
       ].filter(Boolean) as string[];
 
