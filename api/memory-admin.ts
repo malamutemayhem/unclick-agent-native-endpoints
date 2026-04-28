@@ -118,6 +118,127 @@ function normalizeFishbowlText(input: string): string {
   return input.replace(/[\u2013\u2014]/g, "-");
 }
 
+function getRequestBaseUrl(req: VercelRequest): string | null {
+  const explicit = process.env.EMBED_API_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+
+  const vercelUrl = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercelUrl) return `https://${vercelUrl}`;
+
+  const host = typeof req.headers.host === "string" ? req.headers.host : "";
+  if (!host) return null;
+
+  const protoHeader = req.headers["x-forwarded-proto"];
+  const proto = typeof protoHeader === "string" ? protoHeader : host.includes("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
+function queueMemoryEmbedding(req: VercelRequest, table: string, id: string, text: string): void {
+  const secret = process.env.ADMIN_EMBED_SECRET;
+  const baseUrl = getRequestBaseUrl(req);
+  if (!secret || !baseUrl || text.trim().length === 0) return;
+
+  void fetch(`${baseUrl}/api/memory/embed`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-embed-secret": secret,
+    },
+    body: JSON.stringify({ table, id, text }),
+  }).catch((err) => {
+    console.error("[memory_embed] queued embedding failed", err);
+  });
+}
+
+const STARTER_CREW_DEFS = [
+  {
+    name: "Business Council",
+    description:
+      "CEO, CFO, CMO, CTO, and Creative Director deliberate your business decision together. Each brings their own lens. The Chairman synthesises.",
+    template: "council",
+    agentSlugs: ["ceo", "cfo", "cmo", "cto", "cco-creative"],
+  },
+  {
+    name: "Launch Stress Test",
+    description:
+      "A Contrarian, Security Engineer, Growth Hacker, and Customer Success Manager attack and defend your launch plan. Red attacks, blue defends, white scores.",
+    template: "red_blue",
+    agentSlugs: ["contrarian", "security-engineer", "growth-hacker", "csm"],
+  },
+  {
+    name: "Creative Studio",
+    description:
+      "Creative Director, Copywriter, Art Director, and Brand Strategist collaborate on your brief. Draft, shape, verify, stress-test.",
+    template: "editorial",
+    agentSlugs: ["creative-director", "copywriter", "art-director", "brand-strategist"],
+  },
+  {
+    name: "Decision Desk",
+    description:
+      "First Principles Thinker, Pragmatist, Outsider, Executor, and Chairman reason through your decision from five independent angles.",
+    template: "council",
+    agentSlugs: ["first-principles", "pragmatist", "outsider", "executor", "chairman"],
+  },
+] as const;
+
+async function ensureStarterCrews(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+): Promise<void> {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("mc_crews")
+    .select("name,template")
+    .eq("api_key_hash", apiKeyHash);
+  if (existingError) throw existingError;
+
+  const existing = new Set(
+    ((existingRows ?? []) as Array<{ name: string; template: string }>).map(
+      (row) => `${row.name}::${row.template}`,
+    ),
+  );
+  const missingDefs = STARTER_CREW_DEFS.filter(
+    (crew) => !existing.has(`${crew.name}::${crew.template}`),
+  );
+  if (missingDefs.length === 0) return;
+
+  const slugs = Array.from(new Set(missingDefs.flatMap((crew) => crew.agentSlugs)));
+  const [systemAgents, tenantAgents] = await Promise.all([
+    supabase.from("mc_agents").select("id,slug").is("api_key_hash", null).in("slug", slugs),
+    supabase.from("mc_agents").select("id,slug").eq("api_key_hash", apiKeyHash).in("slug", slugs),
+  ]);
+  if (systemAgents.error) throw systemAgents.error;
+  if (tenantAgents.error) throw tenantAgents.error;
+
+  const bySlug = new Map<string, string>();
+  for (const row of (systemAgents.data ?? []) as Array<{ id: string; slug: string }>) {
+    bySlug.set(row.slug, row.id);
+  }
+  for (const row of (tenantAgents.data ?? []) as Array<{ id: string; slug: string }>) {
+    bySlug.set(row.slug, row.id);
+  }
+
+  const rows = missingDefs
+    .map((crew) => {
+      const agentIds = crew.agentSlugs.map((slug) => bySlug.get(slug));
+      if (agentIds.some((id) => !id)) return null;
+      return {
+        api_key_hash: apiKeyHash,
+        name: crew.name,
+        description: crew.description,
+        template: crew.template,
+        agent_ids: agentIds,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("mc_crews").upsert(rows, {
+    onConflict: "api_key_hash,name,template",
+    ignoreDuplicates: true,
+  });
+  if (error) throw error;
+}
+
 function deriveKey(apiKey: string, salt: Buffer): Buffer {
   return crypto.pbkdf2Sync(apiKey, salt, PBKDF2_ITERATIONS, KEY_BYTES, "sha256");
 }
@@ -896,7 +1017,7 @@ function isAdminChatEnabled(): boolean {
   return flag === "1" || flag === "true" || flag === "yes";
 }
 
-function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null) {
+function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null, req: VercelRequest) {
   const requireKey = () =>
     apiKeyHash
       ? null
@@ -963,6 +1084,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
           .select("id")
           .single();
         if (error) return { success: false, error: error.message };
+        queueMemoryEmbedding(req, "extracted_facts", data.id, value);
         return { success: true, fact_id: data.id };
       },
     }),
@@ -976,7 +1098,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
         value: z.string().describe("The context value as a JSON-encoded string or plain text"),
       }),
       execute: async ({ category, key, value }) => {
-        let stored: unknown = value;
+        let stored: unknown;
         try {
           stored = JSON.parse(value);
         } catch {
@@ -1081,6 +1203,7 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
           .select("id")
           .single();
         if (error) return { success: false, error: error.message };
+        queueMemoryEmbedding(req, "session_summaries", data.id, summary);
         return { success: true, summary_id: data.id };
       },
     }),
@@ -1653,8 +1776,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (error) throw error;
 
         const ids = (agents ?? []).map((a: { id: string }) => a.id);
-        let toolCounts: Record<string, number> = {};
-        let layerCounts: Record<string, number> = {};
+        const toolCounts: Record<string, number> = {};
+        const layerCounts: Record<string, number> = {};
 
         if (ids.length > 0) {
           const [toolsRes, layersRes] = await Promise.all([
@@ -3750,6 +3873,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", tenant.apiKeyHash);
 
         if (error) throw error;
+        if (typeof updates.fact === "string") {
+          queueMemoryEmbedding(req, "mc_extracted_facts", String(fId), updates.fact);
+        }
         return res.status(200).json({ success: true });
       }
 
@@ -3943,6 +4069,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
 
         if (error) throw error;
+        queueMemoryEmbedding(req, "mc_extracted_facts", data.id, fact);
         return res.status(200).json({ success: true, data });
       }
 
@@ -4678,7 +4805,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const apiKeyHash = rawApiKey ? sha256hex(rawApiKey) : null;
 
         const systemPrompt = await buildAdminChatSystemPrompt(supabase);
-        const tools = buildAdminChatTools(supabase, apiKeyHash);
+        const tools = buildAdminChatTools(supabase, apiKeyHash, req);
 
         const modelMessages = await convertToModelMessages(messages);
         const result = streamText({
@@ -5026,6 +5153,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
 
+        await ensureStarterCrews(supabase, apiKeyHash);
+
         const { data, error } = await supabase
           .from("mc_crews")
           .select("id,name,description,template,agent_ids,created_at,updated_at")
@@ -5108,6 +5237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        await ensureStarterCrews(supabase, apiKeyHash);
         const { crew_id, task_prompt, token_budget } = (req.body ?? {}) as {
           crew_id?: string;
           task_prompt?: string;
@@ -5115,6 +5245,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         if (!crew_id || !task_prompt?.trim()) {
           return res.status(400).json({ error: "crew_id and task_prompt required" });
+        }
+        const { data: crewRow, error: crewErr } = await supabase
+          .from("mc_crews")
+          .select("id")
+          .eq("id", crew_id)
+          .eq("api_key_hash", apiKeyHash)
+          .maybeSingle();
+        if (crewErr) throw crewErr;
+        if (!crewRow) {
+          return res.status(404).json({ error: "crew_id not found for tenant" });
         }
         // User-facing runs now route LLM traffic through MCP sampling. The HTTP
         // path cannot do bidirectional sampling, so we create the run row for
@@ -5634,7 +5774,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const toolFilter = (body.tool ?? req.query.tool ?? "") as string;
         let q = supabase
           .from("mc_signals")
-          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at, read_via, read_by_agent_id")
           .eq("api_key_hash", apiKeyHash)
           .order("created_at", { ascending: false })
           .limit(limit);
@@ -5642,18 +5782,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (unreadOnly) q = q.is("read_at", null);
         const { data, error } = await q;
         if (error) throw error;
-        return res.status(200).json({ signals: data ?? [] });
+        const signals = (data ?? []).map((signal) => {
+          const payload = (signal.payload ?? {}) as Record<string, unknown>;
+          const policyLabel =
+            signal.tool === "fishbowl" && payload.policy_label === "warning"
+              ? "warning"
+              : signal.severity;
+          return {
+            ...signal,
+            policy_label: policyLabel,
+            display_severity: policyLabel,
+          };
+        });
+        return res.status(200).json({ signals });
       }
 
       case "mark_signal_read": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
-        const { signal_id, read_via } = (req.body ?? {}) as { signal_id?: string; read_via?: string };
+        const { signal_id, read_via, read_by_agent_id } = (req.body ?? {}) as {
+          signal_id?: string;
+          read_via?: string;
+          read_by_agent_id?: string;
+        };
         if (!signal_id) return res.status(400).json({ error: "signal_id required" });
+        const patch: Record<string, string> = {
+          read_at: new Date().toISOString(),
+          read_via: read_via ?? "ui",
+        };
+        if (typeof read_by_agent_id === "string" && read_by_agent_id.length > 0) {
+          patch.read_by_agent_id = read_by_agent_id;
+        }
         const { error } = await supabase
           .from("mc_signals")
-          .update({ read_at: new Date().toISOString(), read_via: read_via ?? "ui" })
+          .update(patch)
           .eq("id", signal_id)
           .eq("api_key_hash", apiKeyHash);
         if (error) throw error;
@@ -5664,14 +5827,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
-        const { signal_ids, read_via } = (req.body ?? {}) as { signal_ids?: string[]; read_via?: string };
+        const { signal_ids, read_via, read_by_agent_id } = (req.body ?? {}) as {
+          signal_ids?: string[];
+          read_via?: string;
+          read_by_agent_id?: string;
+        };
         const ids = Array.isArray(signal_ids)
           ? signal_ids.filter((id): id is string => typeof id === "string" && id.length > 0)
           : [];
         if (ids.length === 0) return res.status(400).json({ error: "signal_ids required" });
+        const patch: Record<string, string> = {
+          read_at: new Date().toISOString(),
+          read_via: read_via ?? "agent",
+        };
+        if (typeof read_by_agent_id === "string" && read_by_agent_id.length > 0) {
+          patch.read_by_agent_id = read_by_agent_id;
+        }
         const { data, error } = await supabase
           .from("mc_signals")
-          .update({ read_at: new Date().toISOString(), read_via: read_via ?? "agent" })
+          .update(patch)
           .eq("api_key_hash", apiKeyHash)
           .is("read_at", null)
           .in("id", ids)
@@ -5688,9 +5862,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const { read_via, read_by_agent_id } = (req.body ?? {}) as {
+          read_via?: string;
+          read_by_agent_id?: string;
+        };
+        const patch: Record<string, string> = {
+          read_at: new Date().toISOString(),
+          read_via: read_via ?? "dismiss",
+        };
+        if (typeof read_by_agent_id === "string" && read_by_agent_id.length > 0) {
+          patch.read_by_agent_id = read_by_agent_id;
+        }
         const { data, error } = await supabase
           .from("mc_signals")
-          .update({ read_at: new Date().toISOString(), read_via: "dismiss" })
+          .update(patch)
           .eq("api_key_hash", apiKeyHash)
           .is("read_at", null)
           .select("id");
@@ -5770,24 +5955,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const { data: rows, error: fetchErr } = await supabase
           .from("mc_signals")
-          .select("id, tool, action, severity, summary, deep_link, created_at")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at")
           .eq("api_key_hash", apiKeyHash)
           .is("read_at", null)
           .order("created_at", { ascending: false })
           .limit(10);
         if (fetchErr) throw fetchErr;
 
-        const signals = rows ?? [];
+        const signals = (rows ?? []).map((signal) => {
+          const payload = (signal.payload ?? {}) as Record<string, unknown>;
+          const policyLabel =
+            signal.tool === "fishbowl" && payload.policy_label === "warning"
+              ? "warning"
+              : signal.severity;
+          return {
+            ...signal,
+            policy_label: policyLabel,
+            display_severity: policyLabel,
+          };
+        });
 
-        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, info: 0 };
+        const bySeverity: Record<string, number> = { critical: 0, action_needed: 0, warning: 0, info: 0 };
         const byTool: Record<string, number> = {};
         for (const s of signals) {
-          if (s.severity in bySeverity) bySeverity[s.severity]++;
+          if (s.display_severity in bySeverity) bySeverity[s.display_severity]++;
           byTool[s.tool] = (byTool[s.tool] ?? 0) + 1;
         }
         const parts: string[] = [];
         if (bySeverity.critical > 0) parts.push(`${bySeverity.critical} critical`);
         if (bySeverity.action_needed > 0) parts.push(`${bySeverity.action_needed} needing action`);
+        if (bySeverity.warning > 0) parts.push(`${bySeverity.warning} warning`);
         if (bySeverity.info > 0) parts.push(`${bySeverity.info} info`);
         const toolList = Object.entries(byTool)
           .map(([t, c]) => `${c} from ${t}`)
@@ -6176,10 +6373,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
         if (insertErr) throw insertErr;
 
-        // Bump last_seen_at so the admin sidebar shows accurate activity.
+        // Bump post-side presence so active authors do not look stale on Now Playing.
+        const postedAtIso = new Date().toISOString();
         await supabase
           .from("mc_fishbowl_profiles")
-          .update({ last_seen_at: new Date().toISOString() })
+          .update({ last_seen_at: postedAtIso, current_status_updated_at: postedAtIso })
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId);
 
@@ -6193,6 +6391,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const tagList = inserted.tags ?? [];
             const tagSet = new Set(tagList);
             const isBlocker = tagSet.has("blocker") || tagSet.has("tripwire");
+            const needsDoing = tagSet.has("needs-doing");
             const broadcastsAll = recipientList.includes("all");
 
             // Discover this tenant's human admin profiles so we can match
@@ -6219,6 +6418,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             let severity: "info" | "action_needed" | "critical" = "info";
             if (targetsHuman) severity = "action_needed";
+            else if (needsDoing) severity = "action_needed";
             else if (broadcastsAll && isBlocker) severity = "action_needed";
             else if (isBlocker) severity = "action_needed";
 
@@ -6239,6 +6439,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 recipients: recipientList,
                 tags: tagList,
                 message_id: inserted.id,
+                policy_label: needsDoing ? "warning" : severity,
               },
             });
           } catch (publishErr) {

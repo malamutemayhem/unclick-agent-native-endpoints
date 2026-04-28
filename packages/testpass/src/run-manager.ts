@@ -52,6 +52,7 @@ export async function createRun(
     profile: params.profile,
     actor_user_id: params.actorUserId,
     status: "running",
+    started_at: new Date().toISOString(),
     verdict_summary: { total: 0, check: 0, na: 0, fail: 0, other: 0, pending: 0, pass_rate: 0 },
   };
   if (params.packName) payload.pack_name = params.packName;

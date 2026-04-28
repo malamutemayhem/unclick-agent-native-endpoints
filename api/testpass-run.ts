@@ -4,7 +4,7 @@
  * Bearer-auth (Supabase JWT) entry point for CI pipelines. Runs a named
  * pack against a target MCP server without going through MCP.
  *
- * Body: { pack_id: string, pack_name?: string, profile?: "smoke"|"standard"|"deep", server_url?: string }
+ * Body/query: { pack_id: string, pack_name?: string, profile?: "smoke"|"standard"|"deep", server_url?: string }
  * Returns: { run_id: string, status: RunStatus, verdict_summary?: VerdictSummary }
  *
  * Smoke profile runs synchronously and returns the final verdict.
@@ -31,7 +31,7 @@ const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST,OPTIONS",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Authorization,Content-Type",
 };
 
@@ -60,19 +60,22 @@ async function getPackIdBySlug(
   supabaseUrl: string,
   serviceKey: string,
   slug: string,
-): Promise<string | null> {
+): Promise<{ id: string; owner_user_id: string } | null> {
   const r = await fetch(
-    `${supabaseUrl}/rest/v1/testpass_packs?slug=eq.${encodeURIComponent(slug)}&select=id&limit=1`,
+    `${supabaseUrl}/rest/v1/testpass_packs?slug=eq.${encodeURIComponent(slug)}&select=id,owner_user_id&limit=1`,
     { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
   );
   if (!r.ok) return null;
-  const rows = (await r.json()) as Array<{ id: string }>;
-  return rows[0]?.id ?? null;
+  const rows = (await r.json()) as Array<{ id: string; owner_user_id: string }>;
+  return rows[0] ?? null;
+}
+
+function queryString(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return json(res, 204, {});
-  if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -83,28 +86,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
   if (!token) return json(res, 401, { error: "Missing Bearer token" });
 
-  const actorUserId = await getActorUserId(supabaseUrl, token);
-  if (!actorUserId) return json(res, 401, { error: "Invalid session" });
+  const isCron = Boolean(process.env.CRON_SECRET) && token === process.env.CRON_SECRET;
+  if (req.method === "GET" && !isCron) return json(res, 405, { error: "Method not allowed" });
+  if (req.method !== "GET" && req.method !== "POST") {
+    return json(res, 405, { error: "Method not allowed" });
+  }
 
-  const body = (req.body ?? {}) as {
-    pack_id?: string;
-    pack_name?: string;
-    profile?: RunProfile;
-    server_url?: string;
-  };
+  const input = req.method === "GET"
+    ? {
+        pack_id: queryString(req.query.pack_id),
+        pack_name: queryString(req.query.pack_name),
+        profile: queryString(req.query.profile) as RunProfile | undefined,
+        server_url: queryString(req.query.server_url),
+      }
+    : ((req.body ?? {}) as {
+        pack_id?: string;
+        pack_name?: string;
+        profile?: RunProfile;
+        server_url?: string;
+      });
 
-  if (!body.pack_id) return json(res, 400, { error: "pack_id required" });
+  if (!input.pack_id) return json(res, 400, { error: "pack_id required" });
 
-  const profile: RunProfile = body.profile ?? "smoke";
+  const profile: RunProfile = input.profile ?? "smoke";
   if (!["smoke", "standard", "deep"].includes(profile)) {
     return json(res, 400, { error: "profile must be smoke|standard|deep" });
   }
 
   const config = { supabaseUrl, serviceRoleKey: serviceKey };
-  const packSlug = body.pack_id;
+  const packSlug = input.pack_id;
 
-  const packId = await getPackIdBySlug(supabaseUrl, serviceKey, packSlug);
-  if (!packId) return json(res, 404, { error: `Pack '${packSlug}' not found` });
+  const packRow = await getPackIdBySlug(supabaseUrl, serviceKey, packSlug);
+  if (!packRow) return json(res, 404, { error: `Pack '${packSlug}' not found` });
+
+  const actorUserId = isCron ? packRow.owner_user_id : await getActorUserId(supabaseUrl, token);
+  if (!actorUserId) return json(res, 401, { error: "Invalid session" });
 
   const packPath = path.resolve(__dirname, `../packages/testpass/packs/${packSlug}.yaml`);
   let pack;
@@ -114,11 +130,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 422, { error: `Pack YAML not found on server for '${packSlug}'` });
   }
 
-  const target: RunTarget = { type: "url", url: body.server_url ?? "" };
+  const target: RunTarget = { type: "url", url: input.server_url ?? "" };
 
   const runId = await createRun(config, {
-    packId,
-    packName: body.pack_name ?? pack.name ?? packSlug,
+    packId: packRow.id,
+    packName: input.pack_name ?? pack.name ?? packSlug,
     target,
     profile,
     actorUserId,

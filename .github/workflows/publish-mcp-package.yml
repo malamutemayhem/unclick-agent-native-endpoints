@@ -1,0 +1,159 @@
+name: Publish MCP server
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-mcp-package.yml'
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Auto-publishes @unclick/mcp-server to npm whenever files under
+# packages/mcp-server/ change on main. Bumps the patch version, pushes the
+# version bump commit back, then publishes. Skips if the last commit is
+# itself the bot bump ([skip ci]).
+#
+# One-time setup: set the NPM_TOKEN repo secret to an "Automation" type
+# npm token (Bypass 2FA).
+
+concurrency:
+  group: publish-mcp-server
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect publish scope
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "PR registry check only; skipping publish."
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null || git show --name-only --format="" "${{ github.sha }}")
+          if echo "$changed_files" | grep -Eq '^(packages/mcp-server/|package-lock\.json$)'; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "No MCP server package changes detected; skipping publish."
+          fi
+
+      - name: Set up Node
+        if: steps.scope.outputs.should_publish == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+
+      - name: Skip if last commit was a bot version bump
+        if: steps.scope.outputs.should_publish == 'true'
+        id: skip_check
+        run: |
+          last_msg=$(git log -1 --pretty=%B)
+          if echo "$last_msg" | grep -q "\[skip ci\]"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install (workspace aware)
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        working-directory: packages/mcp-server
+        run: npm run build
+
+      - name: Verify package contents
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        working-directory: packages/mcp-server
+        run: npm pack --dry-run
+
+      - name: Configure git identity
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        run: |
+          git config user.email "bot@unclick.world"
+          git config user.name "UnClick Bot"
+
+      - name: Bump patch version
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        working-directory: packages/mcp-server
+        run: |
+          remote_ver=$(npm view @unclick/mcp-server version 2>/dev/null || echo "")
+          new_ver=$(node - "$remote_ver" <<'NODE'
+          const fs = require("fs");
+          const remote = process.argv[2] || "";
+          const pkgPath = "package.json";
+          const lockPath = "../../package-lock.json";
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+          const parts = (version) => version.split(".").map((part) => Number(part));
+          const compare = (a, b) => {
+            const aa = parts(a);
+            const bb = parts(b);
+            for (let i = 0; i < 3; i += 1) {
+              if ((aa[i] || 0) !== (bb[i] || 0)) return (aa[i] || 0) - (bb[i] || 0);
+            }
+            return 0;
+          };
+          const base = remote && compare(remote, pkg.version) > 0 ? remote : pkg.version;
+          const next = parts(base);
+          next[2] = (next[2] || 0) + 1;
+          pkg.version = next.join(".");
+          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+          const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+          if (lock.packages?.["packages/mcp-server"]) {
+            lock.packages["packages/mcp-server"].version = pkg.version;
+          }
+          fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+          console.log(pkg.version);
+          NODE
+          )
+          git add package.json ../../package-lock.json
+          git commit -m "chore: bump mcp-server to v${new_ver} [skip ci]"
+
+      - name: Push version bump
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        run: git push
+
+      - name: Publish to npm
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        working-directory: packages/mcp-server
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify published version
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        working-directory: packages/mcp-server
+        run: |
+          local_ver=$(node -p "require('./package.json').version")
+          echo "Published @unclick/mcp-server@${local_ver}"
+          # Give npm registry a moment to propagate, then confirm.
+          for i in 1 2 3 4 5; do
+            remote_ver=$(npm view @unclick/mcp-server version 2>/dev/null || echo "")
+            if [ "$remote_ver" = "$local_ver" ]; then
+              echo "Confirmed on registry."
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "Warning: registry still shows ${remote_ver}, expected ${local_ver}"

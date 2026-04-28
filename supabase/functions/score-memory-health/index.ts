@@ -6,7 +6,7 @@
 // the schedule can move into SQL (see 20260420010000_memory_health.sql).
 //
 // Flow:
-//   1. List distinct api_key_hashes from mc_extracted_facts.
+//   1. List distinct api_key_hashes from memory-bearing tables.
 //   2. For each hash, call mc_score_memory_health(p_api_key_hash)
 //      which upserts mc_memory_health.
 //   3. Return a small JSON summary for observability.
@@ -27,17 +27,29 @@ Deno.serve(async () => {
     auth: { persistSession: false },
   });
 
-  const { data: rows, error: listErr } = await supabase
+  const { data: factRows, error: factListErr } = await supabase
     .from("mc_extracted_facts")
     .select("api_key_hash")
     .eq("status", "active");
 
-  if (listErr) {
-    return json({ error: listErr.message }, 500);
+  if (factListErr) {
+    return json({ error: factListErr.message }, 500);
+  }
+
+  const { data: summaryRows, error: summaryListErr } = await supabase
+    .from("mc_session_summaries")
+    .select("api_key_hash");
+
+  if (summaryListErr) {
+    return json({ error: summaryListErr.message }, 500);
   }
 
   const hashes = Array.from(
-    new Set((rows ?? []).map((r: any) => r.api_key_hash).filter(Boolean)),
+    new Set(
+      [...(factRows ?? []), ...(summaryRows ?? [])]
+        .map((r: any) => r.api_key_hash)
+        .filter(Boolean),
+    ),
   );
 
   const results: Array<{ api_key_hash: string; ok: boolean; error?: string }> = [];

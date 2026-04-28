@@ -178,11 +178,15 @@ export async function getVercelDomain(args: Record<string, unknown>): Promise<un
   }
 }
 
+export function vercelProjectIdArg(args: Record<string, unknown>): string {
+  return String(args.project_id ?? args.projectId ?? "").trim();
+}
+
 // get_vercel_env
 export async function getVercelEnv(args: Record<string, unknown>): Promise<unknown> {
   try {
     const token = getApiKey(args);
-    const projectId = String(args.project_id ?? "").trim();
+    const projectId = vercelProjectIdArg(args);
     if (!projectId) return { error: "project_id is required." };
     const params: Record<string, string> = {};
     if (args.team_id) params.teamId = String(args.team_id);

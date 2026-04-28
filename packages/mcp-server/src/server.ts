@@ -67,7 +67,34 @@ function failureSummary(toolName: string, result: unknown): string | null {
   return null;
 }
 
-function signalToolFailure(toolName: string, result: unknown): void {
+export function signalDeepLink(toolName: string): string {
+  const explicitLinks: Record<string, string> = {
+    github_action: "/admin/signals",
+  };
+  return explicitLinks[toolName] ?? "/admin/signals";
+}
+
+function signalPayload(toolName: string, args?: unknown): Record<string, unknown> {
+  const payload: Record<string, unknown> = { source: "mcp-server" };
+  if (toolName !== "github_action" || !args || typeof args !== "object") {
+    return payload;
+  }
+
+  const record = args as Record<string, unknown>;
+  const githubAction: Record<string, string> = {};
+  for (const key of ["action", "owner", "repo"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      githubAction[key] = value.trim();
+    }
+  }
+  if (Object.keys(githubAction).length > 0) {
+    payload.github_action = githubAction;
+  }
+  return payload;
+}
+
+function signalToolFailure(toolName: string, result: unknown, args?: unknown): void {
   const apiKeyHash = currentApiKeyHash();
   const summary = failureSummary(toolName, result);
   if (!apiKeyHash || !summary) return;
@@ -77,7 +104,8 @@ function signalToolFailure(toolName: string, result: unknown): void {
     action: "failed",
     severity: "action_needed",
     summary: summary.slice(0, 500),
-    payload: { source: "mcp-server" },
+    deepLink: signalDeepLink(toolName),
+    payload: signalPayload(toolName, args),
   });
 }
 
@@ -361,7 +389,12 @@ const VISIBLE_TOOLS = [
       "Automatically marks them as read so you do not re-narrate later.",
     inputSchema: {
       type: "object" as const,
-      properties: {},
+      properties: {
+        agent_id: {
+          type: "string",
+          description: "Stable Fishbowl agent_id for read attribution, e.g. chatgpt-codex-worker2.",
+        },
+      },
     },
   },
   {
@@ -1201,13 +1234,17 @@ export function createServer(): Server {
             ],
           };
         }
+        const callerAgentId =
+          typeof args.agent_id === "string" && args.agent_id.trim()
+            ? args.agent_id.trim()
+            : process.env.UNCLICK_AGENT_ID?.trim();
         const resp = await fetch(`${base}/api/memory-admin?action=check_signals`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-          body: "{}",
+          body: JSON.stringify({ agent_id: callerAgentId }),
         });
         const body = await resp.json().catch(() => ({}));
         const signalIds = Array.isArray((body as { signals?: unknown }).signals)
@@ -1222,7 +1259,11 @@ export function createServer(): Server {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ signal_ids: signalIds, read_via: "agent" }),
+            body: JSON.stringify({
+              signal_ids: signalIds,
+              read_via: "agent",
+              ...(callerAgentId ? { read_by_agent_id: callerAgentId } : {}),
+            }),
           });
           if (!ackResp.ok) {
             const ackBody = await ackResp.json().catch(() => ({}));
@@ -1485,7 +1526,7 @@ export function createServer(): Server {
         const additionalHandler = ADDITIONAL_HANDLERS[handlerKey];
         if (additionalHandler) {
           const result = await additionalHandler(params);
-          signalToolFailure(handlerKey, result);
+          signalToolFailure(handlerKey, result, params);
           return {
             content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };
@@ -1525,7 +1566,7 @@ export function createServer(): Server {
       const additionalHandler = ADDITIONAL_HANDLERS[name];
       if (additionalHandler) {
         const result = await additionalHandler(args);
-        signalToolFailure(name, result);
+        signalToolFailure(name, result, args);
         return {
           content: [
             {
@@ -1564,7 +1605,8 @@ export function createServer(): Server {
           action: "exception",
           severity: "action_needed",
           summary: `${name}: ${message}`.slice(0, 500),
-          payload: { source: "mcp-server" },
+          deepLink: signalDeepLink(name),
+          payload: signalPayload(name, args),
         });
       }
       return {

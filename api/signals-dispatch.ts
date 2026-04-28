@@ -32,6 +32,14 @@ const SEVERITY_RANK: Record<"info" | "action_needed" | "critical", number> = {
   critical: 2,
 };
 
+function displaySeverity(signal: SignalRow): string {
+  const payload = signal.payload ?? {};
+  if (signal.tool === "fishbowl" && payload.policy_label === "warning") {
+    return "warning";
+  }
+  return signal.severity;
+}
+
 async function sendEmail(params: {
   to: string;
   subject: string;
@@ -138,14 +146,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let sent = false;
 
     if (prefs.email_enabled && prefs.email_address) {
-      const subjectPrefix = signal.severity === "critical" ? "Action needed" : "Update";
+      const severityLabel = displaySeverity(signal);
+      const subjectPrefix =
+        signal.severity === "critical"
+          ? "Action needed"
+          : severityLabel === "warning"
+            ? "Warning"
+            : "Update";
       const subject = `[UnClick] ${subjectPrefix}: ${signal.summary}`;
       const textBody = [
         signal.summary,
         "",
         `Tool: ${signal.tool}`,
         `Action: ${signal.action}`,
-        `Severity: ${signal.severity}`,
+        `Severity: ${severityLabel}`,
         `When: ${signal.created_at}`,
         signal.deep_link ? `Open: https://unclick.world${signal.deep_link}` : "",
         "",
