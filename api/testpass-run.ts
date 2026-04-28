@@ -98,15 +98,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         pack_name: queryString(req.query.pack_name),
         profile: queryString(req.query.profile) as RunProfile | undefined,
         server_url: queryString(req.query.server_url),
+        task_id: queryString(req.query.task_id),
       }
     : ((req.body ?? {}) as {
         pack_id?: string;
         pack_name?: string;
         profile?: RunProfile;
         server_url?: string;
+        task_id?: string;
       });
 
   if (!input.pack_id) return json(res, 400, { error: "pack_id required" });
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (input.task_id !== undefined && input.task_id !== "" && !UUID_RE.test(input.task_id)) {
+    return json(res, 400, { error: "task_id must be a UUID (v1-v5, recommended v5)" });
+  }
+  const taskId = input.task_id && input.task_id !== "" ? input.task_id.toLowerCase() : undefined;
 
   const profile: RunProfile = input.profile ?? "smoke";
   if (!["smoke", "standard", "deep"].includes(profile)) {
@@ -132,13 +139,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const target: RunTarget = { type: "url", url: input.server_url ?? "" };
 
-  const runId = await createRun(config, {
+  const { id: runId, was_duplicate } = await createRun(config, {
     packId: packRow.id,
     packName: input.pack_name ?? pack.name ?? packSlug,
     target,
     profile,
     actorUserId,
+    taskId,
   });
+
+  if (was_duplicate) {
+    const summary = await computeVerdictSummary(config, runId);
+    const status = summary.pending === 0 ? (summary.fail > 0 ? "failed" : "complete") : "running";
+    return json(res, 200, {
+      run_id: runId,
+      status,
+      verdict_summary: summary,
+      was_duplicate: true,
+      task_id: taskId,
+    });
+  }
 
   const runWork = async () => {
     let evidenceRef: string | undefined;
@@ -180,11 +200,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (profile === "smoke") {
     const summary = await runWork();
     const status = summary.pending === 0 ? (summary.fail > 0 ? "failed" : "complete") : "running";
-    return json(res, 200, { run_id: runId, status, verdict_summary: summary });
+    return json(res, 200, {
+      run_id: runId,
+      status,
+      verdict_summary: summary,
+      was_duplicate: false,
+      task_id: taskId ?? null,
+    });
   }
 
   runWork().catch((err) => {
     console.error(`testpass-run background work failed for ${runId}:`, (err as Error).message);
   });
-  return json(res, 202, { run_id: runId, status: "running" });
+  return json(res, 202, {
+    run_id: runId,
+    status: "running",
+    was_duplicate: false,
+    task_id: taskId ?? null,
+  });
 }

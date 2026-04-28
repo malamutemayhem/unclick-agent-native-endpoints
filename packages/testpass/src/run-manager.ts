@@ -36,6 +36,11 @@ async function supaFetch(
   return text ? JSON.parse(text) : null;
 }
 
+export interface CreateRunResult {
+  id: string;
+  was_duplicate: boolean;
+}
+
 export async function createRun(
   config: RunManagerConfig,
   params: {
@@ -44,8 +49,9 @@ export async function createRun(
     target: RunTarget;
     profile: RunProfile;
     actorUserId: string;
+    taskId?: string;
   }
-): Promise<string> {
+): Promise<CreateRunResult> {
   const payload: Record<string, unknown> = {
     pack_id: params.packId,
     target: params.target,
@@ -56,8 +62,47 @@ export async function createRun(
     verdict_summary: { total: 0, check: 0, na: 0, fail: 0, other: 0, pending: 0, pass_rate: 0 },
   };
   if (params.packName) payload.pack_name = params.packName;
-  const rows = (await supaFetch(config, "testpass_runs", "POST", payload)) as Array<{ id: string }>;
-  return rows[0].id;
+  if (params.taskId) payload.task_id = params.taskId;
+
+  // Insert. On unique-violation against the (actor_user_id, task_id) partial
+  // index, look up the existing row and surface it with was_duplicate=true so
+  // the caller can short-circuit work and avoid double-dispatch (MCP SEP-1686).
+  const res = await fetch(`${config.supabaseUrl}/rest/v1/testpass_runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  if (res.ok) {
+    const rows = (text ? JSON.parse(text) : []) as Array<{ id: string }>;
+    return { id: rows[0].id, was_duplicate: false };
+  }
+  if (params.taskId && (res.status === 409 || res.status === 400) && /23505|duplicate key/.test(text)) {
+    const lookup = await fetch(
+      `${config.supabaseUrl}/rest/v1/testpass_runs?task_id=eq.${encodeURIComponent(params.taskId)}&actor_user_id=eq.${params.actorUserId}&select=id&limit=1`,
+      {
+        headers: {
+          apikey: config.serviceRoleKey,
+          Authorization: `Bearer ${config.serviceRoleKey}`,
+        },
+      },
+    );
+    if (lookup.ok) {
+      const rows = (await lookup.json()) as Array<{ id: string }>;
+      if (rows[0]) {
+        console.log(
+          `[duplicate_dispatch_avoided] table=testpass_runs task_id=${params.taskId} run_id=${rows[0].id}`,
+        );
+        return { id: rows[0].id, was_duplicate: true };
+      }
+    }
+  }
+  throw new Error(`Supabase POST testpass_runs → ${res.status}: ${text}`);
 }
 
 export async function updateRunStatus(

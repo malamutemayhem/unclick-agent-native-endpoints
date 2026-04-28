@@ -20,20 +20,23 @@ export async function testpassRun(args: Record<string, unknown>): Promise<unknow
   const targetUrl = String(args.target_url ?? "");
   const packId = String(args.pack_id ?? "testpass-core");
   const profile = String(args.profile ?? "smoke");
+  const taskId = typeof args.task_id === "string" && args.task_id ? args.task_id : undefined;
   if (!targetUrl) return { error: "target_url is required" };
 
   const apiKey = getApiKey();
+  const requestBody: Record<string, unknown> = {
+    pack_slug: packId,
+    target: { type: "mcp", url: targetUrl },
+    profile,
+  };
+  if (taskId) requestBody.task_id = taskId;
   const res = await fetch(`${API_BASE}/api/testpass?action=start_run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      pack_slug: packId,
-      target: { type: "mcp", url: targetUrl },
-      profile,
-    }),
+    body: JSON.stringify(requestBody),
   });
   const text = await res.text();
   let body: unknown = text;

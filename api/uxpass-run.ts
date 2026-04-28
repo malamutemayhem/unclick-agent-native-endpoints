@@ -87,8 +87,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const input = req.method === "GET"
     ? {
         url: queryString(req.query.url) ?? queryString(req.query.target_url),
+        task_id: queryString(req.query.task_id),
       }
-    : ((req.body ?? {}) as { url?: string; target_url?: string });
+    : ((req.body ?? {}) as { url?: string; target_url?: string; task_id?: string });
 
   const targetUrl = input.url ?? input.target_url ?? "";
   if (!targetUrl) return json(res, 400, { error: "url required" });
@@ -103,14 +104,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 400, { error: "url must use http or https" });
   }
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (input.task_id !== undefined && input.task_id !== "" && !UUID_RE.test(input.task_id)) {
+    return json(res, 400, { error: "task_id must be a UUID (v1-v5, recommended v5)" });
+  }
+  const taskId = input.task_id && input.task_id !== "" ? input.task_id.toLowerCase() : undefined;
+
   const config = { supabaseUrl, serviceRoleKey: serviceKey };
-  const runId = await createRun(config, {
+  const { id: runId, was_duplicate } = await createRun(config, {
     targetUrl,
     actorUserId,
     hats: CORE_HATS,
     viewports: ["desktop"],
     themes: ["light"],
+    taskId,
   });
+
+  if (was_duplicate) {
+    const lookup = await fetch(
+      `${supabaseUrl}/rest/v1/uxpass_runs?id=eq.${runId}&actor_user_id=eq.${actorUserId}&select=status,ux_score,target_url,breakdown&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+    );
+    const rows = (await lookup.json()) as Array<{
+      status?: string;
+      ux_score?: number | null;
+      target_url?: string;
+      breakdown?: unknown;
+    }>;
+    const existing = rows[0] ?? {};
+    return json(res, 200, {
+      run_id: runId,
+      was_duplicate: true,
+      task_id: taskId,
+      status: existing.status ?? "running",
+      ux_score: existing.ux_score ?? null,
+      target_url: existing.target_url ?? targetUrl,
+      stats: existing.breakdown ?? {},
+    });
+  }
 
   try {
     const result = await runDeterministicChecks(config, runId, targetUrl);
@@ -120,11 +151,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ux_score: result.uxScore,
       target_url: targetUrl,
       stats: result.stats,
+      was_duplicate: false,
+      task_id: taskId ?? null,
     });
   } catch (err) {
     return json(res, 500, {
       run_id: runId,
       error: `runner failed: ${(err as Error).message}`,
+      was_duplicate: false,
+      task_id: taskId ?? null,
     });
   }
 }

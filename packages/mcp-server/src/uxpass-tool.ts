@@ -82,6 +82,7 @@ function safeFilename(name: string): string {
 export async function uxpassRun(args: Record<string, unknown>): Promise<unknown> {
   const url = typeof args.url === "string" ? args.url : undefined;
   const packName = typeof args.pack_name === "string" ? args.pack_name : undefined;
+  const taskId = typeof args.task_id === "string" && args.task_id ? args.task_id : undefined;
 
   if (!url && !packName) {
     return { error: "Either url or pack_name is required" };
@@ -105,9 +106,11 @@ export async function uxpassRun(args: Record<string, unknown>): Promise<unknown>
     }
   }
 
+  const body: Record<string, unknown> = { target_url: targetUrl, pack_slug: "uxpass-core" };
+  if (taskId) body.task_id = taskId;
   return callApi("?action=start_run", {
     method: "POST",
-    body: { target_url: targetUrl, pack_slug: "uxpass-core" },
+    body,
   });
 }
 

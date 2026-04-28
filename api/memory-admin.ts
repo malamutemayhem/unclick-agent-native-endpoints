@@ -5238,13 +5238,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         await ensureStarterCrews(supabase, apiKeyHash);
-        const { crew_id, task_prompt, token_budget } = (req.body ?? {}) as {
+        const { crew_id, task_prompt, token_budget, task_id } = (req.body ?? {}) as {
           crew_id?: string;
           task_prompt?: string;
           token_budget?: number;
+          task_id?: string;
         };
         if (!crew_id || !task_prompt?.trim()) {
           return res.status(400).json({ error: "crew_id and task_prompt required" });
+        }
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        let normalizedTaskId: string | undefined;
+        if (task_id !== undefined && task_id !== null && task_id !== "") {
+          if (typeof task_id !== "string" || !UUID_RE.test(task_id)) {
+            return res.status(400).json({ error: "task_id must be a UUID (v1-v5, recommended v5)" });
+          }
+          normalizedTaskId = task_id.toLowerCase();
         }
         const { data: crewRow, error: crewErr } = await supabase
           .from("mc_crews")
@@ -5259,42 +5268,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // User-facing runs now route LLM traffic through MCP sampling. The HTTP
         // path cannot do bidirectional sampling, so we create the run row for
         // bookkeeping and return a card asking the caller to re-run via MCP.
+        const insertPayload: Record<string, unknown> = {
+          api_key_hash: apiKeyHash,
+          crew_id,
+          task_prompt: task_prompt.trim(),
+          token_budget: token_budget ?? 150000,
+          status: "failed",
+          result_artifact: {
+            error: "SAMPLING_NOT_SUPPORTED",
+            message:
+              "Orchestrator does not support sampling. Use Claude Desktop or another sampling-capable client.",
+          },
+          completed_at: new Date().toISOString(),
+        };
+        if (normalizedTaskId) insertPayload.task_id = normalizedTaskId;
         const { data: runRow, error: runErr } = await supabase
           .from("mc_crew_runs")
-          .insert({
-            api_key_hash: apiKeyHash,
-            crew_id,
-            task_prompt: task_prompt.trim(),
-            token_budget: token_budget ?? 150000,
-            status: "failed",
-            result_artifact: {
-              error: "SAMPLING_NOT_SUPPORTED",
-              message:
-                "Orchestrator does not support sampling. Use Claude Desktop or another sampling-capable client.",
-            },
-            completed_at: new Date().toISOString(),
-          })
+          .insert(insertPayload)
           .select()
           .single();
-        if (runErr) throw runErr;
+        // 23505 = unique_violation against (api_key_hash, task_id) partial index.
+        // Look up the original row, return it with was_duplicate=true so the
+        // caller can short-circuit duplicate dispatch (MCP SEP-1686).
+        let resolvedRunId: string;
+        let wasDuplicate = false;
+        if (runErr) {
+          const errCode = (runErr as { code?: string }).code;
+          if (normalizedTaskId && errCode === "23505") {
+            const { data: existing } = await supabase
+              .from("mc_crew_runs")
+              .select("id")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("task_id", normalizedTaskId)
+              .maybeSingle();
+            if (existing?.id) {
+              console.log(
+                `[duplicate_dispatch_avoided] table=mc_crew_runs task_id=${normalizedTaskId} run_id=${existing.id}`,
+              );
+              resolvedRunId = existing.id;
+              wasDuplicate = true;
+            } else {
+              throw runErr;
+            }
+          } else {
+            throw runErr;
+          }
+        } else {
+          resolvedRunId = runRow.id;
+        }
         const card: ConversationalCard = buildCard({
-          headline: "Crews Council run needs MCP sampling",
-          summary:
-            "This HTTP endpoint cannot run a Council round because LLM traffic now flows through MCP sampling. Start the run from a sampling-capable client (e.g. Claude Desktop) using the start_crew_run MCP tool.",
+          headline: wasDuplicate
+            ? "Crews Council run already created"
+            : "Crews Council run needs MCP sampling",
+          summary: wasDuplicate
+            ? "A run with this task_id already exists for your tenant. Returning the original run_id; no new row was created."
+            : "This HTTP endpoint cannot run a Council round because LLM traffic now flows through MCP sampling. Start the run from a sampling-capable client (e.g. Claude Desktop) using the start_crew_run MCP tool.",
           keyFacts: [
-            `run_id: ${runRow.id}`,
+            `run_id: ${resolvedRunId}`,
             `crew_id: ${crew_id}`,
-            "status: failed (SAMPLING_NOT_SUPPORTED)",
+            ...(wasDuplicate
+              ? ["was_duplicate: true"]
+              : ["status: failed (SAMPLING_NOT_SUPPORTED)"]),
           ],
-          nextActions: [
-            "Install the UnClick MCP server in a sampling-capable client",
-            "Call the start_crew_run MCP tool with the same crew_id and task_prompt",
-          ],
-          deepLink: `/admin/crews/runs/${runRow.id}`,
+          nextActions: wasDuplicate
+            ? ["Call get_run with the run_id to inspect the original run"]
+            : [
+                "Install the UnClick MCP server in a sampling-capable client",
+                "Call the start_crew_run MCP tool with the same crew_id and task_prompt",
+              ],
+          deepLink: `/admin/crews/runs/${resolvedRunId}`,
         });
-        return res.status(409).json({
-          error: "SAMPLING_NOT_SUPPORTED",
-          run_id: runRow.id,
+        return res.status(wasDuplicate ? 200 : 409).json({
+          error: wasDuplicate ? undefined : "SAMPLING_NOT_SUPPORTED",
+          run_id: resolvedRunId,
+          was_duplicate: wasDuplicate,
+          task_id: normalizedTaskId ?? null,
           card,
         });
       }

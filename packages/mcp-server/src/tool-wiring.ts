@@ -11077,13 +11077,17 @@ export const ADDITIONAL_TOOLS = [
   // ── testpass-tool.ts ────────────────────────────────────────────────────────
   {
     name: "testpass_run",
-    description: "Start a TestPass run against an MCP server. Seeds deterministic and agent checks from the given pack and returns the run id plus an initial verdict summary.",
+    description: "Start a TestPass run against an MCP server. Seeds deterministic and agent checks from the given pack and returns the run id plus an initial verdict summary. Response includes was_duplicate: boolean indicating whether the row was already present (idempotent retry).",
     inputSchema: {
       type: "object" as const,
       properties: {
         target_url: { type: "string", description: "HTTP URL of the MCP server to test" },
         pack_id: { type: "string", description: "Pack slug (default: testpass-core)" },
         profile: { type: "string", enum: ["smoke", "standard", "deep"], description: "Run profile (default: smoke)" },
+        task_id: {
+          type: "string",
+          description: "Client-generated idempotency key (UUIDv5 from thread_id + prompt_hash + time_bucket recommended). Required for safe retry. If omitted, the server creates a fresh row and you lose retry safety; sending the same task_id twice returns the original run_id with was_duplicate=true instead of creating a duplicate.",
+        },
       },
       required: ["target_url"],
     },
@@ -11129,7 +11133,7 @@ export const ADDITIONAL_TOOLS = [
   // ── uxpass-tool.ts (UI/UX QC, sister to TestPass) ──────────────────────────
   {
     name: "uxpass_run",
-    description: "Run a UI/UX quality check synchronously against a URL. Executes the deterministic uxpass-core check set (HTTP, HTML, accessibility, agent readability, performance, security) against the target and returns the run id, status, UX Score, and summary. Pass either url (a one-off check) or pack_name (resolves the registered pack's url). The hats parameter is accepted for forward compatibility but is currently ignored; LLM hats land in a later chunk.",
+    description: "Run a UI/UX quality check synchronously against a URL. Executes the deterministic uxpass-core check set (HTTP, HTML, accessibility, agent readability, performance, security) against the target and returns the run id, status, UX Score, and summary. Pass either url (a one-off check) or pack_name (resolves the registered pack's url). The hats parameter is accepted for forward compatibility but is currently ignored; LLM hats land in a later chunk. Response includes was_duplicate: boolean indicating whether the row was already present (idempotent retry).",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -11139,6 +11143,10 @@ export const ADDITIONAL_TOOLS = [
           type: "array",
           items: { type: "string" },
           description: "Reserved for future use. Currently ignored; the deterministic runner evaluates the full uxpass-core check set on every run.",
+        },
+        task_id: {
+          type: "string",
+          description: "Client-generated idempotency key (UUIDv5 from thread_id + prompt_hash + time_bucket recommended). Required for safe retry. If omitted, the server creates a fresh row and you lose retry safety; sending the same task_id twice returns the original run_id with was_duplicate=true instead of creating a duplicate.",
         },
       },
     },
@@ -11202,13 +11210,17 @@ export const ADDITIONAL_TOOLS = [
   // ── crews-tool.ts (Orchestrator Wizard) ──────────────────────────────────────
   {
     name: "start_crew_run",
-    description: "Call this tool when the user wants to start a Crews Council run. Creates the run row on the UnClick API and returns a ConversationalCard with next actions. LLM turns are expected to flow through MCP sampling; if the Orchestrator does not support sampling the card reports SAMPLING_NOT_SUPPORTED.",
+    description: "Call this tool when the user wants to start a Crews Council run. Creates the run row on the UnClick API and returns a ConversationalCard with next actions. LLM turns are expected to flow through MCP sampling; if the Orchestrator does not support sampling the card reports SAMPLING_NOT_SUPPORTED. Response card surfaces was_duplicate when an existing run is returned for an already-seen task_id.",
     inputSchema: {
       type: "object" as const,
       properties: {
         crew_id: { type: "string", description: "The UUID of the Crew to run" },
         task_prompt: { type: "string", description: "The task the Council should deliberate on" },
         token_budget: { type: "number", description: "Optional token budget (default 150000)" },
+        task_id: {
+          type: "string",
+          description: "Client-generated idempotency key (UUIDv5 from thread_id + prompt_hash + time_bucket recommended). Required for safe retry. If omitted, the server creates a fresh row and you lose retry safety; sending the same task_id twice returns the original run_id with was_duplicate=true instead of creating a duplicate.",
+        },
       },
       required: ["crew_id", "task_prompt"],
     },

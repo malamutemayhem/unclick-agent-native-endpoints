@@ -178,6 +178,19 @@ interface StartRunBody {
   pack_id?: string;
   target?: RunTarget;
   profile?: RunProfile;
+  task_id?: string;
+}
+
+// Accept any canonical UUID (v1-v5). UUIDv5 is the recommended derivation but
+// strict version-pinning would needlessly reject conformant clients that pick
+// a different deterministic scheme. Bad input gets a 400 so the partial unique
+// index never sees a malformed key.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function validateTaskId(raw: unknown): { value?: string; error?: string } {
+  if (raw === undefined || raw === null || raw === "") return {};
+  if (typeof raw !== "string") return { error: "task_id must be a string UUID" };
+  if (!UUID_RE.test(raw)) return { error: "task_id must be a UUID (v1-v5, recommended v5)" };
+  return { value: raw.toLowerCase() };
 }
 
 interface StartRunContext {
@@ -196,6 +209,9 @@ async function performStartRun(
   if (!body.pack_slug && !body.pack_id) {
     return { status: 400, payload: { error: "pack_slug or pack_id required" } };
   }
+  const taskIdCheck = validateTaskId(body.task_id);
+  if (taskIdCheck.error) return { status: 400, payload: { error: taskIdCheck.error } };
+
   const profile: RunProfile = body.profile ?? "standard";
   const slug = body.pack_slug ?? "testpass-core";
 
@@ -215,13 +231,29 @@ async function performStartRun(
   }
 
   const config = { supabaseUrl: ctx.supabaseUrl, serviceRoleKey: ctx.serviceKey };
-  const runId = await createRun(config, {
+  const { id: runId, was_duplicate } = await createRun(config, {
     packId,
     packName: pack.name ?? slug,
     target: body.target,
     profile,
     actorUserId: ctx.actorUserId,
+    taskId: taskIdCheck.value,
   });
+
+  if (was_duplicate) {
+    // Skip probe/seed/run; surface the existing row's current state so the
+    // caller can poll status as if it had submitted the original request.
+    const summary = await computeVerdictSummary(config, runId);
+    return {
+      status: 200,
+      payload: {
+        run_id: runId,
+        was_duplicate: true,
+        task_id: taskIdCheck.value,
+        summary,
+      },
+    };
+  }
 
   let evidenceRef: string | undefined;
   try {
@@ -264,7 +296,16 @@ async function performStartRun(
     summary,
   );
 
-  return { status: 201, payload: { run_id: runId, evidence_ref: evidenceRef ?? null, summary } };
+  return {
+    status: 201,
+    payload: {
+      run_id: runId,
+      evidence_ref: evidenceRef ?? null,
+      summary,
+      was_duplicate: false,
+      task_id: taskIdCheck.value ?? null,
+    },
+  };
 }
 
 async function upsertPack(
@@ -398,12 +439,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       profile?: RunProfile;
       pack_slug?: string;
       pack_id?: string;
+      task_id?: string;
     };
     const target: RunTarget | undefined = raw.target
       ?? (raw.target_url ? { type: "mcp", url: raw.target_url } : undefined);
     const result = await performStartRun(
       { supabaseUrl, serviceKey, actorUserId },
-      { target, profile: raw.profile, pack_slug: raw.pack_slug, pack_id: raw.pack_id },
+      { target, profile: raw.profile, pack_slug: raw.pack_slug, pack_id: raw.pack_id, task_id: raw.task_id },
     );
     return json(res, result.status, result.payload);
   }

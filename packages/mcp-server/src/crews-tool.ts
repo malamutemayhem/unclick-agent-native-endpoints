@@ -42,12 +42,19 @@ async function adminCall(
   return { ok: res.ok, status: res.status, json };
 }
 
-type AdminCard = { card?: ConversationalCard; error?: string; message?: string; run_id?: string };
+type AdminCard = {
+  card?: ConversationalCard;
+  error?: string;
+  message?: string;
+  run_id?: string;
+  was_duplicate?: boolean;
+};
 
 export async function crewsStartRun(args: Record<string, unknown>): Promise<ConversationalCard> {
   const crewId = String(args.crew_id ?? "").trim();
   const taskPrompt = String(args.task_prompt ?? "").trim();
   const tokenBudget = typeof args.token_budget === "number" ? args.token_budget : undefined;
+  const taskId = typeof args.task_id === "string" && args.task_id ? args.task_id : undefined;
   if (!crewId) {
     return buildCard({
       headline: "start_crew_run needs a crew_id",
@@ -66,6 +73,7 @@ export async function crewsStartRun(args: Record<string, unknown>): Promise<Conv
   }
   const body: Record<string, unknown> = { crew_id: crewId, task_prompt: taskPrompt };
   if (tokenBudget) body.token_budget = tokenBudget;
+  if (taskId) body.task_id = taskId;
   const { ok, status, json } = await adminCall("start_crew_run", body, "POST");
   const payload = (json ?? {}) as AdminCard;
   if (payload.card) return payload.card;
@@ -81,9 +89,14 @@ export async function crewsStartRun(args: Record<string, unknown>): Promise<Conv
     });
   }
   return buildCard({
-    headline: "Crews run accepted",
-    summary: "The run row was created. Poll get_run to follow progress.",
-    keyFacts: payload.run_id ? [`run_id: ${payload.run_id}`] : [],
+    headline: payload.was_duplicate ? "Crews run already exists" : "Crews run accepted",
+    summary: payload.was_duplicate
+      ? "A run with this task_id already exists for your tenant. Returning the original run_id; no new row was created."
+      : "The run row was created. Poll get_run to follow progress.",
+    keyFacts: [
+      ...(payload.run_id ? [`run_id: ${payload.run_id}`] : []),
+      ...(payload.was_duplicate ? ["was_duplicate: true"] : []),
+    ],
     nextActions: ["Call get_run with the run_id to check status"],
     deepLink: payload.run_id ? `/admin/crews/runs/${payload.run_id}` : undefined,
   });
