@@ -6183,7 +6183,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Updates the agent's free-form Now Playing line. The row must already
         // exist (set_my_emoji creates it). An empty string clears the status
         // back to idle. Always bumps last_seen_at so the status timestamp and
-        // the activity timestamp stay coherent.
+        // the activity timestamp stay coherent. A status pulse also clears any
+        // prior dead-man timer unless the caller sets next_checkin_at again.
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) {
@@ -6263,23 +6264,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           current_status_updated_at: nowIso,
           last_seen_at: nowIso,
         };
-        if (nextCheckinUpdate.apply) {
-          updatePayload.next_checkin_at = nextCheckinUpdate.iso;
-        } else {
-          const { data: existingProfile, error: existingProfileErr } = await supabase
-            .from("mc_fishbowl_profiles")
-            .select("next_checkin_at")
-            .eq("api_key_hash", apiKeyHash)
-            .eq("agent_id", agentId)
-            .maybeSingle();
-          if (existingProfileErr) throw existingProfileErr;
-          const existingNextCheckin = existingProfile?.next_checkin_at;
-          const existingNextCheckinMs =
-            typeof existingNextCheckin === "string" ? Date.parse(existingNextCheckin) : Number.NaN;
-          if (!Number.isNaN(existingNextCheckinMs) && existingNextCheckinMs < now.getTime()) {
-            updatePayload.next_checkin_at = new Date(now.getTime() + 30 * 60_000).toISOString();
-          }
-        }
+        updatePayload.next_checkin_at = nextCheckinUpdate.apply ? nextCheckinUpdate.iso : null;
         const { data, error } = await supabase
           .from("mc_fishbowl_profiles")
           .update(updatePayload)
@@ -6441,10 +6426,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (insertErr) throw insertErr;
 
         // Bump post-side presence so active authors do not look stale on Now Playing.
+        // Posting is a live pulse, so it clears any prior dead-man timer.
         const postedAtIso = new Date().toISOString();
         await supabase
           .from("mc_fishbowl_profiles")
-          .update({ last_seen_at: postedAtIso, current_status_updated_at: postedAtIso })
+          .update({ last_seen_at: postedAtIso, current_status_updated_at: postedAtIso, next_checkin_at: null })
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId);
 
