@@ -30,7 +30,7 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-6 text-center">
         <Plug className="mx-auto h-8 w-8 text-white/20 mb-3" />
         <p className="text-sm text-white/50">
-          Third-party service integrations - connect your API keys in Keychain to enable these tools.
+          No connections yet. Add service credentials in Connections to enable these tools.
         </p>
         <Link
           to="/settings"

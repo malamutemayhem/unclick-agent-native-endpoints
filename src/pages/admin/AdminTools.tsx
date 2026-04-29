@@ -74,14 +74,14 @@ export default function AdminToolsPage() {
           <UnClickTools metering={metering} />
         </section>
 
-        {/* Section 2 - Connected Services */}
+        {/* Section 2 - Connections */}
         <section className="mb-12">
-          <h2 className="mb-4 text-lg font-semibold text-white">Connected Services</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">Connections</h2>
           <InfoCard
             id="tools-services"
-            title="What are Connected Services?"
-            description="Third-party platforms you've linked API keys for - like GitHub, Stripe, or Cloudflare. Your agent can use these on your behalf."
-            learnMore="Store credentials securely in Keychain, and your agent can interact with these services during conversations. Credentials are encrypted and only accessible to your agent."
+            title="What are Connections?"
+            description="Third-party platforms you have linked for your agents, like GitHub, Stripe, or Cloudflare."
+            learnMore="Store credentials securely in Connections, and your agent can interact with these services during conversations. Credentials are encrypted and only accessible to your agent."
           />
           <ConnectedServices connectors={connectors} loading={loading} />
         </section>

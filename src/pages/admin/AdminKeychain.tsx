@@ -1,5 +1,5 @@
 /**
- * AdminKeychain — BackstagePass admin surface (/admin/keychain)
+ * AdminKeychain - Connections admin surface (/admin/keychain)
  *
  * Full CRUD on the user_credentials vault:
  *   - List every credential the signed-in user owns (metadata only)
@@ -504,9 +504,9 @@ export default function AdminKeychain() {
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">BackstagePass</h1>
+          <h1 className="text-2xl font-semibold text-white">Connections</h1>
           <p className="mt-1 text-sm text-[#888]">
-            Your encrypted credential vault. {credentials.length} credential{credentials.length === 1 ? "" : "s"} stored.
+            Securely connect external services for your agents. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
           </p>
         </div>
         <div className="flex gap-2">
