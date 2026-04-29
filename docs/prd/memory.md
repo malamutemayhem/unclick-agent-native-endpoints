@@ -21,6 +21,7 @@ Memory belongs to the user, not the harness. It should survive model upgrades, h
    - Business context: standing rules the agent loads on every turn.
    - Sessions: summaries of prior conversations.
    - Facts: atomic statements with confidence, category, and supersede chain.
+     Troubleshooting facts use category `troubleshooting` and the shape `Issue: <symptom>. Solution: <fix>` so solved client, browser, connector, or tool problems can be found again.
    - Library: canonical documents with provenance and history.
    - Conversations: raw conversation log for replay and debugging.
    - Code: code dumps and architecture snapshots.

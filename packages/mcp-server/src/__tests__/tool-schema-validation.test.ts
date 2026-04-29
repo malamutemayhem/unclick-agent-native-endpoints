@@ -44,6 +44,10 @@ describe("runtime tool schema validation", () => {
 
   it("allows valid arguments for the same tool family", () => {
     expect(validateToolArgumentsForRuntime("load_memory", { num_sessions: 1 })).toBeNull();
+    expect(validateToolArgumentsForRuntime("save_fact", {
+      fact: "Issue: Claude tool-result submission fails in Brave. Solution: disable Brave Shields for claude.ai.",
+      category: "troubleshooting",
+    })).toBeNull();
     expect(validateToolArgumentsForRuntime("unclick_generate_uuid", { count: 1 })).toBeNull();
     expect(validateToolArgumentsForRuntime("unclick_call", {
       endpoint_id: "memory.search_memory",

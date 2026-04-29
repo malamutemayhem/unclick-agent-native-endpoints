@@ -278,7 +278,9 @@ const VISIBLE_TOOLS = [
       "Saves a new persistent fact about the user that will be available in all future sessions across every AI tool. " +
       "Use whenever the user shares anything worth keeping -- even if they don't explicitly ask: 'capture', 'noted', " +
       "'remember this', 'log', 'store', 'don't forget', or any preference, decision, correction, contact, project detail, " +
-      "technical choice, or personal detail the user mentions. " +
+      "technical choice, troubleshooting fix, or personal detail the user mentions. " +
+      "When the user reports a solved client/tool issue, save it as category 'troubleshooting' using the shape " +
+      "'Issue: <symptom>. Solution: <fix>'. " +
       "Also trigger proactively when the user corrects you (save the correction immediately), " +
       "reveals a preference by rejecting something, or names a person/tool/project for the first time. " +
       "Do NOT trigger for transient values (today's weather, one-off calculations, temporary state that won't matter next session). " +
@@ -290,8 +292,8 @@ const VISIBLE_TOOLS = [
         fact: { type: "string", description: "The fact -- a single atomic statement" },
         category: {
           type: "string",
-          enum: ["preference", "decision", "technical", "contact", "project", "general"],
-          description: "Category: preference, decision, technical, contact, project, general",
+          enum: ["preference", "decision", "technical", "contact", "project", "troubleshooting", "general"],
+          description: "Category: preference, decision, technical, contact, project, troubleshooting, general",
           default: "general",
         },
         confidence: { type: "number", minimum: 0, maximum: 1, default: 0.9 },
@@ -1380,6 +1382,8 @@ export function createServer(): Server {
         "               'facts about me', 'who am I', or references any past work.",
         "  3. SAVE   -- call `save_fact` the moment the user shares anything",
         "               worth keeping: name, preferences, decisions, corrections.",
+        "               For solved client/tool issues, use category `troubleshooting`",
+        "               and write `Issue: <symptom>. Solution: <fix>`.",
         "               Use `save_identity` for standing rules that apply every",
         "               session (role, timezone, stack, workflow).",
         "  4. END    -- call `save_session` before closing. Record decisions made,",
