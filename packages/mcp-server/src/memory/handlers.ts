@@ -68,12 +68,86 @@ function hasInvalidatedAtSet(value: unknown): boolean {
   return row.invalidated_at !== null && row.invalidated_at !== undefined && row.invalidated_at !== "";
 }
 
-export function filterInvalidatedActiveFactsForLoadMemory(value: unknown): unknown {
+function factTimestamp(value: unknown): number {
+  const row = asRecord(value);
+  if (!row || typeof row.created_at !== "string") return 0;
+  const parsed = Date.parse(row.created_at);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function factConfidence(value: unknown): number {
+  const row = asRecord(value);
+  return row && typeof row.confidence === "number" && Number.isFinite(row.confidence)
+    ? row.confidence
+    : 0;
+}
+
+function textMatchesOperationalSelfReport(text: string): boolean {
+  const normalized = text.toLowerCase();
+  const exactSignals = [
+    "no fishbowl write tools",
+    "testpass_cron_user_id",
+    "heartbeat",
+    "self-report",
+    "self report",
+  ];
+  if (exactSignals.some((signal) => normalized.includes(signal))) return true;
+  if (normalized.includes("cron") && normalized.includes("resolved")) return true;
+  if (normalized.includes("signal") && normalized.includes("blocked")) return true;
+  return false;
+}
+
+function activeFactPenalty(value: unknown): number {
+  const row = asRecord(value);
+  if (!row) return 0;
+
+  // Startup payloads still strip most provenance, so rank-time demotion needs
+  // to honor explicit markers when present and fall back to content heuristics.
+  if (typeof row.startup_fact_kind === "string") {
+    if (row.startup_fact_kind === "durable") return 0;
+    if (row.startup_fact_kind === "operational" || row.startup_fact_kind === "excluded") return 1;
+  }
+
+  if (typeof row.source_type === "string") {
+    const sourceType = row.source_type.toLowerCase();
+    if (
+      sourceType.includes("heartbeat") ||
+      sourceType.includes("self_report") ||
+      sourceType.includes("self-report") ||
+      sourceType.includes("cron") ||
+      sourceType.includes("system")
+    ) {
+      return 1;
+    }
+  }
+
+  if (typeof row.fact === "string" && textMatchesOperationalSelfReport(row.fact)) return 1;
+  if (typeof row.category === "string" && textMatchesOperationalSelfReport(row.category)) return 1;
+  return 0;
+}
+
+export function normalizeActiveFactsForLoadMemory(value: unknown): unknown {
   const context = asRecord(value);
   if (!context || !Array.isArray(context.active_facts)) return value;
+  const originalFacts = context.active_facts as unknown[];
 
-  const activeFacts = context.active_facts.filter((row) => !hasInvalidatedAtSet(row));
-  if (activeFacts.length === context.active_facts.length) return value;
+  const activeFacts = originalFacts
+    .filter((row) => !hasInvalidatedAtSet(row))
+    .slice()
+    .sort((left, right) => {
+      const penaltyDelta = activeFactPenalty(left) - activeFactPenalty(right);
+      if (penaltyDelta !== 0) return penaltyDelta;
+
+      const confidenceDelta = factConfidence(right) - factConfidence(left);
+      if (confidenceDelta !== 0) return confidenceDelta;
+
+      return factTimestamp(right) - factTimestamp(left);
+    });
+
+  const unchanged =
+    activeFacts.length === originalFacts.length &&
+    activeFacts.every((row, index) => row === originalFacts[index]);
+  if (unchanged) return value;
   return { ...context, active_facts: activeFacts };
 }
 
@@ -81,7 +155,7 @@ export function compactStartupContextForStrictClients(
   value: unknown,
   includeSessionSummaries = false
 ): unknown {
-  const context = asRecord(filterInvalidatedActiveFactsForLoadMemory(value));
+  const context = asRecord(normalizeActiveFactsForLoadMemory(value));
   if (!context) return value;
 
   const out: Record<string, unknown> = { ...context };
@@ -154,7 +228,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       db.getStartupContext(sessionCount),
       resolveAgent({ agent_slug: slug, agent_id: id }),
     ]);
-    const safeBaseContext = filterInvalidatedActiveFactsForLoadMemory(baseContext);
+    const safeBaseContext = normalizeActiveFactsForLoadMemory(baseContext);
     const boundedContext = fullContent
       ? safeBaseContext
       : compactStartupContextForStrictClients(safeBaseContext, !lite);
