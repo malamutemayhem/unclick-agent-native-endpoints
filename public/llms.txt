@@ -1,9 +1,9 @@
 # UnClick
 # Update counts from src/config/site-stats.ts
-> The app store for AI agents. 172+ tools across social, finance, dev, security, and more.
+> Agent rails for AI agents: tools, memory, connections, crews, and Pass family checks.
 
 ## What is UnClick
-UnClick is an MCP-compatible tool marketplace where AI agents discover and use tools through a single install. One npm package gives access to 450+ callable endpoints across 60+ integrations. No per-tool installs. No configuration per service.
+UnClick is an MCP-compatible agent-rails layer where AI agents discover tools, load memory, use secure connections, run crews, and verify work with the Pass family. One npm package gives access to 450+ callable endpoints across 60+ integrations. No per-tool installs. No configuration per service.
 
 ## How agents connect
 Install: npx @unclick/mcp-server

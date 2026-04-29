@@ -26,7 +26,7 @@ const PRODUCTS = [
   },
   {
     title: "Pass family",
-    description: "TestPass, UXPass, SecurityPass, SEOPass",
+    description: "QA, UX, security, SEO, legal, and slop checks",
     href: "/admin/testpass",
     icon: BadgeCheck,
     color: "bg-red-500/10 text-red-500",
@@ -113,7 +113,7 @@ const Hero = () => {
               The rails your agent plugs into
             </h2>
             <p className="mt-3 text-center text-body max-w-2xl mx-auto">
-              UnClick sits behind Claude, ChatGPT, Cursor, and every MCP client as the shared layer for action, memory, credentials, teams, and QA.
+              UnClick sits behind Claude, ChatGPT, Cursor, and every MCP client as the shared layer for action, memory, credentials, crews, and Pass family verification.
             </p>
           </FadeIn>
 

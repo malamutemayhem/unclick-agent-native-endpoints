@@ -42,17 +42,17 @@
   <text x="80" y="260" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-3">UnClick</text>
 
   <!-- Tagline -->
-  <text x="82" y="320" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="32" font-weight="400" fill="#a0a0b0" letter-spacing="0">The App Store for AI Agents</text>
+  <text x="82" y="320" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="32" font-weight="400" fill="#a0a0b0" letter-spacing="0">Agent rails for tools, memory, and QC</text>
 
   <!-- Divider -->
   <rect x="80" y="360" width="1040" height="1" fill="#ffffff12"/>
 
   <!-- Stats row -->
-  <text x="80" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#6366f1" font-weight="600">59 tools</text>
-  <text x="220" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
-  <text x="245" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">One API key</text>
-  <text x="415" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
-  <text x="440" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">Works with Claude, ChatGPT &amp; more</text>
+  <text x="80" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#6366f1" font-weight="600">450+ endpoints</text>
+  <text x="280" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
+  <text x="305" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">Pass family checks</text>
+  <text x="560" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#ffffff30">|</text>
+  <text x="585" y="420" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="22" fill="#a0a0b0">Works with Claude, ChatGPT &amp; more</text>
 
   <!-- Domain -->
   <text x="80" y="530" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="20" fill="#6366f130" letter-spacing="2">unclick.world</text>

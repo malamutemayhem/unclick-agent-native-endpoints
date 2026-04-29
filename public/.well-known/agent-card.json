@@ -1,6 +1,6 @@
 {
   "name": "UnClick",
-  "description": "AI agent tool marketplace. 450+ callable endpoints across 60+ integrations.",
+  "description": "Agent rails for tools, memory, connections, crews, and Pass family checks. 450+ callable endpoints across 60+ integrations.",
   "url": "https://unclick.world",
   "protocol": "mcp",
   "install": "npx @unclick/mcp-server",

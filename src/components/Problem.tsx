@@ -14,7 +14,7 @@ const Problem = () => (
       </FadeIn>
       <FadeIn delay={0.1}>
         <h2 className="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">
-          The web is built for humans. We built the agent version.
+          AI agents need rails, not another dashboard.
         </h2>
       </FadeIn>
       <FadeIn delay={0.2}>
@@ -25,8 +25,9 @@ const Problem = () => (
       </FadeIn>
       <FadeIn delay={0.3}>
         <p className="mt-4 text-body leading-relaxed">
-          UnClick builds proper APIs for the things AI agents constantly need to do. Link pages,
-          scheduling, forms, and more. Call an endpoint. Get JSON back. No browser involved.
+          UnClick gives them the shared pieces they keep reaching for: tools, memory,
+          connections, crews, and Pass family checks. Call an endpoint. Get JSON back.
+          Prove the work before it ships.
         </p>
       </FadeIn>
 

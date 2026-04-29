@@ -57,7 +57,7 @@ ctx.fillText('UnClick', 80, 260);
 ctx.fillStyle = '#a0a0b0';
 ctx.font = '400 32px "Courier New", ui-monospace, monospace';
 ctx.letterSpacing = '0px';
-ctx.fillText('The App Store for AI Agents', 82, 320);
+ctx.fillText('Agent rails for tools, memory, and QC', 82, 320);
 
 // Divider line
 ctx.fillStyle = 'rgba(255,255,255,0.07)';
@@ -68,19 +68,19 @@ const statsY = 420;
 ctx.font = '600 22px "Courier New", ui-monospace, monospace';
 
 ctx.fillStyle = '#6366f1';
-ctx.fillText('48+ Tools', 80, statsY);
+ctx.fillText('450+ endpoints', 80, statsY);
 
 ctx.fillStyle = 'rgba(255,255,255,0.18)';
-ctx.fillText('|', 230, statsY);
+ctx.fillText('|', 270, statsY);
 
 ctx.fillStyle = '#a0a0b0';
-ctx.fillText('Arena', 255, statsY);
+ctx.fillText('Pass family checks', 295, statsY);
 
 ctx.fillStyle = 'rgba(255,255,255,0.18)';
-ctx.fillText('|', 340, statsY);
+ctx.fillText('|', 540, statsY);
 
 ctx.fillStyle = '#a0a0b0';
-ctx.fillText('API-First', 365, statsY);
+ctx.fillText('Claude, ChatGPT & more', 565, statsY);
 
 // Domain
 ctx.fillStyle = 'rgba(99,102,241,0.22)';

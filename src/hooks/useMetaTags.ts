@@ -19,7 +19,7 @@ function setMeta(property: string, content: string) {
   el.setAttribute("content", content);
 }
 
-const defaultTitle = "UnClick - The App Store for AI Agents";
+const defaultTitle = "UnClick - Agent rails for tools, memory, and QC";
 
 export function useMetaTags({ title, description, ogTitle, ogDescription, ogUrl }: MetaTagsOptions) {
   useEffect(() => {

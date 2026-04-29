@@ -15,7 +15,7 @@ const faqData = [
     items: [
       {
         q: "What is UnClick?",
-        a: `UnClick is a managed MCP (Model Context Protocol) server that gives AI agents instant access to ${SITE_STATS.TOOLS_DISPLAY} real-world tools: web search, email, calendars, code execution, data lookups, and more. Instead of building and maintaining integrations yourself, you point your AI agent at UnClick and it handles everything with a single API key.`,
+        a: `UnClick is shared agent rails for tools, memory, connections, crews, and Pass family QA checks. Instead of building and maintaining integrations yourself, you point your AI agent at UnClick and it gets durable context, secure service access, and ${SITE_STATS.TOOLS_DISPLAY} real-world tools through one setup.`,
       },
       {
         q: "How does UnClick work?",
@@ -94,7 +94,7 @@ const faqData = [
       },
       {
         q: "What's the difference between UnClick and other MCP servers?",
-        a: `Most MCP servers focus on a single integration (e.g., one database, one API). UnClick is a unified MCP server covering ${SITE_STATS.TOOLS_DISPLAY} tools across dozens of categories, so you configure one server and get everything. It's also managed: no infrastructure to run, no credentials to rotate, no integrations to maintain.`,
+        a: `Most MCP servers focus on one integration, like one database or one API. UnClick is the shared layer behind your agent: ${SITE_STATS.TOOLS_DISPLAY} tools, persistent memory, secure connections, crews, and Pass family checks in one managed setup. No infrastructure to run, no credentials to hand-roll, no integrations to maintain.`,
       },
     ],
   },
