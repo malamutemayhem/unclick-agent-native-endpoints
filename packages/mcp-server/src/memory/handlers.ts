@@ -62,11 +62,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function hasInvalidatedAtSet(value: unknown): boolean {
+  const row = asRecord(value);
+  if (!row || !("invalidated_at" in row)) return false;
+  return row.invalidated_at !== null && row.invalidated_at !== undefined && row.invalidated_at !== "";
+}
+
+export function filterInvalidatedActiveFactsForLoadMemory(value: unknown): unknown {
+  const context = asRecord(value);
+  if (!context || !Array.isArray(context.active_facts)) return value;
+
+  const activeFacts = context.active_facts.filter((row) => !hasInvalidatedAtSet(row));
+  if (activeFacts.length === context.active_facts.length) return value;
+  return { ...context, active_facts: activeFacts };
+}
+
 export function compactStartupContextForStrictClients(
   value: unknown,
   includeSessionSummaries = false
 ): unknown {
-  const context = asRecord(value);
+  const context = asRecord(filterInvalidatedActiveFactsForLoadMemory(value));
   if (!context) return value;
 
   const out: Record<string, unknown> = { ...context };
@@ -139,9 +154,10 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       db.getStartupContext(sessionCount),
       resolveAgent({ agent_slug: slug, agent_id: id }),
     ]);
+    const safeBaseContext = filterInvalidatedActiveFactsForLoadMemory(baseContext);
     const boundedContext = fullContent
-      ? baseContext
-      : compactStartupContextForStrictClients(baseContext, !lite);
+      ? safeBaseContext
+      : compactStartupContextForStrictClients(safeBaseContext, !lite);
 
     // Optional: if the client passed the list of other tools in this session,
     // classify them and attach tool_guidance so the agent can nudge the user.

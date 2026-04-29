@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   compactSearchMemoryForStrictClients,
   compactStartupContextForStrictClients,
+  filterInvalidatedActiveFactsForLoadMemory,
 } from "../handlers.js";
 
 const long = (prefix: string, size: number) => `${prefix} ${"x".repeat(size)}`;
@@ -56,6 +57,43 @@ describe("strict-client memory response bounds", () => {
     assert.equal(compact.recent_sessions.length, 1);
     assert.ok(compact.recent_sessions[0].summary.length < 500);
     assert.match(compact.recent_sessions[0].summary, /truncated/);
+  });
+
+  test("load_memory filters invalidated active facts before compact ranking", () => {
+    const compact = compactStartupContextForStrictClients({
+      active_facts: [
+        {
+          fact: "invalidated-high-rank",
+          category: "general",
+          confidence: 1,
+          created_at: "2026-04-28T00:00:00Z",
+          invalidated_at: "2026-04-29T00:00:00Z",
+        },
+        ...Array.from({ length: 12 }, (_, i) => ({
+          fact: `live-${i}`,
+          category: "general",
+          confidence: 0.9,
+          created_at: "2026-04-28T00:00:00Z",
+          invalidated_at: null,
+        })),
+      ],
+    }) as { active_facts: Array<{ fact: string }>; response_bounds: { active_facts_available_in_loaded_window: number } };
+
+    const facts = compact.active_facts.map((row) => row.fact);
+    assert.equal(facts.includes("invalidated-high-rank"), false);
+    assert.equal(facts.length, 12);
+    assert.equal(compact.response_bounds.active_facts_available_in_loaded_window, 12);
+  });
+
+  test("load_memory full-content path filters invalidated active facts", () => {
+    const filtered = filterInvalidatedActiveFactsForLoadMemory({
+      active_facts: [
+        { fact: "live", invalidated_at: null, extra: "kept" },
+        { fact: "stale", invalidated_at: "2026-04-29T00:00:00Z" },
+      ],
+    }) as { active_facts: Array<{ fact: string; invalidated_at: string | null; extra?: string }> };
+
+    assert.deepEqual(filtered.active_facts, [{ fact: "live", invalidated_at: null, extra: "kept" }]);
   });
 
   test("search_memory caps content previews by default", () => {
