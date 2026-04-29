@@ -1,0 +1,162 @@
+[
+  {
+    "crew_id": "business-council",
+    "prompt": "A retainer client wants a 3-month commitment at 50 percent of my usual rate. Cash flow is light this quarter, but I worry the discount will anchor future pricing and crowd out better work. Should I take it, counter it, or walk away?",
+    "expected_traits": [
+      "Makes a clear call between taking it, countering, or walking away instead of staying purely conditional",
+      "Weighs short-term cash flow against long-term price anchoring and opportunity cost",
+      "Includes downside protection such as tighter scope, time limits, prepayment, or reset terms",
+      "Shows how to negotiate the next step in a practical, low-drama way"
+    ],
+    "anti_patterns": [
+      "Vague 'it depends' framing with no recommendation",
+      "Ignoring the future pricing anchor risk",
+      "Treating any revenue as automatically good because the quarter is slow",
+      "Offering generic sales advice without concrete protections"
+    ]
+  },
+  {
+    "crew_id": "business-council",
+    "prompt": "A mid-sized client wants to start a 6-week enterprise pilot, but they are asking for a custom security review, weekly stakeholder calls, and a price below our normal floor. Should we accept, counter, or decline? I want the answer to weigh revenue, distraction cost, precedent risk, and what would make the pilot worth it.",
+    "expected_traits": [
+      "Makes a clear accept, counter, or decline recommendation",
+      "Balances revenue upside against delivery drag, stakeholder overhead, and precedent risk",
+      "Defines the guardrails that would make the pilot acceptable if the answer is yes or counter",
+      "Treats security review and custom process demands as real scope, not background noise"
+    ],
+    "anti_patterns": [
+      "Seeing the enterprise logo as sufficient reason to say yes",
+      "Ignoring internal distraction cost",
+      "No clear counter structure or guardrails",
+      "Treating the security review as trivial admin work"
+    ]
+  },
+  {
+    "crew_id": "business-council",
+    "prompt": "Design the onboarding flow for the first 10 pilot customers using UnClick crews and memory. They are technical enough to follow instructions but not patient enough to debug MCP setup for an hour. What is the minimum path that gets them to first value fast without creating a support nightmare for us?",
+    "expected_traits": [
+      "Designs a minimum path to first value with as little setup friction as possible",
+      "Reduces MCP and debug burden through defaults, preflight checks, or guided setup",
+      "Defines a clear first milestone that proves the product is working for the pilot customer",
+      "Balances customer success with support scalability so the team does not create a manual ops trap"
+    ],
+    "anti_patterns": [
+      "Expecting pilots to troubleshoot setup for long periods",
+      "Creating an overly elaborate onboarding process before first value",
+      "No explicit first-value milestone or success checkpoint",
+      "Unlimited white-glove support with no containment"
+    ]
+  },
+  {
+    "crew_id": "launch-stress-test",
+    "prompt": "Stress test this launch plan for June: soft announce UnClick Pro to the waitlist on June 3, publish the public landing page on June 10, run founder-led outreach for two weeks, and open paid signup on June 24. Attack the sequencing, risk points, and weak assumptions, then tell me what to change before I commit.",
+    "expected_traits": [
+      "Identifies the biggest sequencing risks and weak assumptions in the current launch order",
+      "Prioritizes fixes instead of producing an undifferentiated list of concerns",
+      "Distinguishes what must change before commitment from what can be monitored later",
+      "Ends with a revised plan, timeline, or gating logic that is more robust than the original"
+    ],
+    "anti_patterns": [
+      "Generic launch advice that could apply to any product",
+      "Listing risks without ranking or recommending changes",
+      "Failing to challenge the current dates or sequence",
+      "Ending without a clearer revised plan"
+    ]
+  },
+  {
+    "crew_id": "launch-stress-test",
+    "prompt": "Build the rollback and comms plan for this same June launch if paid signup opens and one of three things goes wrong in the first 48 hours: conversion is near zero, support tickets spike, or the MCP install path breaks for a meaningful share of users. What should trigger rollback, who gets told what, and what should stay live versus get paused?",
+    "expected_traits": [
+      "Defines explicit failure triggers rather than vague concern levels",
+      "Separates internal escalation, public comms, and customer-facing messaging cleanly",
+      "Distinguishes what to pause, what to keep live, and what to monitor through the incident",
+      "Optimizes for trust preservation as well as operational recovery"
+    ],
+    "anti_patterns": [
+      "No rollback thresholds or ownership",
+      "Treating all failures as equal severity",
+      "Only focusing on engineering steps and forgetting comms",
+      "Panic advice that shuts everything down without triage"
+    ]
+  },
+  {
+    "crew_id": "creative-studio",
+    "prompt": "Write three homepage headline and subhead options for unclick.world aimed at technical operators evaluating MCP tooling. Make them feel credible, specific, and high-agency. Avoid generic AI automation language, hype, or sounding like a consumer productivity app.",
+    "expected_traits": [
+      "Produces strong headline and subhead options rather than only abstract positioning commentary",
+      "Keeps the voice sharp, credible, and high-agency instead of futuristic or fluffy",
+      "Translates the product's capabilities into clear user value without drowning in jargon",
+      "Pressure-tests wording for vagueness, overclaiming, and credibility gaps"
+    ],
+    "anti_patterns": [
+      "Generic AI-marketing copy full of buzzwords",
+      "Feature-dumping without a crisp positioning angle",
+      "Using jargon like MCP or crews without making the benefit legible",
+      "Ignoring the requested tone"
+    ]
+  },
+  {
+    "crew_id": "creative-studio",
+    "prompt": "Draft the hero copy, supporting bullets, and primary CTA for a pricing page that introduces UnClick Pro. The reader is a technical founder or operator who wants leverage, not a beginner looking for general AI advice. Make the copy specific enough to convert, but still clean and uncluttered.",
+    "expected_traits": [
+      "Produces usable pricing-page copy instead of only positioning notes",
+      "Matches the audience of technical founders and operators with concrete language",
+      "Creates a clear primary CTA and supporting bullets that reduce hesitation",
+      "Balances specificity with restraint so the page does not feel cluttered"
+    ],
+    "anti_patterns": [
+      "Generic SaaS pricing copy that could fit any tool",
+      "No real CTA or next step",
+      "Too much abstraction about leverage with no concrete product value",
+      "Crowded messaging that tries to explain everything at once"
+    ]
+  },
+  {
+    "crew_id": "decision-desk",
+    "prompt": "Should UnClick Pro launch at 19, 29, or 39 AUD per month? Assume the early product has strong utility for technical operators, weak mainstream awareness, and a support burden that will be real for the first 60 days. Recommend one launch price, what to include, and what objection I should expect first.",
+    "expected_traits": [
+      "Chooses one launch price and commits to it clearly",
+      "Justifies the choice using target user utility, weak awareness, and early support burden",
+      "Defines a sensible package for launch rather than treating price in isolation",
+      "Anticipates the first likely objection and addresses it realistically"
+    ],
+    "anti_patterns": [
+      "Comparing prices without making a decision",
+      "Ignoring support costs during the first 60 days",
+      "Vague packaging with no clear inclusions or limits",
+      "Assuming mainstream demand dynamics instead of niche technical adoption"
+    ]
+  },
+  {
+    "crew_id": "decision-desk",
+    "prompt": "We currently have two overlapping ways to handle third-party credentials and connection state. Should we consolidate on one model now or keep both for 6 months to avoid migration pain? Weigh product clarity, migration cost, security risk, and user confusion, then recommend the timing and shape of the move.",
+    "expected_traits": [
+      "Provides strategic clarity on the primary direction rather than preserving ambiguity",
+      "Weighs product clarity, migration cost, security posture, and operator confusion together",
+      "Treats transition risk realistically, including bridge or compatibility considerations",
+      "Explains the operational implications of the chosen path, not just the architectural story"
+    ],
+    "anti_patterns": [
+      "Hand-wavy architecture talk with no recommendation",
+      "Ignoring migration pain or adoption friction",
+      "Reducing the decision to security alone",
+      "Missing the operator-confusion dimension"
+    ]
+  },
+  {
+    "crew_id": "decision-desk",
+    "prompt": "I have too many plausible priorities at once: ship the crews engine, clean up Fishbowl reliability, close the memory startup-context noise bug, fix the TestPass scheduler path, and keep the merge queue moving. Assume I only get one focused week and I will lose part of two days to support interruptions. Build me a brutally honest one-week priority stack that protects momentum instead of making me feel busy.",
+    "expected_traits": [
+      "Produces a hard one-week priority stack with explicit deprioritization",
+      "Sequences work to protect momentum and avoid thrash across too many fronts",
+      "Recognizes which tasks unblock reliability or execution for everything else",
+      "Keeps the plan bounded and practical for a single week rather than aspirational"
+    ],
+    "anti_patterns": [
+      "A long task list masquerading as prioritization",
+      "Treating every item as equally urgent",
+      "Ignoring dependencies and blocker-clearing logic",
+      "Using motivational or productivity language instead of making tradeoffs"
+    ]
+  }
+]
