@@ -43,6 +43,14 @@ interface Tool {
   examplePrompt: string;
 }
 
+type TestPassScore = {
+  score: number;
+  pass: number;
+  fail: number;
+  total: number;
+  status?: string;
+};
+
 const categoryColors: Record<ToolCategory, string> = {
   Utility:  "bg-amber-500/10 text-amber-400 border-amber-500/20",
   Text:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
@@ -2790,6 +2798,61 @@ const NO_API_KEY_TOOLS = new Set([
   "Trove", "TAB", "The Lott", "Toilets",
 ]);
 
+function testPassKeyForTool(tool: Tool): string {
+  return tool.name.toLowerCase();
+}
+
+function targetMatchesTool(target: string, tool: Tool): boolean {
+  const normalizedTarget = target.toLowerCase();
+  const endpoint = tool.endpoint.toLowerCase();
+  const slug = endpoint.split("/").filter(Boolean).pop() ?? tool.name.toLowerCase();
+  const name = tool.name.toLowerCase();
+  return normalizedTarget.includes(endpoint) || normalizedTarget.includes(slug) || normalizedTarget.includes(name);
+}
+
+function scoreFromSummary(summary: Record<string, unknown> | null | undefined): TestPassScore | null {
+  if (!summary) return null;
+  const pass = Number(summary.check ?? 0);
+  const fail = Number(summary.fail ?? 0);
+  const na = Number(summary.na ?? 0);
+  const other = Number(summary.other ?? 0);
+  const pending = Number(summary.pending ?? 0);
+  const total = pass + fail + na + other + pending;
+  if (total <= 0) return null;
+  return {
+    score: Math.round(((pass + na) / total) * 100),
+    pass,
+    fail,
+    total,
+  };
+}
+
+function TestPassBadge({ score }: { score?: TestPassScore }) {
+  if (!score) {
+    return (
+      <span className="rounded-full border border-border/40 bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        TP --
+      </span>
+    );
+  }
+
+  const tone =
+    score.fail > 0
+      ? "bg-red-500/10 text-red-400 border-red-500/20"
+      : score.score >= 90
+        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+        : "bg-[#E2B93B]/10 text-[#E2B93B] border-[#E2B93B]/20";
+
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${tone}`}
+      title={`${score.pass} pass, ${score.fail} fail, ${score.total} total`}
+    >
+      TP {score.score}
+    </span>
+  );
+}
+
 // Intent-first quick-jump categories
 const QUICK_LINKS: { label: string; category: Category }[] = [
   { label: "Weather", category: "Utility" },
@@ -2807,12 +2870,14 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [localSearch, setLocalSearch] = useState("");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
-  const [hasKey, setHasKey] = useState(false);
+  const [hasKey, setHasKey] = useState(() => (
+    typeof window !== "undefined" && Boolean(localStorage.getItem("unclick_api_key"))
+  ));
   const [connectorStatus, setConnectorStatus] = useState<Record<string, "connected" | "not-connected">>({});
+  const [testPassScores, setTestPassScores] = useState<Record<string, TestPassScore>>({});
 
   useEffect(() => {
     const key = localStorage.getItem("unclick_api_key");
-    setHasKey(Boolean(key));
 
     const onStorage = () => setHasKey(Boolean(localStorage.getItem("unclick_api_key")));
     window.addEventListener("storage", onStorage);
@@ -2833,6 +2898,30 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
       ).then((results) => {
         setConnectorStatus(Object.fromEntries(results));
       });
+
+      fetch("/api/memory-admin?action=list_reports&limit=200", {
+        headers: { Authorization: `Bearer ${key}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          const reports = Array.isArray(body?.reports) ? body.reports : [];
+          const nextScores: Record<string, TestPassScore> = {};
+          for (const entry of reports) {
+            const target = String(entry?.report?.target ?? "");
+            const summary = entry?.latest_run?.verdict_summary as Record<string, unknown> | null | undefined;
+            const score = scoreFromSummary(summary);
+            if (!target || !score) continue;
+            score.status = String(entry?.latest_run?.status ?? entry?.report?.status ?? "");
+            for (const tool of tools) {
+              const keyForTool = testPassKeyForTool(tool);
+              if (!nextScores[keyForTool] && targetMatchesTool(target, tool)) {
+                nextScores[keyForTool] = score;
+              }
+            }
+          }
+          setTestPassScores(nextScores);
+        })
+        .catch(() => setTestPassScores({}));
     }
 
     return () => window.removeEventListener("storage", onStorage);
@@ -2966,6 +3055,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                             No setup
                           </span>
                         )}
+                        <TestPassBadge score={testPassScores[testPassKeyForTool(tool)]} />
                       </div>
                     </motion.button>
                   </FadeIn>
@@ -3041,9 +3131,12 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
 
                           {/* Footer: category badge + connect CTA */}
                           <div className="mt-3 flex items-center justify-between gap-2">
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
-                              {tool.category}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                                {tool.category}
+                              </span>
+                              <TestPassBadge score={testPassScores[testPassKeyForTool(tool)]} />
+                            </div>
                             <a
                               href={`/connect/${slug}`}
                               className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
@@ -3096,9 +3189,12 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                       <p className="mt-1.5 text-xs text-body leading-relaxed line-clamp-2">{tool.description}</p>
                     </button>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
-                        {tool.category}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${categoryColors[tool.category]}`}>
+                          {tool.category}
+                        </span>
+                        <TestPassBadge score={testPassScores[testPassKeyForTool(tool)]} />
+                      </div>
                       <a
                         href={`/connect/${slug}`}
                         className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
@@ -3126,6 +3222,7 @@ const Tools = ({ searchQuery = "" }: ToolsProps) => {
                       <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
                         No setup
                       </span>
+                      <TestPassBadge score={testPassScores[testPassKeyForTool(tool)]} />
                     </div>
                   </motion.button>
                 )}
