@@ -17,6 +17,7 @@ export interface FactInput {
   category: string;
   confidence: number;
   source_session_id?: string;
+  startup_fact_kind?: StartupFactKind;
   // Bi-temporal + provenance (Chunk 2)
   valid_from?: string;
   extractor_id?: string;
@@ -27,6 +28,8 @@ export interface FactInput {
   commit_sha?: string;
   pr_number?: number;
 }
+
+export type StartupFactKind = "durable" | "operational" | "excluded" | "legacy_unspecified";
 
 export interface InvalidateFactInput {
   fact_id: string;

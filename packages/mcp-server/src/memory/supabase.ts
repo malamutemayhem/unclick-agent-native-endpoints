@@ -490,6 +490,7 @@ export class SupabaseBackend implements MemoryBackend {
           confidence: data.confidence,
           source_session_id: data.source_session_id ?? null,
           source_type: "manual",
+          startup_fact_kind: data.startup_fact_kind ?? "durable",
           status: "active",
           decay_tier: "hot",
           last_accessed: now(),
@@ -592,6 +593,7 @@ export class SupabaseBackend implements MemoryBackend {
             confidence: Math.max(0, data.confidence - 0.05), // slight confidence discount
             source_session_id: data.source_session_id ?? null,
             source_type: "auto_extract",
+            startup_fact_kind: data.startup_fact_kind ?? "durable",
             status: "active",
             decay_tier: "hot",
             last_accessed: now(),

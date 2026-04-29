@@ -120,6 +120,7 @@ interface FactRow {
   confidence: number;
   source_session_id?: string;
   source_type: string;
+  startup_fact_kind: "durable" | "operational" | "excluded" | "legacy_unspecified";
   status: string;
   superseded_by?: string;
   access_count: number;
@@ -284,6 +285,7 @@ export class LocalBackend implements MemoryBackend {
       confidence: data.confidence,
       source_session_id: data.source_session_id,
       source_type: "manual",
+      startup_fact_kind: data.startup_fact_kind ?? "durable",
       status: "active",
       superseded_by: undefined,
       access_count: 0,
@@ -315,6 +317,7 @@ export class LocalBackend implements MemoryBackend {
       confidence: confidence ?? 1.0,
       source_session_id: undefined,
       source_type: "manual",
+      startup_fact_kind: "durable",
       status: "active",
       superseded_by: undefined,
       access_count: 0,
