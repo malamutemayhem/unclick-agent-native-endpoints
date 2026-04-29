@@ -1,7 +1,8 @@
 /**
- * testpass-tool - MCP handlers for starting TestPass runs and polling status.
+ * testpass-tool - MCP handlers for starting TestPass runs, polling status,
+ * and fetching reports in HTML, JSON, or Markdown.
  *
- * Both handlers call back into the UnClick Vercel API (/api/testpass) using
+ * All handlers call back into the UnClick Vercel API (/api/testpass) using
  * the caller's UNCLICK_API_KEY as the Bearer token. The API resolves the
  * caller's user id from that token and enforces actor_user_id scoping.
  */
@@ -58,6 +59,59 @@ export async function testpassStatus(args: Record<string, unknown>): Promise<unk
   let body: unknown = text;
   try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
   if (!res.ok) return { error: `testpass status failed (HTTP ${res.status})`, body };
+  return body;
+}
+
+export async function testpassReportHtml(args: Record<string, unknown>): Promise<unknown> {
+  const runId = typeof args.run_id === "string" ? args.run_id : "";
+  if (!runId) return { error: "run_id is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${API_BASE}/api/testpass?action=report_html&run_id=${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    let body: unknown = text;
+    try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+    return { error: `testpass report_html failed (HTTP ${res.status})`, body };
+  }
+  return { run_id: runId, format: "html", body: text };
+}
+
+export async function testpassReportJson(args: Record<string, unknown>): Promise<unknown> {
+  const runId = typeof args.run_id === "string" ? args.run_id : "";
+  if (!runId) return { error: "run_id is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${API_BASE}/api/testpass?action=report_json&run_id=${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass report_json failed (HTTP ${res.status})`, body };
+  return { run_id: runId, format: "json", body };
+}
+
+export async function testpassReportMd(args: Record<string, unknown>): Promise<unknown> {
+  const runId = typeof args.run_id === "string" ? args.run_id : "";
+  if (!runId) return { error: "run_id is required" };
+
+  const apiKey = getApiKey();
+  const res = await fetch(
+    `${API_BASE}/api/testpass?action=report_md&run_id=${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  const text = await res.text();
+  let body: unknown = text;
+  try { body = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+  if (!res.ok) return { error: `testpass report_md failed (HTTP ${res.status})`, body };
+  if (body && typeof body === "object" && "markdown" in body) {
+    return { run_id: runId, format: "md", body: (body as { markdown: string }).markdown };
+  }
   return body;
 }
 

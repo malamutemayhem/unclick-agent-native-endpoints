@@ -748,7 +748,15 @@ import {
 } from "./convertkit-tool.js";
 
 // ─── TestPass ─────────────────────────────────────────────────────────────────
-import { testpassRun, testpassStatus, testpassSavePack, testpassEditItem } from "./testpass-tool.js";
+import {
+  testpassRun,
+  testpassStatus,
+  testpassSavePack,
+  testpassEditItem,
+  testpassReportHtml,
+  testpassReportJson,
+  testpassReportMd,
+} from "./testpass-tool.js";
 
 // ─── UXPass (sister to TestPass, UI/UX QC) ───────────────────────────────────
 import {
@@ -11129,6 +11137,39 @@ export const ADDITIONAL_TOOLS = [
       required: ["run_id", "item_id", "verdict"],
     },
   },
+  {
+    name: "testpass_report_html",
+    description: "Get the HTML report for a TestPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by testpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "testpass_report_json",
+    description: "Get the JSON report for a TestPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by testpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "testpass_report_md",
+    description: "Get the Markdown report for a TestPass run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by testpass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
 
   // ── uxpass-tool.ts (UI/UX QC, sister to TestPass) ──────────────────────────
   {
@@ -12357,10 +12398,13 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   togetherai_list_models:     (args) => togetherai_list_models(args),
 
   // testpass-tool.ts
-  testpass_run:       (args) => testpassRun(args),
-  testpass_status:    (args) => testpassStatus(args),
-  testpass_save_pack: (args) => testpassSavePack(args),
-  testpass_edit_item: (args) => testpassEditItem(args),
+  testpass_run:         (args) => testpassRun(args),
+  testpass_status:      (args) => testpassStatus(args),
+  testpass_save_pack:   (args) => testpassSavePack(args),
+  testpass_edit_item:   (args) => testpassEditItem(args),
+  testpass_report_html: (args) => testpassReportHtml(args),
+  testpass_report_json: (args) => testpassReportJson(args),
+  testpass_report_md:   (args) => testpassReportMd(args),
 
   // uxpass-tool.ts
   uxpass_run:           (args) => uxpassRun(args),
