@@ -758,6 +758,12 @@ import {
   testpassReportMd,
 } from "./testpass-tool.js";
 
+// ─── LegalPass (issue-spotting guardrails) ───────────────────────────────────
+import {
+  legalpassRun,
+  legalpassVerdict,
+} from "./legalpass-tool.js";
+
 // ─── UXPass (sister to TestPass, UI/UX QC) ───────────────────────────────────
 import {
   uxpassRun,
@@ -11934,6 +11940,47 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── legalpass-tool.ts ──────────────────────────────────────────────────────
+  {
+    name: "legalpass_run",
+    description: "Plan a LegalPass issue-spotting run against a URL, contract upload, or repo. Scaffold-only: exposes LegalPass guardrails and the safe run envelope while full 12-hat execution lands in a later engine chip.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        pack_id: { type: "string", description: "LegalPass pack slug (default: legalpass-mvp-v0)" },
+        target: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            kind: { type: "string", enum: ["url", "contract_upload", "repo"] },
+            url: { type: "string", description: "Target URL for url runs" },
+            upload_ref: { type: "string", description: "Upload reference for contract_upload runs" },
+            repo: { type: "string", description: "Repository identifier for repo runs" },
+            branch: { type: "string", description: "Optional branch name for repo runs" },
+            commit: { type: "string", description: "Optional commit SHA for repo runs" },
+          },
+          required: ["kind"],
+        },
+        profile: { type: "string", enum: ["smoke", "standard", "deep"], description: "Run profile (default: smoke)" },
+        jurisdictions: { type: "array", items: { type: "string" }, description: "Optional jurisdiction routing hints" },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "legalpass_verdict",
+    description: "Lint LegalPass-style verdict text against the issue-spotter guardrail and return the legally reviewed disclaimer banner for Pass-family outputs.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        verdict_text: { type: "string", description: "Verdict or finding text to check before display" },
+        disclaimer_length: { type: "string", enum: ["chat", "results", "tos"], description: "Disclaimer length to return (default: results)" },
+      },
+    },
+  },
+
   // ── uxpass-tool.ts (UI/UX QC, sister to TestPass) ──────────────────────────
   {
     name: "uxpass_run",
@@ -13229,6 +13276,10 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   testpass_report_html: (args) => testpassReportHtml(args),
   testpass_report_json: (args) => testpassReportJson(args),
   testpass_report_md:   (args) => testpassReportMd(args),
+
+  // legalpass-tool.ts
+  legalpass_run:     (args) => legalpassRun(args),
+  legalpass_verdict: (args) => legalpassVerdict(args),
 
   // uxpass-tool.ts
   uxpass_run:           (args) => uxpassRun(args),
