@@ -19,6 +19,7 @@ import type {
   UXScoreBreakdown,
   Verdict,
 } from "./types.js";
+import { buildCriticBreakdown } from "./critics.js";
 
 type CheckSeverity = "critical" | "high" | "medium" | "low";
 
@@ -368,6 +369,7 @@ export function buildBreakdown(evaluations: CheckEvaluation[]): RunBreakdown {
     score_components: computeScoreComponents(evaluations),
     by_hat: byHat,
     checks_run: evaluations.map((e) => e.check_id),
+    critics: buildCriticBreakdown(evaluations),
   };
 }
 

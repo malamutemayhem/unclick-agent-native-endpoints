@@ -38,6 +38,20 @@ export interface UXScoreBreakdown {
   first_run_quality: number | null;
 }
 
+export type CriticExecutionMode = "deterministic" | "llm";
+export type CriticExecutionStatus = "ran" | "queued";
+
+export interface CriticBreakdown {
+  id: string;
+  label: string;
+  score_component: keyof UXScoreBreakdown;
+  mode: CriticExecutionMode;
+  status: CriticExecutionStatus;
+  pass: number;
+  fail: number;
+  na: number;
+}
+
 export interface RunResult {
   run_id: string;
   pack_name?: string;
@@ -87,6 +101,7 @@ export interface RunBreakdown {
   score_components: UXScoreBreakdown;
   by_hat: Record<string, { pass: number; fail: number; na: number }>;
   checks_run: string[];
+  critics?: CriticBreakdown[];
 }
 
 export interface RunSummaryStats {
