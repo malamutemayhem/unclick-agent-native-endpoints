@@ -31,6 +31,7 @@
     "@supabase/supabase-js": "^2.103.0",
     "@types/imap": "^0.8.43",
     "@types/nodemailer": "^8.0.0",
+    "ajv": "^8.20.0",
     "csv-parse": "^6.2.1",
     "csv-stringify": "^6.7.0",
     "fast-xml-parser": "^5.5.10",

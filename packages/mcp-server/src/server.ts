@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -1164,6 +1165,83 @@ const DIRECT_TOOLS = [
   },
 ] as const;
 
+type RuntimeToolSchema = {
+  name: string;
+  inputSchema?: unknown;
+};
+
+type RuntimeValidationError = {
+  code: "validation_error";
+  tool: string;
+  message: string;
+  details: Array<{
+    path: string;
+    message: string;
+    keyword: string;
+  }>;
+};
+
+const ajv = new Ajv({
+  allErrors: true,
+  strict: false,
+  validateFormats: false,
+});
+
+const TOOL_INPUT_SCHEMAS = new Map<string, unknown>();
+const TOOL_VALIDATORS = new Map<string, ValidateFunction>();
+
+function registerToolInputSchema(tool: RuntimeToolSchema): void {
+  if (tool.inputSchema) TOOL_INPUT_SCHEMAS.set(tool.name, tool.inputSchema);
+}
+
+for (const tool of [...INTERNAL_TOOLS, ...VISIBLE_TOOLS, ...DIRECT_TOOLS, ...ADDITIONAL_TOOLS]) {
+  registerToolInputSchema(tool);
+}
+
+// Backwards-compatible memory tool names still dispatch directly, so they need
+// the same runtime guard as the newer visible names.
+for (const [alias, canonical] of Object.entries(MEMORY_TOOL_ALIASES)) {
+  const schema = TOOL_INPUT_SCHEMAS.get(alias);
+  if (schema) TOOL_INPUT_SCHEMAS.set(canonical, schema);
+}
+
+function formatAjvError(error: ErrorObject): RuntimeValidationError["details"][number] {
+  const additionalProperty =
+    error.keyword === "additionalProperties" &&
+    error.params &&
+    typeof (error.params as { additionalProperty?: unknown }).additionalProperty === "string"
+      ? ` '${(error.params as { additionalProperty: string }).additionalProperty}'`
+      : "";
+  return {
+    path: error.instancePath || "/",
+    message: `${error.message ?? "invalid input"}${additionalProperty}`,
+    keyword: error.keyword,
+  };
+}
+
+export function validateToolArgumentsForRuntime(
+  toolName: string,
+  args: Record<string, unknown>
+): RuntimeValidationError | null {
+  const schema = TOOL_INPUT_SCHEMAS.get(toolName);
+  if (!schema) return null;
+
+  let validate = TOOL_VALIDATORS.get(toolName);
+  if (!validate) {
+    const compiled = ajv.compile(schema);
+    TOOL_VALIDATORS.set(toolName, compiled);
+    validate = compiled;
+  }
+
+  if (validate(args)) return null;
+  return {
+    code: "validation_error",
+    tool: toolName,
+    message: `Invalid arguments for ${toolName}`,
+    details: (validate.errors ?? []).map(formatAjvError),
+  };
+}
+
 // ─── Handler map for direct tools ───────────────────────────────────────────
 
 type DirectHandler = (
@@ -1312,6 +1390,13 @@ export function createServer(): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
     const args = (rawArgs ?? {}) as Record<string, unknown>;
+    const validationError = validateToolArgumentsForRuntime(name, args);
+    if (validationError) {
+      return {
+        content: [{ type: "text", text: JSON.stringify(validationError, null, 2) }],
+        isError: true,
+      };
+    }
 
     // Fire-and-forget Umami event for tool-usage stats. Never awaited.
     trackToolCall(name);
