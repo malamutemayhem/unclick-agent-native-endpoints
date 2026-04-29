@@ -107,7 +107,7 @@ const App = () => (
           <Route path="/developers/vibe-coding" element={<VibeCodingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/backstagepass" element={<BackstagePassPage />} />
+          <Route path="/backstagepass" element={<Navigate to="/admin/keychain" replace />} />
           {/* Core product pages */}
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
