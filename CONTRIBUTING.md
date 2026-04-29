@@ -6,7 +6,7 @@ This document provides essential guidelines to help you understand our project s
 
 ## Repository Structure
 
-UnClick is a monorepo managed with Bun workspaces. The codebase is primarily organized into apps and packages. Here are the key directories you should know about:
+UnClick is a monorepo managed with npm workspaces. The codebase is primarily organized into apps and packages. Here are the key directories you should know about:
 
 - `packages/mcp-server/` - The main npm package (`@unclick/mcp-server`) published to the registry.
 - `packages/mcp-server/src/memory/` - The built-in memory module featuring our 6-layer architecture.
@@ -18,7 +18,7 @@ For specialized instructions guiding AI coding agents, you must read [AGENTS.md]
 
 ## Local Setup
 
-We use Bun for package management and test execution. Please make sure you have Bun installed on your system before proceeding.
+We use npm for package management and test execution. Please make sure you have Node.js and npm installed on your system before proceeding.
 
 To set up the project locally, please follow these steps:
 
@@ -28,11 +28,10 @@ To set up the project locally, please follow these steps:
    cd unclick
    ```
 
-2. Install dependencies using Bun:
+2. Install dependencies using npm:
    ```bash
-   bun install
+   npm install
    ```
-   **Important Note:** Do not run `npm install` anywhere in this repository. It unsafely modifies and dirties the `package-lock.json` file. We strictly use Bun for package management.
 
 3. Set up environment variables:
    Locate the `.env.local.example` file in the repository root. Copy it to a new file named `.env.local` and fill in the necessary API keys and configuration values required for local development.
@@ -43,10 +42,13 @@ Our testing framework of choice is Vitest, and it is configured with a `jsdom` e
 
 To run the full test suite, always use the following command:
 ```bash
-bun test
+npm test
 ```
 
-Please note that `bun test` is the reliable command for running the test suite in our environment. The standard `vitest` binary might be missing or inaccessible, so relying on Bun is mandatory.
+For workspace specific testing, you can run tests with workspace commands like:
+```bash
+npm run --workspace=@unclick/mcp-server test
+```
 
 When writing tests that interact with browser storage, you may need to mock `localStorage`. To do this in our testing environment, assign the mock implementation directly to `global.localStorage`.
 
@@ -76,6 +78,6 @@ When filing an issue, we ask that you include the following information to help 
 - A clear, descriptive title summarizing the problem or request.
 - Step-by-step instructions to reproduce the issue (if it is a bug).
 - A description of the expected behavior versus the actual behavior you observed.
-- Relevant details about your environment, such as your operating system, Node version, and Bun version.
+- Relevant details about your environment, such as your operating system, Node version, and npm version.
 
 We appreciate all contributions that help improve UnClick. Thank you for reading and for following our guidelines!
