@@ -7,6 +7,8 @@ import {
   failingFindings,
   type CheckContext,
 } from "../checks.js";
+import { HAT_IDS } from "../schema.js";
+import { UXPASS_CRITICS, criticIds, validateCriticRoster } from "../critics.js";
 
 const goodHtml = `<!doctype html>
 <html lang="en">
@@ -59,11 +61,34 @@ describe("CORE_CHECKS", () => {
     expect(hats.size).toBeGreaterThanOrEqual(7);
   });
 
+  it("maps deterministic checks to canonical critics", () => {
+    const critics = new Set(criticIds());
+    for (const check of CORE_CHECKS) {
+      expect(critics.has(check.hat)).toBe(true);
+    }
+  });
+
   it("only uses severities allowed by the uxpass_findings schema", () => {
     const allowed = new Set(["critical", "high", "medium", "low"]);
     for (const c of CORE_CHECKS) {
       expect(allowed.has(c.severity)).toBe(true);
     }
+  });
+});
+
+describe("UXPASS_CRITICS", () => {
+  it("declares the full 18-critic roster from the schema", () => {
+    expect(UXPASS_CRITICS).toHaveLength(18);
+    expect(validateCriticRoster()).toBe(true);
+    expect(criticIds()).toEqual([...HAT_IDS]);
+  });
+
+  it("keeps deterministic critics aligned with CORE_CHECKS", () => {
+    const deterministicCritics = new Set(
+      UXPASS_CRITICS.filter((critic) => critic.mode === "deterministic").map((critic) => critic.id),
+    );
+    const deterministicChecks = new Set(CORE_CHECKS.map((check) => check.hat));
+    expect(deterministicCritics).toEqual(deterministicChecks);
   });
 });
 
@@ -201,6 +226,27 @@ describe("buildBreakdown", () => {
     const evaluations = evaluateAllChecks(baseCtx());
     const breakdown = buildBreakdown(evaluations);
     expect(breakdown.checks_run).toHaveLength(CORE_CHECKS.length);
+  });
+
+  it("includes critic coverage for all 18 hats", () => {
+    const evaluations = evaluateAllChecks(baseCtx());
+    const breakdown = buildBreakdown(evaluations);
+    expect(breakdown.critics).toHaveLength(18);
+    expect(breakdown.critics?.map((critic) => critic.id)).toEqual([...HAT_IDS]);
+    expect(breakdown.critics?.find((critic) => critic.id === "accessibility")).toMatchObject({
+      status: "ran",
+      mode: "deterministic",
+      pass: 3,
+      fail: 0,
+      na: 0,
+    });
+    expect(breakdown.critics?.find((critic) => critic.id === "motion")).toMatchObject({
+      status: "queued",
+      mode: "llm",
+      pass: 0,
+      fail: 0,
+      na: 0,
+    });
   });
 });
 

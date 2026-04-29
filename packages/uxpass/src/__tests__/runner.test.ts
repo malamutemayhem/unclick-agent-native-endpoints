@@ -117,6 +117,16 @@ describe("evaluateUrl - integration with live HTTP server", () => {
       expect(result.breakdown.by_hat["accessibility"]).toEqual({ pass: 3, fail: 0, na: 0 });
       // PT-001 fails on http://; PT-002 passes (HSTS present).
       expect(result.breakdown.by_hat["privacy-trust"]).toEqual({ pass: 1, fail: 1, na: 0 });
+      expect(result.breakdown.critics).toHaveLength(18);
+      expect(result.breakdown.critics?.find((critic) => critic.id === "agent-readability")).toMatchObject({
+        status: "ran",
+        mode: "deterministic",
+        pass: 3,
+      });
+      expect(result.breakdown.critics?.find((critic) => critic.id === "dark-pattern-detector")).toMatchObject({
+        status: "queued",
+        mode: "llm",
+      });
     } finally {
       server.close();
     }
