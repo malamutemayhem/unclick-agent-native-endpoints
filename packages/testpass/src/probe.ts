@@ -1,9 +1,10 @@
 /**
  * MCP probe - connects to an MCP server over HTTP and reads its tool list.
  *
- * Transport: HTTP POST to a single endpoint (simple JSON-RPC over HTTP).
- * SSE transport is out of scope for Chunk 2.
+ * Transport: MCP Streamable HTTP. Servers may answer with JSON or SSE.
  */
+
+import { buildMcpHeaders, readMcpResponseBody } from "./mcp-http.js";
 
 export interface ProbeResult {
   protocolVersion: string;
@@ -47,13 +48,7 @@ async function rpc(
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), timeoutMs);
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (process.env.TESTPASS_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.TESTPASS_TOKEN}`;
-  }
+  const headers = buildMcpHeaders();
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -65,7 +60,7 @@ async function rpc(
       throw new Error(`HTTP ${res.status} from MCP server`);
     }
     if (id === null) return null; // notification - no response expected
-    const data = (await res.json()) as {
+    const data = (await readMcpResponseBody(res)) as {
       result?: unknown;
       error?: { code: number; message: string };
     };

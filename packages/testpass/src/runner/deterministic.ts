@@ -13,6 +13,7 @@ import type { Pack, RunProfile } from "../types.js";
 import type { RunManagerConfig } from "../run-manager.js";
 import { updateItem, createEvidence } from "../run-manager.js";
 import { createHash } from "node:crypto";
+import { buildMcpHeaders, readMcpResponseBody } from "../mcp-http.js";
 
 // ─── Internal types ────────────────────────────────────────────────
 
@@ -42,13 +43,7 @@ async function send(
   const start      = Date.now();
   const controller = new AbortController();
   const tid        = setTimeout(() => controller.abort(), timeoutMs);
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept:         "application/json",
-  };
-  if (process.env.TESTPASS_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.TESTPASS_TOKEN}`;
-  }
+  const headers = buildMcpHeaders();
   try {
     const res = await fetch(url, {
       method:  "POST",
@@ -56,11 +51,7 @@ async function send(
       body:    JSON.stringify(reqBody),
       signal:  controller.signal,
     });
-    let body: unknown = null;
-    const text = await res.text();
-    if (text) {
-      try { body = JSON.parse(text); } catch { body = text; }
-    }
+    const body = await readMcpResponseBody(res);
     return { status: res.status, body, latency_ms: Date.now() - start };
   } finally {
     clearTimeout(tid);

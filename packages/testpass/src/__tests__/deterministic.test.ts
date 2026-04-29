@@ -61,6 +61,41 @@ function makeMockMcpServer(): Promise<{ url: string; close: () => void }> {
   });
 }
 
+function makeStrictSseMcpServer(): Promise<{ url: string; close: () => void }> {
+  return new Promise((resolve) => {
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      const accept = req.headers.accept ?? "";
+      if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
+        res.writeHead(406, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Not Acceptable" } }));
+        return;
+      }
+
+      let raw = "";
+      req.on("data", (c: Buffer) => (raw += c.toString()));
+      req.on("end", () => {
+        const rpc = JSON.parse(raw) as { id?: number; method: string };
+        if (rpc.id === undefined) {
+          res.writeHead(204).end();
+          return;
+        }
+
+        const result = rpc.method === "ping" ? {} : mockResult(rpc.method);
+        const payload = result === "__ERROR__"
+          ? { jsonrpc: "2.0", id: rpc.id, error: { code: -32601, message: "Method not found" } }
+          : { jsonrpc: "2.0", id: rpc.id, result };
+
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end(`event: message\ndata: ${JSON.stringify(payload)}\n\n`);
+      });
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address() as { port: number };
+      resolve({ url: `http://127.0.0.1:${addr.port}`, close: () => server.close() });
+    });
+  });
+}
+
 function mockResult(method: string): unknown {
   if (method === "initialize") {
     return {
@@ -268,5 +303,18 @@ items:
     const smokePack = loadPackFromYaml(smokeOnlyYaml);
     await runDeterministicChecks(config, "run-2", srv.url, smokePack, "deep");
     expect(mockUpdateItem).toHaveBeenCalledTimes(0);
+  });
+
+  it("sends MCP Accept header and parses SSE JSON-RPC responses", async () => {
+    const strictSrv = await makeStrictSseMcpServer();
+    try {
+      await runDeterministicChecks(config, "run-sse", strictSrv.url, pack, "standard");
+      const rpc001 = mockUpdateItem.mock.calls.find((c) => c[2] === "RPC-001");
+      const mcp005 = mockUpdateItem.mock.calls.find((c) => c[2] === "MCP-005");
+      expect(rpc001?.[3].verdict).toBe("check");
+      expect(mcp005?.[3].verdict).toBe("check");
+    } finally {
+      strictSrv.close();
+    }
   });
 });
