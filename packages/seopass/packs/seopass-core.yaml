@@ -1,0 +1,32 @@
+name: SEOPass Core
+url: https://unclick.world
+description: Core SEO, crawlability, and AI search readiness checks.
+checks:
+  - lighthouse-performance
+  - crawlability
+  - metadata
+  - structured-data
+  - indexability
+  - canonical-signals
+  - internal-links
+  - ai-overview-readiness
+lighthouse:
+  strategy: mobile
+  categories:
+    - performance
+    - accessibility
+    - best-practices
+    - seo
+crawl:
+  max_pages: 25
+  respect_robots: true
+budgets:
+  performance: ">= 75"
+  accessibility: ">= 90"
+  best_practices: ">= 90"
+  seo: ">= 90"
+  crawl_errors: "0"
+tags:
+  - seo
+  - lighthouse
+  - ai-search

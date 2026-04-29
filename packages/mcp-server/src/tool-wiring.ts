@@ -768,6 +768,14 @@ import {
   uxpassRegisterPack,
 } from "./uxpass-tool.js";
 
+// ─── SEOPass (search visibility QC, sister to UXPass) ───────────────────────
+import {
+  seopassRun,
+  seopassStatus,
+  seopassRegisterPack,
+  seopassLighthousePlan,
+} from "./seopass-tool.js";
+
 // ─── Crews (Orchestrator Wizard) ──────────────────────────────────────────────
 import { crewsStartRun, crewsGetRun, crewsListRuns } from "./crews-tool.js";
 
@@ -11248,6 +11256,54 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── seopass-tool.ts (search visibility QC, sister to UXPass) ────────────────
+  {
+    name: "seopass_run",
+    description: "Plan a SEOPass run against a URL or registered pack. Chunk 1 returns the crawl and Lighthouse execution plan without persisting results.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "Target URL for a one-off SEOPass plan" },
+        pack_name: { type: "string", description: "Name of a registered SEOPass pack; the pack URL is used as the target" },
+      },
+    },
+  },
+  {
+    name: "seopass_status",
+    description: "Fetch the status for a SEOPass run. Chunk 1 reserves the tool shape; persistence lands later.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        run_id: { type: "string", description: "The SEOPass run id returned by a future seopass_run execution path" },
+      },
+      required: ["run_id"],
+    },
+  },
+  {
+    name: "seopass_register_pack",
+    description: "Register a SEOPass pack from a YAML string. Validates required keys and stores the pack locally for seopass_run.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pack_yaml: { type: "string", description: "Full SEOPass pack definition as a YAML string" },
+      },
+      required: ["pack_yaml"],
+    },
+  },
+  {
+    name: "seopass_lighthouse_plan",
+    description: "Build the Lighthouse execution plan for a SEOPass target URL. Execution and persistence land in a later chunk.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "Target URL to audit with Lighthouse" },
+        strategy: { type: "string", enum: ["mobile", "desktop"], description: "Lighthouse strategy (default: mobile)" },
+        categories: { type: "array", items: { type: "string" }, description: "Lighthouse categories to request" },
+      },
+      required: ["url"],
+    },
+  },
+
   // ── crews-tool.ts (Orchestrator Wizard) ──────────────────────────────────────
   {
     name: "start_crew_run",
@@ -12413,6 +12469,12 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   uxpass_report_json:   (args) => uxpassReportJson(args),
   uxpass_report_md:     (args) => uxpassReportMd(args),
   uxpass_register_pack: (args) => uxpassRegisterPack(args),
+
+  // seopass-tool.ts
+  seopass_run:             (args) => seopassRun(args),
+  seopass_status:          (args) => seopassStatus(args),
+  seopass_register_pack:   (args) => seopassRegisterPack(args),
+  seopass_lighthouse_plan: (args) => seopassLighthousePlan(args),
 
   // crews-tool.ts
   start_crew_run: (args) => crewsStartRun(args),
