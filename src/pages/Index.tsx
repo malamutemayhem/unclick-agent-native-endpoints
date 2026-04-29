@@ -14,10 +14,10 @@ import VantaWavesBackground from "@/components/VantaWavesBackground";
 const Index = () => {
   useCanonical("/");
   useMetaTags({
-    title: "UnClick - The Operating System for AI Agents",
-    description: "One npm install gives your AI agent access to 450+ callable endpoints across 60+ integrations, plus persistent cross-session memory. The MCP marketplace.",
-    ogTitle: "UnClick - The Operating System for AI Agents",
-    ogDescription: "450+ tools. 60+ integrations. One npm install. Give your AI agent everything it needs.",
+    title: "UnClick - Agent rails for tools, memory, and QC",
+    description: "One npm install gives your AI agent callable tools, persistent memory, secure connections, and Pass family QA checks.",
+    ogTitle: "UnClick - Agent rails for tools, memory, and QC",
+    ogDescription: "Tools, memory, connections, crews, and Pass family checks for AI agents.",
     ogUrl: "https://unclick.world/",
   });
 

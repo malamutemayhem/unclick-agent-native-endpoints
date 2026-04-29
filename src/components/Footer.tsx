@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 const PRODUCT_LINKS = [
   { label: "Tools", href: "/#tools" },
   { label: "Memory", href: "/memory" },
-  { label: "BackstagePass", href: "/backstagepass" },
-  { label: "Arena", href: "/arena" },
+  { label: "Connections", href: "/admin/keychain" },
+  { label: "TestPass", href: "/admin/testpass" },
 ];
 
 const RESOURCES_LINKS = [
@@ -73,7 +73,7 @@ const Footer = () => (
             <img src="/logo-wordmark.svg" alt="UnClick" style={{ height: "2.4rem" }} className="w-auto" />
           </Link>
           <p className="mt-2 text-xs text-muted-custom leading-relaxed">
-            The operating system for AI agents.<br />Built in Melbourne, Australia.
+            Agent rails for tools, memory, connections, and QA.<br />Built in Melbourne, Australia.
           </p>
         </div>
 

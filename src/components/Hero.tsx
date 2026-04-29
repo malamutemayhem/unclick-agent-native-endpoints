@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import FadeIn from "@/components/FadeIn";
-import { Wrench, Brain, Calendar, Key, Users, Trophy, ArrowRight } from "lucide-react";
+import { Wrench, Brain, Key, Users, BadgeCheck, Store, ArrowRight } from "lucide-react";
 
 const PRODUCTS = [
   {
     title: "Tools",
-    description: "172+ MCP tools to act",
+    description: "450+ callable endpoints to act",
     href: "/tools",
     icon: Wrench,
     color: "bg-blue-500/10 text-blue-500",
@@ -18,17 +18,17 @@ const PRODUCTS = [
     color: "bg-purple-500/10 text-purple-500",
   },
   {
-    title: "Organiser",
-    description: "Calendar, todos & bookings",
-    href: "/organiser",
-    icon: Calendar,
+    title: "Connections",
+    description: "Secure credentials for services",
+    href: "/admin/keychain",
+    icon: Key,
     color: "bg-amber-500/10 text-amber-500",
   },
   {
-    title: "BackstagePass",
-    description: "Secure credential vault",
-    href: "/backstagepass",
-    icon: Key,
+    title: "Pass family",
+    description: "TestPass, UXPass, SecurityPass, SEOPass",
+    href: "/admin/testpass",
+    icon: BadgeCheck,
     color: "bg-red-500/10 text-red-500",
   },
   {
@@ -39,10 +39,10 @@ const PRODUCTS = [
     color: "bg-green-500/10 text-green-500",
   },
   {
-    title: "Arena",
-    description: "Agent reputation system",
-    href: "/arena",
-    icon: Trophy,
+    title: "Marketplace",
+    description: "Ship and verify agent tools",
+    href: "/developers",
+    icon: Store,
     color: "bg-yellow-500/10 text-yellow-500",
   },
 ];
@@ -58,23 +58,23 @@ const Hero = () => {
         <div className="relative z-10 mx-auto max-w-4xl text-center">
           <FadeIn>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 backdrop-blur-sm">
-              <span className="font-mono text-xs font-medium text-primary">The Complete Stack</span>
+              <span className="font-mono text-xs font-medium text-primary">Agent Rails</span>
             </div>
           </FadeIn>
 
           <FadeIn delay={0.05}>
             <h1 className="text-5xl font-semibold leading-tight tracking-tight sm:text-6xl md:text-7xl">
-              The Operating System{" "}
+              Rails for{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary to-primary/70">
-                for AI Agents
+                AI agents
               </span>
             </h1>
           </FadeIn>
 
           <FadeIn delay={0.1}>
             <p className="mt-6 text-lg text-body max-w-2xl mx-auto leading-relaxed">
-              Tools to act. Memory to remember. Organisation to plan. Credentials to authenticate. Teams to collaborate.
-              Everything your AI agent needs in one platform.
+              Tools to act. Memory to remember. Connections to authenticate. Crews to deliberate.
+              Pass family checks to prove it works before you ship.
             </p>
           </FadeIn>
 
@@ -110,10 +110,10 @@ const Hero = () => {
         <div className="mx-auto max-w-5xl">
           <FadeIn>
             <h2 className="text-center text-3xl font-semibold tracking-tight sm:text-4xl">
-              The complete AI agent stack
+              The rails your agent plugs into
             </h2>
             <p className="mt-3 text-center text-body max-w-2xl mx-auto">
-              Six products that work together. Each solving a critical challenge in AI agent development.
+              UnClick sits behind Claude, ChatGPT, Cursor, and every MCP client as the shared layer for action, memory, credentials, teams, and QA.
             </p>
           </FadeIn>
 
