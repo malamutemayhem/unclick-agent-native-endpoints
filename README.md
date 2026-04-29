@@ -34,15 +34,17 @@ This repo follows the AGENTS.md fence rules for agent work.
 
 Gives your agent access to a growing catalog of tools across developer utilities, social media, e-commerce, finance, messaging, media, security, and more. You don't need to install separate packages for each integration. One server provides access to everything in the catalog.
 
-## The 3 tools
+## Tool Surface
 
-| Tool | What it does |
-|------|-------------|
-| `unclick_search` | Search the catalog by keyword or category |
-| `unclick_tool_info` | Get the full schema and parameters for a specific tool |
-| `unclick_call` | Call any tool in the catalog |
+UnClick exposes a small direct surface for daily agent workflows, plus hidden internal discovery tools for the full catalog.
 
-The agent searches for what it needs, checks the schema, and then calls the tool. Discovery is built into the workflow.
+| Tool group | Tools |
+|------------|-------|
+| Memory session protocol | `load_memory`, `save_fact`, `search_memory`, `save_identity`, `save_session` |
+| Signals and Fishbowl coordination | `check_signals`, `read_messages`, `post_message`, `create_todo`, `list_todos`, `update_todo`, `complete_todo`, `create_idea`, `list_ideas`, `vote_on_idea`, `promote_idea_to_todo` |
+| Hidden internal catalog tools | `unclick_search`, `unclick_browse`, `unclick_tool_info`, `unclick_call` |
+
+The agent starts with memory, uses direct Fishbowl tools for coordination, and can still call the hidden catalog tools by name when it needs dynamic endpoint discovery.
 
 ## Requirements
 

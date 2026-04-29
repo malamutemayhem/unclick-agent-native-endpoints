@@ -16,41 +16,36 @@ api/                            # Vercel serverless functions (REST API endpoint
 
 | File | Purpose |
 |------|---------|
-| `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers meta-tools + 5 direct memory tools |
+| `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers the direct tool surface and hidden internal meta-tools |
 | `packages/mcp-server/src/tool-wiring.ts` | Maps tool names to API calls |
 | `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (all 17 ops) |
 | `packages/mcp-server/src/memory/db.ts` | Backend factory (local JSON or Supabase) |
-| `src/pages/tools/Tools.tsx` | Website tools grid, one tile per integration |
+| `src/pages/Tools.tsx` | Website tools grid, one tile per integration |
 
 ## Architecture
 
-**4 meta-tools** let agents discover and call anything dynamically:
+`CLAUDE.md` is the canonical source of truth for repo architecture and the MCP tool surface. Keep this section aligned with that file instead of expanding separate copies.
 
-- `unclick_search` - find tools by keyword
-- `unclick_browse` - list all tools, optionally by category
-- `unclick_tool_info` - get endpoints and params for a specific tool
-- `unclick_call` - execute any endpoint with parameters (including `memory.*`)
+Current summary:
 
-**5 direct memory tools** expose the session protocol agents should follow:
+- Hidden internal meta-tools: `unclick_search`, `unclick_browse`, `unclick_tool_info`, `unclick_call`
+- Direct memory tools: `load_memory`, `save_session`, `save_fact`, `search_memory`, `save_identity`
+- Old memory tool names still work as aliases: `get_startup_context`, `write_session_summary`, `add_fact`, `set_business_context`
+- Signals and Fishbowl coordination tools are visible first-party tools for worker operation
 
-- `get_startup_context` - call FIRST in every session
-- `write_session_summary` - call BEFORE session ends
-- `add_fact` - record preferences, decisions, important info
-- `search_memory` - recall anything from prior sessions
-- `set_business_context` - set standing rules (always loaded)
-
-The other 12 memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
+The other memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
 
 ## Adding a new tool
 
 1. Create `api/*-tool.ts` with the Vercel handler and endpoint logic
 2. Wire it in `packages/mcp-server/src/tool-wiring.ts` (add name, description, category, and endpoint mapping)
-3. Add a tile in `src/pages/tools/Tools.tsx`
+3. Add a tile in `src/pages/Tools.tsx`
+4. If it should appear in `ListTools`, add it intentionally to the first-party tool surface in `packages/mcp-server/src/server.ts`
 
 ## Style rules
 
 - No em dashes anywhere in code or content (use a regular dash or restructure the sentence)
-- No per-tool MCP registrations EXCEPT the 5 direct memory tools (everything else goes through the 4 meta-tools)
+- Do not add one-off MCP registrations casually. Catalog and integration tools should normally flow through `tool-wiring.ts` and the hidden internal meta-tools. Add visible first-party tools only when agents need a direct workflow surface.
 
 ## Operating rules for cloud-async coding agents
 
@@ -124,7 +119,7 @@ This is how we verify the work actually landed in the remote repository.
 
 ### 7. Brand voice rules (when writing user-facing copy or docs)
 
-- No em dashes (—). Use plain commas, full stops, or " - " hyphens instead.
+- No em dashes. Use plain commas, full stops, or " - " hyphens instead.
 - Plain English. Idiot-proof. Avoid jargon.
 - Short sentences.
 
