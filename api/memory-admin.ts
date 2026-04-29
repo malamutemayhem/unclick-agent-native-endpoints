@@ -6602,6 +6602,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "fishbowl_drop_todo":
       case "fishbowl_delete_todo":
       case "fishbowl_list_todos":
+      case "fishbowl_auto_close_merged":
       case "fishbowl_create_idea":
       case "fishbowl_update_idea":
       case "fishbowl_vote_on_idea":
@@ -6882,6 +6883,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               descriptions_included: includeDescription,
               todos_returned: decorated.length,
             },
+          });
+        }
+
+        // Auto-close: caller (GitHub Action / cron poller) hands us a list of
+        // merged PRs; we close any open|in_progress todo whose title or
+        // description references the PR. Linkage is by text since todos have
+        // no FK to GitHub: word-bounded "#<number>" or full PR URL match.
+        // Idempotent: already-done todos are filtered out by the status WHERE.
+        if (action === "fishbowl_auto_close_merged") {
+          const rawPrs = Array.isArray(body.merged_prs) ? body.merged_prs : null;
+          if (!rawPrs) {
+            return res.status(400).json({
+              error: "merged_prs required (array of {number, url?})",
+            });
+          }
+          if (rawPrs.length === 0) {
+            return res.status(200).json({ closed: [], scanned_pr_count: 0, matched_todo_count: 0 });
+          }
+          if (rawPrs.length > 50) {
+            return res.status(400).json({ error: "merged_prs must be at most 50 entries per call" });
+          }
+
+          const prs: Array<{ number: number; url: string | null }> = [];
+          for (const entry of rawPrs) {
+            const e = (entry ?? {}) as Record<string, unknown>;
+            const n = Number(e.number);
+            if (!Number.isInteger(n) || n <= 0) {
+              return res.status(400).json({ error: "each merged_prs[].number must be a positive integer" });
+            }
+            const u = typeof e.url === "string" && e.url.trim().length > 0 ? e.url.trim() : null;
+            prs.push({ number: n, url: u });
+          }
+
+          const { data: openTodos, error: listErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id, title, description, status")
+            .eq("api_key_hash", apiKeyHash)
+            .in("status", ["open", "in_progress"])
+            .limit(500);
+          if (listErr) throw listErr;
+
+          const matched: Array<{ todo: { id: string; title: string }; pr_number: number }> = [];
+          for (const pr of prs) {
+            const numRe = new RegExp(`(^|[^\\d])#${pr.number}(?!\\d)`);
+            const urlNeedle = pr.url;
+            for (const t of openTodos ?? []) {
+              if (matched.some((m) => m.todo.id === (t.id as string))) continue;
+              const hay = `${t.title ?? ""}\n${t.description ?? ""}`;
+              const hit = numRe.test(hay) || (urlNeedle != null && hay.includes(urlNeedle));
+              if (hit) matched.push({ todo: { id: t.id as string, title: t.title as string }, pr_number: pr.number });
+            }
+          }
+
+          if (matched.length === 0) {
+            return res.status(200).json({
+              closed: [],
+              scanned_pr_count: prs.length,
+              matched_todo_count: 0,
+            });
+          }
+
+          const nowIso = new Date().toISOString();
+          const ids = matched.map((m) => m.todo.id);
+          const { data: updated, error: updErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .update({ status: "done", completed_at: nowIso, updated_at: nowIso })
+            .eq("api_key_hash", apiKeyHash)
+            .in("id", ids)
+            .in("status", ["open", "in_progress"])
+            .select("id, title");
+          if (updErr) throw updErr;
+
+          for (const m of matched) {
+            void postFishbowlEvent(
+              supabase,
+              apiKeyHash,
+              agentId,
+              "todo-completed",
+              `Auto-closed on PR #${m.pr_number} merge: ${m.todo.title}`,
+            );
+          }
+
+          return res.status(200).json({
+            closed: updated ?? [],
+            scanned_pr_count: prs.length,
+            matched_todo_count: matched.length,
           });
         }
 
