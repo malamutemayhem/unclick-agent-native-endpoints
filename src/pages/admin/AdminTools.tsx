@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Wrench, Rocket } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Wrench, Rocket, PenSquare } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import { InfoCard } from "./memory/InfoCard";
 import UnClickTools from "./tools/UnClickTools";
@@ -86,17 +87,38 @@ export default function AdminToolsPage() {
           <ConnectedServices connectors={connectors} loading={loading} />
         </section>
 
-        {/* Section 3 - Marketplace placeholder */}
+        {/* Section 3 - Marketplace */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-white">Marketplace</h2>
-          <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-8 text-center">
-            <Rocket className="mx-auto h-8 w-8 text-white/20 mb-3" />
-            <p className="text-sm text-white/50">
-              Community tools and custom integrations - coming soon.
-            </p>
-            <p className="mt-1 text-xs text-white/30">
-              Build your own MCP tools or install from the UnClick marketplace.
-            </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Link
+              to="/admin/copypass"
+              className="rounded-xl border border-white/[0.06] bg-[#111] p-5 transition-colors hover:border-fuchsia-400/30 hover:bg-white/[0.04]"
+            >
+              <div className="flex items-center gap-2">
+                <PenSquare className="h-4 w-4 text-fuchsia-300" />
+                <h3 className="text-sm font-semibold text-white">CopyPass</h3>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-fuchsia-500/10 text-fuchsia-300">
+                  Pass family
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-white/50">
+                Scaffold-only MCP and admin surface for AI-generated copy review. Deterministic checks land in a later chunk.
+              </p>
+              <p className="mt-3 text-[11px] font-medium text-fuchsia-300">
+                Open CopyPass →
+              </p>
+            </Link>
+
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-8 text-center">
+              <Rocket className="mx-auto h-8 w-8 text-white/20 mb-3" />
+              <p className="text-sm text-white/50">
+                Community tools and custom integrations - coming soon.
+              </p>
+              <p className="mt-1 text-xs text-white/30">
+                Build your own MCP tools or install from the UnClick marketplace.
+              </p>
+            </div>
           </div>
         </section>
     </>

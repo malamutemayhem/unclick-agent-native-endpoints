@@ -776,6 +776,12 @@ import {
   seopassLighthousePlan,
 } from "./seopass-tool.js";
 
+// ─── CopyPass (copy quality QC, sister to SecurityPass) ─────────────────────
+import {
+  copypassRun,
+  copypassStatus,
+} from "./copypass-tool.js";
+
 // ─── Crews (Orchestrator Wizard) ──────────────────────────────────────────────
 import { crewsStartRun, crewsGetRun, crewsListRuns } from "./crews-tool.js";
 
@@ -12069,6 +12075,36 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── copypass-tool.ts (copy quality QC, scaffold-only for Chunk 1) ────────
+  {
+    name: "copypass_run",
+    description: "Start a scaffold CopyPass run for AI-generated copy. Chunk 1 stores an in-session run record and echoes operator context so later evidence-led copy checks can plug into a stable shape.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        copy_text: { type: "string", description: "The AI-generated copy to review." },
+        channel: { type: "string", description: "Optional surface label such as homepage_hero, pricing_section, or onboarding_email." },
+        audience: { type: "string", description: "Optional intended audience for the copy." },
+        goal: { type: "string", description: "Optional goal for the copy, such as clarity, conversion, or trust." },
+        profile: { type: "string", enum: ["smoke", "standard", "deep"], description: "Reserved for later evaluator depth. Defaults to smoke." },
+      },
+      required: ["copy_text"],
+    },
+  },
+  {
+    name: "copypass_status",
+    description: "Fetch the current status, notes, and scaffold finding count for a CopyPass run started in this MCP session.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        run_id: { type: "string", description: "The run id returned by copypass_run" },
+      },
+      required: ["run_id"],
+    },
+  },
+
   // ── crews-tool.ts (Orchestrator Wizard) ──────────────────────────────────────
   {
     name: "start_crew_run",
@@ -13243,6 +13279,10 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   seopass_status:          (args) => seopassStatus(args),
   seopass_register_pack:   (args) => seopassRegisterPack(args),
   seopass_lighthouse_plan: (args) => seopassLighthousePlan(args),
+
+  // copypass-tool.ts
+  copypass_run:            (args) => copypassRun(args),
+  copypass_status:         (args) => copypassStatus(args),
 
   // crews-tool.ts
   start_crew_run: (args) => crewsStartRun(args),
