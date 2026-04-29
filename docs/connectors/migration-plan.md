@@ -1,8 +1,11 @@
 # BackstagePass to Connections Migration Plan
 
-**Status**: Audit complete  
+**Status**: Audit complete (Phase 0 baseline)  
 **Last updated**: 2026-04-29  
 **Owner**: `🦾`
+
+**Implementation note**: This document is a baseline audit captured before the full rename landed on `main`.
+Some user-facing copy changes identified here have already shipped, so this file should be read as migration grounding and wording history, not as a fresh unblock list.
 
 ## Goal
 
