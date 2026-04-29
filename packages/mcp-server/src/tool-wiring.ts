@@ -791,6 +791,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search BoardGameGeek for board games by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Game name to search for" },
         type: { type: "string", enum: ["boardgame", "boardgameexpansion"], description: "Type of item to search for (default: boardgame)" },
@@ -803,6 +804,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get full details for a board game by its BGG ID - name, year, rating, players, playtime, description, categories, and mechanics.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         gameId: { type: "string", description: "BoardGameGeek game ID" },
       },
@@ -814,6 +816,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a BGG user's game collection filtered by status (owned, wishlist, or played).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string", description: "BGG username" },
         status: { type: "string", enum: ["owned", "wishlist", "played"], description: "Collection filter (default: owned)" },
@@ -826,6 +829,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the BGG Hotness list - the most discussed and active board games right now.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number", description: "Number of games to return (max 50, default 20)" },
       },
@@ -836,6 +840,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get user comments and ratings for a board game on BGG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         gameId: { type: "string", description: "BoardGameGeek game ID" },
         page: { type: "number", description: "Page number (default 1, 25 comments per page)" },
@@ -850,6 +855,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for video games on RAWG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search: { type: "string", description: "Search query" },
         genres: { type: "string" },
@@ -866,6 +872,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific game by RAWG ID or slug.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string", description: "RAWG game ID or slug" },
         api_key: { type: "string" },
@@ -878,6 +885,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get screenshots for a RAWG game.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         api_key: { type: "string" },
@@ -890,6 +898,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all game genres on RAWG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -898,6 +907,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all gaming platforms on RAWG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -906,6 +916,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get upcoming game releases from RAWG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         page_size: { type: "number" },
         api_key: { type: "string" },
@@ -919,6 +930,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a League of Legends summoner by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         summonerName: { type: "string" },
         region: { type: "string", description: "e.g. euw1, na1, kr" },
@@ -932,6 +944,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get ranked stats for a League of Legends summoner.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         summonerId: { type: "string" },
         region: { type: "string" },
@@ -945,6 +958,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get match history for a LoL/Riot account by PUUID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         puuid: { type: "string" },
         region: { type: "string" },
@@ -959,6 +973,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Riot match by match ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         matchId: { type: "string" },
         region: { type: "string" },
@@ -972,6 +987,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Valorant account by game name and tag line.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         gameName: { type: "string" },
         tagLine: { type: "string" },
@@ -987,6 +1003,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for a Destiny 2 player by display name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         displayName: { type: "string" },
         membershipType: { type: "number", description: "-1 for all" },
@@ -1000,6 +1017,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Destiny 2 player profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         membershipType: { type: "number" },
         membershipId: { type: "string" },
@@ -1013,6 +1031,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Destiny 2 manifest definition.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -1021,6 +1040,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Destiny 2 manifest entities.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         entityType: { type: "string" },
         searchTerm: { type: "string" },
@@ -1036,6 +1056,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Clash of Clans player by tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         playerTag: { type: "string" },
         api_key: { type: "string" },
@@ -1048,6 +1069,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Clash of Clans clan by tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         clanTag: { type: "string" },
         api_key: { type: "string" },
@@ -1060,6 +1082,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get members of a Clash of Clans clan.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         clanTag: { type: "string" },
         api_key: { type: "string" },
@@ -1072,6 +1095,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Clash Royale player by tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         playerTag: { type: "string" },
         api_key: { type: "string" },
@@ -1084,6 +1108,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top Clash Royale players globally or by location.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         locationId: { type: "string" },
         api_key: { type: "string" },
@@ -1095,6 +1120,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Brawl Stars player by tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         playerTag: { type: "string" },
         api_key: { type: "string" },
@@ -1107,6 +1133,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Brawl Stars club by tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         clubTag: { type: "string" },
         api_key: { type: "string" },
@@ -1121,6 +1148,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search LEGO sets by name/theme (Rebrickable).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search: { type: "string" },
         theme_id: { type: "number" },
@@ -1136,6 +1164,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific LEGO set by set number.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         set_num: { type: "string", description: "e.g. 75192-1" },
         api_key: { type: "string" },
@@ -1148,6 +1177,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the parts list for a LEGO set.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         set_num: { type: "string" },
         api_key: { type: "string" },
@@ -1160,6 +1190,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search LEGO parts by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search: { type: "string" },
         api_key: { type: "string" },
@@ -1172,6 +1203,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all LEGO themes from Rebrickable.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -1180,6 +1212,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search LEGO sets via Brickset API.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         year: { type: "string" },
@@ -1194,6 +1227,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific LEGO set from Brickset by set number.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         setNumber: { type: "string" },
         api_key: { type: "string" },
@@ -1208,6 +1242,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for beers on Untappd.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         limit: { type: "number" },
@@ -1221,6 +1256,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific beer on Untappd.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bid: { type: "number", description: "Beer ID" },
         api_key: { type: "string" },
@@ -1233,6 +1269,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a brewery on Untappd.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         brewery_id: { type: "number" },
         api_key: { type: "string" },
@@ -1245,6 +1282,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for breweries on Untappd.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         api_key: { type: "string" },
@@ -1257,6 +1295,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recent activity/check-ins for a beer on Untappd.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bid: { type: "number" },
         limit: { type: "number" },
@@ -1272,6 +1311,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get esports matches from PandaScore.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game: { type: "string", description: "e.g. lol, csgo, dota2" },
         status: { type: "string", description: "running, upcoming, past" },
@@ -1286,6 +1326,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get esports tournaments from PandaScore.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game: { type: "string" },
         status: { type: "string" },
@@ -1298,6 +1339,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search esports teams on PandaScore.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game: { type: "string" },
         search: { type: "string" },
@@ -1310,6 +1352,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search esports players on PandaScore.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search: { type: "string" },
         api_key: { type: "string" },
@@ -1321,6 +1364,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific esports match by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         match_id: { type: "number" },
         api_key: { type: "string" },
@@ -1335,6 +1379,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Amber Electric sites for the authenticated user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -1343,6 +1388,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the current electricity price for an Amber site.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         site_id: { type: "string" },
         api_key: { type: "string" },
@@ -1355,6 +1401,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get electricity price forecast for an Amber site.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         site_id: { type: "string" },
         api_key: { type: "string" },
@@ -1369,6 +1416,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get weather forecast from WillyWeather for an Australian location.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location_id: { type: "number", description: "WillyWeather location ID" },
         days: { type: "number" },
@@ -1382,6 +1430,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get surf report from WillyWeather.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location_id: { type: "number" },
         days: { type: "number" },
@@ -1395,6 +1444,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get tide times from WillyWeather.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location_id: { type: "number" },
         days: { type: "number" },
@@ -1410,6 +1460,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Australian property listings on Domain.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         suburb: { type: "string" },
         state: { type: "string" },
@@ -1429,6 +1480,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Domain property listing.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         listing_id: { type: "number" },
         api_key: { type: "string" },
@@ -1441,6 +1493,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get property market statistics for an Australian suburb.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         suburb: { type: "string" },
         state: { type: "string" },
@@ -1458,6 +1511,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search the National Library of Australia's Trove.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         zone: { type: "string", description: "e.g. newspaper, book" },
@@ -1472,6 +1526,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Trove work by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         api_key: { type: "string" },
@@ -1484,6 +1539,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Trove newspaper article by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         api_key: { type: "string" },
@@ -1498,6 +1554,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Track an Australia Post parcel by tracking number.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         tracking_id: { type: "string" },
         api_key: { type: "string" },
@@ -1510,6 +1567,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Look up an Australian postcode or suburb.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string", description: "Suburb name or postcode" },
         api_key: { type: "string" },
@@ -1522,6 +1580,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Australia Post estimated delivery times.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         from_postcode: { type: "string" },
         to_postcode: { type: "string" },
@@ -1538,6 +1597,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a shipping quote from Sendle.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pickup_suburb: { type: "string" },
         pickup_postcode: { type: "string" },
@@ -1557,6 +1617,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a Sendle shipping order.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sender: { type: "object", additionalProperties: true },
         receiver: { type: "object", additionalProperties: true },
@@ -1571,6 +1632,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Track a Sendle parcel by tracking number.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         tracking_id: { type: "string" },
         api_key: { type: "string" },
@@ -1585,6 +1647,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Australian trademarks via IP Australia.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         status: { type: "string" },
@@ -1599,6 +1662,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Australian trademark.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         applicationNumber: { type: "string" },
         api_key: { type: "string" },
@@ -1611,6 +1675,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Australian patents via IP Australia.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         status: { type: "string" },
@@ -1626,6 +1691,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get TAB race meetings for a date.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string", description: "YYYY-MM-DD" },
         jurisdiction: { type: "string", description: "e.g. VIC, NSW" },
@@ -1638,6 +1704,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get TAB race details.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         race_id: { type: "string" },
         api_key: { type: "string" },
@@ -1650,6 +1717,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get TAB sports betting markets.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sport: { type: "string" },
         competition: { type: "string" },
@@ -1664,6 +1732,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Australian lottery results from The Lott.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game: { type: "string", description: "e.g. TattsLotto, Powerball" },
         draw_number: { type: "number" },
@@ -1675,6 +1744,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current Australian lottery jackpots from The Lott.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -1685,6 +1755,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Look up an Australian Business Number (ABN).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         abn: { type: "string" },
         api_key: { type: "string" },
@@ -1697,6 +1768,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for Australian businesses by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string" },
         api_key: { type: "string" },
@@ -1711,6 +1783,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search PTV stops, routes, or outlets.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search_term: { type: "string" },
         api_key: { type: "string" },
@@ -1723,6 +1796,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get PTV departures for a stop.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         route_type: { type: "number", description: "0=train,1=tram,2=bus,3=vline,4=night" },
         stop_id: { type: "number" },
@@ -1738,6 +1812,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current PTV service disruptions.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         route_types: { type: "string" },
         api_key: { type: "string" },
@@ -1749,6 +1824,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get stops on a PTV route.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         route_id: { type: "number" },
         route_type: { type: "number" },
@@ -1762,6 +1838,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get directions for a PTV route.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         route_id: { type: "number" },
         api_key: { type: "string" },
@@ -1776,6 +1853,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific CVE by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         cve_id: { type: "string", description: "e.g. CVE-2023-12345" },
       },
@@ -1787,6 +1865,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search the NVD CVE database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keyword: { type: "string" },
         cvssV3Severity: { type: "string", description: "LOW, MEDIUM, HIGH, CRITICAL" },
@@ -1801,6 +1880,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recently published CVEs from NVD.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         resultsPerPage: { type: "number" },
       },
@@ -1813,6 +1893,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Find email addresses for a domain using Hunter.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         domain: { type: "string" },
         first_name: { type: "string" },
@@ -1827,6 +1908,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Verify an email address with Hunter.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         email: { type: "string" },
         api_key: { type: "string" },
@@ -1839,6 +1921,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get email information for a domain from Hunter.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         domain: { type: "string" },
         api_key: { type: "string" },
@@ -1853,6 +1936,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check if an email account has been in a data breach.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         email: { type: "string" },
         api_key: { type: "string" },
@@ -1865,6 +1949,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all breaches tracked by Have I Been Pwned.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         domain: { type: "string" },
       },
@@ -1875,6 +1960,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check if a password has appeared in a data breach.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         password: { type: "string" },
       },
@@ -1888,6 +1974,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Submit a URL for scanning on VirusTotal.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string" },
         api_key: { type: "string" },
@@ -1900,6 +1987,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a VirusTotal report for a URL.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string" },
         api_key: { type: "string" },
@@ -1912,6 +2000,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a VirusTotal report for an IP address.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
         api_key: { type: "string" },
@@ -1924,6 +2013,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a VirusTotal report for a domain.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         domain: { type: "string" },
         api_key: { type: "string" },
@@ -1938,6 +2028,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check if an IP address has been reported for abuse.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
         maxAgeInDays: { type: "number" },
@@ -1951,6 +2042,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Report an abusive IP address to AbuseIPDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
         categories: { type: "string" },
@@ -1965,6 +2057,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the AbuseIPDB blacklist.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         confidenceMinimum: { type: "number" },
         limit: { type: "number" },
@@ -1979,9 +2072,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Submit a URL for scanning on urlscan.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string" },
-        visibility: { type: "string", description: "public, private, or unlisted" },
+        visibility: { type: "string", enum: ["public", "private", "unlisted"], description: "public, private, or unlisted" },
         api_key: { type: "string" },
       },
       required: ["url"],
@@ -1992,6 +2086,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the result of a urlscan.io scan by UUID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         uuid: { type: "string" },
         api_key: { type: "string" },
@@ -2004,6 +2099,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search urlscan.io scan results.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         size: { type: "number" },
@@ -2019,6 +2115,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Shodan for internet-connected devices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         page: { type: "number" },
@@ -2032,6 +2129,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Shodan information for a specific IP address.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
         api_key: { type: "string" },
@@ -2044,6 +2142,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get aggregated statistics for a Shodan query.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         facets: { type: "string" },
@@ -2059,6 +2158,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send an email using Resend.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         from: { type: "string" },
         to: { type: "string" },
@@ -2075,6 +2175,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a sent email by ID from Resend.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         email_id: { type: "string" },
         api_key: { type: "string" },
@@ -2087,6 +2188,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List domains configured in Resend.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: { api_key: { type: "string" } },
     },
   },
@@ -2097,6 +2199,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Vercel deployments for a project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         projectId: { type: "string" },
         limit: { type: "number" },
@@ -2109,6 +2212,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Vercel deployment.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         deploymentId: { type: "string" },
         api_key: { type: "string" },
@@ -2121,6 +2225,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Vercel projects.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
         api_key: { type: "string" },
@@ -2132,6 +2237,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get information about a Vercel domain.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         domain: { type: "string" },
         api_key: { type: "string" },
@@ -2144,6 +2250,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get environment variables for a Vercel project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         project_id: { type: "string" },
         projectId: { type: "string", description: "Legacy alias for project_id." },
@@ -2160,6 +2267,7 @@ export const ADDITIONAL_TOOLS = [
       "Create (or upsert) an environment variable on a Vercel project. Target defaults to production, preview, and development. Use type='plain' for non-secret values, 'encrypted' or 'sensitive' for secrets.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         project_id: { type: "string" },
         key: { type: "string" },
@@ -2186,6 +2294,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Delete a Vercel environment variable by its env id (get ids from vercel_get_env).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         project_id: { type: "string" },
         env_id: { type: "string" },
@@ -2201,6 +2310,7 @@ export const ADDITIONAL_TOOLS = [
       "Create a Vercel deployment. Pass deployment_id to redeploy an existing commit, or project_id + git_ref to deploy fresh from git. Set force_new=true to skip the build cache (needed after env var changes or when serverless function surfaces change).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         deployment_id: { type: "string", description: "Redeploy the git source of this existing deployment." },
         project_id: { type: "string", description: "Deploy fresh from the project's linked git repo." },
@@ -2220,6 +2330,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Toggl time entries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         start_date: { type: "string" },
         end_date: { type: "string" },
@@ -2232,6 +2343,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new Toggl time entry.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         workspace_id: { type: "number" },
         description: { type: "string" },
@@ -2248,6 +2360,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Toggl projects for a workspace.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         workspace_id: { type: "number" },
         api_key: { type: "string" },
@@ -2260,6 +2373,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Toggl time summary report.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         workspace_id: { type: "number" },
         since: { type: "string" },
@@ -2276,6 +2390,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send an email via Gmail/IMAP.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         to: { type: "string" },
         subject: { type: "string" },
@@ -2293,6 +2408,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Read emails from an inbox.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         folder: { type: "string" },
         limit: { type: "number" },
@@ -2306,6 +2422,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search emails in an inbox.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         folder: { type: "string" },
@@ -2321,6 +2438,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific email by UID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         uid: { type: "string" },
         folder: { type: "string" },
@@ -2335,6 +2453,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Mark an email as read.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         uid: { type: "string" },
         folder: { type: "string" },
@@ -2349,6 +2468,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Delete an email by UID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         uid: { type: "string" },
         folder: { type: "string" },
@@ -2365,6 +2485,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recent earthquakes from USGS.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         minmagnitude: { type: "number" },
         limit: { type: "number" },
@@ -2377,6 +2498,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific USGS earthquake event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         event_id: { type: "string" },
       },
@@ -2388,6 +2510,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get USGS earthquakes within a geographic region.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         minlatitude: { type: "number" },
         maxlatitude: { type: "number" },
@@ -2407,6 +2530,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get air quality data for a location from OpenAQ.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         city: { type: "string" },
         country: { type: "string" },
@@ -2420,6 +2544,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get air quality measurements from OpenAQ.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location_id: { type: "number" },
         parameter: { type: "string" },
@@ -2435,6 +2560,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List countries with air quality data on OpenAQ.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -2445,6 +2571,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for food products on Open Food Facts.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         page: { type: "number" },
@@ -2458,6 +2585,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a food product from Open Food Facts by barcode.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         barcode: { type: "string" },
       },
@@ -2469,6 +2597,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get food products by category from Open Food Facts.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         category: { type: "string" },
         page: { type: "number" },
@@ -2483,6 +2612,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recent bird observations from eBird.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         regionCode: { type: "string", description: "e.g. AU-VIC" },
         back: { type: "number", description: "Days back (max 30)" },
@@ -2497,6 +2627,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get notable/rare bird observations from eBird.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         regionCode: { type: "string" },
         back: { type: "number" },
@@ -2510,6 +2641,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get information about a bird species from eBird.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         speciesCode: { type: "string" },
         api_key: { type: "string" },
@@ -2524,6 +2656,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Estimate carbon emissions for a flight.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         legs: { type: "array", items: {}, description: "Array of flight legs with departure_airport and destination_airport" },
         passengers: { type: "number" },
@@ -2537,6 +2670,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Estimate carbon emissions for a vehicle journey.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         distance_value: { type: "number" },
         distance_unit: { type: "string" },
@@ -2551,6 +2685,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Estimate carbon emissions for electricity consumption.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         electricity_value: { type: "number" },
         electricity_unit: { type: "string" },
@@ -2567,6 +2702,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Find the nearest public toilets to a location (Australia).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         latitude: { type: "number" },
         longitude: { type: "number" },
@@ -2581,6 +2717,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific public toilet by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         toilet_id: { type: "string" },
       },
@@ -2594,6 +2731,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Calculate tip amount and total for a bill.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bill: { type: "number" },
         tip_percent: { type: "number" },
@@ -2607,6 +2745,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Calculate monthly mortgage repayment.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         principal: { type: "number" },
         annual_rate: { type: "number" },
@@ -2620,6 +2759,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Calculate Body Mass Index (BMI).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         weight_kg: { type: "number" },
         height_cm: { type: "number" },
@@ -2632,6 +2772,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Calculate compound interest growth.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         principal: { type: "number" },
         annual_rate: { type: "number" },
@@ -2647,6 +2788,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Estimate currency conversion using a rough rate.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         amount: { type: "number" },
         from: { type: "string" },
@@ -2662,6 +2804,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between length units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2675,6 +2818,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between weight/mass units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2688,6 +2832,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between temperature units (C, F, K).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2701,6 +2846,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between volume units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2714,6 +2860,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between speed units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2727,6 +2874,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between area units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2740,6 +2888,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert between data storage units.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         value: { type: "number" },
         from: { type: "string" },
@@ -2755,6 +2904,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the current date and time, optionally in a specific timezone.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         timezone: { type: "string" },
         format: { type: "string" },
@@ -2766,6 +2916,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert a datetime from one timezone to another.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         datetime: { type: "string" },
         from_timezone: { type: "string" },
@@ -2779,6 +2930,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Calculate the difference between two dates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date1: { type: "string" },
         date2: { type: "string" },
@@ -2791,6 +2943,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Add a duration to a date.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
         years: { type: "number" },
@@ -2807,6 +2960,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get business days between two dates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         start: { type: "string" },
         end: { type: "string" },
@@ -2819,6 +2973,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Format a date string.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
         format: { type: "string" },
@@ -2832,6 +2987,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the ISO week number for a date.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
       },
@@ -2845,6 +3001,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Analyse text (word count, sentences, readability).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
       },
@@ -2856,6 +3013,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Transform text (uppercase, lowercase, title case, slug, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         transform: { type: "string", description: "uppercase, lowercase, titlecase, slug, reverse, etc." },
@@ -2868,6 +3026,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Extract all email addresses from a text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
       },
@@ -2879,6 +3038,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Extract all URLs from a text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
       },
@@ -2890,6 +3050,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Extract all phone numbers from a text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
       },
@@ -2901,6 +3062,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Count occurrences of a substring in text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         search: { type: "string" },
@@ -2914,6 +3076,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Truncate text to a maximum length.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         max_length: { type: "number" },
@@ -2929,6 +3092,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for meals/recipes by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
       },
@@ -2940,6 +3104,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a random meal/recipe.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -2948,6 +3113,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a meal/recipe by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
       },
@@ -2959,6 +3125,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all meal categories.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -2967,6 +3134,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Filter meals by category.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         category: { type: "string" },
       },
@@ -2978,6 +3146,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Filter meals by cuisine/area.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         area: { type: "string" },
       },
@@ -2989,6 +3158,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Filter meals by main ingredient.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ingredient: { type: "string" },
       },
@@ -3002,6 +3172,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current NFL scores from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3010,6 +3181,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current NBA scores from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3018,6 +3190,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current MLB scores from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3026,6 +3199,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current NHL scores from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3034,6 +3208,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get soccer scores from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         league: { type: "string", description: "e.g. eng.1, usa.1" },
       },
@@ -3044,6 +3219,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get ESPN sports news.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sport: { type: "string" },
         limit: { type: "number" },
@@ -3055,6 +3231,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get team information from ESPN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sport: { type: "string" },
         league: { type: "string" },
@@ -3070,6 +3247,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the current NFL state from Sleeper.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3078,6 +3256,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all NFL players from Sleeper.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sport: { type: "string" },
       },
@@ -3088,9 +3267,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending players on Sleeper.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sport: { type: "string" },
-        type: { type: "string", description: "add or drop" },
+        type: { type: "string", enum: ["add", "drop"], description: "add or drop" },
         lookback_hours: { type: "number" },
         limit: { type: "number" },
       },
@@ -3101,6 +3281,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Sleeper fantasy league by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         league_id: { type: "string" },
       },
@@ -3112,6 +3293,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get rosters for a Sleeper fantasy league.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         league_id: { type: "string" },
       },
@@ -3123,6 +3305,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get matchups for a Sleeper fantasy league week.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         league_id: { type: "string" },
         week: { type: "number" },
@@ -3137,6 +3320,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Deezer for tracks, artists, or albums.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         type: { type: "string", description: "track, artist, album, playlist" },
@@ -3150,6 +3334,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Deezer artist by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
       },
@@ -3161,6 +3346,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Deezer album by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
       },
@@ -3172,6 +3358,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Deezer track by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
       },
@@ -3183,6 +3370,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Deezer chart (top tracks/albums/artists).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         type: { type: "string", description: "tracks, albums, artists, playlists" },
         limit: { type: "number" },
@@ -3194,6 +3382,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for Deezer playlists.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         limit: { type: "number" },
@@ -3208,6 +3397,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert a color between HEX, RGB, HSL, and other formats.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         color: { type: "string" },
         from: { type: "string" },
@@ -3221,6 +3411,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get information about a color (name, complementary, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         color: { type: "string" },
         format: { type: "string" },
@@ -3233,6 +3424,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a color palette from a base color.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         color: { type: "string" },
         type: { type: "string", description: "complementary, analogous, triadic, etc." },
@@ -3246,6 +3438,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Mix two colors together.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         color1: { type: "string" },
         color2: { type: "string" },
@@ -3259,6 +3452,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the contrast ratio between two colors.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         foreground: { type: "string" },
         background: { type: "string" },
@@ -3273,6 +3467,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a random UUID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3281,6 +3476,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a random number within a range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         min: { type: "number" },
         max: { type: "number" },
@@ -3294,6 +3490,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a random string.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         length: { type: "number" },
         charset: { type: "string" },
@@ -3305,6 +3502,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Pick random item(s) from a list.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         items: { type: "array", items: {} },
         count: { type: "number" },
@@ -3317,6 +3515,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Flip a coin.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         times: { type: "number" },
       },
@@ -3327,6 +3526,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Roll dice.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         dice: { type: "string", description: "e.g. 2d6, 1d20" },
       },
@@ -3337,6 +3537,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Shuffle a list randomly.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         items: { type: "array", items: {} },
       },
@@ -3348,6 +3549,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate lorem ipsum placeholder text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         paragraphs: { type: "number" },
         words: { type: "number" },
@@ -3362,6 +3564,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Notion action: search_notion, get_notion_page, get_notion_database, query_notion_database, create_notion_page, update_notion_page.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3382,6 +3585,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Readwise action: get_readwise_highlights, get_readwise_books, get_daily_review, search_highlights, create_highlight.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3400,6 +3604,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Raindrop.io action: search_raindrops, get_collection_raindrops, get_raindrop_collections, create_raindrop, get_raindrop, delete_raindrop.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3420,6 +3625,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Clockify action: get_clockify_workspaces, get_time_entries, create_time_entry, get_clockify_projects, get_clockify_summary.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3439,6 +3645,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Splitwise action: get_groups, get_expenses, get_balances, create_expense, get_friends.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3458,6 +3665,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform an Instapaper action: get_instapaper_bookmarks, add_instapaper_bookmark, archive_bookmark, delete_bookmark, get_instapaper_folders.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         username: { type: "string" },
@@ -3478,6 +3686,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Monica CRM action: get_contacts, search_contacts, get_contact, create_contact, get_contact_reminders, get_activities, add_note.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3497,6 +3706,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Feedly action: get_feedly_feeds, get_feedly_streams, search_feedly, get_feedly_categories, mark_as_read.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         api_key: { type: "string" },
@@ -3515,6 +3725,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the top stories from Hacker News.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3525,6 +3736,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the newest stories from Hacker News.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3535,6 +3747,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the best stories from Hacker News.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3545,6 +3758,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Ask HN posts from Hacker News.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3555,6 +3769,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Show HN posts from Hacker News.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3565,6 +3780,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Hacker News item by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
       },
@@ -3576,6 +3792,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Hacker News user profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
       },
@@ -3589,6 +3806,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 sessions from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         year: { type: "number" },
         session_type: { type: "string" },
@@ -3601,6 +3819,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 driver info from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3612,6 +3831,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 position data from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3624,6 +3844,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 lap data from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3637,6 +3858,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 pit stop data from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3649,6 +3871,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 car telemetry data from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3661,6 +3884,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 team radio messages from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
         driver_number: { type: "number" },
@@ -3673,6 +3897,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Formula 1 weather data from OpenF1.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_key: { type: "number" },
       },
@@ -3686,6 +3911,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for movies on TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         year: { type: "number" },
@@ -3700,6 +3926,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for TV shows on TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         page: { type: "number" },
@@ -3713,6 +3940,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a TMDB movie by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -3725,6 +3953,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a TMDB TV show by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -3737,9 +3966,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending movies or TV shows on TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        media_type: { type: "string", description: "movie, tv, or all" },
-        time_window: { type: "string", description: "day or week" },
+        media_type: { type: "string", enum: ["movie", "tv", "all"], description: "movie, tv, or all" },
+        time_window: { type: "string", enum: ["day", "week"], description: "day or week" },
         api_key: { type: "string" },
       },
     },
@@ -3749,6 +3979,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get movies currently in theaters from TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         page: { type: "number" },
         api_key: { type: "string" },
@@ -3760,6 +3991,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get upcoming movies from TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         page: { type: "number" },
         api_key: { type: "string" },
@@ -3771,6 +4003,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get popular TV shows from TMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         page: { type: "number" },
         api_key: { type: "string" },
@@ -3784,11 +4017,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trivia questions from Open Trivia DB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         amount: { type: "number" },
         category: { type: "number" },
-        difficulty: { type: "string", description: "easy, medium, hard" },
-        type: { type: "string", description: "multiple, boolean" },
+        difficulty: { type: "string", enum: ["easy", "medium", "hard"], description: "easy, medium, hard" },
+        type: { type: "string", enum: ["multiple", "boolean"], description: "multiple, boolean" },
       },
     },
   },
@@ -3797,6 +4031,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get available trivia categories from Open Trivia DB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3807,6 +4042,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get NASA Astronomy Picture of the Day.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
         count: { type: "number" },
@@ -3819,6 +4055,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get NASA Near Earth Object (asteroid) data.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         start_date: { type: "string" },
         end_date: { type: "string" },
@@ -3831,8 +4068,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Get NASA Mars rover photos.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        rover: { type: "string", description: "curiosity, opportunity, spirit" },
+        rover: { type: "string", enum: ["curiosity", "opportunity", "spirit", "perseverance"], description: "curiosity, opportunity, spirit" },
         sol: { type: "number" },
         earth_date: { type: "string" },
         camera: { type: "string" },
@@ -3845,6 +4083,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get NASA Earth satellite imagery.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         lat: { type: "number" },
         lon: { type: "number" },
@@ -3860,6 +4099,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get NASA EPIC Earth imagery.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
         api_key: { type: "string" },
@@ -3873,6 +4113,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get current weather for a location from Open-Meteo (no API key required).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         latitude: { type: "number" },
         longitude: { type: "number" },
@@ -3886,6 +4127,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get weather forecast for a location from Open-Meteo.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         latitude: { type: "number" },
         longitude: { type: "number" },
@@ -3900,6 +4142,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get hourly weather forecast from Open-Meteo.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         latitude: { type: "number" },
         longitude: { type: "number" },
@@ -3916,6 +4159,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for radio stations via Radio Browser.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string" },
         limit: { type: "number" },
@@ -3928,6 +4172,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get radio stations by country.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         country: { type: "string" },
         limit: { type: "number" },
@@ -3940,6 +4185,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the most-clicked radio stations.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3950,6 +4196,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the most-voted radio stations.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
       },
@@ -3960,6 +4207,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get radio stations by genre tag.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         tag: { type: "string" },
         limit: { type: "number" },
@@ -3972,6 +4220,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all countries with radio stations.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -3982,6 +4231,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search global news via the GDELT Project. Returns article titles, URLs, sources, dates, countries, and languages. No API key required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Search query (keywords, phrases, or operators)" },
         maxrecords: { type: "number", description: "Max articles to return (default 25, max 250)" },
@@ -3998,6 +4248,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Analyse the sentiment and tone of global news coverage for a topic over time. Returns average tone scores (negative = negative coverage, positive = positive), trend summary, and timeline. Great for brand monitoring or tracking public sentiment.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Topic or keyword to analyse" },
         timespan: { type: "string", description: "Time window (e.g. '24h', '7d', '1month')" },
@@ -4012,6 +4263,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get geographic distribution of news events for a topic from the GDELT GEO API. Returns event clusters with location, article count, and tone score.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Topic or keyword to map" },
         maxpoints: { type: "number", description: "Max location clusters to return (default 50, max 250)" },
@@ -4025,6 +4277,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check whether a topic is trending in global news using GDELT article volume timelines. Returns a trend classification (surging, rising, stable, declining, fading) and volume data over time.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Topic or keyword to check" },
         timespan: { type: "string", description: "Time window (e.g. '24h', '7d', '1month')" },
@@ -4040,9 +4293,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an interesting fact about a number.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         number: { type: "number" },
-        type: { type: "string", description: "trivia, math, date, year" },
+        type: { type: "string", enum: ["trivia", "math", "date", "year"], description: "trivia, math, date, year" },
       },
       required: ["number"],
     },
@@ -4052,6 +4306,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a random number fact.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         type: { type: "string" },
         min: { type: "number" },
@@ -4066,6 +4321,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search movies/TV shows on OMDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         s: { type: "string", description: "Search term" },
         type: { type: "string" },
@@ -4080,6 +4336,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an OMDB movie/show by title.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         t: { type: "string" },
         type: { type: "string" },
@@ -4094,6 +4351,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an OMDB movie/show by IMDb ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         i: { type: "string", description: "IMDb ID" },
         api_key: { type: "string" },
@@ -4108,6 +4366,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search books on Open Library.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         limit: { type: "number" },
@@ -4121,6 +4380,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a book from Open Library by work ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         work_id: { type: "string", description: "e.g. OL45804W" },
       },
@@ -4132,6 +4392,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a book edition from Open Library by ISBN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         isbn: { type: "string" },
       },
@@ -4143,6 +4404,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an author from Open Library by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         author_id: { type: "string", description: "e.g. OL23919A" },
       },
@@ -4154,6 +4416,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get works by an author from Open Library.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         author_id: { type: "string" },
         limit: { type: "number" },
@@ -4166,6 +4429,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending books from Open Library.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -4176,6 +4440,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for artists on MusicBrainz.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         limit: { type: "number" },
@@ -4188,6 +4453,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for releases/albums on MusicBrainz.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         artist: { type: "string" },
@@ -4201,6 +4467,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for recordings/tracks on MusicBrainz.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         artist: { type: "string" },
@@ -4214,6 +4481,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a MusicBrainz artist by MBID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         mbid: { type: "string" },
       },
@@ -4225,6 +4493,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a MusicBrainz release by MBID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         mbid: { type: "string" },
       },
@@ -4238,6 +4507,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Genius for songs and lyrics.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         api_key: { type: "string" },
@@ -4250,6 +4520,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Genius song by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -4262,6 +4533,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Genius artist by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -4274,6 +4546,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get songs by an artist on Genius.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         per_page: { type: "number" },
@@ -4289,6 +4562,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for events on Ticketmaster.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keyword: { type: "string" },
         city: { type: "string" },
@@ -4305,6 +4579,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Ticketmaster event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         api_key: { type: "string" },
@@ -4317,6 +4592,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for venues on Ticketmaster.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keyword: { type: "string" },
         countryCode: { type: "string" },
@@ -4330,6 +4606,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Ticketmaster venue.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         api_key: { type: "string" },
@@ -4342,6 +4619,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for attractions/artists on Ticketmaster.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keyword: { type: "string" },
         classificationName: { type: "string" },
@@ -4356,6 +4634,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for events on SeatGeek.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         type: { type: "string" },
@@ -4370,6 +4649,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a SeatGeek event by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -4382,6 +4662,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for performers on SeatGeek.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         api_key: { type: "string" },
@@ -4394,6 +4675,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a SeatGeek performer by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -4406,6 +4688,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for venues on SeatGeek.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         api_key: { type: "string" },
@@ -4418,6 +4701,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a SeatGeek venue by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         api_key: { type: "string" },
@@ -4432,6 +4716,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for events on Eventbrite.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         location_address: { type: "string" },
@@ -4445,6 +4730,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for an Eventbrite event by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         event_id: { type: "string" },
         api_key: { type: "string" },
@@ -4457,6 +4743,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get attendees for an Eventbrite event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         event_id: { type: "string" },
         api_key: { type: "string" },
@@ -4469,6 +4756,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create an event on Eventbrite.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string" },
         start_utc: { type: "string" },
@@ -4486,6 +4774,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Eventbrite event categories.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -4496,6 +4785,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for an Eventbrite venue.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         venue_id: { type: "string" },
         api_key: { type: "string" },
@@ -4510,6 +4800,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for places on Foursquare.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         ll: { type: "string", description: "lat,lng" },
@@ -4524,6 +4815,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a Foursquare place by FSQ ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fsq_id: { type: "string" },
         api_key: { type: "string" },
@@ -4536,6 +4828,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get photos for a Foursquare place.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fsq_id: { type: "string" },
         api_key: { type: "string" },
@@ -4548,6 +4841,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get tips/reviews for a Foursquare place.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fsq_id: { type: "string" },
         api_key: { type: "string" },
@@ -4560,6 +4854,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Autocomplete a Foursquare place search.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
         ll: { type: "string" },
@@ -4575,6 +4870,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Last.fm artist info.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         api_key: { type: "string" },
@@ -4587,6 +4883,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for artists on Last.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         limit: { type: "number" },
@@ -4600,6 +4897,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top tracks for an artist on Last.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         limit: { type: "number" },
@@ -4613,6 +4911,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get similar artists on Last.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         limit: { type: "number" },
@@ -4626,6 +4925,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Last.fm chart of top artists.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
         api_key: { type: "string" },
@@ -4637,6 +4937,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Last.fm chart of top tracks.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
         api_key: { type: "string" },
@@ -4648,6 +4949,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get album info from Last.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         album: { type: "string" },
@@ -4663,6 +4965,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for music releases on Discogs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         artist: { type: "string" },
@@ -4680,6 +4983,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Discogs release by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         release_id: { type: "number" },
         api_key: { type: "string" },
@@ -4692,6 +4996,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Discogs artist by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist_id: { type: "number" },
         api_key: { type: "string" },
@@ -4704,6 +5009,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for artists on Discogs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         api_key: { type: "string" },
@@ -4716,6 +5022,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Discogs marketplace stats for a release.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         release_id: { type: "number" },
         api_key: { type: "string" },
@@ -4728,6 +5035,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Discogs record label by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         label_id: { type: "number" },
         api_key: { type: "string" },
@@ -4742,6 +5050,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for an artist on Setlist.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artistName: { type: "string" },
         api_key: { type: "string" },
@@ -4754,6 +5063,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get setlists for an artist on Setlist.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         mbid: { type: "string" },
         page: { type: "number" },
@@ -4767,6 +5077,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search setlists on Setlist.fm.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artistName: { type: "string" },
         cityName: { type: "string" },
@@ -4780,6 +5091,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific setlist from Setlist.fm by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         setlistId: { type: "string" },
         api_key: { type: "string" },
@@ -4794,6 +5106,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an artist profile from Bandsintown.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         app_id: { type: "string" },
@@ -4806,6 +5119,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get upcoming events for an artist on Bandsintown.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         date: { type: "string" },
@@ -4819,6 +5133,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recommended events for an artist on Bandsintown.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         artist: { type: "string" },
         location: { type: "string" },
@@ -4834,6 +5149,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for podcasts on Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         max: { type: "number" },
@@ -4848,6 +5164,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a podcast by feed URL from Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string" },
         api_key: { type: "string" },
@@ -4861,6 +5178,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get episodes for a podcast from Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "number" },
         max: { type: "number" },
@@ -4875,6 +5193,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search podcast episodes on Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         max: { type: "number" },
@@ -4889,6 +5208,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending podcasts from Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         max: { type: "number" },
         lang: { type: "string" },
@@ -4902,6 +5222,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recent podcast episodes from Podcast Index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         max: { type: "number" },
         api_key: { type: "string" },
@@ -4916,6 +5237,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Lichess user profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
       },
@@ -4927,6 +5249,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get games for a Lichess user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
         max: { type: "number" },
@@ -4941,6 +5264,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Lichess daily puzzle.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -4949,8 +5273,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top Lichess players for a game mode.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        perfType: { type: "string", description: "bullet, blitz, rapid, classical, etc." },
+        perfType: { type: "string", enum: ["ultraBullet", "bullet", "blitz", "rapid", "classical", "chess960", "crazyhouse", "antichess", "atomic", "horde", "kingOfTheHill", "racingKings", "threeCheck"], description: "bullet, blitz, rapid, classical, etc." },
         nb: { type: "number" },
       },
     },
@@ -4960,6 +5285,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a Lichess tournament.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         tournament_id: { type: "string" },
       },
@@ -4973,6 +5299,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Chess.com player profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
       },
@@ -4984,6 +5311,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Chess.com player statistics.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
       },
@@ -4995,6 +5323,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get recent games for a Chess.com player.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         username: { type: "string" },
         year: { type: "number" },
@@ -5008,6 +5337,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a random chess puzzle from Chess.com.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -5016,6 +5346,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Chess.com leaderboards.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -5026,6 +5357,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Fantasy Premier League bootstrap data (players, teams, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -5034,6 +5366,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get FPL player details and history.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         player_id: { type: "number" },
       },
@@ -5045,6 +5378,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get FPL gameweek details.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         gameweek: { type: "number" },
       },
@@ -5056,6 +5390,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get FPL fixtures, optionally for a gameweek.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         gameweek: { type: "number" },
       },
@@ -5066,6 +5401,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an FPL manager's team for a gameweek.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         manager_id: { type: "number" },
         gameweek: { type: "number" },
@@ -5079,6 +5415,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an FPL manager profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         manager_id: { type: "number" },
       },
@@ -5090,6 +5427,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get FPL classic league standings.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         league_id: { type: "number" },
         page: { type: "number" },
@@ -5104,6 +5442,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for articles on The Guardian.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         section: { type: "string" },
@@ -5120,6 +5459,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Guardian article by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         article_id: { type: "string" },
         api_key: { type: "string" },
@@ -5132,6 +5472,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all Guardian sections.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -5142,6 +5483,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Guardian tags.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         api_key: { type: "string" },
@@ -5153,6 +5495,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Guardian edition by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         edition_id: { type: "string" },
         api_key: { type: "string" },
@@ -5167,6 +5510,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top headlines from NewsAPI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         country: { type: "string" },
         category: { type: "string" },
@@ -5181,6 +5525,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search news articles via NewsAPI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         q: { type: "string" },
         from: { type: "string" },
@@ -5198,6 +5543,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get available news sources from NewsAPI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         country: { type: "string" },
         category: { type: "string" },
@@ -5213,6 +5559,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a real-time stock quote from Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
         api_key: { type: "string" },
@@ -5225,6 +5572,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for stock tickers on Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keywords: { type: "string" },
         api_key: { type: "string" },
@@ -5237,9 +5585,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Get daily stock price history from Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
-        outputsize: { type: "string", description: "compact or full" },
+        outputsize: { type: "string", enum: ["compact", "full"], description: "compact or full" },
         api_key: { type: "string" },
       },
       required: ["symbol"],
@@ -5250,6 +5599,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get intraday stock prices from Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
         interval: { type: "string", description: "1min, 5min, 15min, 30min, 60min" },
@@ -5263,6 +5613,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a forex exchange rate from Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         from_currency: { type: "string" },
         to_currency: { type: "string" },
@@ -5276,6 +5627,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get daily crypto price history from Alpha Vantage.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
         market: { type: "string" },
@@ -5291,6 +5643,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get cryptocurrency prices from CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ids: { type: "string", description: "Comma-separated coin IDs" },
         vs_currencies: { type: "string", description: "Comma-separated currency codes" },
@@ -5303,6 +5656,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get detailed info for a cryptocurrency from CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
       },
@@ -5314,6 +5668,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for cryptocurrencies on CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string" },
       },
@@ -5325,6 +5680,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending cryptocurrencies from CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -5333,6 +5689,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top cryptocurrencies by market cap from CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         vs_currency: { type: "string" },
         per_page: { type: "number" },
@@ -5345,6 +5702,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get historical price data for a cryptocurrency from CoinGecko.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         id: { type: "string" },
         date: { type: "string", description: "DD-MM-YYYY" },
@@ -5359,6 +5717,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get latest cryptocurrency listings from CoinMarketCap.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
         convert: { type: "string" },
@@ -5371,6 +5730,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get cryptocurrency quotes from CoinMarketCap.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
         id: { type: "string" },
@@ -5384,6 +5744,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get cryptocurrency metadata from CoinMarketCap.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         symbol: { type: "string" },
         id: { type: "string" },
@@ -5396,6 +5757,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get trending cryptocurrencies from CoinMarketCap.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number" },
         api_key: { type: "string" },
@@ -5407,6 +5769,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get global cryptocurrency market metrics from CoinMarketCap.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -5419,6 +5782,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get latest forex exchange rates from Open Exchange Rates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         base: { type: "string" },
         symbols: { type: "string" },
@@ -5431,6 +5795,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get historical forex rates from Open Exchange Rates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         date: { type: "string" },
         base: { type: "string" },
@@ -5444,6 +5809,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all currencies from Open Exchange Rates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -5454,6 +5820,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert a currency amount using Open Exchange Rates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         from: { type: "string" },
         to: { type: "string" },
@@ -5470,6 +5837,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get exchange rates from Wise.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         source: { type: "string" },
         target: { type: "string" },
@@ -5482,6 +5850,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the authenticated Wise user profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -5492,6 +5861,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Wise accounts for a profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         profile_id: { type: "number" },
         api_key: { type: "string" },
@@ -5504,6 +5874,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a Wise money transfer quote.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         sourceCurrency: { type: "string" },
         targetCurrency: { type: "string" },
@@ -5522,6 +5893,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Look up geolocation for an IP address.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
         api_key: { type: "string" },
@@ -5534,6 +5906,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Batch IP address geolocation lookup.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ips: { type: "array", items: {}, description: "Array of IP address strings" },
         api_key: { type: "string" },
@@ -5548,6 +5921,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all countries from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fields: { type: "string" },
       },
@@ -5558,6 +5932,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a country by name from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string" },
         fullText: { type: "boolean" },
@@ -5570,6 +5945,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a country by code from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         code: { type: "string" },
       },
@@ -5581,6 +5957,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get countries by region from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         region: { type: "string" },
       },
@@ -5592,6 +5969,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get countries by currency from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         currency: { type: "string" },
       },
@@ -5603,6 +5981,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get countries by language from REST Countries.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         language: { type: "string" },
       },
@@ -5616,6 +5995,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get realtime weather from Tomorrow.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location: { type: "string", description: "lat,lon or place name" },
         units: { type: "string" },
@@ -5629,9 +6009,10 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a weather forecast from Tomorrow.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location: { type: "string" },
-        timesteps: { type: "string", description: "1h or 1d" },
+        timesteps: { type: "string", enum: ["1h", "1d"], description: "1h or 1d" },
         units: { type: "string" },
         api_key: { type: "string" },
       },
@@ -5643,6 +6024,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get historical weather data from Tomorrow.io.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location: { type: "string" },
         startTime: { type: "string" },
@@ -5659,6 +6041,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for live streams on Twitch.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game_id: { type: "string" },
         user_login: { type: "string" },
@@ -5673,6 +6056,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Twitch stream by user login.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         user_login: { type: "string" },
         client_id: { type: "string" },
@@ -5686,6 +6070,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for games on Twitch.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string" },
         client_id: { type: "string" },
@@ -5699,6 +6084,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get top games currently streaming on Twitch.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         first: { type: "number" },
         client_id: { type: "string" },
@@ -5711,6 +6097,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get clips for a Twitch broadcaster.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         broadcaster_id: { type: "string" },
         game_id: { type: "string" },
@@ -5725,6 +6112,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get information about a Twitch channel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         broadcaster_id: { type: "string" },
         client_id: { type: "string" },
@@ -5738,6 +6126,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Twitch channel's streaming schedule.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         broadcaster_id: { type: "string" },
         client_id: { type: "string" },
@@ -5753,13 +6142,14 @@ export const ADDITIONAL_TOOLS = [
     description: "Read posts from a Reddit subreddit.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         subreddit: { type: "string" },
-        sort: { type: "string", description: "hot, new, top, rising" },
+        sort: { type: "string", enum: ["hot", "new", "top", "rising"], description: "hot, new, top, rising" },
         limit: { type: "number" },
         after: { type: "string" },
-        t: { type: "string", description: "hour, day, week, month, year, all" },
+        t: { type: "string", enum: ["hour", "day", "week", "month", "year", "all"], description: "hour, day, week, month, year, all" },
       },
       required: ["access_token", "subreddit"],
     },
@@ -5769,11 +6159,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a Reddit post.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         subreddit: { type: "string" },
         title: { type: "string" },
-        kind: { type: "string", description: "self, link" },
+        kind: { type: "string", enum: ["self", "link"], description: "self, link" },
         text: { type: "string" },
         url: { type: "string" },
         nsfw: { type: "boolean" },
@@ -5787,6 +6178,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Post a comment on Reddit.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         parent_id: { type: "string" },
@@ -5800,6 +6192,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Reddit posts.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         q: { type: "string" },
@@ -5815,6 +6208,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Reddit user profile and posts.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         username: { type: "string" },
@@ -5829,6 +6223,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Vote on a Reddit post or comment.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         id: { type: "string" },
@@ -5842,10 +6237,11 @@ export const ADDITIONAL_TOOLS = [
     description: "Subscribe to or unsubscribe from a Reddit subreddit.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         sr: { type: "string" },
-        action: { type: "string", description: "sub or unsub" },
+        action: { type: "string", enum: ["sub", "unsub"], description: "sub or unsub" },
       },
       required: ["access_token", "sr", "action"],
     },
@@ -5857,6 +6253,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Mastodon action: mastodon_post, mastodon_read_timeline, mastodon_reply, mastodon_boost, mastodon_favorite, mastodon_search, mastodon_profile, mastodon_follow, mastodon_notifications.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         instance_url: { type: "string" },
@@ -5877,6 +6274,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Bluesky action: bluesky_post, bluesky_read_feed, bluesky_reply, bluesky_like, bluesky_repost, bluesky_search, bluesky_profile, bluesky_follow.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         identifier: { type: "string", description: "Bluesky handle or DID" },
@@ -5898,6 +6296,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a message to a Discord channel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         channel_id: { type: "string" },
@@ -5912,6 +6311,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Read messages from a Discord channel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         channel_id: { type: "string" },
@@ -5926,6 +6326,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a Discord thread.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         channel_id: { type: "string" },
@@ -5941,6 +6342,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Add a reaction to a Discord message.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         channel_id: { type: "string" },
@@ -5955,6 +6357,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List channels in a Discord guild.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         guild_id: { type: "string" },
@@ -5967,6 +6370,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List members of a Discord guild.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         guild_id: { type: "string" },
@@ -5980,6 +6384,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search messages in a Discord guild.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         guild_id: { type: "string" },
@@ -5997,6 +6402,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a Slack action: slack_send, slack_read, slack_search, slack_thread_reply, slack_channels, slack_react, slack_upload.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         bot_token: { type: "string" },
@@ -6018,6 +6424,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a Telegram message.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         chat_id: { type: "string" },
@@ -6033,6 +6440,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Read Telegram messages/updates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         offset: { type: "number" },
@@ -6046,6 +6454,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Telegram messages in a chat.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         chat_id: { type: "string" },
@@ -6059,10 +6468,11 @@ export const ADDITIONAL_TOOLS = [
     description: "Send media (photo/document/video) via Telegram.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         chat_id: { type: "string" },
-        media_type: { type: "string", description: "photo, document, video, audio" },
+        media_type: { type: "string", enum: ["photo", "document", "audio", "video", "animation"], description: "photo, document, video, audio" },
         media_url: { type: "string" },
         caption: { type: "string" },
       },
@@ -6074,6 +6484,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Telegram bot updates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         offset: { type: "number" },
@@ -6088,6 +6499,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Manage a Telegram chat (get info, ban, kick, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bot_token: { type: "string" },
         chat_id: { type: "string" },
@@ -6104,6 +6516,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a text message to a LINE user, group, or room.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         to: { type: "string", description: "User ID, group ID, or room ID" },
@@ -6117,6 +6530,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a rich Flex Message to a LINE user or group.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         to: { type: "string" },
@@ -6131,6 +6545,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a LINE user's display name, profile picture, and status message.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         user_id: { type: "string" },
@@ -6143,6 +6558,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a LINE group's name and picture URL.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         group_id: { type: "string" },
@@ -6155,6 +6571,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Reply to a LINE message using a reply token from a webhook event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         reply_token: { type: "string" },
@@ -6169,6 +6586,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Broadcast a text message to all followers of your LINE Official Account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         channel_access_token: { type: "string" },
         message: { type: "string" },
@@ -6183,6 +6601,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Figma file's structure and metadata - pages, frames, and component count.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string", description: "Alphanumeric file ID from the Figma URL" },
@@ -6196,6 +6615,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific node by ID within a Figma file.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string" },
@@ -6209,11 +6629,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Export/render Figma nodes as images (PNG, JPG, SVG, or PDF).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string" },
         node_ids: { description: "Comma-separated node IDs or array of node ID strings" },
-        format: { type: "string", description: "png, jpg, svg, or pdf (default: png)" },
+        format: { type: "string", enum: ["png", "jpg", "svg", "pdf"], description: "png, jpg, svg, or pdf (default: png)" },
         scale: { type: "number", description: "Image scale factor 0.01-4 (default: 1, PNG/JPG only)" },
       },
       required: ["personal_access_token", "file_key", "node_ids"],
@@ -6224,6 +6645,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all comments on a Figma file.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string" },
@@ -6236,6 +6658,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Add a comment to a Figma file, optionally pinned to canvas coordinates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string" },
@@ -6251,6 +6674,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get all published components in a Figma file.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         file_key: { type: "string" },
@@ -6263,6 +6687,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all projects for a Figma team.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         personal_access_token: { type: "string" },
         team_id: { type: "string", description: "Team ID from your Figma team URL" },
@@ -6277,6 +6702,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for products on Amazon.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         keywords: { type: "string" },
         searchIndex: { type: "string" },
@@ -6294,6 +6720,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Amazon product details by ASIN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         asin: { type: "string" },
         access_key: { type: "string" },
@@ -6309,6 +6736,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Browse Amazon product categories.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         browseNodeId: { type: "string" },
         access_key: { type: "string" },
@@ -6323,6 +6751,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Amazon product variations for an ASIN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         asin: { type: "string" },
         access_key: { type: "string" },
@@ -6339,6 +6768,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get products from a Shopify store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         limit: { type: "number" },
@@ -6356,6 +6786,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get orders from a Shopify store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         limit: { type: "number" },
@@ -6372,6 +6803,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get customers from a Shopify store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         limit: { type: "number" },
@@ -6387,6 +6819,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get inventory for Shopify products.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         product_id: { type: "number" },
@@ -6401,6 +6834,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get collections from a Shopify store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         limit: { type: "number" },
@@ -6415,6 +6849,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Shopify store information.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         api_key: { type: "string" },
@@ -6428,6 +6863,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get fulfillments for a Shopify order.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         shop_domain: { type: "string" },
         order_id: { type: "number" },
@@ -6444,6 +6880,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for businesses on Yelp.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         term: { type: "string" },
         location: { type: "string" },
@@ -6460,6 +6897,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a Yelp business by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         business_id: { type: "string" },
         api_key: { type: "string" },
@@ -6472,6 +6910,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get reviews for a Yelp business.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         business_id: { type: "string" },
         api_key: { type: "string" },
@@ -6484,6 +6923,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for events on Yelp.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         location: { type: "string" },
         categories: { type: "string" },
@@ -6497,6 +6937,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Autocomplete a Yelp business search.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         latitude: { type: "number" },
@@ -6513,6 +6954,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get invoices from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         status: { type: "string", description: "DRAFT, SUBMITTED, AUTHORISED, etc." },
         contact_id: { type: "string" },
@@ -6528,6 +6970,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get contacts from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         search: { type: "string" },
         is_supplier: { type: "boolean" },
@@ -6542,6 +6985,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get chart of accounts from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         type: { type: "string" },
         access_token: { type: "string" },
@@ -6554,6 +6998,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get payments from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         status: { type: "string" },
         date_from: { type: "string" },
@@ -6568,6 +7013,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get bank transactions from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bank_account_id: { type: "string" },
         date_from: { type: "string" },
@@ -6582,6 +7028,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get financial reports from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         report_type: { type: "string", description: "BalanceSheet, ProfitAndLoss, TrialBalance" },
         from_date: { type: "string" },
@@ -6597,6 +7044,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get quotes from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         status: { type: "string" },
         contact_id: { type: "string" },
@@ -6610,6 +7058,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get organisation details from Xero.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         tenant_id: { type: "string" },
@@ -6623,6 +7072,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search eBay listings via the Browse API.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:     { type: "string", description: "eBay application Client ID" },
         client_secret: { type: "string", description: "eBay application Client Secret" },
@@ -6642,6 +7092,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get full details for an eBay item by item ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:     { type: "string" },
         client_secret: { type: "string" },
@@ -6657,6 +7108,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get an eBay item by its legacy item ID (classic numeric ID).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:            { type: "string" },
         client_secret:        { type: "string" },
@@ -6673,6 +7125,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the eBay category tree for a marketplace.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:        { type: "string" },
         client_secret:    { type: "string" },
@@ -6689,13 +7142,14 @@ export const ADDITIONAL_TOOLS = [
     description: "Search active Etsy listings by keyword.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key:     { type: "string", description: "Etsy API key" },
         keywords:    { type: "string", description: "Search keywords" },
         limit:       { type: "number", description: "Results per page (max 100, default 25)" },
         offset:      { type: "number" },
-        sort_on:     { type: "string", description: "Sort field (created, price, score, updated)" },
-        sort_order:  { type: "string", description: "asc or desc" },
+        sort_on:     { type: "string", enum: ["created", "price", "score", "updated"], description: "Sort field (created, price, score, updated)" },
+        sort_order:  { type: "string", enum: ["asc", "desc"], description: "asc or desc" },
         min_price:   { type: "number" },
         max_price:   { type: "number" },
         taxonomy_id: { type: "number" },
@@ -6709,6 +7163,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single Etsy listing by listing ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key:    { type: "string" },
         listing_id: { type: "string" },
@@ -6722,6 +7177,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for an Etsy shop by shop ID or numeric ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         shop_id: { type: "string", description: "Shop ID or shop name" },
@@ -6734,6 +7190,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get active listings for an Etsy shop.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key:    { type: "string" },
         shop_id:    { type: "string" },
@@ -6750,6 +7207,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for Etsy shops by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key:   { type: "string" },
         shop_name: { type: "string", description: "Shop name to search for" },
@@ -6766,9 +7224,10 @@ export const ADDITIONAL_TOOLS = [
     description: "List or create Stripe customers.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string", description: "Stripe secret key (sk_live_* or sk_test_*)" },
-        action:         { type: "string", description: "list or create (default: list)" },
+        action:         { type: "string", enum: ["list", "create"], description: "list or create (default: list)" },
         limit:          { type: "number" },
         starting_after: { type: "string", description: "Pagination cursor (customer ID)" },
         email:          { type: "string" },
@@ -6784,9 +7243,10 @@ export const ADDITIONAL_TOOLS = [
     description: "List or create Stripe charges.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string" },
-        action:         { type: "string", description: "list or create (default: list)" },
+        action:         { type: "string", enum: ["list", "create"], description: "list or create (default: list)" },
         limit:          { type: "number" },
         starting_after: { type: "string" },
         customer:       { type: "string" },
@@ -6803,6 +7263,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Stripe subscriptions.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string" },
         limit:          { type: "number" },
@@ -6819,12 +7280,13 @@ export const ADDITIONAL_TOOLS = [
     description: "List Stripe invoices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string" },
         limit:          { type: "number" },
         starting_after: { type: "string" },
         customer:       { type: "string" },
-        status:         { type: "string", description: "draft, open, paid, uncollectible, void" },
+        status:         { type: "string", enum: ["draft", "open", "paid", "uncollectible", "void"], description: "draft, open, paid, uncollectible, void" },
         subscription:   { type: "string" },
       },
       required: ["secret_key"],
@@ -6835,6 +7297,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Stripe products.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string" },
         limit:          { type: "number" },
@@ -6849,13 +7312,14 @@ export const ADDITIONAL_TOOLS = [
     description: "List Stripe prices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         secret_key:     { type: "string" },
         limit:          { type: "number" },
         starting_after: { type: "string" },
         product:        { type: "string" },
         active:         { type: "boolean" },
-        type:           { type: "string", description: "one_time or recurring" },
+        type:           { type: "string", enum: ["one_time", "recurring"], description: "one_time or recurring" },
       },
       required: ["secret_key"],
     },
@@ -6867,12 +7331,13 @@ export const ADDITIONAL_TOOLS = [
     description: "Create or retrieve a PayPal order.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:      { type: "string", description: "PayPal application Client ID" },
         client_secret:  { type: "string", description: "PayPal application Client Secret" },
-        action:         { type: "string", description: "create or get (default: get)" },
+        action:         { type: "string", enum: ["create", "get"], description: "create or get (default: get)" },
         order_id:       { type: "string", description: "Required for action='get'" },
-        intent:         { type: "string", description: "CAPTURE or AUTHORIZE (default: CAPTURE)" },
+        intent:         { type: "string", enum: ["CAPTURE", "AUTHORIZE"], description: "CAPTURE or AUTHORIZE (default: CAPTURE)" },
         purchase_units: { type: "array", items: {}, description: "Required for action='create'" },
         sandbox:        { type: "boolean", description: "Use PayPal sandbox (default: false)" },
       },
@@ -6884,10 +7349,11 @@ export const ADDITIONAL_TOOLS = [
     description: "List, create, or send PayPal invoices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:      { type: "string" },
         client_secret:  { type: "string" },
-        action:         { type: "string", description: "list, create, or send (default: list)" },
+        action:         { type: "string", enum: ["list", "create", "send"], description: "list, create, or send (default: list)" },
         invoice_id:     { type: "string", description: "Required for action='send'" },
         invoice:        { type: "object", additionalProperties: true, description: "Invoice object for action='create'" },
         page:           { type: "number" },
@@ -6904,9 +7370,10 @@ export const ADDITIONAL_TOOLS = [
     description: "List or create Square payments.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token:  { type: "string", description: "Square access token" },
-        action:        { type: "string", description: "list or create (default: list)" },
+        action:        { type: "string", enum: ["list", "create"], description: "list or create (default: list)" },
         begin_time:    { type: "string", description: "RFC 3339 timestamp" },
         end_time:      { type: "string" },
         cursor:        { type: "string" },
@@ -6925,6 +7392,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Square customers.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         cursor:       { type: "string" },
@@ -6940,6 +7408,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Square catalog objects (items, categories, taxes, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         cursor:       { type: "string" },
@@ -6954,6 +7423,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Square catalog objects by text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         text_filter:  { type: "string", description: "Text to search for" },
@@ -6971,6 +7441,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Query QuickBooks Online customers.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "QuickBooks OAuth2 access token" },
         realm_id:     { type: "string", description: "QuickBooks company realm ID" },
@@ -6987,10 +7458,11 @@ export const ADDITIONAL_TOOLS = [
     description: "List, get, or create QuickBooks Online invoices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         realm_id:     { type: "string" },
-        action:       { type: "string", description: "list, get, or create (default: list)" },
+        action:       { type: "string", enum: ["list", "get", "create"], description: "list, get, or create (default: list)" },
         invoice_id:   { type: "string", description: "Required for action='get'" },
         invoice:      { type: "object", additionalProperties: true, description: "Invoice object for action='create'" },
         where:        { type: "string" },
@@ -7006,6 +7478,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Query QuickBooks Online items (products and services).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         realm_id:     { type: "string" },
@@ -7022,6 +7495,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Query QuickBooks Online payments.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
         realm_id:     { type: "string" },
@@ -7040,12 +7514,13 @@ export const ADDITIONAL_TOOLS = [
     description: "Get accounts for a Plaid-linked item.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:    { type: "string", description: "Plaid client ID" },
         secret:       { type: "string", description: "Plaid secret key" },
         access_token: { type: "string", description: "Plaid item access token" },
         account_ids:  { type: "array", items: {}, description: "Filter to specific account IDs" },
-        environment:  { type: "string", description: "sandbox, development, or production (default: sandbox)" },
+        environment:  { type: "string", enum: ["sandbox", "development", "production"], description: "sandbox, development, or production (default: sandbox)" },
       },
       required: ["client_id", "secret", "access_token"],
     },
@@ -7055,6 +7530,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get transactions for a Plaid-linked item within a date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:    { type: "string" },
         secret:       { type: "string" },
@@ -7064,7 +7540,7 @@ export const ADDITIONAL_TOOLS = [
         count:        { type: "number", description: "Number of transactions (max 500, default 100)" },
         offset:       { type: "number" },
         account_ids:  { type: "array", items: {} },
-        environment:  { type: "string" },
+        environment:  { type: "string", enum: ["sandbox", "development", "production"] },
       },
       required: ["client_id", "secret", "access_token", "start_date", "end_date"],
     },
@@ -7074,12 +7550,13 @@ export const ADDITIONAL_TOOLS = [
     description: "Get real-time account balances for a Plaid-linked item.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:    { type: "string" },
         secret:       { type: "string" },
         access_token: { type: "string" },
         account_ids:  { type: "array", items: {} },
-        environment:  { type: "string" },
+        environment:  { type: "string", enum: ["sandbox", "development", "production"] },
       },
       required: ["client_id", "secret", "access_token"],
     },
@@ -7089,11 +7566,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Get identity information for accounts linked via Plaid.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:    { type: "string" },
         secret:       { type: "string" },
         access_token: { type: "string" },
-        environment:  { type: "string" },
+        environment:  { type: "string", enum: ["sandbox", "development", "production"] },
       },
       required: ["client_id", "secret", "access_token"],
     },
@@ -7103,6 +7581,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a Plaid Link token to initialise the Plaid Link flow.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id:             { type: "string" },
         secret:                { type: "string" },
@@ -7113,7 +7592,7 @@ export const ADDITIONAL_TOOLS = [
         language:              { type: "string", description: "Language code (default: en)" },
         webhook:               { type: "string" },
         access_token:          { type: "string", description: "For update mode: existing access token" },
-        environment:           { type: "string" },
+        environment:           { type: "string", enum: ["sandbox", "development", "production"] },
       },
       required: ["client_id", "secret", "user_client_user_id"],
     },
@@ -7125,15 +7604,16 @@ export const ADDITIONAL_TOOLS = [
     description: "List or get WooCommerce products.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         store_url:       { type: "string", description: "WooCommerce store URL (e.g. https://mystore.com)" },
         consumer_key:    { type: "string", description: "WooCommerce consumer key (ck_...)" },
         consumer_secret: { type: "string", description: "WooCommerce consumer secret (cs_...)" },
-        action:          { type: "string", description: "list or get (default: list)" },
+        action:          { type: "string", enum: ["list", "get"], description: "list or get (default: list)" },
         id:              { type: "string", description: "Product ID for action='get'" },
         per_page:        { type: "number" },
         page:            { type: "number" },
-        status:          { type: "string", description: "publish, draft, pending, private" },
+        status:          { type: "string", enum: ["publish", "draft", "pending", "private"], description: "publish, draft, pending, private" },
         category:        { type: "string" },
         search:          { type: "string" },
         orderby:         { type: "string" },
@@ -7147,11 +7627,12 @@ export const ADDITIONAL_TOOLS = [
     description: "List, get, or create WooCommerce orders.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         store_url:       { type: "string" },
         consumer_key:    { type: "string" },
         consumer_secret: { type: "string" },
-        action:          { type: "string", description: "list, get, or create (default: list)" },
+        action:          { type: "string", enum: ["list", "get", "create"], description: "list, get, or create (default: list)" },
         id:              { type: "string", description: "Order ID for action='get'" },
         order:           { type: "object", additionalProperties: true, description: "Order object for action='create'" },
         per_page:        { type: "number" },
@@ -7169,6 +7650,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List WooCommerce customers.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         store_url:       { type: "string" },
         consumer_key:    { type: "string" },
@@ -7191,11 +7673,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a C-Suite multi-perspective analysis on a business scenario.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         scenario: { type: "string" },
         context: { type: "string" },
         perspectives: { type: "array", items: {}, description: "e.g. [\"CEO\",\"CFO\",\"CTO\"]" },
-        depth: { type: "string", description: "quick, standard, or deep" },
+        depth: { type: "string", enum: ["quick", "standard", "deep"], description: "quick, standard, or deep" },
         focus: { type: "string" },
       },
       required: ["scenario"],
@@ -7208,6 +7691,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a sequential QC checklist against a website URL. Checks site load, SSL, meta tags, og:image, robots.txt, sitemap, console errors, broken links, response time, and copy quality (em dashes, banned words). Runs checks one at a time and returns a pass/fail/warn result for each.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string", description: "The full URL to check (e.g. https://example.com)" },
         checks: {
@@ -7224,6 +7708,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Test a list of API endpoints and report which ones return the expected HTTP status. Runs each endpoint sequentially.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         base_url: { type: "string", description: "Base URL for all endpoints (e.g. https://api.example.com)" },
         endpoints: {
@@ -7248,6 +7733,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Fetch a page and scan all visible text for em dashes (U+2014), en dashes (U+2013), and a configurable list of banned words. Returns every occurrence with surrounding context.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string", description: "The full URL to audit (e.g. https://example.com)" },
         banned_words: {
@@ -7266,6 +7752,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Perform a vault action: vault_init, vault_store, vault_retrieve, vault_list, vault_delete, vault_rotate, vault_audit.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         action: { type: "string" },
         master_password: { type: "string" },
@@ -7283,6 +7770,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Store an encrypted platform credential in the UnClick Keychain. Tests the credential against the platform API before saving. Scoped to the caller's UNCLICK_API_KEY.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         platform:   { type: "string", description: "Platform ID: github, supabase, vercel, stripe, cloudflare." },
         credential: { type: "string", description: "API key or token for the platform." },
@@ -7296,6 +7784,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the connection status of one or all platform credentials stored in the UnClick Keychain for the current UNCLICK_API_KEY.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         platform: { type: "string", description: "Platform ID to check. Omit to return all connected platforms." },
       },
@@ -7306,6 +7795,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Remove a platform credential from the UnClick Keychain. Scoped to the caller's UNCLICK_API_KEY.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         platform: { type: "string", description: "Platform ID to disconnect: github, supabase, vercel, stripe, cloudflare." },
         label:    { type: "string", description: "Label of the credential to remove. Omit to remove all labels for the platform." },
@@ -7318,6 +7808,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available platform connectors in the UnClick Keychain catalog, with connection status for the current UNCLICK_API_KEY.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         category: { type: "string", description: "Filter by category (e.g. 'Developer Tools', 'Business')." },
       },
@@ -7328,6 +7819,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Securely connect a platform credential without exposing the key in chat. Checks environment variables first; if not found, opens a localhost secure input page for the user to paste their key. Call once to get the URL, then call again after the user submits to complete the connection.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         platform:  { type: "string", description: "Platform ID: github, stripe, openai, vercel, cloudflare, etc." },
         label:     { type: "string", description: "Optional label to distinguish multiple credentials for the same platform (default: 'default')." },
@@ -7343,8 +7835,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the GitHub REST API: search repos, get repo details, list and create issues, list PRs, get user profiles, list gists, and search code.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:       { type: "string", description: "Action: search_repos, get_repo, list_issues, create_issue, list_prs, get_user, list_gists, search_code." },
+        action:       { type: "string", enum: ["search_repos", "get_repo", "list_issues", "create_issue", "list_prs", "get_user", "list_gists", "search_code"], description: "Action: search_repos, get_repo, list_issues, create_issue, list_prs, get_user, list_gists, search_code." },
         access_token: { type: "string", description: "GitHub personal access token (PAT). Public data works without a token." },
         query:        { type: "string", description: "Search query string (for search_repos and search_code)." },
         owner:        { type: "string", description: "Repository owner login." },
@@ -7367,8 +7860,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the GitLab REST API: search projects, get project details, list issues and merge requests, and look up users. Supports self-hosted GitLab instances.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:       { type: "string", description: "Action: search_projects, get_project, list_issues, list_mrs, get_user." },
+        action:       { type: "string", enum: ["search_projects", "get_project", "list_issues", "list_mrs", "get_user"], description: "Action: search_projects, get_project, list_issues, list_mrs, get_user." },
         access_token: { type: "string", description: "GitLab personal access token (PAT)." },
         base_url:     { type: "string", description: "GitLab base URL (default: https://gitlab.com/api/v4). Set for self-hosted instances." },
         query:        { type: "string", description: "Search query string (for search_projects)." },
@@ -7389,8 +7883,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the ClickUp API v2: list workspaces and spaces, get lists and tasks, create tasks, and update task properties.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:      { type: "string", description: "Action: get_workspaces, get_spaces, get_lists, get_tasks, create_task, update_task." },
+        action:      { type: "string", enum: ["get_workspaces", "get_spaces", "get_lists", "get_tasks", "create_task", "update_task"], description: "Action: get_workspaces, get_spaces, get_lists, get_tasks, create_task, update_task." },
         api_key:     { type: "string", description: "ClickUp API key." },
         team_id:     { type: "string", description: "Workspace (team) ID (for get_spaces)." },
         space_id:    { type: "string", description: "Space ID (for get_lists without a folder)." },
@@ -7414,8 +7909,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the Linear GraphQL API: list and search issues, create issues, get project details, and list teams.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:      { type: "string", description: "Action: list_issues, create_issue, get_project, list_teams, search_issues." },
+        action:      { type: "string", enum: ["list_issues", "create_issue", "get_project", "list_teams", "search_issues"], description: "Action: list_issues, create_issue, get_project, list_teams, search_issues." },
         api_key:     { type: "string", description: "Linear API key." },
         title:       { type: "string", description: "Issue title (for create_issue)." },
         team_id:     { type: "string", description: "Team ID (required for create_issue, optional filter for list_issues)." },
@@ -7437,8 +7933,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the Airtable REST API: list bases, list and search records, get a single record, and create or update records.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:       { type: "string", description: "Action: list_bases, list_records, get_record, create_record, update_record, search_records." },
+        action:       { type: "string", enum: ["list_bases", "list_records", "get_record", "create_record", "update_record", "search_records"], description: "Action: list_bases, list_records, get_record, create_record, update_record, search_records." },
         access_token: { type: "string", description: "Airtable personal access token (PAT)." },
         base_id:      { type: "string", description: "Airtable base ID (starts with 'app')." },
         table_name:   { type: "string", description: "Table name or ID." },
@@ -7460,8 +7957,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the Trello REST API: list boards and lists, get and search cards, create cards, and update card properties.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:    { type: "string", description: "Action: get_boards, get_lists, get_cards, create_card, update_card, search_cards." },
+        action:    { type: "string", enum: ["get_boards", "get_lists", "get_cards", "create_card", "update_card", "search_cards"], description: "Action: get_boards, get_lists, get_cards, create_card, update_card, search_cards." },
         api_key:   { type: "string", description: "Trello API key." },
         token:     { type: "string", description: "Trello user token." },
         board_id:  { type: "string", description: "Board ID." },
@@ -7489,8 +7987,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the Sentry REST API: list projects and issues, get issue details and events, and resolve issues.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:            { type: "string", description: "Action: list_projects, list_issues, get_issue, list_events, resolve_issue." },
+        action:            { type: "string", enum: ["list_projects", "list_issues", "get_issue", "list_events", "resolve_issue"], description: "Action: list_projects, list_issues, get_issue, list_events, resolve_issue." },
         auth_token:        { type: "string", description: "Sentry auth token." },
         organization_slug: { type: "string", description: "Sentry organization slug." },
         project_slug:      { type: "string", description: "Sentry project slug." },
@@ -7510,8 +8009,9 @@ export const ADDITIONAL_TOOLS = [
     description: "Interact with the Postman API: list and retrieve collections, list environments, and list monitors.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
-        action:        { type: "string", description: "Action: list_collections, get_collection, list_environments, list_monitors." },
+        action:        { type: "string", enum: ["list_collections", "get_collection", "list_environments", "list_monitors"], description: "Action: list_collections, get_collection, list_environments, list_monitors." },
         api_key:       { type: "string", description: "Postman API key." },
         collection_id: { type: "string", description: "Collection UID (for get_collection)." },
         workspace_id:  { type: "string", description: "Workspace ID to filter results." },
@@ -7526,6 +8026,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send an SMS via Twilio.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7542,6 +8043,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List SMS messages sent or received on a Twilio account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7558,6 +8060,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a single Twilio message by SID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7571,6 +8074,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Initiate an outbound phone call via Twilio.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7587,6 +8091,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List outbound and inbound calls on a Twilio account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7603,12 +8108,13 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a verification code via Twilio Verify (SMS, call, email, or WhatsApp).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
         service_sid: { type: "string", description: "Twilio Verify Service SID" },
         to: { type: "string", description: "E.164 phone number or email" },
-        channel: { type: "string", description: "sms, call, email, or whatsapp (default: sms)" },
+        channel: { type: "string", enum: ["sms", "call", "email", "whatsapp"], description: "sms, call, email, or whatsapp (default: sms)" },
       },
       required: ["account_sid", "auth_token", "service_sid", "to"],
     },
@@ -7618,6 +8124,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check a verification code submitted by a user via Twilio Verify.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         account_sid: { type: "string" },
         auth_token: { type: "string" },
@@ -7635,6 +8142,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a push notification via Pushover.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_token: { type: "string" },
         user_key: { type: "string" },
@@ -7657,6 +8165,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get acknowledgment status for an emergency Pushover notification.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_token: { type: "string" },
         receipt: { type: "string", description: "Receipt token returned from an emergency notification" },
@@ -7669,6 +8178,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Cancel an outstanding emergency Pushover notification before it expires.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_token: { type: "string" },
         user_key: { type: "string" },
@@ -7682,6 +8192,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available notification sounds in Pushover.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_token: { type: "string" },
       },
@@ -7693,6 +8204,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Validate a Pushover user or group key and list their registered devices.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_token: { type: "string" },
         user_key: { type: "string" },
@@ -7708,6 +8220,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a text message via WhatsApp Business Cloud API.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         phone_number_id: { type: "string", description: "Your WhatsApp phone number ID from Meta for Developers" },
@@ -7723,6 +8236,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a WhatsApp template message (required for first contact or >24h since last message).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         phone_number_id: { type: "string" },
@@ -7739,11 +8253,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a media message (image, video, audio, document, sticker) via WhatsApp.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         phone_number_id: { type: "string" },
         to: { type: "string" },
-        media_type: { type: "string", description: "image, video, audio, document, or sticker" },
+        media_type: { type: "string", enum: ["image", "video", "audio", "document", "sticker"], description: "image, video, audio, document, or sticker" },
         media_id: { type: "string", description: "ID of a previously uploaded media object" },
         media_link: { type: "string", description: "URL of the media to send" },
         caption: { type: "string" },
@@ -7757,6 +8272,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the download URL and metadata for a WhatsApp media object by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         media_id: { type: "string" },
@@ -7769,6 +8285,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Upload a media file to WhatsApp and get a media ID for use in messages.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         phone_number_id: { type: "string" },
@@ -7786,10 +8303,11 @@ export const ADDITIONAL_TOOLS = [
     description: "Search YouTube for videos, channels, or playlists.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         query: { type: "string" },
-        type: { type: "string", description: "video, channel, or playlist (default: video)" },
+        type: { type: "string", enum: ["video", "channel", "playlist"], description: "video, channel, or playlist (default: video)" },
         max_results: { type: "number" },
         order: { type: "string", description: "relevance, date, rating, viewCount, title" },
         channel_id: { type: "string" },
@@ -7805,6 +8323,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata, statistics, and content details for a YouTube video.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         video_id: { type: "string" },
@@ -7817,6 +8336,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata and statistics for a YouTube channel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         channel_id: { type: "string" },
@@ -7830,6 +8350,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List playlists belonging to a YouTube channel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         channel_id: { type: "string" },
@@ -7844,6 +8365,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List videos in a YouTube playlist.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         playlist_id: { type: "string" },
@@ -7858,6 +8380,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List available caption tracks for a YouTube video.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         video_id: { type: "string" },
@@ -7872,6 +8395,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Spotify for tracks, albums, artists, or playlists.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         query: { type: "string" },
@@ -7888,6 +8412,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata for a Spotify track by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         track_id: { type: "string" },
@@ -7901,6 +8426,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata and track listing for a Spotify album.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         album_id: { type: "string" },
@@ -7913,6 +8439,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata and follower count for a Spotify artist.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         artist_id: { type: "string" },
@@ -7925,6 +8452,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata and tracks for a Spotify playlist.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         playlist_id: { type: "string" },
@@ -7938,6 +8466,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Spotify track recommendations based on seed tracks, artists, or genres.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         seed_tracks: { type: "string", description: "Comma-separated Spotify track IDs (max 5 seeds total)" },
@@ -7958,6 +8487,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get audio analysis features (danceability, energy, tempo, etc.) for a Spotify track.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         bearer_token: { type: "string" },
         track_id: { type: "string" },
@@ -7972,6 +8502,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a video from a text prompt using Higgsfield AI. Supports Soul Styles for cinematic looks. Returns a generation_id to poll for completion.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Higgsfield API key" },
         prompt: { type: "string", description: "Text description of the video to generate" },
@@ -7989,6 +8520,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate an image from a text prompt using Higgsfield AI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Higgsfield API key" },
         prompt: { type: "string", description: "Text description of the image to generate" },
@@ -8006,6 +8538,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available Soul Styles for Higgsfield AI video and image generation.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Higgsfield API key" },
       },
@@ -8017,6 +8550,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the status of a Higgsfield AI generation by ID. Returns status, video URL when complete.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Higgsfield API key" },
         generation_id: { type: "string", description: "Generation ID returned by higgsfield_generate_video or higgsfield_generate_image" },
@@ -8031,6 +8565,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create an AI avatar video with HeyGen. The avatar speaks a script using a selected voice. Returns a video_id to poll for completion.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "HeyGen API key" },
         avatar_id: { type: "string", description: "Avatar ID (use heygen_list_avatars to find available avatars)" },
@@ -8051,6 +8586,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available AI avatars in your HeyGen account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "HeyGen API key" },
       },
@@ -8062,6 +8598,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the generation status of a HeyGen video by video ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "HeyGen API key" },
         video_id: { type: "string", description: "Video ID returned by heygen_create_avatar_video" },
@@ -8074,6 +8611,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available voices for HeyGen avatar videos.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "HeyGen API key" },
       },
@@ -8087,6 +8625,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a video from text or an image using Runway ML. Supports text-to-video and image-to-video. Returns a task_id to poll for completion.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Runway API key" },
         prompt: { type: "string", description: "Text description of the video to generate" },
@@ -8104,6 +8643,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the status of a Runway ML generation task. Returns status, progress, and video URL when complete.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Runway API key" },
         task_id: { type: "string", description: "Task ID returned by runway_generate_video" },
@@ -8116,6 +8656,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List available Runway ML video generation models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Runway API key" },
       },
@@ -8129,6 +8670,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a creative AI video from a text prompt using Pika. Optionally animate an input image. Returns a generation_id to poll for completion.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pika API key" },
         prompt: { type: "string", description: "Text description of the video to generate" },
@@ -8148,6 +8690,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the status of a Pika video generation by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pika API key" },
         generation_id: { type: "string", description: "Generation ID returned by pika_generate_video" },
@@ -8160,6 +8703,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List available visual styles for Pika video generation.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pika API key" },
       },
@@ -8173,6 +8717,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Mailchimp audiences (lists) in the account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key (format: key-dc e.g. abc123-us21)" },
         count: { type: "number", description: "Number of audiences to return (default: 10, max: 1000)" },
@@ -8185,6 +8730,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Mailchimp email campaigns, optionally filtered by status or audience.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         count: { type: "number", description: "Number of campaigns (default: 10)" },
@@ -8199,6 +8745,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Mailchimp campaign by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         campaign_id: { type: "string", description: "Campaign ID" },
@@ -8211,6 +8758,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new Mailchimp email campaign.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         list_id: { type: "string", description: "Audience (list) ID to send to" },
@@ -8227,6 +8775,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List members (subscribers) in a Mailchimp audience.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         list_id: { type: "string", description: "Audience ID" },
@@ -8241,6 +8790,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Add or update a subscriber in a Mailchimp audience.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         list_id: { type: "string", description: "Audience ID" },
@@ -8257,6 +8807,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for subscribers across all or a specific Mailchimp audience.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mailchimp API key" },
         query: { type: "string", description: "Search query (email address, name, etc.)" },
@@ -8272,6 +8823,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a transactional email via SendGrid.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key from app.sendgrid.com" },
         to: { type: "string", description: "Recipient email address" },
@@ -8292,6 +8844,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List dynamic email templates in SendGrid.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key" },
         page_size: { type: "number", description: "Number of templates (default: 10, max: 200)" },
@@ -8304,6 +8857,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific SendGrid email template by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key" },
         template_id: { type: "string", description: "Template ID" },
@@ -8316,6 +8870,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all marketing contacts in SendGrid.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key" },
       },
@@ -8327,6 +8882,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Add or update a marketing contact in SendGrid.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key" },
         email: { type: "string", description: "Contact email address" },
@@ -8343,6 +8899,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get SendGrid email sending statistics for a date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "SendGrid API key" },
         start_date: { type: "string", description: "Start date (YYYY-MM-DD). Defaults to 7 days ago." },
@@ -8359,6 +8916,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert an address or place name to coordinates using Mapbox.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "Mapbox access token from account.mapbox.com" },
         query: { type: "string", description: "Address or place name to geocode" },
@@ -8376,6 +8934,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert coordinates to a place name or address using Mapbox reverse geocoding.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "Mapbox access token" },
         longitude: { type: "number", description: "Longitude" },
@@ -8391,6 +8950,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get turn-by-turn directions between two or more locations using Mapbox.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "Mapbox access token" },
         coordinates: { type: "string", description: "Semicolon-separated lng,lat pairs (e.g. -122.4194,37.7749;-118.2437,34.0522)" },
@@ -8408,6 +8968,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a static map image URL for a given location using Mapbox.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "Mapbox access token" },
         longitude: { type: "number", description: "Center longitude" },
@@ -8426,6 +8987,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Mapbox tilesets owned by a user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "Mapbox access token" },
         username: { type: "string", description: "Mapbox username" },
@@ -8442,6 +9004,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search an Algolia index for records matching a query.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_id: { type: "string", description: "Algolia Application ID" },
         api_key: { type: "string", description: "Algolia API Key (Search or Admin)" },
@@ -8460,6 +9023,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Retrieve a single record from an Algolia index by its objectID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_id: { type: "string", description: "Algolia Application ID" },
         api_key: { type: "string", description: "Algolia API Key" },
@@ -8474,6 +9038,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Algolia indices in the application.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_id: { type: "string", description: "Algolia Application ID" },
         api_key: { type: "string", description: "Algolia Admin API Key" },
@@ -8486,6 +9051,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Browse all records in an Algolia index (paginated cursor-based).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         app_id: { type: "string", description: "Algolia Application ID" },
         api_key: { type: "string", description: "Algolia Admin API Key" },
@@ -8505,6 +9071,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Pinecone vector indexes in the project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pinecone API key from app.pinecone.io" },
       },
@@ -8516,6 +9083,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details (dimension, metric, status, host) for a Pinecone index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pinecone API key" },
         index_name: { type: "string", description: "Index name" },
@@ -8528,6 +9096,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Query a Pinecone index for nearest-neighbor vectors.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pinecone API key" },
         index_host: { type: "string", description: "Index host URL from describe_index (e.g. https://my-index-xxx.svc.pinecone.io)" },
@@ -8546,6 +9115,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Upsert (insert or update) vectors into a Pinecone index.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pinecone API key" },
         index_host: { type: "string", description: "Index host URL from describe_index" },
@@ -8560,6 +9130,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Delete vectors from a Pinecone index by ID or filter.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Pinecone API key" },
         index_host: { type: "string", description: "Index host URL from describe_index" },
@@ -8578,6 +9149,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Track a custom event in Mixpanel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         service_account_username: { type: "string", description: "Mixpanel Service Account username" },
         service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
@@ -8595,6 +9167,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Mixpanel event analytics data for a date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         service_account_username: { type: "string", description: "Mixpanel Service Account username" },
         service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
@@ -8613,6 +9186,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get funnel conversion data from Mixpanel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         service_account_username: { type: "string", description: "Mixpanel Service Account username" },
         service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
@@ -8630,6 +9204,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get user retention analytics from Mixpanel.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         service_account_username: { type: "string", description: "Mixpanel Service Account username" },
         service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
@@ -8649,6 +9224,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Export raw Mixpanel event data for a date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         service_account_username: { type: "string", description: "Mixpanel Service Account username" },
         service_account_secret: { type: "string", description: "Mixpanel Service Account secret" },
@@ -8669,6 +9245,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Datadog monitors (alerts) with optional name or tag filters.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key (DD-API-KEY)" },
         app_key: { type: "string", description: "Datadog Application key (DD-APPLICATION-KEY)" },
@@ -8685,6 +9262,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Datadog monitor.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key" },
         app_key: { type: "string", description: "Datadog Application key" },
@@ -8698,6 +9276,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new Datadog monitor (alert).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key" },
         app_key: { type: "string", description: "Datadog Application key" },
@@ -8716,6 +9295,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Datadog dashboards.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key" },
         app_key: { type: "string", description: "Datadog Application key" },
@@ -8729,6 +9309,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Query Datadog metrics time-series data.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key" },
         app_key: { type: "string", description: "Datadog Application key" },
@@ -8744,6 +9325,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Datadog events stream for a time range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Datadog API key" },
         app_key: { type: "string", description: "Datadog Application key" },
@@ -8763,6 +9345,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Translate text into another language using DeepL's neural translation engine.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         auth_key: { type: "string", description: "DeepL Auth Key from deepl.com. Free tier keys end with :fx." },
         text: { description: "Text or array of texts to translate (max 50 texts per call)", oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
@@ -8780,6 +9363,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get DeepL API usage and quota information for the current billing period.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         auth_key: { type: "string", description: "DeepL Auth Key" },
       },
@@ -8791,6 +9375,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all languages supported by DeepL for translation.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         auth_key: { type: "string", description: "DeepL Auth Key" },
         type: { type: "string", enum: ["source", "target"], description: "Language direction (default: target)" },
@@ -8803,6 +9388,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Submit a document (PDF, Word, PowerPoint) for translation via DeepL.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         auth_key: { type: "string", description: "DeepL Auth Key" },
         document_url: { type: "string", description: "Publicly accessible URL of the document to translate" },
@@ -8821,6 +9407,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Submit an audio or video file for transcription with AssemblyAI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key from assemblyai.com/dashboard" },
         audio_url: { type: "string", description: "Publicly accessible URL of the audio/video file" },
@@ -8844,6 +9431,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the status and results of an AssemblyAI transcription job.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key" },
         transcript_id: { type: "string", description: "Transcript ID returned by assemblyai_transcribe" },
@@ -8856,6 +9444,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List recent AssemblyAI transcripts for the account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key" },
         limit: { type: "number", description: "Number of transcripts to return (default: 10, max: 200)" },
@@ -8871,6 +9460,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a completed transcript split into individual sentences.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key" },
         transcript_id: { type: "string", description: "Completed transcript ID" },
@@ -8883,6 +9473,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a completed transcript split into paragraphs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key" },
         transcript_id: { type: "string", description: "Completed transcript ID" },
@@ -8895,6 +9486,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the AI-generated summary for a completed AssemblyAI transcript (must have been submitted with summarization enabled).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "AssemblyAI API key" },
         transcript_id: { type: "string", description: "Completed transcript ID" },
@@ -8909,6 +9501,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a fast LLM inference with Groq. Supports Llama 3, Mixtral, Gemma, and other open models at high speed.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Groq API key from console.groq.com/keys" },
         model: { type: "string", description: "Model ID (e.g. llama-3.3-70b-versatile, mixtral-8x7b-32768, gemma2-9b-it). Default: llama-3.3-70b-versatile" },
@@ -8928,6 +9521,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all models available on Groq.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Groq API key" },
       },
@@ -8941,6 +9535,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate a high-quality video from text using Kling AI (Kuaishou). Supports standard and professional modes. Returns a task_id to poll for completion.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Kling AI API key" },
         prompt: { type: "string", description: "Text description of the video to generate" },
@@ -8960,6 +9555,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Check the status of a Kling AI video generation task.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Kling AI API key" },
         task_id: { type: "string", description: "Task ID returned by kling_generate_video" },
@@ -8974,6 +9570,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List PagerDuty incidents. Filter by status (triggered, acknowledged, resolved), service, or date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         status: { type: "string", description: "Filter by status: triggered, acknowledged, or resolved" },
@@ -8989,6 +9586,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single PagerDuty incident by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         incident_id: { type: "string", description: "Incident ID" },
@@ -9001,6 +9599,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new PagerDuty incident on a service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         title: { type: "string", description: "Incident title/summary" },
@@ -9017,6 +9616,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Acknowledge a PagerDuty incident by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         incident_id: { type: "string", description: "Incident ID to acknowledge" },
@@ -9029,6 +9629,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Resolve a PagerDuty incident by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         incident_id: { type: "string", description: "Incident ID to resolve" },
@@ -9041,6 +9642,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all services in a PagerDuty account. Optionally filter by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         query: { type: "string", description: "Filter services by name" },
@@ -9054,6 +9656,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List who is currently on-call in PagerDuty, optionally filtered by schedule or user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "PagerDuty API key" },
         schedule_ids: { type: "string", description: "Filter by schedule ID" },
@@ -9069,6 +9672,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List CircleCI pipelines for a project or organization. Optionally filter by branch.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         project_slug: { type: "string", description: "Project slug e.g. gh/MyOrg/my-repo. Omit to list all org pipelines." },
@@ -9084,6 +9688,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single CircleCI pipeline by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         pipeline_id: { type: "string", description: "Pipeline ID" },
@@ -9096,6 +9701,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List workflows for a CircleCI pipeline.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         pipeline_id: { type: "string", description: "Pipeline ID" },
@@ -9108,6 +9714,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single CircleCI workflow by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         workflow_id: { type: "string", description: "Workflow ID" },
@@ -9120,6 +9727,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List jobs in a CircleCI workflow.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         workflow_id: { type: "string", description: "Workflow ID" },
@@ -9132,6 +9740,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Trigger a new CircleCI pipeline for a project. Optionally specify branch, tag, or parameters.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "CircleCI personal API token" },
         project_slug: { type: "string", description: "Project slug e.g. gh/MyOrg/my-repo" },
@@ -9149,6 +9758,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Track a custom event in Segment. Use for recording user actions like 'Signed Up', 'Item Purchased', etc.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         write_key: { type: "string", description: "Segment source write key" },
         event: { type: "string", description: "Event name (e.g. 'Item Purchased')" },
@@ -9165,6 +9775,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Identify a user in Segment with traits. Links an anonymous ID to a known user ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         write_key: { type: "string", description: "Segment source write key" },
         user_id: { type: "string", description: "Unique user identifier" },
@@ -9180,6 +9791,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Segment sources in a workspace using the Segment Public API.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Segment Public API token" },
         workspace_id: { type: "string", description: "Segment workspace ID" },
@@ -9192,6 +9804,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all destinations connected to a Segment source.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Segment Public API token" },
         source_id: { type: "string", description: "Segment source ID" },
@@ -9204,6 +9817,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single Segment source including settings and enabled state.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Segment Public API token" },
         source_id: { type: "string", description: "Segment source ID" },
@@ -9218,6 +9832,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a transactional email via Postmark. Supports HTML and plain text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
         from: { type: "string", description: "Sender email address (must be verified in Postmark)" },
@@ -9239,6 +9854,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send multiple emails in a single Postmark API call (up to 500 messages).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
         messages: { type: "array", items: {}, description: "Array of email message objects (same fields as send_email)" },
@@ -9251,6 +9867,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get delivery statistics from Postmark including bounces, spam complaints, and open rates.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
       },
@@ -9262,6 +9879,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List email templates stored in Postmark.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
         count: { type: "number", description: "Number of templates to return (default 100)" },
@@ -9275,6 +9893,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a single Postmark email template by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
         template_id: { type: "string", description: "Template ID or alias" },
@@ -9287,6 +9906,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search sent messages in Postmark by recipient, sender, tag, or status.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Postmark server token" },
         count: { type: "number", description: "Number of messages to return (default 25)" },
@@ -9306,6 +9926,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all products in a Gumroad account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Gumroad access token" },
       },
@@ -9317,6 +9938,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single Gumroad product by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Gumroad access token" },
         product_id: { type: "string", description: "Product ID (permalink)" },
@@ -9329,6 +9951,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List sales from a Gumroad account. Filter by product, email, or date range.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Gumroad access token" },
         product_id: { type: "string", description: "Filter by product ID" },
@@ -9345,6 +9968,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a single Gumroad sale by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Gumroad access token" },
         sale_id: { type: "string", description: "Sale ID" },
@@ -9357,6 +9981,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List subscribers for a Gumroad membership/subscription product.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Gumroad access token" },
         product_id: { type: "string", description: "Product ID of the subscription product" },
@@ -9372,6 +9997,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a chat completion with any Together AI model. Supports Llama, Mistral, Qwen, and 100+ open-source models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Together AI API key" },
         model: { type: "string", description: "Model ID (e.g. meta-llama/Llama-3-8b-chat-hf). Use togetherai_list_models to browse." },
@@ -9390,6 +10016,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a text completion with any Together AI model.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Together AI API key" },
         model: { type: "string", description: "Model ID (e.g. mistralai/Mistral-7B-v0.1)" },
@@ -9408,6 +10035,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create text embeddings using a Together AI embedding model.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Together AI API key" },
         model: { type: "string", description: "Embedding model ID (e.g. togethercomputer/m2-bert-80M-8k-retrieval)" },
@@ -9421,6 +10049,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available models on Together AI including chat, completion, embedding, and image models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Together AI API key" },
       },
@@ -9434,6 +10063,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available voices in ElevenLabs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -9445,6 +10075,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get metadata for a specific ElevenLabs voice by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         voice_id: { type: "string" },
@@ -9458,6 +10089,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert text to speech with a selected ElevenLabs voice. Returns base64-encoded audio.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         voice_id: { type: "string" },
@@ -9477,6 +10109,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List available ElevenLabs TTS models and their supported languages.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -9488,6 +10121,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the TTS generation history for an ElevenLabs account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         page_size: { type: "number" },
@@ -9504,6 +10138,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List public models available on Replicate.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         cursor: { type: "string" },
@@ -9516,6 +10151,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details and latest version for a Replicate model.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         owner: { type: "string", description: "Model owner username" },
@@ -9529,6 +10165,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a Replicate model by creating a prediction.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         version: { type: "string", description: "Model version ID (use this OR model)" },
@@ -9545,6 +10182,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the status and output of a Replicate prediction.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         prediction_id: { type: "string" },
@@ -9557,6 +10195,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List recent predictions for a Replicate account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         cursor: { type: "string" },
@@ -9569,6 +10208,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Cancel a running Replicate prediction.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_token: { type: "string" },
         prediction_id: { type: "string" },
@@ -9583,6 +10223,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate images from a text prompt using Stability AI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         prompt: { type: "string" },
@@ -9604,6 +10245,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Transform an existing image using a text prompt with Stability AI.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         prompt: { type: "string" },
@@ -9623,6 +10265,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Upscale an image using Stability AI ESRGAN.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         image_url: { type: "string", description: "URL of the image to upscale" },
@@ -9637,6 +10280,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available Stability AI generation engines.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -9650,6 +10294,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a chat completion with an OpenAI model (GPT-4o, GPT-4, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         model: { type: "string", description: "Model ID, e.g. gpt-4o, gpt-4o-mini (default: gpt-4o-mini)" },
@@ -9672,6 +10317,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create vector embeddings for text using an OpenAI embedding model.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         input: { description: "String or array of strings to embed" },
@@ -9687,15 +10333,16 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate images from a text prompt using DALL-E.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         prompt: { type: "string" },
         model: { type: "string", description: "dall-e-3 or dall-e-2 (default: dall-e-3)" },
         n: { type: "number", description: "Number of images to generate" },
         size: { type: "string", description: "1024x1024, 1792x1024, or 1024x1792 for DALL-E 3" },
-        quality: { type: "string", description: "standard or hd (DALL-E 3 only)" },
-        style: { type: "string", description: "natural or vivid (DALL-E 3 only)" },
-        response_format: { type: "string", description: "url or b64_json (default: url)" },
+        quality: { type: "string", enum: ["standard", "hd"], description: "standard or hd (DALL-E 3 only)" },
+        style: { type: "string", enum: ["natural", "vivid"], description: "natural or vivid (DALL-E 3 only)" },
+        response_format: { type: "string", enum: ["url", "b64_json"], description: "url or b64_json (default: url)" },
       },
       required: ["api_key", "prompt"],
     },
@@ -9705,12 +10352,13 @@ export const ADDITIONAL_TOOLS = [
     description: "Transcribe audio to text using OpenAI Whisper.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         audio_url: { type: "string", description: "URL of the audio file to transcribe" },
         model: { type: "string", description: "Transcription model (default: whisper-1)" },
         language: { type: "string", description: "ISO-639-1 language code (optional)" },
-        response_format: { type: "string", description: "json, text, srt, verbose_json, vtt (default: json)" },
+        response_format: { type: "string", enum: ["json", "text", "srt", "verbose_json", "vtt"], description: "json, text, srt, verbose_json, vtt (default: json)" },
         prompt: { type: "string" },
         temperature: { type: "number" },
         filename: { type: "string" },
@@ -9723,6 +10371,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all OpenAI models available to the account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -9736,6 +10385,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Send a message to the Anthropic Messages API (Claude models). Useful for agents that need to call Claude programmatically or compare model outputs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         model: { type: "string", description: "Claude model ID (default: claude-sonnet-4-6)" },
@@ -9756,6 +10406,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Claude models available via the Anthropic API.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -9769,6 +10420,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Asana workspaces accessible by the authenticated user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Asana Personal Access Token (or set ASANA_API_KEY)" },
       },
@@ -9779,6 +10431,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List projects in an Asana workspace.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         workspace_gid: { type: "string", description: "Workspace GID" },
         archived: { type: "boolean", description: "Include archived projects (default false)" },
@@ -9793,6 +10446,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List tasks in an Asana project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         project_gid: { type: "string", description: "Project GID" },
         completed: { type: "boolean", description: "Filter to completed tasks only" },
@@ -9807,6 +10461,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new task in Asana.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string", description: "Task name" },
         workspace_gid: { type: "string", description: "Workspace GID" },
@@ -9824,6 +10479,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Update an existing Asana task.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         task_gid: { type: "string", description: "Task GID" },
         name: { type: "string" },
@@ -9841,6 +10497,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get full details of a single Asana task.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         task_gid: { type: "string", description: "Task GID" },
         api_key: { type: "string" },
@@ -9853,6 +10510,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search tasks by text within an Asana workspace.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         workspace_gid: { type: "string", description: "Workspace GID" },
         text: { type: "string", description: "Search query" },
@@ -9870,6 +10528,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List boards in a Monday.com account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number", description: "Max boards to return (default 25)" },
         api_key: { type: "string", description: "Monday.com API token (or set MONDAY_API_KEY)" },
@@ -9881,6 +10540,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details of a specific Monday.com board including columns and groups.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID" },
         api_key: { type: "string" },
@@ -9893,6 +10553,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List items (rows) in a Monday.com board.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID" },
         limit: { type: "number", description: "Max items (default 50)" },
@@ -9906,6 +10567,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new item in a Monday.com board.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID" },
         item_name: { type: "string", description: "Item name" },
@@ -9921,6 +10583,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Update a column value on a Monday.com item.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string" },
         item_id: { type: "string" },
@@ -9936,6 +10599,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search items by name in a Monday.com board.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string" },
         query: { type: "string", description: "Search text" },
@@ -9952,6 +10616,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the authenticated Calendly user profile.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Calendly Personal Access Token (or set CALENDLY_API_KEY)" },
       },
@@ -9962,6 +10627,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List event types for the authenticated Calendly user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         user_uri: { type: "string", description: "User URI (auto-resolved if omitted)" },
         active: { type: "boolean", description: "Filter to active event types only" },
@@ -9975,6 +10641,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List scheduled events for the authenticated Calendly user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         user_uri: { type: "string", description: "User URI (auto-resolved if omitted)" },
         status: { type: "string", description: "active or canceled" },
@@ -9991,6 +10658,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details of a single Calendly scheduled event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         event_uuid: { type: "string", description: "Event UUID" },
         api_key: { type: "string" },
@@ -10003,6 +10671,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List invitees for a Calendly scheduled event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         event_uuid: { type: "string", description: "Event UUID" },
         status: { type: "string", description: "active or canceled" },
@@ -10019,6 +10688,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List Pinterest boards for the authenticated user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         page_size: { type: "number" },
         bookmark: { type: "string", description: "Pagination cursor" },
@@ -10032,6 +10702,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details of a specific Pinterest board.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID" },
         access_token: { type: "string" },
@@ -10044,6 +10715,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List pins on a Pinterest board.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID" },
         page_size: { type: "number" },
@@ -10058,6 +10730,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new Pinterest pin from an image URL.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         board_id: { type: "string", description: "Board ID to pin to" },
         media_source_url: { type: "string", description: "Public image URL" },
@@ -10075,6 +10748,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search Pinterest pins by keyword.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Search query" },
         page_size: { type: "number" },
@@ -10089,6 +10763,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the authenticated Pinterest user account info.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string" },
       },
@@ -10101,6 +10776,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the authenticated TikTok user profile (follower count, video count, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         access_token: { type: "string", description: "TikTok OAuth access token (or set TIKTOK_ACCESS_TOKEN)" },
       },
@@ -10111,6 +10787,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List videos for the authenticated TikTok user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         max_count: { type: "number", description: "Max videos to return (default 20, max 20)" },
         cursor: { type: "number", description: "Pagination cursor" },
@@ -10123,6 +10800,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details of a specific TikTok video by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         video_id: { type: "string", description: "TikTok video ID" },
         access_token: { type: "string" },
@@ -10137,6 +10815,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get Steam player profile summaries for one or more Steam IDs.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         steamids: { type: "string", description: "Comma-separated Steam64 IDs (up to 100)" },
         api_key: { type: "string", description: "Steam Web API key (or set STEAM_API_KEY)" },
@@ -10149,6 +10828,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get games owned by a Steam user.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         steamid: { type: "string", description: "Steam64 ID" },
         include_appinfo: { type: "boolean", description: "Include game names (default true)" },
@@ -10163,6 +10843,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get achievements for a Steam user in a specific game.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         steamid: { type: "string", description: "Steam64 ID" },
         appid: { type: "string", description: "Steam App ID of the game" },
@@ -10176,6 +10857,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get store details for a Steam app (game info, price, platforms, Metacritic score).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         appid: { type: "string", description: "Steam App ID" },
         cc: { type: "string", description: "Country code for pricing (e.g. us, au)" },
@@ -10189,6 +10871,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search the Steam store for games by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         term: { type: "string", description: "Search term" },
         cc: { type: "string", description: "Country code for pricing" },
@@ -10204,6 +10887,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search the IGDB games database by name.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Game name to search for" },
         limit: { type: "number", description: "Max results (default 10, max 50)" },
@@ -10218,6 +10902,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get full details of a game from IGDB by game ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game_id: { type: "string", description: "IGDB game ID" },
         client_id: { type: "string" },
@@ -10231,6 +10916,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List gaming platforms from IGDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         limit: { type: "number", description: "Max results (default 30)" },
         offset: { type: "number" },
@@ -10244,6 +10930,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all game genres from IGDB.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         client_id: { type: "string" },
         client_secret: { type: "string" },
@@ -10255,6 +10942,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a game company from IGDB by name or ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string", description: "Company name to search for" },
         company_id: { type: "string", description: "IGDB company ID (takes precedence over name)" },
@@ -10270,6 +10958,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Search for games on Speedrun.com by name. No API key required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         name: { type: "string", description: "Game name to search" },
         max: { type: "number", description: "Max results" },
@@ -10282,6 +10971,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details of a game on Speedrun.com including categories and levels.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game_id: { type: "string", description: "Speedrun.com game ID or abbreviation" },
       },
@@ -10293,6 +10983,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the leaderboard for a Speedrun.com game category.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game_id: { type: "string", description: "Game ID" },
         category_id: { type: "string", description: "Category ID" },
@@ -10309,13 +11000,14 @@ export const ADDITIONAL_TOOLS = [
     description: "List speedruns with optional filters for game, category, user, or status.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         game: { type: "string", description: "Game ID" },
         category: { type: "string" },
         user: { type: "string", description: "User ID" },
-        status: { type: "string", description: "new, verified, or rejected" },
-        orderby: { type: "string", description: "date, submitted, status, game, category, level, platform, region, emulated, or weblink" },
-        direction: { type: "string", description: "asc or desc" },
+        status: { type: "string", enum: ["new", "verified", "rejected"], description: "new, verified, or rejected" },
+        orderby: { type: "string", enum: ["date", "submitted", "status", "game", "category", "level", "platform", "region", "emulated", "weblink"], description: "date, submitted, status, game, category, level, platform, region, emulated, or weblink" },
+        direction: { type: "string", enum: ["asc", "desc"], description: "asc or desc" },
         max: { type: "number" },
       },
     },
@@ -10325,6 +11017,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a Speedrun.com user profile by ID or username.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         user_id: { type: "string", description: "User ID or username" },
       },
@@ -10338,6 +11031,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get latest currency exchange rates for a base currency. Works without API key using the free tier.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         base: { type: "string", description: "Base currency code (default USD)" },
         api_key: { type: "string", description: "ExchangeRate-API key (or set EXCHANGERATE_API_KEY). Optional for latest rates." },
@@ -10349,6 +11043,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Convert an amount from one currency to another.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         from: { type: "string", description: "Source currency code (e.g. USD)" },
         to: { type: "string", description: "Target currency code (e.g. EUR)" },
@@ -10363,6 +11058,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get historical exchange rates for a specific date. Requires an API key.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         base: { type: "string", description: "Base currency code (default USD)" },
         year: { type: "string", description: "4-digit year" },
@@ -10378,6 +11074,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all supported currency codes and their names. Requires an API key.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "ExchangeRate-API key (required)" },
       },
@@ -10390,6 +11087,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Neon Serverless Postgres projects in your account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Neon API key" },
         limit: { type: "number", description: "Max projects to return (default 10)" },
@@ -10402,6 +11100,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Neon project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         project_id: { type: "string", description: "Neon project ID" },
@@ -10414,6 +11113,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all branches in a Neon project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         project_id: { type: "string" },
@@ -10426,6 +11126,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new branch in a Neon project.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         project_id: { type: "string" },
@@ -10439,6 +11140,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all databases on a Neon branch.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         project_id: { type: "string" },
@@ -10452,6 +11154,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Execute a SQL query against a Neon database endpoint.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         project_id: { type: "string" },
@@ -10470,6 +11173,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the value of a key from an Upstash Redis database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Upstash API key" },
         email: { type: "string", description: "Upstash account email" },
@@ -10484,6 +11188,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Set a key-value pair in an Upstash Redis database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10500,6 +11205,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Delete a key from an Upstash Redis database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10514,6 +11220,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List keys in an Upstash Redis database matching a pattern.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10528,6 +11235,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Increment a numeric key in an Upstash Redis database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10542,6 +11250,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Produce messages to an Upstash Kafka topic.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10557,6 +11266,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all topics in an Upstash Kafka cluster.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         email: { type: "string" },
@@ -10572,6 +11282,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all databases in a Turso organization.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Turso API token" },
         org: { type: "string", description: "Organization name or slug" },
@@ -10584,6 +11295,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new Turso SQLite edge database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         org: { type: "string" },
@@ -10598,6 +11310,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all groups in a Turso organization.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         org: { type: "string" },
@@ -10610,6 +11323,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Turso database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         org: { type: "string" },
@@ -10623,6 +11337,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Execute a SQL query against a Turso edge database.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         org: { type: "string" },
@@ -10639,6 +11354,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Render services (web services, static sites, cron jobs, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Render API key" },
         limit: { type: "number", description: "Max results (default 20)" },
@@ -10652,6 +11368,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Render service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         service_id: { type: "string", description: "Render service ID (srv-...)" },
@@ -10664,6 +11381,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List deploys for a Render service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         service_id: { type: "string" },
@@ -10677,6 +11395,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Trigger a new deploy for a Render service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         service_id: { type: "string" },
@@ -10690,6 +11409,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List environment variables for a Render service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         service_id: { type: "string" },
@@ -10702,6 +11422,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Set an environment variable on a Render service.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         service_id: { type: "string" },
@@ -10718,6 +11439,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Fly.io apps in your organization.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Fly.io API token" },
         org_slug: { type: "string", description: "Organization slug (optional)" },
@@ -10729,6 +11451,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get details for a specific Fly.io app.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         app_name: { type: "string", description: "Fly.io app name" },
@@ -10741,6 +11464,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all machines in a Fly.io app.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         app_name: { type: "string" },
@@ -10754,6 +11478,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create a new machine in a Fly.io app.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         app_name: { type: "string" },
@@ -10769,6 +11494,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all volumes attached to a Fly.io app.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         app_name: { type: "string" },
@@ -10783,6 +11509,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a chat completion with a Mistral AI model (mistral-small, mistral-medium, mistral-large, etc.).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Mistral API key" },
         model: { type: "string", description: "Model ID (default: mistral-small-latest)" },
@@ -10800,6 +11527,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available Mistral AI models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -10810,6 +11538,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Create vector embeddings for text using Mistral's embedding model.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         input: { type: "string", description: "Text or JSON array of strings to embed" },
@@ -10825,6 +11554,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Chat with a Cohere Command model. Supports system preamble and conversation history.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Cohere API key" },
         message: { type: "string", description: "User message" },
@@ -10842,6 +11572,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Generate text completions using Cohere Command models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         prompt: { type: "string" },
@@ -10858,11 +11589,12 @@ export const ADDITIONAL_TOOLS = [
     description: "Create vector embeddings for text using Cohere's embed models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         texts: { type: "string", description: "JSON array of strings to embed" },
         model: { type: "string", description: "Embed model (default: embed-english-v3.0)" },
-        input_type: { type: "string", description: "search_document, search_query, classification, clustering" },
+        input_type: { type: "string", enum: ["search_document", "search_query", "classification", "clustering"], description: "search_document, search_query, classification, clustering" },
       },
       required: ["texts"],
     },
@@ -10872,6 +11604,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Rerank a list of documents by relevance to a query using Cohere Rerank.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         query: { type: "string" },
@@ -10887,6 +11620,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Classify texts into categories using Cohere Classify with few-shot examples.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         inputs: { type: "string", description: "JSON array of strings to classify" },
@@ -10901,6 +11635,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all available Cohere models.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -10913,6 +11648,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a search-augmented chat completion with Perplexity AI. Returns grounded answers with citations from the web.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Perplexity API key" },
         model: { type: "string", description: "Model (default: sonar). Options: sonar, sonar-pro, sonar-reasoning" },
@@ -10935,6 +11671,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all Lemon Squeezy stores on your account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "Lemon Squeezy API key" },
         page: { type: "number" },
@@ -10947,6 +11684,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List products in a Lemon Squeezy store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         store_id: { type: "string" },
@@ -10960,6 +11698,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List orders in a Lemon Squeezy store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         store_id: { type: "string" },
@@ -10974,6 +11713,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List subscriptions for a Lemon Squeezy store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         store_id: { type: "string" },
@@ -10989,6 +11729,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get a specific Lemon Squeezy order by ID.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         order_id: { type: "string" },
@@ -11001,6 +11742,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List customers for a Lemon Squeezy store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         store_id: { type: "string" },
@@ -11017,6 +11759,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all subscribers in a ConvertKit account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_secret: { type: "string", description: "ConvertKit API secret" },
         page: { type: "number" },
@@ -11033,6 +11776,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Subscribe an email address to a ConvertKit form.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string", description: "ConvertKit API key" },
         form_id: { type: "string" },
@@ -11047,6 +11791,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all forms in a ConvertKit account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -11058,6 +11803,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all email sequences in a ConvertKit account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -11069,6 +11815,7 @@ export const ADDITIONAL_TOOLS = [
     description: "List all tags in a ConvertKit account.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
       },
@@ -11080,6 +11827,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Apply a tag to a subscriber in ConvertKit.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         api_key: { type: "string" },
         tag_id: { type: "string" },
@@ -11096,6 +11844,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Start a TestPass run against an MCP server. Seeds deterministic and agent checks from the given pack and returns the run id plus an initial verdict summary. Response includes was_duplicate: boolean indicating whether the row was already present (idempotent retry).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         target_url: { type: "string", description: "HTTP URL of the MCP server to test" },
         pack_id: { type: "string", description: "Pack slug (default: testpass-core)" },
@@ -11113,6 +11862,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Fetch the current status, verdict summary, and fail count for a TestPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The TestPass run id returned by testpass_run" },
       },
@@ -11124,6 +11874,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Save a TestPass pack YAML definition for the caller. Creates or updates the pack identified by pack_id.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pack_id: { type: "string", description: "Unique slug for the pack (e.g. 'my-mcp-pack')" },
         yaml: { type: "string", description: "Full pack definition as a YAML string" },
@@ -11136,6 +11887,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Override the verdict and optional notes for a single check item in a TestPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run the item belongs to" },
         item_id: { type: "string", description: "The testpass_items row id (uuid)" },
@@ -11150,6 +11902,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the HTML report for a TestPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by testpass_run" },
       },
@@ -11161,6 +11914,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the JSON report for a TestPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by testpass_run" },
       },
@@ -11172,6 +11926,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Markdown report for a TestPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by testpass_run" },
       },
@@ -11185,6 +11940,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Run a UI/UX quality check synchronously against a URL. Executes the deterministic uxpass-core check set (HTTP, HTML, accessibility, agent readability, performance, security) against the target and returns the run id, status, UX Score, and summary. Pass either url (a one-off check) or pack_name (resolves the registered pack's url). The hats parameter is accepted for forward compatibility but is currently ignored; LLM hats land in a later chunk. Response includes was_duplicate: boolean indicating whether the row was already present (idempotent retry).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pack_name: { type: "string", description: "Name of a registered UXPass pack; the pack's url is used as the target" },
         url: { type: "string", description: "Target URL for a one-off run (takes precedence over pack_name)" },
@@ -11205,6 +11961,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Fetch the status, UX Score, and summary for a UXPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by uxpass_run" },
       },
@@ -11216,6 +11973,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the HTML report for a UXPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by uxpass_run" },
       },
@@ -11227,6 +11985,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the JSON report for a UXPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by uxpass_run" },
       },
@@ -11238,6 +11997,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Get the Markdown report for a UXPass run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run id returned by uxpass_run" },
       },
@@ -11249,6 +12009,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Register a UXPass pack from a YAML string. Validates the basic shape (required keys: name, url, viewports, themes, hats, synthesiser, budgets, remediation) and persists the pack so uxpass_run can reference it by name. Returns the assigned pack_id.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pack_yaml: { type: "string", description: "Full pack definition as a YAML string" },
       },
@@ -11262,6 +12023,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Plan a SEOPass run against a URL or registered pack. Chunk 1 returns the crawl and Lighthouse execution plan without persisting results.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string", description: "Target URL for a one-off SEOPass plan" },
         pack_name: { type: "string", description: "Name of a registered SEOPass pack; the pack URL is used as the target" },
@@ -11273,6 +12035,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Fetch the status for a SEOPass run. Chunk 1 reserves the tool shape; persistence lands later.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The SEOPass run id returned by a future seopass_run execution path" },
       },
@@ -11284,6 +12047,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Register a SEOPass pack from a YAML string. Validates required keys and stores the pack locally for seopass_run.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pack_yaml: { type: "string", description: "Full SEOPass pack definition as a YAML string" },
       },
@@ -11295,6 +12059,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Build the Lighthouse execution plan for a SEOPass target URL. Execution and persistence land in a later chunk.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string", description: "Target URL to audit with Lighthouse" },
         strategy: { type: "string", enum: ["mobile", "desktop"], description: "Lighthouse strategy (default: mobile)" },
@@ -11310,6 +12075,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Call this tool when the user wants to start a Crews Council run. Creates the run row on the UnClick API and returns a ConversationalCard with next actions. LLM turns are expected to flow through MCP sampling; if the Orchestrator does not support sampling the card reports SAMPLING_NOT_SUPPORTED. Response card surfaces was_duplicate when an existing run is returned for an already-seen task_id.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         crew_id: { type: "string", description: "The UUID of the Crew to run" },
         task_prompt: { type: "string", description: "The task the Council should deliberate on" },
@@ -11327,6 +12093,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Call this tool when the user wants the status of a specific Crews run. Returns a ConversationalCard summarising stage progress, token usage, and any failure artifact.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         run_id: { type: "string", description: "The run_id returned by start_crew_run" },
       },
@@ -11338,6 +12105,7 @@ export const ADDITIONAL_TOOLS = [
     description: "Call this tool when the user wants a recent history of Crews runs. Returns a ConversationalCard with a run count and the newest few run ids.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         crew_id: { type: "string", description: "Optional: filter to one crew" },
         limit: { type: "number", description: "Optional: max rows to return (default 50, capped at 100)" },

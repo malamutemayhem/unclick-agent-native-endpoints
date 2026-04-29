@@ -153,6 +153,7 @@ const INTERNAL_TOOLS = [
       "Example: 'I need to resize an image' returns the image tool with its endpoints.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: {
           type: "string",
@@ -174,6 +175,7 @@ const INTERNAL_TOOLS = [
       "Returns a list of tools with their slugs and descriptions.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         category: {
           type: "string",
@@ -191,6 +193,7 @@ const INTERNAL_TOOLS = [
       "exactly how to call a tool.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         slug: {
           type: "string",
@@ -210,6 +213,7 @@ const INTERNAL_TOOLS = [
       "Example: endpoint_id='image.resize', params={image: '<base64>', width: 800, height: 600}",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         endpoint_id: {
           type: "string",
@@ -245,6 +249,7 @@ const VISIBLE_TOOLS = [
       "Do NOT trigger for pure factual lookups (capitals, math, definitions) that require no personal context.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         num_sessions: {
           type: "number",
@@ -278,10 +283,12 @@ const VISIBLE_TOOLS = [
       "Do NOT trigger for facts already confirmed stored earlier in this session.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fact: { type: "string", description: "The fact -- a single atomic statement" },
         category: {
           type: "string",
+          enum: ["preference", "decision", "technical", "contact", "project", "general"],
           description: "Category: preference, decision, technical, contact, project, general",
           default: "general",
         },
@@ -309,6 +316,7 @@ const VISIBLE_TOOLS = [
       "Do NOT trigger if load_memory was just called and already returned the relevant context.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Search query" },
         max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
@@ -341,9 +349,11 @@ const VISIBLE_TOOLS = [
       "Do NOT trigger for information the user explicitly says is temporary.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         category: {
           type: "string",
+          enum: ["identity", "preference", "client", "workflow", "technical", "standing_rule"],
           description: "Category: identity, preference, client, workflow, technical, standing_rule",
         },
         key: { type: "string", description: "Unique key within category (e.g. 'timezone', 'preferred_stack')" },
@@ -367,6 +377,7 @@ const VISIBLE_TOOLS = [
       "Do NOT trigger if the session has already been saved with no new work done since.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         session_id: { type: "string", description: "Unique session identifier (timestamp or UUID)" },
         summary: { type: "string", description: "Narrative of what happened: decisions, work completed, problems solved" },
@@ -389,6 +400,7 @@ const VISIBLE_TOOLS = [
       "search_memory result. Do NOT use for new information -- use save_fact instead.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         fact_id: { type: "string", description: "UUID of the fact to invalidate" },
         reason: { type: "string", description: "Why the fact is no longer valid (optional but recommended)" },
@@ -407,6 +419,7 @@ const VISIBLE_TOOLS = [
       "Automatically marks them as read so you do not re-narrate later.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: {
           type: "string",
@@ -427,6 +440,7 @@ const VISIBLE_TOOLS = [
       "Do NOT call this on every session, only the first time on a new device or after a reset.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: {
           type: "string",
@@ -462,6 +476,7 @@ const VISIBLE_TOOLS = [
       "If you're replying to a specific earlier message, set thread_id to that message's id. The admin view groups threads visually so the user can collapse a back-and-forth instead of scrolling through every reply.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: {
           type: "string",
@@ -509,6 +524,7 @@ const VISIBLE_TOOLS = [
       "Optional next_checkin_at acts as a dead-man's-switch. Set it when you expect to be away (sleeping session, long-running job, scheduled task) and want the watcher to nudge the human if you do not pulse again by then. Pass either an ISO 8601 timestamp ('2026-04-25T18:30:00Z') or a relative duration ('30m', '2h', '1d', '90s'). The Now Playing strip shows 'back in 23m' while it's in the future and a red MIA badge once it passes without a fresh pulse. Pass an empty string to clear it.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: {
           type: "string",
@@ -539,6 +555,7 @@ const VISIBLE_TOOLS = [
       "Posts a 'todo-created' Fishbowl event so other agents notice without polling.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string", description: "Stable identifier for the calling agent. Same value as set_my_emoji." },
         title: { type: "string", description: "Short title (max 200 chars)" },
@@ -556,6 +573,7 @@ const VISIBLE_TOOLS = [
       "Update a todo's title, description, priority, status, or assignee. Use when scope changes, ownership shifts, or you move it between kanban columns ('open', 'in_progress', 'done', 'dropped'). agent_id required for attribution.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string", description: "Stable identifier for the calling agent." },
         todo_id: { type: "string", description: "UUID of the todo to update" },
@@ -575,6 +593,7 @@ const VISIBLE_TOOLS = [
       "Shortcut for marking a todo as done. Sets status='done' and stamps completed_at. Posts a 'todo-completed' Fishbowl event. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         todo_id: { type: "string" },
@@ -589,6 +608,7 @@ const VISIBLE_TOOLS = [
       "Marks a todo as dropped (decided not to do it). Soft state, not a delete. Use when a todo is obsolete but the history still matters. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         todo_id: { type: "string" },
@@ -603,6 +623,7 @@ const VISIBLE_TOOLS = [
       "Hard-deletes a todo and any comments on it. Use sparingly: prefer drop_todo so history is preserved. agent_id required for the audit log.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         todo_id: { type: "string" },
@@ -617,6 +638,7 @@ const VISIBLE_TOOLS = [
       "Returns todos for this tenant, optionally filtered by status. Use to render a kanban view, find your assignments, or pick the next thing to work on. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         status: { type: "string", enum: ["open", "in_progress", "done", "dropped"], description: "Optional filter" },
@@ -633,6 +655,7 @@ const VISIBLE_TOOLS = [
       "Drops a new idea into the Fishbowl Ideas board so the pack can react and vote. Use when something is too speculative for a todo but worth capturing. agent_id required. Posts an 'idea-created' Fishbowl event.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         title: { type: "string", description: "Short title (max 200 chars)" },
@@ -648,6 +671,7 @@ const VISIBLE_TOOLS = [
       "Edit an idea's title, description, or status ('proposed', 'voting', 'locked', 'parked', 'rejected'). agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         idea_id: { type: "string" },
@@ -665,6 +689,7 @@ const VISIBLE_TOOLS = [
       "Cast or change your vote on an idea ('up' or 'down'). One vote per agent per idea; calling again overwrites your previous vote. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         idea_id: { type: "string" },
@@ -680,6 +705,7 @@ const VISIBLE_TOOLS = [
       "Returns ideas for this tenant sorted by score (upvotes minus downvotes) desc, optionally filtered by status. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         status: { type: "string", enum: ["proposed", "voting", "locked", "parked", "rejected"] },
@@ -695,6 +721,7 @@ const VISIBLE_TOOLS = [
       "Converts an idea into a tracked todo and locks the idea. Requires either net upvotes >= 1, or admin caller. Sets idea.status='locked' and idea.promoted_to_todo_id. Posts an 'idea-promoted' Fishbowl event. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         idea_id: { type: "string" },
@@ -711,6 +738,7 @@ const VISIBLE_TOOLS = [
       "Adds a comment to a Fishbowl todo or idea. Use for discussion that belongs scoped to that item rather than as a top-level Fishbowl message. target_kind is 'todo' or 'idea'. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         target_kind: { type: "string", enum: ["todo", "idea"] },
@@ -727,6 +755,7 @@ const VISIBLE_TOOLS = [
       "Returns comments on a specific Fishbowl todo or idea, in chronological order. agent_id required.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: { type: "string" },
         target_kind: { type: "string", enum: ["todo", "idea"] },
@@ -753,6 +782,7 @@ const VISIBLE_TOOLS = [
       "Recommended start-of-session loop: (1) call read_messages to catch up on Fishbowl (you're doing this now), (2) check mentions[] for anything addressed to you, (3) call set_my_status to declare you're back online and set next_checkin_at if you expect to be away again.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         agent_id: {
           type: "string",
@@ -795,6 +825,7 @@ const DIRECT_TOOLS = [
     description: "Shorten a URL using UnClick. Returns a short URL and its code.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string", description: "The URL to shorten" },
       },
@@ -806,6 +837,7 @@ const DIRECT_TOOLS = [
     description: "Generate a QR code from text or a URL. Returns base64-encoded PNG or SVG.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string", description: "Text or URL to encode in the QR code" },
         format: { type: "string", enum: ["png", "svg"], default: "png" },
@@ -819,6 +851,7 @@ const DIRECT_TOOLS = [
     description: "Compute a cryptographic hash (MD5, SHA1, SHA256, SHA512) of text.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         algorithm: {
@@ -836,6 +869,7 @@ const DIRECT_TOOLS = [
       "Transform text case: upper, lower, title, sentence, camelCase, snake_case, kebab-case, PascalCase.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         to: {
@@ -851,6 +885,7 @@ const DIRECT_TOOLS = [
     description: "Validate an email address format.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         email: { type: "string" },
       },
@@ -862,6 +897,7 @@ const DIRECT_TOOLS = [
     description: "Validate a URL format, optionally check if it's reachable.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         url: { type: "string" },
         check_reachable: { type: "boolean", default: false },
@@ -874,6 +910,7 @@ const DIRECT_TOOLS = [
     description: "Resize an image (provided as base64) to specified dimensions.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         image: { type: "string", description: "Base64-encoded image (with or without data: prefix)" },
         width: { type: "number" },
@@ -892,6 +929,7 @@ const DIRECT_TOOLS = [
     description: "Parse a CSV string into a JSON array of rows.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         csv: { type: "string" },
         header: { type: "boolean", default: true },
@@ -905,9 +943,17 @@ const DIRECT_TOOLS = [
     description: "Format / pretty-print a JSON string.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         json: { type: "string" },
-        indent: { description: "2, 4, or 'tab'", default: 2 },
+        indent: {
+          oneOf: [
+            { type: "number", enum: [2, 4] },
+            { type: "string", enum: ["tab"] },
+          ],
+          description: "2, 4, or 'tab'",
+          default: 2,
+        },
       },
       required: ["json"],
     },
@@ -917,6 +963,7 @@ const DIRECT_TOOLS = [
     description: "Encode or decode text. Supports base64, URL, HTML, and hex.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         text: { type: "string" },
         operation: {
@@ -937,6 +984,7 @@ const DIRECT_TOOLS = [
     description: "Generate one or more random UUIDs (v4).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         count: { type: "number", minimum: 1, maximum: 100, default: 1 },
       },
@@ -947,6 +995,7 @@ const DIRECT_TOOLS = [
     description: "Generate a secure random password.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         length: { type: "number", minimum: 4, maximum: 512, default: 16 },
         uppercase: { type: "boolean", default: true },
@@ -961,6 +1010,7 @@ const DIRECT_TOOLS = [
     description: "Convert a cron expression to a human-readable description and get next occurrences.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         expression: { type: "string", description: "e.g. '0 9 * * 1-5' (weekdays at 9am)" },
         next_count: { type: "number", minimum: 1, maximum: 10, default: 5 },
@@ -973,6 +1023,7 @@ const DIRECT_TOOLS = [
     description: "Parse an IP address -- get decimal, binary, hex, and type (private/loopback/multicast).",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         ip: { type: "string" },
       },
@@ -984,8 +1035,24 @@ const DIRECT_TOOLS = [
     description: "Convert a color between hex, RGB, HSL, and HSV formats.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         color: {
+          oneOf: [
+            { type: "string" },
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: { r: { type: "number" }, g: { type: "number" }, b: { type: "number" } },
+              required: ["r", "g", "b"],
+            },
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: { h: { type: "number" }, s: { type: "number" }, l: { type: "number" } },
+              required: ["h", "s", "l"],
+            },
+          ],
           description: "Color as hex string (e.g. '#ff6b6b'), RGB object {r,g,b}, or HSL object {h,s,l}",
         },
       },
@@ -997,6 +1064,7 @@ const DIRECT_TOOLS = [
     description: "Test a regex pattern against text and get all matches with groups.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         pattern: { type: "string", description: "Regex pattern (no surrounding slashes)" },
         flags: { type: "string", description: "Flags like 'gi'", default: "" },
@@ -1010,8 +1078,10 @@ const DIRECT_TOOLS = [
     description: "Convert a timestamp (ISO, Unix seconds, or Unix ms) to all common formats.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         timestamp: {
+          oneOf: [{ type: "string" }, { type: "number" }],
           description: "ISO string, Unix seconds (e.g. 1700000000), or Unix ms (e.g. 1700000000000)",
         },
       },
@@ -1023,6 +1093,7 @@ const DIRECT_TOOLS = [
     description: "Compare two strings and return a unified diff showing what changed.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         a: { type: "string", description: "Original text" },
         b: { type: "string", description: "New text" },
@@ -1035,6 +1106,7 @@ const DIRECT_TOOLS = [
     description: "Store a value in the UnClick key-value store with optional TTL.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         key: { type: "string" },
         value: { description: "Any JSON-serializable value" },
@@ -1048,6 +1120,7 @@ const DIRECT_TOOLS = [
     description: "Retrieve a value from the UnClick key-value store.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         key: { type: "string" },
       },
@@ -1063,6 +1136,7 @@ const DIRECT_TOOLS = [
       "timeout/503 → high, 4xx/invalid → low, everything else → medium.",
     inputSchema: {
       type: "object" as const,
+      additionalProperties: false,
       properties: {
         tool_name: {
           type: "string",
