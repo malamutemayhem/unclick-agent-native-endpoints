@@ -1,0 +1,29 @@
+{
+  "name": "@unclick/legalpass",
+  "version": "0.1.0",
+  "description": "LegalPass - 12-hat issue-spotter for AI-native teams. Twelve checks. One verdict. Plain English.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types.js",
+    "./tools": "./dist/tools/index.js",
+    "./passguard/verdict-linter": "./dist/passguard/verdict-linter.js",
+    "./passguard/disclaimer-banner": "./dist/passguard/disclaimer-banner.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  }
+}
