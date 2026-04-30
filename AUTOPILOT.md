@@ -100,6 +100,30 @@ Every handoff should include:
 
 Every worker should acknowledge a direct handoff within the next expected cycle. If there is no ack after two cycles, Bailey may reassign or return the card to the pool.
 
+## Event Wakeups
+
+Ready work should wake the right worker immediately instead of waiting for the
+next heartbeat. Cron remains the safety net, not the primary trigger.
+
+Wake targets:
+
+- Target: event-to-visible-worker-action under 2 minutes.
+- Warning: over 5 minutes.
+- Fail: 16 minutes or more, because that is no better than the old heartbeat delay.
+
+Use the cheapest reliable wake path first:
+
+1. No-LLM watcher routes clear events such as green PR checks, draft lifted, blocker cleared, todo assigned, or verification ready.
+2. Optional cheap triage may use OpenRouter when `OPENROUTER_API_KEY` and `OPENROUTER_WAKE_MODEL` are configured. This layer is only a doorbell/classifier: it may decide wake/no-wake and route to an owner, but it must not code, review diffs, summarize large files, or make product decisions.
+3. Claude/Codex wakeups are escalation paths, not heartbeat loops.
+
+Cost guardrails:
+
+- Do not use Claude GitHub Action as the default heartbeat.
+- Do not type the raw Claude trigger phrase in GitHub unless a Claude run is intended.
+- Measure request count and token usage for every AI-backed wake test.
+- Prefer one wake signal per event; duplicate triggers are treated as failures.
+
 ## PR Rules
 
 Before opening a PR:
