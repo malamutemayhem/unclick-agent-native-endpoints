@@ -1,7 +1,7 @@
 /**
  * Memory operation handlers for @unclick/mcp-server.
  *
- * Wraps the 17 memory operations (get_startup_context, search_memory, add_fact,
+ * Wraps the 18 memory operations (get_startup_context, search_memory, add_fact,
  * write_session_summary, etc.) as plain async functions that take a single
  * params object. Used by both direct MCP tools and the unclick_call meta-tool.
  */

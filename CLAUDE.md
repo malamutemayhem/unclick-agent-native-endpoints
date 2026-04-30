@@ -18,7 +18,7 @@ api/                            # Vercel serverless functions (REST API endpoint
 |------|---------|
 | `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers the direct tool surface and hidden internal meta-tools |
 | `packages/mcp-server/src/tool-wiring.ts` | Maps tool names to API calls |
-| `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (all 17 ops) |
+| `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (all 18 ops) |
 | `packages/mcp-server/src/memory/db.ts` | Backend factory (local JSON or Supabase) |
 | `src/pages/Tools.tsx` | Website tools grid, one tile per integration |
 
