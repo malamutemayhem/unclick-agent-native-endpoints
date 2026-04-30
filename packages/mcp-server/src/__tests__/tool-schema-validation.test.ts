@@ -60,6 +60,9 @@ describe("runtime tool schema validation", () => {
       category: "troubleshooting",
     })).toBeNull();
     expect(validateToolArgumentsForRuntime("unclick_generate_uuid", { count: 1 })).toBeNull();
+    expect(validateToolArgumentsForRuntime("check_signals", {
+      agent_id: "strict-probe",
+    })).toBeNull();
     expect(validateToolArgumentsForRuntime("ack_handoff", {
       agent_id: "strict-probe",
       thread_id: "11111111-1111-4111-8111-111111111111",
