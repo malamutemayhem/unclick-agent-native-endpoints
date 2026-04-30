@@ -267,9 +267,18 @@ export function createReclaimSignal(
   staleSeconds: number,
 ): ReclaimSignalDescriptor {
   const payload = dispatch.payload ?? {};
+  const hasAckFlag = (value: unknown): boolean => {
+    if (value === true) return true;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "true" || normalized === "1" || normalized === "yes";
+    }
+    if (typeof value === "number") return value === 1;
+    return false;
+  };
   const expectsAck =
-    payload.ack_required === true ||
-    payload.require_ack === true ||
+    hasAckFlag(payload.ack_required) ||
+    hasAckFlag(payload.require_ack) ||
     typeof payload.handoff_message_id === "string" ||
     typeof payload.handoff_thread_id === "string";
 
