@@ -100,6 +100,11 @@ Every handoff should include:
 
 Every worker should acknowledge a direct handoff within the next expected cycle. If there is no ack after two cycles, Bailey may reassign or return the card to the pool.
 
+When the MCP `ack_handoff` tool is available, use it instead of a free-form
+reply. It posts a standard ACK card with current chip, next action, ETA, and
+blocker so the fleet can measure handoff latency without the human translating
+status prose.
+
 ## Event Wakeups
 
 Ready work should wake the right worker immediately instead of waiting for the
