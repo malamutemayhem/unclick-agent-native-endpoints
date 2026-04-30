@@ -40,7 +40,7 @@
     "marked": "^17.0.6",
     "nodemailer": "^8.0.5",
     "turndown": "^7.2.4",
-    "zod": "^3.23.8"
+    "zod": "^4.4.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
