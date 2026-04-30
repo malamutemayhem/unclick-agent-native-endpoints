@@ -186,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .from("mc_fishbowl_profiles")
     .select("api_key_hash, agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
     .not("current_status", "is", null)
-    .lt("current_status_updated_at", staleStatusCutoff);
+    .or(`current_status_updated_at.is.null,current_status_updated_at.lt.${staleStatusCutoff}`);
 
   if (staleStatusErr) {
     console.error("[fishbowl-watcher] stale status fetch error:", staleStatusErr.message);
@@ -194,21 +194,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const staleStatusCandidates = ((staleStatusProfiles ?? []) as ProfileRow[]).filter((p) => {
-    if (!p.current_status || !p.current_status_updated_at) return false;
+    if (!p.current_status) return false;
+    if (!p.current_status_updated_at) return true;
     const statusMs = new Date(p.current_status_updated_at).getTime();
     if (Number.isNaN(statusMs) || nowMs - statusMs < STATUS_STALE_WINDOW_MS) return false;
-    if (!p.next_checkin_at) return true;
-    const checkinMs = new Date(p.next_checkin_at).getTime();
-    return Number.isNaN(checkinMs) || checkinMs <= nowMs;
+    return true;
   });
 
   for (const profile of staleStatusCandidates) {
-    const { error: clearErr } = await supabase
+    let clearQuery = supabase
       .from("mc_fishbowl_profiles")
       .update({ current_status: null, current_status_updated_at: nowIso })
       .eq("api_key_hash", profile.api_key_hash)
-      .eq("agent_id", profile.agent_id)
-      .eq("current_status_updated_at", profile.current_status_updated_at);
+      .eq("agent_id", profile.agent_id);
+    clearQuery = profile.current_status_updated_at
+      ? clearQuery.eq("current_status_updated_at", profile.current_status_updated_at)
+      : clearQuery.is("current_status_updated_at", null);
+    const { error: clearErr } = await clearQuery;
 
     if (clearErr) {
       console.error("[fishbowl-watcher] stale status clear error:", clearErr.message);

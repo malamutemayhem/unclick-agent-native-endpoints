@@ -7299,6 +7299,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           normal: 1,
           low: 0,
         };
+        const DONE_TODO_ARCHIVE_WINDOW_MS = 12 * 60 * 60 * 1000;
 
         // ── Todos ──────────────────────────────────────────────────────────
 
@@ -7457,6 +7458,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (action === "fishbowl_list_todos") {
           const limit = Math.min(Math.max(Number(body.limit ?? 50) || 50, 1), 200);
           const includeDescription = body.include_description === true || body.full_content === true;
+          const includeArchivedDone =
+            body.include_archived_done === true ||
+            body.include_archived === true ||
+            body.show_archived === true;
+          const doneArchiveCutoff = new Date(Date.now() - DONE_TODO_ARCHIVE_WINDOW_MS).toISOString();
           let q = supabase
             .from("mc_fishbowl_todos")
             .select("*")
@@ -7473,6 +7479,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (body.assigned_to_agent_id != null) {
             const a = String(body.assigned_to_agent_id);
             q = q.eq("assigned_to_agent_id", a);
+          }
+          if (!includeArchivedDone && body.status == null) {
+            q = q.or(`status.neq.done,completed_at.is.null,completed_at.gte.${doneArchiveCutoff}`);
           }
           const { data, error } = await q;
           if (error) throw error;
@@ -7512,6 +7521,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             response_bounds: {
               compact: !includeDescription,
               descriptions_included: includeDescription,
+              archived_done_hidden: !includeArchivedDone && body.status == null,
+              done_archive_cutoff: !includeArchivedDone && body.status == null ? doneArchiveCutoff : null,
               todos_returned: decorated.length,
             },
           });
