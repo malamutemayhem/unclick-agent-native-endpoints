@@ -119,3 +119,5 @@ Before merging:
 ## Current Priority Rule
 
 Autopilot foundation work comes before new Pass-family expansion. Pass dogfood work may continue when it supports autopilot, but new Pass product lanes should wait until the autopilot rails are landed.
+
+<!-- build-d probe 4920fa -->
