@@ -42,8 +42,8 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/testpass-run?pack_id=testpass-core&profile=smoke&server_url=https%3A%2F%2Funclick.world%2Fapi%2Fmcp",
-      "schedule": "*/15 * * * *"
+      "path": "/api/testpass-run?pack_id=testpass-core&profile=smoke&server_url=https%3A%2F%2Funclick.world%2Fapi%2Fmcp&source=scheduled",
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/uxpass-run?url=https%3A%2F%2Funclick.world&pack_slug=uxpass-core",

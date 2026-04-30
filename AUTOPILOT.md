@@ -118,6 +118,19 @@ status prose.
 Ready work should wake the right worker immediately instead of waiting for the
 next heartbeat. Cron remains the safety net, not the primary trigger.
 
+## Scheduled TestPass Clock
+
+GitHub Actions `schedule` is a backup clock, not the primary TestPass cadence.
+On 2026-05-01, the workflow was configured for every 5 minutes but natural
+GitHub runs arrived about 70 minutes apart during the first overnight proof
+window. Treat GitHub schedule events as useful receipts, not precise timing.
+
+Use Vercel Cron as the primary scheduled TestPass clock when the project plan
+supports minute-level cron. Keep the cron request authenticated with
+`CRON_SECRET`, include `source=scheduled`, and leave a TestPass run plus signal
+receipt so the fleet can prove unattended execution without reading provider
+logs.
+
 Wake targets:
 
 - Target: event-to-visible-worker-action under 2 minutes.
