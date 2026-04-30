@@ -4850,7 +4850,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               return res.status(400).json({ error: "dispatch_id and agent_id required" });
             }
 
-            const leaseSeconds = getClampedLimit(body.lease_seconds, 900, 86400);
+            const leaseSeconds = getClampedLimit(body.lease_seconds, 60, 86400);
             const { data, error } = await supabase
               .from("mc_agent_dispatches")
               .select(
