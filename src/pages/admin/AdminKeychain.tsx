@@ -466,7 +466,7 @@ export default function AdminKeychain() {
       const url      = URL.createObjectURL(blob);
       const anchor   = document.createElement("a");
       const filename = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
-        ?? `unclick-vault-${new Date().toISOString().slice(0, 10)}.enc`;
+        ?? `unclick-connections-${new Date().toISOString().slice(0, 10)}.enc`;
       anchor.href     = url;
       anchor.download = filename;
       anchor.click();
@@ -506,7 +506,7 @@ export default function AdminKeychain() {
         <div>
           <h1 className="text-2xl font-semibold text-white">Connections</h1>
           <p className="mt-1 text-sm text-[#888]">
-            Securely connect external services for your agents. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
+            Connect services your agents can use. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
           </p>
         </div>
         <div className="flex gap-2">
@@ -514,7 +514,7 @@ export default function AdminKeychain() {
             onClick={() => { setExportOpen(true); setExportPassword(""); setExportConfirm(""); setExportError(null); }}
             className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] transition-colors hover:border-[#E2B93B]/20 hover:text-[#E2B93B]"
           >
-            Export all credentials
+            Export connections
           </button>
           <button
             onClick={openAudit}
@@ -537,9 +537,9 @@ export default function AdminKeychain() {
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#E2B93B]/20 bg-[#E2B93B]/5 px-4 py-3">
         <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[#E2B93B]" />
         <div>
-          <p className="text-xs font-medium text-[#E2B93B]">End-to-end encrypted</p>
+          <p className="text-xs font-medium text-[#E2B93B]">Encrypted connection secrets</p>
           <p className="mt-0.5 text-[11px] text-[#888]">
-            Credentials are AES-256-GCM encrypted with a key derived from your UnClick API key.
+            Connection secrets are AES-256-GCM encrypted with a key derived from your UnClick API key.
             UnClick staff cannot decrypt them — even revealing a value requires your API key to be present in this browser.
           </p>
         </div>
@@ -555,21 +555,21 @@ export default function AdminKeychain() {
       {loading ? (
         <div className="flex items-center gap-2 py-12 text-[#666]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Loading credentials...</span>
+          <span className="text-sm">Loading connections...</span>
         </div>
       ) : credentials.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/[0.08] bg-[#111111] p-8 text-center">
           <KeyRound className="mx-auto h-8 w-8 text-[#333]" />
-          <p className="mt-3 text-sm text-[#666]">No credentials stored</p>
+          <p className="mt-3 text-sm text-[#666]">No connections yet</p>
           <p className="mt-1 text-xs text-[#444]">
-            Connect a platform or add credentials manually.
+            Connect a platform or add a manual key or token.
           </p>
           <button
             onClick={() => setStarterOpen(true)}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-3 py-2 text-xs font-semibold text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add starter credentials
+            Add connection
           </button>
         </div>
       ) : (
@@ -610,11 +610,11 @@ export default function AdminKeychain() {
                         <div className="flex shrink-0 items-center gap-2">
                           {cred.is_valid ? (
                             <span className="flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400">
-                              <CheckCircle2 className="h-3 w-3" /> Active
+                              <CheckCircle2 className="h-3 w-3" /> Connected
                             </span>
                           ) : (
                             <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400">
-                              <XCircle className="h-3 w-3" /> Invalid
+                              <XCircle className="h-3 w-3" /> Needs reconnection
                             </span>
                           )}
 
@@ -779,19 +779,19 @@ export default function AdminKeychain() {
         />
       )}
 
-      {/* Export vault modal */}
+      {/* Export connections modal */}
       {exportOpen && (() => {
         const pw       = exportPassword;
         const strength = exportPasswordStrength(pw);
         const canDownload = pw.length >= 12 && pw === exportConfirm;
         return (
-          <ModalShell title="Export vault" onClose={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}>
+          <ModalShell title="Export connections" onClose={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}>
             <p className="mb-4 text-xs text-[#888]">
-              Download an encrypted backup of all your credentials. Set a password to protect the file.
+              Download an encrypted backup of your Connections secrets. Set a password to protect the file.
             </p>
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-[11px] text-[#888]">Vault password</label>
+                <label className="mb-1 block text-[11px] text-[#888]">Backup password</label>
                 <input
                   type="password"
                   value={exportPassword}
@@ -849,7 +849,7 @@ export default function AdminKeychain() {
         );
       })()}
 
-      {/* Add credential modal */}
+      {/* Add connection modal */}
       {starterOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -862,7 +862,7 @@ export default function AdminKeychain() {
           >
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-4">
-              <h3 className="text-sm font-semibold text-white">Add a credential</h3>
+              <h3 className="text-sm font-semibold text-white">Add connection</h3>
               <button
                 onClick={() => { setStarterOpen(false); resetAddModal(); }}
                 className="rounded-md p-1 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white"
@@ -1014,7 +1014,7 @@ export default function AdminKeychain() {
                     disabled={adding || !readLocalApiKey()}
                     className="w-full rounded-md border border-[#61C1C4]/30 bg-[#61C1C4]/10 py-2 text-xs font-semibold text-[#61C1C4] transition-colors hover:bg-[#61C1C4]/20 disabled:opacity-50"
                   >
-                    {adding ? "Saving..." : "Save Encrypted Credential"}
+                    {adding ? "Saving..." : "Save encrypted connection"}
                   </button>
                 </div>
               </div>
@@ -1097,7 +1097,7 @@ function EditLabelModal({
   return (
     <ModalShell title={`Rename ${cred.connector?.name ?? cred.platform}`} onClose={onClose}>
       <p className="mb-3 text-xs text-[#888]">
-        Labels distinguish multiple credentials for the same platform (e.g. "claude-code", "bailey-plex-3"). Leave blank for the default.
+        Labels distinguish multiple connections for the same platform (e.g. "claude-code", "bailey-plex-3"). Leave blank for the default.
       </p>
       <input
         value={label}
@@ -1175,7 +1175,7 @@ function RotateValuesModal({
   return (
     <ModalShell title={`Rotate ${cred.connector?.name ?? cred.platform} values`} onClose={onClose}>
       <p className="mb-3 text-xs text-[#888]">
-        Paste the new credential as a JSON object. This replaces the stored values and re-encrypts with your UnClick API key.
+        Paste the new connection values as a JSON object. This replaces the stored values and re-encrypts with your UnClick API key.
       </p>
       <div className="mb-2 text-[10px] text-[#666]">Example:</div>
       <pre className="mb-3 overflow-x-auto rounded border border-white/[0.04] bg-black/40 p-2 text-[10px] text-[#888]">
@@ -1244,11 +1244,11 @@ function DeleteModal({
   }
 
   return (
-    <ModalShell title="Delete credential?" onClose={onClose}>
+    <ModalShell title="Delete connection?" onClose={onClose}>
       <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
         <p className="text-xs text-red-400">
-          This permanently removes <span className="font-mono">{cred.platform}{cred.label ? ` [${cred.label}]` : ""}</span> from your vault. The audit log is preserved.
+          This permanently removes <span className="font-mono">{cred.platform}{cred.label ? ` [${cred.label}]` : ""}</span> from Connections. The audit log is preserved.
         </p>
       </div>
       {err && <p className="mt-2 text-[11px] text-red-400">{err}</p>}
@@ -1289,7 +1289,7 @@ function AuditDrawer({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-white">Audit log</h3>
-            <p className="text-[11px] text-[#666]">Every reveal, update, and delete on your vault.</p>
+            <p className="text-[11px] text-[#666]">Every reveal, update, and delete on your Connections secrets.</p>
           </div>
           <button
             onClick={onClose}

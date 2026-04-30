@@ -82,7 +82,7 @@ export default function AdminToolsPage() {
             id="tools-services"
             title="What are Connections?"
             description="Third-party platforms you have linked for your agents, like GitHub, Stripe, or Cloudflare."
-            learnMore="Store credentials securely in Connections, and your agent can interact with these services during conversations. Credentials are encrypted and only accessible to your agent."
+            learnMore="Connections keeps setup state, health, and encrypted secrets in one place so your agents can use approved services without you pasting keys into every run."
           />
           <ConnectedServices connectors={connectors} loading={loading} />
         </section>

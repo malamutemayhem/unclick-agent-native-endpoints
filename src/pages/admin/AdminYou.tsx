@@ -520,7 +520,7 @@ export default function AdminYou() {
                 </div>
                 <div className="border-t border-white/[0.06] pt-3">
                   <p className="mb-2 text-[11px] text-[#666]">
-                    Key not visible? Your browser may have cleared it. Re-issuing generates a new key and invalidates the old one - any saved Connections credentials will need to be re-saved.
+                    Key not visible? Your browser may have cleared it. Re-issuing generates a new key and invalidates the old one - saved Connections may need to be reconnected or re-saved.
                   </p>
                   {reissueError && (
                     <p className="mb-2 text-[11px] text-red-400">{reissueError}</p>

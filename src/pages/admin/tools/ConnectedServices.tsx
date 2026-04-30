@@ -30,13 +30,13 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-6 text-center">
         <Plug className="mx-auto h-8 w-8 text-white/20 mb-3" />
         <p className="text-sm text-white/50">
-          No connections yet. Add service credentials in Connections to enable these tools.
+          No connections yet. Add a service in Connections to enable these tools.
         </p>
         <Link
-          to="/settings"
+          to="/admin/keychain"
           className="mt-3 inline-flex items-center gap-1.5 text-xs text-[#61C1C4] hover:text-[#61C1C4]/80 transition-colors"
         >
-          Go to Keychain
+          Go to Connections
           <ExternalLink className="h-3 w-3" />
         </Link>
       </div>
@@ -56,10 +56,10 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
           statusText = "Connected";
         } else if (connected && !valid) {
           statusDot = "bg-red-500";
-          statusText = "Connection Error";
+          statusText = "Connection error";
         } else {
           statusDot = "bg-white/20";
-          statusText = "Not Connected";
+          statusText = "Not connected";
         }
 
         return (
@@ -85,7 +85,7 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
                 <span className="text-xs text-white/40">{statusText}</span>
               </div>
               <Link
-                to="/settings"
+                to="/admin/keychain"
                 className="text-[10px] text-white/30 hover:text-white/50 transition-colors"
               >
                 Manage
