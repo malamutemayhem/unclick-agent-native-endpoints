@@ -653,6 +653,21 @@ const VISIBLE_TOOLS = [
     },
   },
   {
+    name: "list_actionable_todos",
+    title: "List actionable Fishbowl todos",
+    description:
+      "Returns the highest-priority unassigned open todos, ranked so an agent can pull the next best chip without relying on prose handoffs. agent_id required.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        agent_id: { type: "string" },
+        limit: { type: "number", minimum: 1, maximum: 50, default: 10 },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
     name: "create_idea",
     title: "Propose a Fishbowl idea",
     description:
@@ -1500,6 +1515,7 @@ export function createServer(): Server {
         drop_todo: "fishbowl_drop_todo",
         delete_todo: "fishbowl_delete_todo",
         list_todos: "fishbowl_list_todos",
+        list_actionable_todos: "fishbowl_list_actionable_todos",
         create_idea: "fishbowl_create_idea",
         update_idea: "fishbowl_update_idea",
         vote_on_idea: "fishbowl_vote_on_idea",

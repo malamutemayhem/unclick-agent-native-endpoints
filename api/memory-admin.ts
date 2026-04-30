@@ -6616,6 +6616,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "fishbowl_drop_todo":
       case "fishbowl_delete_todo":
       case "fishbowl_list_todos":
+      case "fishbowl_list_actionable_todos":
       case "fishbowl_create_idea":
       case "fishbowl_update_idea":
       case "fishbowl_vote_on_idea":
@@ -6680,6 +6681,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!t) return { error: `${field} required` };
           if (!UUID_RE.test(t)) return { error: `${field} must be a uuid` };
           return t;
+        };
+        const todoPriorityRank: Record<string, number> = {
+          urgent: 3,
+          high: 2,
+          normal: 1,
+          low: 0,
         };
 
         // ── Todos ──────────────────────────────────────────────────────────
@@ -6894,6 +6901,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             response_bounds: {
               compact: !includeDescription,
               descriptions_included: includeDescription,
+              todos_returned: decorated.length,
+            },
+          });
+        }
+
+        if (action === "fishbowl_list_actionable_todos") {
+          const limit = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 50);
+          const { data, error } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("*")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("status", "open")
+            .is("assigned_to_agent_id", null)
+            .order("created_at", { ascending: true })
+            .limit(500);
+          if (error) throw error;
+
+          const actionable = (data ?? [])
+            .sort((a, b) => {
+              const priorityDelta =
+                (todoPriorityRank[String(b.priority ?? "normal")] ?? 1) -
+                (todoPriorityRank[String(a.priority ?? "normal")] ?? 1);
+              if (priorityDelta !== 0) return priorityDelta;
+
+              const createdA = Date.parse(String(a.created_at ?? "")) || 0;
+              const createdB = Date.parse(String(b.created_at ?? "")) || 0;
+              if (createdA !== createdB) return createdA - createdB;
+
+              return String(a.id).localeCompare(String(b.id));
+            })
+            .slice(0, limit);
+
+          let countMap: Record<string, number> = {};
+          if (actionable.length > 0) {
+            const ids = actionable.map((t) => t.id);
+            const { data: comments } = await supabase
+              .from("mc_fishbowl_comments")
+              .select("target_id")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("target_kind", "todo")
+              .in("target_id", ids);
+            countMap = (comments ?? []).reduce<Record<string, number>>((acc, c) => {
+              const k = c.target_id as string;
+              acc[k] = (acc[k] ?? 0) + 1;
+              return acc;
+            }, {});
+          }
+
+          const decorated = actionable.map((t, index) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+            assigned_to_agent_id: t.assigned_to_agent_id,
+            created_by_agent_id: t.created_by_agent_id,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+            completed_at: t.completed_at,
+            comment_count: countMap[t.id as string] ?? 0,
+            actionable_rank: index + 1,
+          }));
+          return res.status(200).json({
+            todos: decorated,
+            response_bounds: {
+              compact: true,
+              descriptions_included: false,
               todos_returned: decorated.length,
             },
           });
