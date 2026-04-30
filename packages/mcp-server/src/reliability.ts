@@ -1,0 +1,171 @@
+import { createHash } from "node:crypto";
+
+export type DispatchSource =
+  | "fishbowl"
+  | "connectors"
+  | "wakepass"
+  | "testpass"
+  | "uxpass"
+  | "flowpass"
+  | "securitypass"
+  | "manual";
+
+export type DispatchStatus =
+  | "queued"
+  | "leased"
+  | "completed"
+  | "failed"
+  | "stale"
+  | "cancelled";
+
+export type HeartbeatState =
+  | "idle"
+  | "received"
+  | "accepted"
+  | "working"
+  | "blocked"
+  | "completed";
+
+export interface AgentDispatch {
+  apiKeyHash: string;
+  dispatchId: string;
+  source: DispatchSource;
+  targetAgentId: string;
+  taskRef?: string;
+  status: DispatchStatus;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
+  lastRealActionAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface AgentHeartbeat {
+  apiKeyHash: string;
+  agentId: string;
+  dispatchId?: string;
+  state: HeartbeatState;
+  currentTask?: string;
+  nextAction?: string;
+  etaMinutes?: number;
+  blocker?: string;
+  lastRealActionAt?: string;
+  createdAt: string;
+}
+
+export interface DispatchIdInput {
+  source: DispatchSource;
+  targetAgentId: string;
+  taskRef?: string;
+  promptHash?: string;
+  timeBucket?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface StaleLeaseInput {
+  status: DispatchStatus;
+  leaseExpiresAt?: string | null;
+  lastRealActionAt?: string | null;
+}
+
+export interface StaleLeaseDecision {
+  isStale: boolean;
+  reason: "not_leased" | "missing_lease_expiry" | "lease_active" | "lease_expired";
+  staleSeconds: number;
+}
+
+export function createDispatchId(input: DispatchIdInput): string {
+  const hash = createHash("sha256")
+    .update(stableStringify(input))
+    .digest("hex")
+    .slice(0, 32);
+
+  return `dispatch_${hash}`;
+}
+
+export function createTimeBucket(date: Date, bucketSeconds = 5): string {
+  if (!Number.isFinite(bucketSeconds) || bucketSeconds <= 0) {
+    throw new Error("bucketSeconds must be a positive number");
+  }
+
+  const bucketMs = bucketSeconds * 1000;
+  const bucketStart = Math.floor(date.getTime() / bucketMs) * bucketMs;
+  return new Date(bucketStart).toISOString();
+}
+
+export function decideStaleLease(
+  input: StaleLeaseInput,
+  now = new Date(),
+): StaleLeaseDecision {
+  if (input.status !== "leased") {
+    return { isStale: false, reason: "not_leased", staleSeconds: 0 };
+  }
+
+  if (!input.leaseExpiresAt) {
+    return { isStale: false, reason: "missing_lease_expiry", staleSeconds: 0 };
+  }
+
+  const leaseExpiresAtMs = Date.parse(input.leaseExpiresAt);
+  if (Number.isNaN(leaseExpiresAtMs)) {
+    return { isStale: false, reason: "missing_lease_expiry", staleSeconds: 0 };
+  }
+
+  const staleMs = now.getTime() - leaseExpiresAtMs;
+  if (staleMs <= 0) {
+    return { isStale: false, reason: "lease_active", staleSeconds: 0 };
+  }
+
+  return {
+    isStale: true,
+    reason: "lease_expired",
+    staleSeconds: Math.floor(staleMs / 1000),
+  };
+}
+
+export function createHeartbeat(params: {
+  apiKeyHash: string;
+  agentId: string;
+  state: HeartbeatState;
+  createdAt?: Date;
+  dispatchId?: string;
+  currentTask?: string;
+  nextAction?: string;
+  etaMinutes?: number;
+  blocker?: string;
+  lastRealActionAt?: Date;
+}): AgentHeartbeat {
+  const heartbeat: AgentHeartbeat = {
+    apiKeyHash: params.apiKeyHash,
+    agentId: params.agentId,
+    state: params.state,
+    createdAt: (params.createdAt ?? new Date()).toISOString(),
+  };
+
+  if (params.dispatchId) heartbeat.dispatchId = params.dispatchId;
+  if (params.currentTask) heartbeat.currentTask = params.currentTask;
+  if (params.nextAction) heartbeat.nextAction = params.nextAction;
+  if (typeof params.etaMinutes === "number") heartbeat.etaMinutes = params.etaMinutes;
+  if (params.blocker) heartbeat.blocker = params.blocker;
+  if (params.lastRealActionAt) {
+    heartbeat.lastRealActionAt = params.lastRealActionAt.toISOString();
+  }
+
+  return heartbeat;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(",")}}`;
+}
