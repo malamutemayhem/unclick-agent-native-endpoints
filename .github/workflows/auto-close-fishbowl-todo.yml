@@ -1,0 +1,82 @@
+name: Auto-close Fishbowl todo on PR merge
+
+# When a PR merges, scan its body for "Closes Fishbowl todo: <uuid>" markers
+# and POST to the existing memory-admin fishbowl_complete_todo action for
+# each match. A Fishbowl outage must NOT block merge cleanup, so the job
+# always exits 0 even if the API call fails.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  close-todos:
+    if: github.event.pull_request.merged == true
+    name: Close linked Fishbowl todos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract todo ids and call memory-admin
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          UNCLICK_API_KEY: ${{ secrets.FISHBOWL_AUTOCLOSE_TOKEN }}
+          API_URL: https://unclick.world/api/memory-admin
+          AGENT_ID: github-action-autoclose
+        shell: bash
+        run: |
+          # No -e: a single bad id or transport blip should not fail the job.
+          set -uo pipefail
+
+          if [ -z "${UNCLICK_API_KEY:-}" ]; then
+            echo "::warning::FISHBOWL_AUTOCLOSE_TOKEN secret not set - skipping."
+            exit 0
+          fi
+          if [ -z "${PR_BODY:-}" ]; then
+            echo "PR #${PR_NUMBER} body empty - nothing to close."
+            exit 0
+          fi
+
+          # Match "Closes Fishbowl todo: <uuid>" or "closes-fishbowl-todo: <uuid>",
+          # case-insensitive, allowing - or space between the words.
+          UUID_RE='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+          mapfile -t IDS < <(printf '%s\n' "$PR_BODY" \
+            | grep -Eio "closes[- ]fishbowl[- ]todo[: ][[:space:]]*${UUID_RE}" \
+            | grep -Eio "${UUID_RE}" \
+            | sort -u)
+
+          if [ "${#IDS[@]}" -eq 0 ]; then
+            echo "No Fishbowl todo ids found in PR #${PR_NUMBER} body."
+            exit 0
+          fi
+
+          echo "Found ${#IDS[@]} todo id(s) in PR #${PR_NUMBER}: ${IDS[*]}"
+          fail_count=0
+          for id in "${IDS[@]}"; do
+            echo "Closing todo ${id}"
+            payload=$(jq -n --arg agent_id "$AGENT_ID" --arg todo_id "$id" \
+              '{agent_id: $agent_id, todo_id: $todo_id}')
+            curl_exit=0
+            http=$(curl -sS -o resp.json -w "%{http_code}" \
+              --connect-timeout 10 --max-time 30 \
+              -X POST "${API_URL}?action=fishbowl_complete_todo" \
+              -H "Authorization: Bearer ${UNCLICK_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "$payload") || curl_exit=$?
+            http="${http:-000}"
+            echo "  HTTP ${http} (curl exit ${curl_exit})"
+            if [ -f resp.json ]; then cat resp.json; echo; fi
+            if [ "$curl_exit" -ne 0 ] || [ "$http" -ge 400 ] 2>/dev/null; then
+              fail_count=$((fail_count + 1))
+              echo "::warning::Failed to close todo ${id} (HTTP ${http})."
+            fi
+          done
+
+          # Always succeed - a Fishbowl outage must not paint a red X on a
+          # cleanly merged PR. Surface failures via warnings only.
+          if [ "$fail_count" -gt 0 ]; then
+            echo "::warning::${fail_count} of ${#IDS[@]} todo close call(s) failed."
+          fi
+          exit 0

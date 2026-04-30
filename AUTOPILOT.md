@@ -109,6 +109,7 @@ Before opening a PR:
 - Run the smallest useful verification.
 - Run `/review` when available.
 - Mention whether the change is ship-without-ask, ask-once, or gated.
+- If the PR finishes a Fishbowl todo, link it in the PR body with `Closes Fishbowl todo: <uuid>` (one line per todo, case-insensitive, `closes-fishbowl-todo:` also accepted). The `auto-close-fishbowl-todo` workflow scans merged PR bodies and calls `fishbowl_complete_todo` for each match; a Fishbowl outage logs a warning and never blocks merge cleanup.
 
 Before merging:
 
