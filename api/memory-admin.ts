@@ -5065,20 +5065,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
               dispatchForHeartbeat = dispatchData as ReliabilityDispatchRow;
 
-              const staleDecision = decideStaleLease(
-                {
-                  status: dispatchForHeartbeat.status,
-                  leaseExpiresAt: dispatchForHeartbeat.lease_expires_at,
-                  lastRealActionAt: dispatchForHeartbeat.last_real_action_at,
-                },
-                new Date(),
-              );
-
               if (
                 dispatchForHeartbeat.status === "leased" &&
                 dispatchForHeartbeat.lease_owner &&
-                dispatchForHeartbeat.lease_owner !== agentId &&
-                !staleDecision.isStale
+                dispatchForHeartbeat.lease_owner !== agentId
               ) {
                 return res.status(409).json({
                   error: "dispatch is actively leased by another agent",
