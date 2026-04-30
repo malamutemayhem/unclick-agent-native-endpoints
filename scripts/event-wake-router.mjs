@@ -58,6 +58,7 @@ function baseDecision(event) {
         urgency: "high",
         reason: `PR checks completed green for ${run.name || "workflow"} on PR #${prs[0].number}`,
         eventCreatedAt: run.updated_at || run.created_at,
+        needsTriage: false,
       };
     }
   }
@@ -71,6 +72,7 @@ function baseDecision(event) {
         urgency: "high",
         reason: `PR #${pr.number || event.number} is ${action.replaceAll("_", " ")}`,
         eventCreatedAt: pr.updated_at || pr.created_at,
+        needsTriage: false,
       };
     }
   }
@@ -83,6 +85,7 @@ function baseDecision(event) {
       urgency: "normal",
       reason: `Issue #${issue.number} was ${action}`,
       eventCreatedAt: issue.updated_at || issue.created_at,
+      needsTriage: false,
     };
   }
 
@@ -96,6 +99,7 @@ function baseDecision(event) {
         urgency: "high",
         reason: `Manual wake command on issue/PR #${event.issue?.number}`,
         eventCreatedAt: comment.created_at,
+        needsTriage: false,
       };
     }
   }
@@ -106,6 +110,7 @@ function baseDecision(event) {
     urgency: "low",
     reason: `No wake rule matched for ${eventName}${action ? `/${action}` : ""}`,
     eventCreatedAt: new Date().toISOString(),
+    needsTriage: false,
   };
 }
 
@@ -146,6 +151,7 @@ async function cheapTriage(brief, decision) {
   const apiKey = process.env.OPENROUTER_API_KEY || "";
   const model = process.env.OPENROUTER_WAKE_MODEL || "";
   if (!apiKey || !model || !decision.wake) return { used: false, decision };
+  if (decision.needsTriage === false) return { used: false, decision };
 
   const prompt = [
     "Return only compact JSON.",
