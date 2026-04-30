@@ -87,6 +87,14 @@ Examples:
 - A docs file names retired tools: ship without ask if current code is clear.
 - A new cron will make changes on a schedule: ask once, then ship after approval.
 
+## Canonical Heartbeat Template
+
+Scheduled workers and recurring wakeups should use `.claude/agents/heartbeat.md`
+as the in-repo heartbeat source of truth. If a broadcast instruction conflicts
+with that template, update the template in a PR instead of patching each worker
+by prose. The silent-exit rule is explicit: a zero-event cycle must not call
+`post_message`.
+
 ## Fishbowl Handoff Rules
 
 Every handoff should include:
