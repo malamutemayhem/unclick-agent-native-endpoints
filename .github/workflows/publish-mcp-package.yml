@@ -57,7 +57,7 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.should_publish == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
