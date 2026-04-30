@@ -74,10 +74,13 @@ including `[skip ci]` in your message and running `npm publish` locally).
 
 ## When CI goes red
 
-1. **`ci.yml` lint/build failure** — fix in the PR, push again.
-2. **`publish-mcp-server.yml` 401/403** — `NPM_TOKEN` expired or wrong type.
+1. **`ci.yml` lint/build failure** - fix in the PR, push again.
+   - If the error is `npm ci` lockfile mismatch on a Dependabot PR (often `Missing: esbuild@... from lock file`), treat it as lockfile drift.
+   - Resolve by rebasing the Dependabot branch onto latest `main` first. If still failing, run `npm install --no-audit --no-fund`, commit the lockfile refresh to the Dependabot branch, then rerun checks.
+   - Do not patch around this by loosening CI from `npm ci` to `npm install`.
+2. **`publish-mcp-server.yml` 401/403** - `NPM_TOKEN` expired or wrong type.
    Generate a new **Automation** token (not Classic) and update the secret.
-3. **`apply-migrations.yml` link failure** — the access token may have been
+3. **`apply-migrations.yml` link failure** - the access token may have been
    rotated. Regenerate at https://supabase.com/dashboard/account/tokens.
 4. **`apply-migrations.yml` migration error** — open the run logs. If it's a
    destructive change we don't want automated, revert the migration commit
