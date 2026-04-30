@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createDispatchId,
   createHeartbeat,
+  createOperatorTelemetry,
+  createQueuedDispatch,
   createReclaimSignal,
   createTimeBucket,
   decideStaleLease,
@@ -43,6 +45,36 @@ describe("reliability helpers", () => {
     });
 
     expect(first).not.toBe(second);
+  });
+
+  it("creates a queued dispatch from stable inputs", () => {
+    const dispatch = createQueuedDispatch({
+      apiKeyHash: "hash_123",
+      source: "wakepass",
+      targetAgentId: "coder",
+      taskRef: "pr-314",
+      timeBucket: "2026-04-30T13:40:00.000Z",
+      payload: { b: 2, a: 1 },
+      createdAt: new Date("2026-04-30T13:41:00.000Z"),
+    });
+
+    expect(dispatch).toEqual({
+      apiKeyHash: "hash_123",
+      dispatchId: createDispatchId({
+        source: "wakepass",
+        targetAgentId: "coder",
+        taskRef: "pr-314",
+        timeBucket: "2026-04-30T13:40:00.000Z",
+        payload: { a: 1, b: 2 },
+      }),
+      source: "wakepass",
+      targetAgentId: "coder",
+      taskRef: "pr-314",
+      status: "queued",
+      createdAt: "2026-04-30T13:41:00.000Z",
+      updatedAt: "2026-04-30T13:41:00.000Z",
+      payload: { b: 2, a: 1 },
+    });
   });
 
   it("buckets dispatch time into stable windows", () => {
@@ -92,6 +124,28 @@ describe("reliability helpers", () => {
     ).toMatchObject({ isStale: false, reason: "not_leased" });
   });
 
+  it("treats missing or invalid lease expiry as not reclaimable", () => {
+    expect(
+      decideStaleLease(
+        {
+          status: "leased",
+          leaseExpiresAt: null,
+        },
+        new Date("2026-04-30T11:00:10.000Z"),
+      ),
+    ).toEqual({ isStale: false, reason: "missing_lease_expiry", staleSeconds: 0 });
+
+    expect(
+      decideStaleLease(
+        {
+          status: "leased",
+          leaseExpiresAt: "not-a-date",
+        },
+        new Date("2026-04-30T11:00:10.000Z"),
+      ),
+    ).toEqual({ isStale: false, reason: "missing_lease_expiry", staleSeconds: 0 });
+  });
+
   it("creates compact heartbeat metadata", () => {
     const heartbeat = createHeartbeat({
       apiKeyHash: "hash_123",
@@ -116,6 +170,60 @@ describe("reliability helpers", () => {
       createdAt: "2026-04-30T11:00:00.000Z",
       lastRealActionAt: "2026-04-30T10:59:30.000Z",
     });
+  });
+
+  it("creates operator-safe telemetry without tenant hash or payload", () => {
+    const dispatch = createQueuedDispatch({
+      apiKeyHash: "hash_secret",
+      source: "fishbowl",
+      targetAgentId: "plex",
+      taskRef: "handoff-1",
+      payload: { private_note: "do not surface" },
+      createdAt: new Date("2026-04-30T13:00:00.000Z"),
+    });
+
+    const heartbeat = createHeartbeat({
+      apiKeyHash: "hash_secret",
+      agentId: "plex",
+      dispatchId: dispatch.dispatchId,
+      state: "blocked",
+      currentTask: "resolve conflict",
+      nextAction: "post blocker",
+      blocker: "merge conflict",
+      etaMinutes: 15,
+      createdAt: new Date("2026-04-30T13:02:00.000Z"),
+      lastRealActionAt: new Date("2026-04-30T13:01:00.000Z"),
+    });
+
+    const telemetry = createOperatorTelemetry({
+      dispatch,
+      heartbeat,
+      staleDecision: {
+        isStale: false,
+        reason: "lease_active",
+        staleSeconds: 0,
+      },
+    });
+
+    expect(telemetry).toEqual({
+      dispatchId: dispatch.dispatchId,
+      source: "fishbowl",
+      targetAgentId: "plex",
+      status: "queued",
+      updatedAt: "2026-04-30T13:00:00.000Z",
+      agentId: "plex",
+      heartbeatState: "blocked",
+      currentTask: "resolve conflict",
+      nextAction: "post blocker",
+      blocker: "merge conflict",
+      etaMinutes: 15,
+      lastRealActionAt: "2026-04-30T13:01:00.000Z",
+      stale: false,
+      staleReason: "lease_active",
+      staleSeconds: 0,
+    });
+    expect(JSON.stringify(telemetry)).not.toContain("hash_secret");
+    expect(JSON.stringify(telemetry)).not.toContain("private_note");
   });
 
   it("marks missing-ack handoffs as a WakePass reliability miss", () => {

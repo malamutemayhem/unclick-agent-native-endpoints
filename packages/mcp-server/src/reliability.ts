@@ -81,6 +81,37 @@ export interface StaleLeaseDecision {
   staleSeconds: number;
 }
 
+export interface QueuedDispatchParams {
+  apiKeyHash: string;
+  source: DispatchSource;
+  targetAgentId: string;
+  taskRef?: string;
+  promptHash?: string;
+  timeBucket?: string;
+  payload?: Record<string, unknown>;
+  createdAt?: Date;
+}
+
+export interface OperatorTelemetry {
+  dispatchId?: string;
+  source?: DispatchSource;
+  targetAgentId?: string;
+  status?: DispatchStatus;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
+  updatedAt?: string;
+  agentId?: string;
+  heartbeatState?: HeartbeatState;
+  currentTask?: string;
+  nextAction?: string;
+  etaMinutes?: number;
+  blocker?: string;
+  lastRealActionAt?: string;
+  stale?: boolean;
+  staleReason?: StaleLeaseDecision["reason"];
+  staleSeconds?: number;
+}
+
 export function createDispatchId(input: DispatchIdInput): string {
   const hash = createHash("sha256")
     .update(stableStringify(input))
@@ -88,6 +119,34 @@ export function createDispatchId(input: DispatchIdInput): string {
     .slice(0, 32);
 
   return `dispatch_${hash}`;
+}
+
+export function createQueuedDispatch(params: QueuedDispatchParams): AgentDispatch {
+  const createdAt = (params.createdAt ?? new Date()).toISOString();
+  const idInput: DispatchIdInput = {
+    source: params.source,
+    targetAgentId: params.targetAgentId,
+  };
+
+  if (params.taskRef) idInput.taskRef = params.taskRef;
+  if (params.promptHash) idInput.promptHash = params.promptHash;
+  if (params.timeBucket) idInput.timeBucket = params.timeBucket;
+  if (params.payload) idInput.payload = params.payload;
+
+  const dispatch: AgentDispatch = {
+    apiKeyHash: params.apiKeyHash,
+    dispatchId: createDispatchId(idInput),
+    source: params.source,
+    targetAgentId: params.targetAgentId,
+    status: "queued",
+    createdAt,
+    updatedAt: createdAt,
+  };
+
+  if (params.taskRef) dispatch.taskRef = params.taskRef;
+  if (params.payload) dispatch.payload = params.payload;
+
+  return dispatch;
 }
 
 export function createTimeBucket(date: Date, bucketSeconds = 5): string {
@@ -158,6 +217,49 @@ export function createHeartbeat(params: {
   }
 
   return heartbeat;
+}
+
+export function createOperatorTelemetry(input: {
+  dispatch?: AgentDispatch;
+  heartbeat?: AgentHeartbeat;
+  staleDecision?: StaleLeaseDecision;
+}): OperatorTelemetry {
+  const telemetry: OperatorTelemetry = {};
+
+  if (input.dispatch) {
+    telemetry.dispatchId = input.dispatch.dispatchId;
+    telemetry.source = input.dispatch.source;
+    telemetry.targetAgentId = input.dispatch.targetAgentId;
+    telemetry.status = input.dispatch.status;
+    telemetry.updatedAt = input.dispatch.updatedAt;
+    if (input.dispatch.leaseOwner) telemetry.leaseOwner = input.dispatch.leaseOwner;
+    if (input.dispatch.leaseExpiresAt) {
+      telemetry.leaseExpiresAt = input.dispatch.leaseExpiresAt;
+    }
+    if (input.dispatch.lastRealActionAt) {
+      telemetry.lastRealActionAt = input.dispatch.lastRealActionAt;
+    }
+  }
+
+  if (input.heartbeat) {
+    telemetry.dispatchId = input.heartbeat.dispatchId ?? telemetry.dispatchId;
+    telemetry.agentId = input.heartbeat.agentId;
+    telemetry.heartbeatState = input.heartbeat.state;
+    telemetry.currentTask = input.heartbeat.currentTask;
+    telemetry.nextAction = input.heartbeat.nextAction;
+    telemetry.etaMinutes = input.heartbeat.etaMinutes;
+    telemetry.blocker = input.heartbeat.blocker;
+    telemetry.lastRealActionAt =
+      input.heartbeat.lastRealActionAt ?? telemetry.lastRealActionAt;
+  }
+
+  if (input.staleDecision) {
+    telemetry.stale = input.staleDecision.isStale;
+    telemetry.staleReason = input.staleDecision.reason;
+    telemetry.staleSeconds = input.staleDecision.staleSeconds;
+  }
+
+  return telemetry;
 }
 
 export function createReclaimSignal(
