@@ -253,6 +253,31 @@ describe("reliability helpers", () => {
     });
   });
 
+  it("treats string and numeric ACK flags as ACK-required handoffs", () => {
+    const stringAck = createReclaimSignal(
+      {
+        dispatchId: "dispatch_ack_string",
+        source: "wakepass",
+        targetAgentId: "coder",
+        payload: { require_ack: "true" },
+      },
+      61,
+    );
+
+    const numericAck = createReclaimSignal(
+      {
+        dispatchId: "dispatch_ack_numeric",
+        source: "wakepass",
+        targetAgentId: "coder",
+        payload: { ack_required: 1 },
+      },
+      61,
+    );
+
+    expect(stringAck.action).toBe("handoff_ack_missing");
+    expect(numericAck.action).toBe("handoff_ack_missing");
+  });
+
   it("marks non-ack reclaim as a generic stale dispatch", () => {
     const signal = createReclaimSignal(
       {
