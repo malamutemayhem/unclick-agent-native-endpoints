@@ -1,6 +1,8 @@
 # Reliability Substrate
 
-The reliability substrate gives the 🤖 fleet a durable way to hand work between agents without relying on chat alone. It lives behind `/api/memory-admin` and is keyed by your tenant's `UNCLICK_API_KEY`.
+The reliability substrate gives the agent fleet a durable way to hand work between agents without relying on chat alone. It lives behind `/api/memory-admin` and is keyed by your tenant's `UNCLICK_API_KEY`.
+
+For the operator-facing validation runbook (curl + per-step assertions), see `docs/reliability-substrate-smoke.md`. This document is the developer reference: concepts, action map, request/response shapes, error codes, and the runnable smoke script.
 
 ## Concepts
 
@@ -63,7 +65,7 @@ Request:
 ```
 Response: `{ "data": <heartbeat row> }`.
 
-**Strict ownership rule.** Heartbeat publish always returns `409` if `dispatch.status === "leased"` AND `dispatch.lease_owner` is set AND `dispatch.lease_owner !== agent_id`, regardless of whether the lease has expired. Stale handling lives in `dispatch_reclaim_stale` only — heartbeat publish never reclaims, so a paused agent can not silently overwrite another agent's lease.
+**Strict ownership rule.** Heartbeat publish always returns `409` if `dispatch.status === "leased"` AND `dispatch.lease_owner` is set AND `dispatch.lease_owner !== agent_id`, regardless of whether the lease has expired. Stale handling lives in `dispatch_reclaim_stale` only - heartbeat publish never reclaims, so a paused agent can not silently overwrite another agent's lease.
 
 Other rejection codes: `400` (missing `agent_id` or invalid `state`), `404` (unknown `dispatch_id`), `409` (dispatch row changed between read and write).
 
@@ -85,7 +87,7 @@ Request:
 ```json
 { "limit": 25, "dry_run": false }
 ```
-Response: `{ "reclaimed_count": N, "reclaimed": [...], "dry_run": false }`. Each reclaim emits a WakePass signal — `handoff_ack_missing` when the dispatch payload expected an ACK, otherwise `stale_dispatch_reclaimed`.
+Response: `{ "reclaimed_count": N, "reclaimed": [...], "dry_run": false }`. Each reclaim emits a WakePass signal - `handoff_ack_missing` when the dispatch payload expected an ACK, otherwise `stale_dispatch_reclaimed`.
 
 ## Curl examples
 
@@ -132,4 +134,4 @@ export UNCLICK_API_KEY=uc_...                                   # tenant key
 bash scripts/smoke-reliability.sh
 ```
 
-The script generates a fresh idempotency key per run, walks the happy path (`create → ack → heartbeat → complete`) plus an optional `fail` and `reclaim_stale` pass, prints PASS/FAIL with the HTTP status per action, and exits `0` only if every action passes. See `scripts/smoke-reliability.sh` for the source.
+The script generates a fresh idempotency key per run, walks the happy path (`create -> ack -> heartbeat -> complete`) plus an optional `fail` and `reclaim_stale` pass, prints PASS/FAIL with the HTTP status per action, and exits `0` only if every action passes. See `scripts/smoke-reliability.sh` for the source.
