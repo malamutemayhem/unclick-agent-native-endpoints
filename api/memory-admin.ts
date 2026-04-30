@@ -35,6 +35,9 @@
  *   - admin_build_tasks: method=list|get|create|update_status|soft_delete
  *   - admin_build_workers: method=list|register|update|delete|health_check
  *   - admin_build_dispatch: POST with task_id + worker_id (same tenant)
+ *   - reliability_dispatches: method=list|get|upsert|claim|release
+ *   - reliability_heartbeats: method=list|publish
+ *   - reliability_reclaim_stale: POST with optional { limit, dry_run }
  *
  * Memory reliability instrumentation (Bearer <api_key>):
  *   - log_tool_event: POST from MCP server; inserts memory_load_events row,
@@ -94,6 +97,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
+import {
+  createDispatchId,
+  createHeartbeat,
+  createReclaimSignal,
+  createTimeBucket,
+  decideStaleLease,
+} from "../packages/mcp-server/src/reliability.js";
 import { emitSignal } from "../packages/mcp-server/src/signals/emit.js";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
@@ -116,6 +126,80 @@ function sha256hex(input: string): string {
 
 function normalizeFishbowlText(input: string): string {
   return input.replace(/[\u2013\u2014]/g, "-");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+const RELIABILITY_SOURCES = [
+  "fishbowl",
+  "connectors",
+  "wakepass",
+  "testpass",
+  "uxpass",
+  "flowpass",
+  "securitypass",
+  "manual",
+] as const;
+
+const RELIABILITY_STATUSES = [
+  "queued",
+  "leased",
+  "completed",
+  "failed",
+  "stale",
+  "cancelled",
+] as const;
+
+const RELIABILITY_HEARTBEAT_STATES = [
+  "idle",
+  "received",
+  "accepted",
+  "working",
+  "blocked",
+  "completed",
+] as const;
+
+type ReliabilitySource = (typeof RELIABILITY_SOURCES)[number];
+type ReliabilityStatus = (typeof RELIABILITY_STATUSES)[number];
+type ReliabilityHeartbeatState = (typeof RELIABILITY_HEARTBEAT_STATES)[number];
+
+type ReliabilityDispatchRow = {
+  id: string;
+  api_key_hash: string;
+  dispatch_id: string;
+  source: ReliabilitySource;
+  target_agent_id: string;
+  task_ref: string | null;
+  status: ReliabilityStatus;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
+  last_real_action_at: string | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function isReliabilitySource(value: unknown): value is ReliabilitySource {
+  return typeof value === "string" && RELIABILITY_SOURCES.includes(value as ReliabilitySource);
+}
+
+function isReliabilityStatus(value: unknown): value is ReliabilityStatus {
+  return typeof value === "string" && RELIABILITY_STATUSES.includes(value as ReliabilityStatus);
+}
+
+function isReliabilityHeartbeatState(value: unknown): value is ReliabilityHeartbeatState {
+  return (
+    typeof value === "string" &&
+    RELIABILITY_HEARTBEAT_STATES.includes(value as ReliabilityHeartbeatState)
+  );
+}
+
+function getClampedLimit(value: unknown, fallback = 50, max = 200): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
 }
 
 function getRequestBaseUrl(req: VercelRequest): string | null {
@@ -4633,6 +4717,448 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (updErr) throw updErr;
 
         return res.status(200).json({ data: eventData });
+      }
+
+      case "reliability_dispatches": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const method = String(req.query.method ?? req.body?.method ?? "list").trim().toLowerCase();
+
+        switch (method) {
+          case "list": {
+            const limit = getClampedLimit(req.query.limit ?? req.body?.limit, 50, 200);
+            let query = supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .order("created_at", { ascending: false })
+              .limit(limit);
+
+            const status = String(req.query.status ?? req.body?.status ?? "").trim();
+            const source = String(req.query.source ?? req.body?.source ?? "").trim();
+            const targetAgentId = String(
+              req.query.target_agent_id ?? req.body?.target_agent_id ?? "",
+            ).trim();
+            const leaseOwner = String(req.query.lease_owner ?? req.body?.lease_owner ?? "").trim();
+
+            if (status) query = query.eq("status", status);
+            if (source) query = query.eq("source", source);
+            if (targetAgentId) query = query.eq("target_agent_id", targetAgentId);
+            if (leaseOwner) query = query.eq("lease_owner", leaseOwner);
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return res.status(200).json({ dispatches: data ?? [] });
+          }
+
+          case "get": {
+            const dispatchId = String(
+              req.query.dispatch_id ?? req.body?.dispatch_id ?? "",
+            ).trim();
+            if (!dispatchId) return res.status(400).json({ error: "dispatch_id required" });
+
+            const { data, error } = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", dispatchId)
+              .maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ error: "dispatch not found" });
+            return res.status(200).json({ data });
+          }
+
+          case "upsert": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const body = (req.body ?? {}) as Record<string, unknown>;
+            const source = body.source;
+            const targetAgentId = String(body.target_agent_id ?? "").trim();
+            if (!isReliabilitySource(source)) {
+              return res.status(400).json({ error: "valid source required" });
+            }
+            if (!targetAgentId) {
+              return res.status(400).json({ error: "target_agent_id required" });
+            }
+
+            const taskRef = String(body.task_ref ?? "").trim() || undefined;
+            const promptHash = String(body.prompt_hash ?? "").trim() || undefined;
+            const bucketSeconds = getClampedLimit(body.time_bucket_seconds, 60, 3600);
+            const timeBucket =
+              String(body.time_bucket ?? "").trim() ||
+              createTimeBucket(new Date(), bucketSeconds);
+            const payload =
+              isRecord(body.payload) ? body.payload : isRecord(body.payload_json) ? body.payload_json : {};
+            const explicitDispatchId = String(body.dispatch_id ?? "").trim() || undefined;
+            const dispatchId =
+              explicitDispatchId ??
+              createDispatchId({
+                source,
+                targetAgentId,
+                taskRef,
+                promptHash,
+                timeBucket,
+                payload,
+              });
+
+            const row = {
+              api_key_hash: apiKeyHash,
+              dispatch_id: dispatchId,
+              source,
+              target_agent_id: targetAgentId,
+              task_ref: taskRef ?? null,
+              status: "queued",
+              payload,
+            };
+
+            const { data, error } = await supabase
+              .from("mc_agent_dispatches")
+              .insert(row)
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .single();
+
+            if (error) {
+              if ((error as { code?: string }).code === "23505") {
+                const existing = await supabase
+                  .from("mc_agent_dispatches")
+                  .select(
+                    "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+                  )
+                  .eq("api_key_hash", apiKeyHash)
+                  .eq("dispatch_id", dispatchId)
+                  .maybeSingle();
+                if (existing.error) throw existing.error;
+                return res.status(200).json({ data: existing.data, was_duplicate: true });
+              }
+              throw error;
+            }
+
+            return res.status(200).json({ data, was_duplicate: false });
+          }
+
+          case "claim": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const body = (req.body ?? {}) as Record<string, unknown>;
+            const dispatchId = String(body.dispatch_id ?? "").trim();
+            const agentId = String(body.agent_id ?? "").trim();
+            if (!dispatchId || !agentId) {
+              return res.status(400).json({ error: "dispatch_id and agent_id required" });
+            }
+
+            const leaseSeconds = getClampedLimit(body.lease_seconds, 900, 86400);
+            const { data, error } = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", dispatchId)
+              .maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ error: "dispatch not found" });
+
+            const dispatch = data as ReliabilityDispatchRow;
+            const staleDecision = decideStaleLease(
+              {
+                status: dispatch.status,
+                leaseExpiresAt: dispatch.lease_expires_at,
+                lastRealActionAt: dispatch.last_real_action_at,
+              },
+              new Date(),
+            );
+
+            if (
+              dispatch.status === "completed" ||
+              dispatch.status === "failed" ||
+              dispatch.status === "cancelled"
+            ) {
+              return res.status(409).json({ error: `dispatch is already ${dispatch.status}` });
+            }
+
+            if (
+              dispatch.status === "leased" &&
+              dispatch.lease_owner &&
+              dispatch.lease_owner !== agentId &&
+              !staleDecision.isStale
+            ) {
+              return res.status(409).json({
+                error: "dispatch is already actively leased",
+                lease_owner: dispatch.lease_owner,
+                lease_expires_at: dispatch.lease_expires_at,
+              });
+            }
+
+            const now = new Date();
+            const leaseExpiresAt = new Date(now.getTime() + leaseSeconds * 1000).toISOString();
+            const { data: claimed, error: claimError } = await supabase
+              .from("mc_agent_dispatches")
+              .update({
+                status: "leased",
+                lease_owner: agentId,
+                lease_expires_at: leaseExpiresAt,
+                updated_at: now.toISOString(),
+              })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", dispatchId)
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .maybeSingle();
+            if (claimError) throw claimError;
+            if (!claimed) return res.status(404).json({ error: "dispatch not found" });
+
+            return res.status(200).json({
+              data: claimed,
+              reclaimed_stale_lease: staleDecision.isStale,
+            });
+          }
+
+          case "release": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const body = (req.body ?? {}) as Record<string, unknown>;
+            const dispatchId = String(body.dispatch_id ?? "").trim();
+            const agentId = String(body.agent_id ?? "").trim();
+            const nextStatusRaw = body.status;
+            if (!dispatchId || !agentId) {
+              return res.status(400).json({ error: "dispatch_id and agent_id required" });
+            }
+            if (nextStatusRaw !== undefined && !isReliabilityStatus(nextStatusRaw)) {
+              return res.status(400).json({ error: "invalid status" });
+            }
+            if (nextStatusRaw === "leased") {
+              return res.status(400).json({ error: "release cannot keep status leased" });
+            }
+
+            const { data, error } = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", dispatchId)
+              .maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ error: "dispatch not found" });
+
+            const dispatch = data as ReliabilityDispatchRow;
+            if (dispatch.lease_owner && dispatch.lease_owner !== agentId) {
+              return res.status(409).json({
+                error: "dispatch is leased by another agent",
+                lease_owner: dispatch.lease_owner,
+              });
+            }
+
+            const nextStatus = (nextStatusRaw as ReliabilityStatus | undefined) ?? "queued";
+            const now = new Date().toISOString();
+            const { data: released, error: releaseError } = await supabase
+              .from("mc_agent_dispatches")
+              .update({
+                status: nextStatus,
+                lease_owner: null,
+                lease_expires_at: null,
+                last_real_action_at:
+                  nextStatus === "completed" || nextStatus === "failed" ? now : dispatch.last_real_action_at,
+                updated_at: now,
+              })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", dispatchId)
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .maybeSingle();
+            if (releaseError) throw releaseError;
+            if (!released) return res.status(404).json({ error: "dispatch not found" });
+
+            return res.status(200).json({ data: released });
+          }
+
+          default:
+            return res.status(400).json({ error: `Unknown method: ${method}` });
+        }
+      }
+
+      case "reliability_heartbeats": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+        const method = String(req.query.method ?? req.body?.method ?? "list").trim().toLowerCase();
+
+        switch (method) {
+          case "list": {
+            const limit = getClampedLimit(req.query.limit ?? req.body?.limit, 50, 200);
+            const agentId = String(req.query.agent_id ?? req.body?.agent_id ?? "").trim();
+            const dispatchId = String(req.query.dispatch_id ?? req.body?.dispatch_id ?? "").trim();
+            let query = supabase
+              .from("mc_agent_heartbeats")
+              .select(
+                "id, api_key_hash, agent_id, dispatch_id, state, current_task, next_action, eta_minutes, blocker, last_real_action_at, created_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .order("created_at", { ascending: false })
+              .limit(limit);
+
+            if (agentId) query = query.eq("agent_id", agentId);
+            if (dispatchId) query = query.eq("dispatch_id", dispatchId);
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return res.status(200).json({ heartbeats: data ?? [] });
+          }
+
+          case "publish": {
+            if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+            const body = (req.body ?? {}) as Record<string, unknown>;
+            const agentId = String(body.agent_id ?? "").trim();
+            const state = body.state;
+            if (!agentId) return res.status(400).json({ error: "agent_id required" });
+            if (!isReliabilityHeartbeatState(state)) {
+              return res.status(400).json({ error: "valid state required" });
+            }
+
+            const dispatchId = String(body.dispatch_id ?? "").trim() || undefined;
+            const etaMinutesRaw = body.eta_minutes;
+            const etaMinutes =
+              typeof etaMinutesRaw === "number" && Number.isFinite(etaMinutesRaw)
+                ? Math.max(0, Math.floor(etaMinutesRaw))
+                : undefined;
+            const lastRealActionAt = body.last_real_action_at
+              ? new Date(String(body.last_real_action_at))
+              : new Date();
+            const heartbeat = createHeartbeat({
+              apiKeyHash,
+              agentId,
+              dispatchId,
+              state,
+              currentTask: String(body.current_task ?? "").trim() || undefined,
+              nextAction: String(body.next_action ?? "").trim() || undefined,
+              etaMinutes,
+              blocker: String(body.blocker ?? "").trim() || undefined,
+              lastRealActionAt:
+                Number.isNaN(lastRealActionAt.getTime()) ? undefined : lastRealActionAt,
+            });
+
+            const { data, error } = await supabase
+              .from("mc_agent_heartbeats")
+              .insert({
+                api_key_hash: heartbeat.apiKeyHash,
+                agent_id: heartbeat.agentId,
+                dispatch_id: heartbeat.dispatchId ?? null,
+                state: heartbeat.state,
+                current_task: heartbeat.currentTask ?? null,
+                next_action: heartbeat.nextAction ?? null,
+                eta_minutes: heartbeat.etaMinutes ?? null,
+                blocker: heartbeat.blocker ?? null,
+                last_real_action_at: heartbeat.lastRealActionAt ?? null,
+                created_at: heartbeat.createdAt,
+              })
+              .select(
+                "id, api_key_hash, agent_id, dispatch_id, state, current_task, next_action, eta_minutes, blocker, last_real_action_at, created_at",
+              )
+              .single();
+            if (error) throw error;
+
+            if (dispatchId) {
+              const dispatchPatch: Record<string, unknown> = {
+                last_real_action_at: heartbeat.lastRealActionAt ?? heartbeat.createdAt,
+                updated_at: new Date().toISOString(),
+              };
+              if (state === "completed") {
+                dispatchPatch.status = "completed";
+                dispatchPatch.lease_owner = null;
+                dispatchPatch.lease_expires_at = null;
+              }
+              const { error: dispatchUpdateError } = await supabase
+                .from("mc_agent_dispatches")
+                .update(dispatchPatch)
+                .eq("api_key_hash", apiKeyHash)
+                .eq("dispatch_id", dispatchId);
+              if (dispatchUpdateError) throw dispatchUpdateError;
+            }
+
+            return res.status(200).json({ data });
+          }
+
+          default:
+            return res.status(400).json({ error: `Unknown method: ${method}` });
+        }
+      }
+
+      case "reliability_reclaim_stale": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const limit = getClampedLimit(body.limit ?? req.query.limit, 25, 200);
+        const dryRun = body.dry_run === true || req.query.dry_run === "1";
+        const now = new Date();
+        const { data, error } = await supabase
+          .from("mc_agent_dispatches")
+          .select(
+            "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+          )
+          .eq("api_key_hash", apiKeyHash)
+          .eq("status", "leased")
+          .not("lease_expires_at", "is", null)
+          .order("lease_expires_at", { ascending: true })
+          .limit(limit);
+        if (error) throw error;
+
+        const reclaimed: Array<Record<string, unknown>> = [];
+        for (const row of (data ?? []) as ReliabilityDispatchRow[]) {
+          const decision = decideStaleLease(
+            {
+              status: row.status,
+              leaseExpiresAt: row.lease_expires_at,
+              lastRealActionAt: row.last_real_action_at,
+            },
+            now,
+          );
+          if (!decision.isStale) continue;
+
+          const signal = createReclaimSignal(row, decision.staleSeconds);
+          if (!dryRun) {
+            const { error: reclaimError } = await supabase
+              .from("mc_agent_dispatches")
+              .update({
+                status: "stale",
+                lease_owner: null,
+                lease_expires_at: null,
+                updated_at: now.toISOString(),
+              })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", row.dispatch_id);
+            if (reclaimError) throw reclaimError;
+
+            await emitSignal({
+              apiKeyHash,
+              tool: "wakepass",
+              action: signal.action,
+              severity: signal.action === "handoff_ack_missing" ? "action_needed" : "info",
+              summary: signal.summary,
+              payload: signal.payload,
+            });
+          }
+
+          reclaimed.push({
+            dispatch_id: row.dispatch_id,
+            target_agent_id: row.target_agent_id,
+            source: row.source,
+            stale_seconds: decision.staleSeconds,
+            action: signal.action,
+            dry_run: dryRun,
+          });
+        }
+
+        return res.status(200).json({
+          reclaimed_count: reclaimed.length,
+          reclaimed,
+          dry_run: dryRun,
+        });
       }
 
       // ── Tenant auto-load settings ───────────────────────────────────

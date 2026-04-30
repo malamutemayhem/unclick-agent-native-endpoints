@@ -173,6 +173,7 @@ The MVP is working when:
 - a stuck run can be recovered from a Pass surface without manual cross-tool hunting.
 - every wake attempt has a route history.
 - every failed wake has a clear next route or human fallback.
+- any handoff that required an ACK but aged past reclaim emits explicit `handoff_ack_missing` evidence instead of disappearing as a generic stale lease.
 
 ## Launch copy
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDispatchId,
   createHeartbeat,
+  createReclaimSignal,
   createTimeBucket,
   decideStaleLease,
 } from "../reliability.js";
@@ -114,6 +115,57 @@ describe("reliability helpers", () => {
       etaMinutes: 4,
       createdAt: "2026-04-30T11:00:00.000Z",
       lastRealActionAt: "2026-04-30T10:59:30.000Z",
+    });
+  });
+
+  it("marks missing-ack handoffs as a WakePass reliability miss", () => {
+    const signal = createReclaimSignal(
+      {
+        dispatchId: "dispatch_ack",
+        source: "fishbowl",
+        targetAgentId: "plex",
+        taskRef: "todo-123",
+        payload: { ack_required: true, handoff_message_id: "msg-abc" },
+      },
+      95,
+    );
+
+    expect(signal).toEqual({
+      action: "handoff_ack_missing",
+      summary: "WakePass reliability miss: no ACK arrived before reclaim for plex",
+      payload: {
+        dispatch_id: "dispatch_ack",
+        source: "fishbowl",
+        target_agent_id: "plex",
+        task_ref: "todo-123",
+        stale_seconds: 95,
+        ack_required: true,
+        handoff_message_id: "msg-abc",
+      },
+    });
+  });
+
+  it("marks non-ack reclaim as a generic stale dispatch", () => {
+    const signal = createReclaimSignal(
+      {
+        dispatchId: "dispatch_generic",
+        source: "connectors",
+        targetAgentId: "bailey",
+        taskRef: "conn-42",
+        payload: { route: "oauth-health" },
+      },
+      12,
+    );
+
+    expect(signal.action).toBe("stale_dispatch_reclaimed");
+    expect(signal.summary).toBe("Reclaimed stale connectors dispatch for bailey");
+    expect(signal.payload).toMatchObject({
+      dispatch_id: "dispatch_generic",
+      source: "connectors",
+      target_agent_id: "bailey",
+      task_ref: "conn-42",
+      stale_seconds: 12,
+      route: "oauth-health",
     });
   });
 });

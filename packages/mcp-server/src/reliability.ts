@@ -63,6 +63,12 @@ export interface DispatchIdInput {
   payload?: Record<string, unknown>;
 }
 
+export interface ReclaimSignalDescriptor {
+  action: "stale_dispatch_reclaimed" | "handoff_ack_missing";
+  summary: string;
+  payload: Record<string, unknown>;
+}
+
 export interface StaleLeaseInput {
   status: DispatchStatus;
   leaseExpiresAt?: string | null;
@@ -152,6 +158,46 @@ export function createHeartbeat(params: {
   }
 
   return heartbeat;
+}
+
+export function createReclaimSignal(
+  dispatch: Pick<AgentDispatch, "dispatchId" | "source" | "targetAgentId" | "taskRef" | "payload">,
+  staleSeconds: number,
+): ReclaimSignalDescriptor {
+  const payload = dispatch.payload ?? {};
+  const expectsAck =
+    payload.ack_required === true ||
+    payload.require_ack === true ||
+    typeof payload.handoff_message_id === "string" ||
+    typeof payload.handoff_thread_id === "string";
+
+  if (expectsAck) {
+    return {
+      action: "handoff_ack_missing",
+      summary: `WakePass reliability miss: no ACK arrived before reclaim for ${dispatch.targetAgentId}`,
+      payload: {
+        dispatch_id: dispatch.dispatchId,
+        source: dispatch.source,
+        target_agent_id: dispatch.targetAgentId,
+        task_ref: dispatch.taskRef ?? null,
+        stale_seconds: staleSeconds,
+        ...payload,
+      },
+    };
+  }
+
+  return {
+    action: "stale_dispatch_reclaimed",
+    summary: `Reclaimed stale ${dispatch.source} dispatch for ${dispatch.targetAgentId}`,
+    payload: {
+      dispatch_id: dispatch.dispatchId,
+      source: dispatch.source,
+      target_agent_id: dispatch.targetAgentId,
+      task_ref: dispatch.taskRef ?? null,
+      stale_seconds: staleSeconds,
+      ...payload,
+    },
+  };
 }
 
 function stableStringify(value: unknown): string {
