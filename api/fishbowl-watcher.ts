@@ -8,6 +8,8 @@
  *   2. Unread mention digest: if a tenant has unread fishbowl signals at
  *      severity action_needed older than 10 minutes, emit a digest signal so
  *      the human gets a second nudge if the original push was dismissed.
+ *   3. Stale status cleanup: clear old Now Playing text after 30 minutes so
+ *      stale workers do not look like they are still actively holding a lane.
  *
  * Dedup: each emission checks for a recent identical-action signal so we
  * never spam (30 min for missed check-ins, 60 min for digests).
@@ -24,6 +26,8 @@ interface ProfileRow {
   emoji: string;
   display_name: string | null;
   last_seen_at: string | null;
+  current_status: string | null;
+  current_status_updated_at: string | null;
   next_checkin_at: string | null;
 }
 
@@ -37,6 +41,7 @@ interface SignalRow {
 const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
+const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
@@ -57,11 +62,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let checkinSignalsEmitted = 0;
   let digestSignalsEmitted = 0;
+  let staleStatusesCleared = 0;
 
   // ── 1. Dead-man's-switch sweep ──────────────────────────────────────────
   const { data: overdueProfiles, error: profileErr } = await supabase
     .from("mc_fishbowl_profiles")
-    .select("api_key_hash, agent_id, emoji, display_name, last_seen_at, next_checkin_at")
+    .select("api_key_hash, agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
     .lt("next_checkin_at", nowIso)
     .not("next_checkin_at", "is", null);
 
@@ -174,10 +180,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // ── 3. Stale Now Playing cleanup ─────────────────────────────────────────
+  const staleStatusCutoff = new Date(nowMs - STATUS_STALE_WINDOW_MS).toISOString();
+  const { data: staleStatusProfiles, error: staleStatusErr } = await supabase
+    .from("mc_fishbowl_profiles")
+    .select("api_key_hash, agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
+    .not("current_status", "is", null)
+    .lt("current_status_updated_at", staleStatusCutoff);
+
+  if (staleStatusErr) {
+    console.error("[fishbowl-watcher] stale status fetch error:", staleStatusErr.message);
+    return res.status(500).json({ error: staleStatusErr.message });
+  }
+
+  const staleStatusCandidates = ((staleStatusProfiles ?? []) as ProfileRow[]).filter((p) => {
+    if (!p.current_status || !p.current_status_updated_at) return false;
+    const statusMs = new Date(p.current_status_updated_at).getTime();
+    if (Number.isNaN(statusMs) || nowMs - statusMs < STATUS_STALE_WINDOW_MS) return false;
+    if (!p.next_checkin_at) return true;
+    const checkinMs = new Date(p.next_checkin_at).getTime();
+    return Number.isNaN(checkinMs) || checkinMs <= nowMs;
+  });
+
+  for (const profile of staleStatusCandidates) {
+    const { error: clearErr } = await supabase
+      .from("mc_fishbowl_profiles")
+      .update({ current_status: null, current_status_updated_at: nowIso })
+      .eq("api_key_hash", profile.api_key_hash)
+      .eq("agent_id", profile.agent_id)
+      .eq("current_status_updated_at", profile.current_status_updated_at);
+
+    if (clearErr) {
+      console.error("[fishbowl-watcher] stale status clear error:", clearErr.message);
+    } else {
+      staleStatusesCleared++;
+    }
+  }
+
   return res.status(200).json({
     checkin_signals_emitted: checkinSignalsEmitted,
     digest_signals_emitted: digestSignalsEmitted,
+    stale_statuses_cleared: staleStatusesCleared,
     overdue_candidates: candidates.length,
     tenants_with_unread_mentions: unreadCounts.size,
+    stale_status_candidates: staleStatusCandidates.length,
   });
 }
