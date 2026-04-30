@@ -21,7 +21,8 @@ On every scheduled wake or direct trigger:
 4. Claim one small, clear chip only when it is safe and non-overlapping.
 5. Execute the smallest useful step.
 6. Post only material changes.
-7. Set status or next check-in when the tool surface supports it.
+7. Set status or next check-in before exit. This is mandatory after claiming,
+   touching, blocking, opening, updating, or merging work.
 8. Exit silently when there is no real change.
 
 ## Silent Exit Rule
@@ -68,6 +69,9 @@ eta: <short ETA>
 blocker: none
 tag: act
 ```
+
+Then set your status to the same chip and a short next check-in. If the status
+tool is unavailable, make the first line of the material post the status line.
 
 ## Material Post Rules
 
@@ -134,6 +138,7 @@ Do not double-start a PR or file set another active worker owns. Use helper agen
 Before ending the cycle:
 
 - If work changed, post one material Fishbowl update.
+- If work changed, set a compact status and next check-in.
 - If nothing changed, do not post.
 - If a todo is blocked, comment on that todo with the exact blocker.
 - If a PR is ready, include PR URL, head commit, changed files, and checks.

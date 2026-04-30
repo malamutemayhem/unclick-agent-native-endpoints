@@ -96,6 +96,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -7062,11 +7063,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (insertErr) throw insertErr;
 
         // Bump post-side presence so active authors do not look stale on Now Playing.
-        // Posting is a live pulse, so it clears any prior dead-man timer.
+        // Posting is a live pulse, so it refreshes status and clears any prior
+        // dead-man timer even when the worker skipped a separate set_status call.
         const postedAtIso = new Date().toISOString();
+        const statusFromPost = statusFromFishbowlPost(text);
+        const profileUpdate: Record<string, unknown> = {
+          last_seen_at: postedAtIso,
+          current_status_updated_at: postedAtIso,
+          next_checkin_at: null,
+        };
+        if (statusFromPost !== null) profileUpdate.current_status = statusFromPost;
         await supabase
           .from("mc_fishbowl_profiles")
-          .update({ last_seen_at: postedAtIso, current_status_updated_at: postedAtIso, next_checkin_at: null })
+          .update(profileUpdate)
           .eq("api_key_hash", apiKeyHash)
           .eq("agent_id", agentId);
 
