@@ -23,8 +23,10 @@ import {
 import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
 import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
 import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
+import { emitSignal } from "../packages/mcp-server/src/signals/emit.js";
 import * as path from "node:path";
 import * as url from "node:url";
+import { createHash } from "node:crypto";
 import type { RunProfile, RunTarget } from "../packages/testpass/src/types.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -70,6 +72,62 @@ async function getPackIdBySlug(
   return rows[0] ?? null;
 }
 
+function sha256hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function getApiKeyHashForUser(
+  supabaseUrl: string,
+  serviceKey: string,
+  userId: string,
+): Promise<string | null> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/api_keys?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=key_hash,api_key&order=last_used_at.desc.nullslast,created_at.desc&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+  );
+  if (!r.ok) return null;
+  const rows = (await r.json().catch(() => [])) as Array<{
+    key_hash?: string | null;
+    api_key?: string | null;
+  }>;
+  const row = rows[0];
+  return row?.key_hash ?? (row?.api_key ? sha256hex(row.api_key) : null);
+}
+
+function shouldEmitScheduledSignal(source: string | undefined): boolean {
+  return source === "scheduled";
+}
+
+function emitScheduledRunSignal(params: {
+  apiKeyHash: string | null;
+  runId: string;
+  packSlug: string;
+  packName: string;
+  profile: RunProfile;
+  target: RunTarget;
+  status: string;
+  summary: Awaited<ReturnType<typeof computeVerdictSummary>>;
+}) {
+  if (!params.apiKeyHash) return;
+  void emitSignal({
+    apiKeyHash: params.apiKeyHash,
+    tool: "testpass",
+    action: params.status === "failed" ? "scheduled_run_failed" : "scheduled_run_complete",
+    severity: params.status === "failed" ? "action_needed" : "info",
+    summary: `Scheduled TestPass ${params.status}: ${params.packName} / ${params.profile}`,
+    deepLink: `/admin/testpass/runs/${params.runId}`,
+    payload: {
+      run_id: params.runId,
+      pack_slug: params.packSlug,
+      pack_name: params.packName,
+      profile: params.profile,
+      target_url: params.target.url ?? "",
+      status: params.status,
+      verdict_summary: params.summary,
+    },
+  });
+}
+
 function queryString(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -99,6 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         profile: queryString(req.query.profile) as RunProfile | undefined,
         server_url: queryString(req.query.server_url),
         task_id: queryString(req.query.task_id),
+        source: queryString(req.query.source),
       }
     : ((req.body ?? {}) as {
         pack_id?: string;
@@ -106,6 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         profile?: RunProfile;
         server_url?: string;
         task_id?: string;
+        source?: string;
       });
 
   if (!input.pack_id) return json(res, 400, { error: "pack_id required" });
@@ -139,6 +199,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     actorUserId = await getActorUserId(supabaseUrl, token);
     if (!actorUserId) return json(res, 401, { error: "Invalid session" });
   }
+  const apiKeyHash = shouldEmitScheduledSignal(input.source)
+    ? await getApiKeyHashForUser(supabaseUrl, serviceKey, actorUserId)
+    : null;
 
   const packPath = path.resolve(__dirname, `../packages/testpass/packs/${packSlug}.yaml`);
   let pack;
@@ -149,10 +212,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const target: RunTarget = { type: "url", url: input.server_url ?? "" };
+  const packName = input.pack_name ?? pack.name ?? packSlug;
 
   const { id: runId, was_duplicate } = await createRun(config, {
     packId: packRow.id,
-    packName: input.pack_name ?? pack.name ?? packSlug,
+    packName,
     target,
     profile,
     actorUserId,
@@ -199,12 +263,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const summary = await computeVerdictSummary(config, runId);
     const isDone = summary.pending === 0;
+    const status = isDone ? (summary.fail > 0 ? "failed" : "complete") : "running";
     await updateRunStatus(
       config,
       runId,
-      isDone ? (summary.fail > 0 ? "failed" : "complete") : "running",
+      status,
       summary,
     );
+    if (shouldEmitScheduledSignal(input.source)) {
+      emitScheduledRunSignal({
+        apiKeyHash,
+        runId,
+        packSlug,
+        packName,
+        profile,
+        target,
+        status,
+        summary,
+      });
+    }
     return summary;
   };
 
