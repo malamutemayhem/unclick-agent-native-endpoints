@@ -1,0 +1,41 @@
+name: Event Wake Router
+
+on:
+  workflow_run:
+    workflows:
+      - Website
+      - MCP server package
+      - TestPass PR Check
+    types: [completed]
+  pull_request:
+    types: [ready_for_review, review_requested, reopened]
+  issues:
+    types: [assigned, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the wake payload without posting to Fishbowl.
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    name: Route ready-work wake event
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Route event
+        env:
+          FISHBOWL_WAKE_TOKEN: ${{ secrets.FISHBOWL_WAKE_TOKEN }}
+          FISHBOWL_AUTOCLOSE_TOKEN: ${{ secrets.FISHBOWL_AUTOCLOSE_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_WAKE_MODEL: ${{ vars.OPENROUTER_WAKE_MODEL }}
+          WAKE_ROUTER_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: node scripts/event-wake-router.mjs
