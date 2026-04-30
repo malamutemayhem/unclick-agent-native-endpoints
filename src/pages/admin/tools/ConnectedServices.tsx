@@ -6,6 +6,10 @@ interface Connector {
   name: string;
   icon?: string;
   category?: string;
+  auth_type?: "oauth2" | "api_key" | "bot_token";
+  description?: string | null;
+  setup_url?: string | null;
+  test_endpoint?: string | null;
   credential: { is_valid: boolean; last_tested_at: string | null } | null;
 }
 
@@ -15,6 +19,60 @@ interface ConnectedServicesProps {
 }
 
 export default function ConnectedServices({ connectors, loading }: ConnectedServicesProps) {
+  function getSetupLabel(authType?: Connector["auth_type"]): string {
+    switch (authType) {
+      case "oauth2":
+        return "OAuth setup";
+      case "bot_token":
+        return "Bot token";
+      case "api_key":
+      default:
+        return "API key";
+    }
+  }
+
+  function getStatus(connector: Connector): {
+    dot: string;
+    pillClass: string;
+    pill: string;
+    note: string;
+  } {
+    const credential = connector.credential;
+    if (!credential) {
+      return {
+        dot: "bg-white/20",
+        pillClass: "border border-white/[0.08] bg-white/[0.04] text-white/75",
+        pill: "Setup required",
+        note: "No saved connection yet.",
+      };
+    }
+
+    if (!credential.is_valid) {
+      return {
+        dot: "bg-amber-400",
+        pillClass: "bg-amber-400/10 text-amber-200",
+        pill: "Needs reconnection",
+        note: "Reconnect or retest this service in Connections.",
+      };
+    }
+
+    if (!credential.last_tested_at) {
+      return {
+        dot: "bg-sky-400",
+        pillClass: "bg-sky-400/10 text-sky-200",
+        pill: "Setup incomplete",
+        note: "Saved, but not validated with a connection test yet.",
+      };
+    }
+
+    return {
+      dot: "bg-green-500",
+      pillClass: "bg-green-500/10 text-green-200",
+      pill: "Connected",
+      note: "Ready for approved agent workflows.",
+    };
+  }
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -46,21 +104,9 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {connectors.map((c) => {
-        const connected = c.credential !== null;
-        const valid = c.credential?.is_valid ?? false;
-
-        let statusDot: string;
-        let statusText: string;
-        if (connected && valid) {
-          statusDot = "bg-green-500";
-          statusText = "Connected";
-        } else if (connected && !valid) {
-          statusDot = "bg-red-500";
-          statusText = "Connection error";
-        } else {
-          statusDot = "bg-white/20";
-          statusText = "Not connected";
-        }
+        const status = getStatus(c);
+        const setupLabel = getSetupLabel(c.auth_type);
+        const hasTest = Boolean(c.test_endpoint);
 
         return (
           <div key={c.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
@@ -79,16 +125,33 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
                 )}
               </div>
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${status.pillClass}`}>
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${status.dot}`} />
+                {status.pill}
+              </span>
+              <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[10px] text-white/45">
+                {setupLabel}
+              </span>
+              {hasTest && (
+                <span className="rounded-full border border-[#61C1C4]/20 bg-[#61C1C4]/10 px-2 py-0.5 text-[10px] text-[#61C1C4]">
+                  Test supported
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-white/40">
+              {status.note}
+              {c.description ? ` ${c.description}` : ""}
+            </p>
             <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className={`inline-block h-2 w-2 rounded-full ${statusDot}`} />
-                <span className="text-xs text-white/40">{statusText}</span>
+              <div className="text-[10px] text-white/30">
+                {c.setup_url ? "Setup guide available" : "Managed in Connections"}
               </div>
               <Link
                 to="/admin/keychain"
                 className="text-[10px] text-white/30 hover:text-white/50 transition-colors"
               >
-                Manage
+                {c.credential ? "Manage" : "Set up"}
               </Link>
             </div>
           </div>

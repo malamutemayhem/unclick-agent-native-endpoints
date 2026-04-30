@@ -11,6 +11,10 @@ interface Connector {
   name: string;
   icon?: string;
   category?: string;
+  auth_type?: "oauth2" | "api_key" | "bot_token";
+  description?: string | null;
+  setup_url?: string | null;
+  test_endpoint?: string | null;
   credential: { is_valid: boolean; last_tested_at: string | null } | null;
 }
 
