@@ -21,6 +21,10 @@ inputs:
     description: TestPass API endpoint.
     required: false
     default: https://unclick.world/api/testpass-run
+  source:
+    description: Source label sent to TestPass for visibility routing.
+    required: false
+    default: pr_check
 
 outputs:
   run_id:
@@ -59,6 +63,7 @@ runs:
         PROFILE: ${{ inputs.profile }}
         SERVER_URL: ${{ inputs.server_url }}
         API_URL: ${{ inputs.api_url }}
+        SOURCE: ${{ inputs.source }}
       run: |
         # Note: -e intentionally omitted so curl/jq failures don't abort
         # before outputs are written. We classify failures explicitly below.
@@ -68,7 +73,8 @@ runs:
           --arg pack_id "$PACK_ID" \
           --arg profile "$PROFILE" \
           --arg server_url "$SERVER_URL" \
-          '{pack_id: $pack_id, profile: $profile} + (if $server_url == "" then {} else {server_url: $server_url} end)')
+          --arg source "$SOURCE" \
+          '{pack_id: $pack_id, profile: $profile, source: $source} + (if $server_url == "" then {} else {server_url: $server_url} end)')
 
         # Capture curl transport exit code separately from HTTP status.
         # curl exits non-zero on DNS failure, connection refused, timeout, etc.

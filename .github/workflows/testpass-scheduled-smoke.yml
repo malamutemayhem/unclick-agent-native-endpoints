@@ -1,0 +1,53 @@
+name: TestPass Scheduled Smoke
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      pack_id:
+        description: Slug of the TestPass pack to run.
+        required: false
+        default: testpass-core
+      profile:
+        description: Run profile (smoke, standard, deep).
+        required: false
+        default: smoke
+      server_url:
+        description: Optional target MCP server URL.
+        required: false
+        default: https://unclick.world/api/mcp
+
+permissions:
+  contents: read
+
+jobs:
+  scheduled-smoke:
+    name: Scheduled TestPass smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run scheduled TestPass
+        id: testpass
+        uses: ./.github/actions/testpass
+        with:
+          token: ${{ secrets.TESTPASS_TOKEN }}
+          pack_id: ${{ inputs.pack_id || 'testpass-core' }}
+          profile: ${{ inputs.profile || 'smoke' }}
+          server_url: ${{ inputs.server_url || 'https://unclick.world/api/mcp' }}
+          source: scheduled
+
+      - name: Summarize receipt
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "### Scheduled TestPass receipt"
+            echo ""
+            echo "- Run: \`${{ steps.testpass.outputs.run_id || 'unknown' }}\`"
+            echo "- Status: \`${{ steps.testpass.outputs.status || 'unknown' }}\`"
+            echo "- Failure kind: \`${{ steps.testpass.outputs.failure_kind || 'unknown' }}\`"
+            echo "- HTTP: \`${{ steps.testpass.outputs.http_code || '000' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
