@@ -7,6 +7,17 @@ describe("runtime tool schema validation", () => {
     { name: "load_memory", args: { num_sessions: 1, bogus_field: "should reject" } },
     { name: "search_memory", args: { query: "strict schema probe", bogus_field: "should reject" } },
     { name: "check_signals", args: { agent_id: "strict-probe", bogus_field: "should reject" } },
+    {
+      name: "ack_handoff",
+      args: {
+        agent_id: "strict-probe",
+        thread_id: "11111111-1111-4111-8111-111111111111",
+        current_chip: "Build B probe",
+        next_action: "ack the handoff",
+        eta: "next cycle",
+        bogus_field: "should reject",
+      },
+    },
     { name: "stripe_customers", args: { secret_key: "sk_test_dummy", action: "X", bogus_field: "should reject" } },
     { name: "stripe_charges", args: { secret_key: "sk_test_dummy", action: "X", bogus_field: "should reject" } },
     {
@@ -49,6 +60,14 @@ describe("runtime tool schema validation", () => {
       category: "troubleshooting",
     })).toBeNull();
     expect(validateToolArgumentsForRuntime("unclick_generate_uuid", { count: 1 })).toBeNull();
+    expect(validateToolArgumentsForRuntime("ack_handoff", {
+      agent_id: "strict-probe",
+      thread_id: "11111111-1111-4111-8111-111111111111",
+      current_chip: "Build B probe",
+      next_action: "ack the handoff",
+      eta: "next cycle",
+      blocker: "none",
+    })).toBeNull();
     expect(validateToolArgumentsForRuntime("unclick_call", {
       endpoint_id: "memory.search_memory",
       params: { query: "strict schema probe" },

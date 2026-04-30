@@ -521,6 +521,51 @@ const VISIBLE_TOOLS = [
     },
   },
   {
+    name: "ack_handoff",
+    title: "Acknowledge a Fishbowl handoff",
+    description:
+      "Replies to a Fishbowl handoff with a structured ACK card so the sender and the human can see ownership, next action, ETA, and blockers without parsing free-form chat. " +
+      "Use when a message is directly addressed to you, tagged handoff, or asks you to confirm receipt. " +
+      "This posts a short reply in the original thread using the existing Fishbowl post path; it does not claim a todo or change code by itself.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        agent_id: {
+          type: "string",
+          description:
+            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across Fishbowl calls.",
+        },
+        thread_id: {
+          type: "string",
+          description: "Fishbowl message id of the handoff you are acknowledging.",
+        },
+        current_chip: {
+          type: "string",
+          description: "The work you are taking or watching, in one short phrase.",
+        },
+        next_action: {
+          type: "string",
+          description: "The next concrete action you will take.",
+        },
+        eta: {
+          type: "string",
+          description: "Expected next check-in or completion time, e.g. '15m', 'next cycle', or 'blocked until CI finishes'.",
+        },
+        blocker: {
+          type: "string",
+          description: "Blocker if any. Use 'none' when clear.",
+        },
+        recipients: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional recipients for the ACK reply. Defaults to ['all'].",
+        },
+      },
+      required: ["agent_id", "thread_id", "current_chip", "next_action", "eta"],
+    },
+  },
+  {
     name: "set_my_status",
     title: "Update my Now Playing status",
     description:
@@ -1504,6 +1549,54 @@ export function createServer(): Server {
       // All routes go through /api/memory-admin?action=<fishbowl_*> so the
       // backend stays the single source of truth for validation, anti-spoof,
       // and side effects (event posts, score updates).
+      if (name === "ack_handoff") {
+        const apiKey = process.env.UNCLICK_API_KEY;
+        const base =
+          process.env.UNCLICK_MEMORY_BASE_URL ||
+          process.env.UNCLICK_SITE_URL ||
+          "https://unclick.world";
+        if (!apiKey) {
+          return {
+            content: [
+              { type: "text", text: "Fishbowl unavailable: no UNCLICK_API_KEY configured. Run the UnClick setup wizard." },
+            ],
+            isError: true,
+          };
+        }
+        const blocker = typeof args.blocker === "string" && args.blocker.trim() ? args.blocker.trim() : "none";
+        const text = [
+          "ACK",
+          `Current chip: ${String(args.current_chip).trim()}`,
+          `Next action: ${String(args.next_action).trim()}`,
+          `ETA: ${String(args.eta).trim()}`,
+          `Blocker: ${blocker}`,
+        ].join("\n");
+        const userAgentHint =
+          (args.user_agent_hint as string | undefined) ||
+          process.env.UNCLICK_CLIENT_USER_AGENT ||
+          "unclick-mcp-server";
+        const resp = await fetch(`${base}/api/memory-admin?action=fishbowl_post`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agent_id: args.agent_id,
+            thread_id: args.thread_id,
+            recipients: args.recipients ?? ["all"],
+            tags: ["answer", "handoff"],
+            text,
+            user_agent_hint: userAgentHint,
+          }),
+        });
+        const respBody = await resp.json().catch(() => ({}));
+        return {
+          content: [{ type: "text", text: JSON.stringify(respBody, null, 2) }],
+          isError: !resp.ok,
+        };
+      }
+
       const FISHBOWL_TOOL_ACTIONS: Record<string, string> = {
         set_my_emoji: "fishbowl_set_emoji",
         post_message: "fishbowl_post",
