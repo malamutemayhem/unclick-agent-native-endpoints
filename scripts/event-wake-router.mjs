@@ -119,7 +119,7 @@ function baseDecision(event) {
   if (eventName === "issue_comment") {
     const comment = event.comment || {};
     const body = String(comment.body || "").toLowerCase();
-    if (body.includes("/wake") || body.includes("wake worker")) {
+    if (body.includes("/wake") || body.includes("wake worker") || body.trim().startsWith("wake:")) {
       return {
         wake: true,
         owner: "🤖",

@@ -48,3 +48,4 @@ jobs:
           path: .wake-ledger/*.json
           if-no-files-found: ignore
           retention-days: 14
+          include-hidden-files: true
