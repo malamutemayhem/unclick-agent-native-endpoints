@@ -124,6 +124,12 @@ Cost guardrails:
 - Measure request count and token usage for every AI-backed wake test.
 - Prefer one wake signal per event; duplicate triggers are treated as failures.
 
+Ledger rule:
+
+- Every wake-router run writes a GitHub Actions summary and a `wake-ledger-*` JSON artifact with event id, source, route, timing, Fishbowl post result, and ACK thresholds.
+- Fishbowl wake posts include `Wake event id:` and ask the target worker to reply `ACK <event_id>` with their next action.
+- ACK tracking is measured against the same thresholds: target under 2 minutes, warning over 5 minutes, failure at 16 minutes.
+
 ## PR Rules
 
 Before opening a PR:

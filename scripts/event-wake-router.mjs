@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const eventName = process.env.GITHUB_EVENT_NAME || "manual";
 const eventPath = process.env.GITHUB_EVENT_PATH || "";
@@ -10,6 +12,9 @@ const runId = process.env.GITHUB_RUN_ID || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";
 const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AUTOCLOSE_TOKEN || "";
 const dryRun = process.env.WAKE_ROUTER_DRY_RUN === "1" || process.env.WAKE_ROUTER_DRY_RUN === "true";
+const receivedAt = new Date().toISOString();
+const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
+const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || "";
 
 function readEvent() {
   if (!eventPath) return {};
@@ -43,6 +48,28 @@ function sourceUrl(event) {
   if (event.workflow_run?.html_url) return event.workflow_run.html_url;
   if (runId) return `${serverUrl}/${repository}/actions/runs/${runId}`;
   return `${serverUrl}/${repository}`;
+}
+
+function eventSubject(event) {
+  if (event.comment?.id) return `comment-${event.comment.id}`;
+  if (event.pull_request?.number) return `pr-${event.pull_request.number}`;
+  if (event.issue?.number) return `issue-${event.issue.number}`;
+  if (event.workflow_run?.id) return `workflow-run-${event.workflow_run.id}`;
+  return runId ? `run-${runId}` : "unknown";
+}
+
+function wakeEventId(event, decision) {
+  const action = String(event.action || "");
+  const basis = [
+    repository,
+    eventName,
+    action,
+    eventSubject(event),
+    decision.eventCreatedAt || "",
+    sourceUrl(event),
+  ].join("|");
+  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 12);
+  return `wake-${eventName}-${eventSubject(event)}-${digest}`.replace(/[^a-zA-Z0-9_.-]/g, "-");
 }
 
 function baseDecision(event) {
@@ -211,16 +238,18 @@ async function cheapTriage(brief, decision) {
   }
 }
 
-async function postWake(decision, triage) {
+async function postWake(decision, triage, eventId) {
   const eventSeconds = secondsSince(decision.eventCreatedAt);
   const wakeSecondsLabel = eventSeconds === null ? "unknown" : `${eventSeconds}s`;
   const recipients = decision.owner === "all" ? ["all"] : [decision.owner];
   const text = [
+    `Wake event id: ${eventId}`,
     `Wake event: ${decision.reason}`,
     `Source: ${sourceUrl(event)}`,
     `Event-to-router: ${wakeSecondsLabel}`,
     `Route: ${decision.owner}`,
     triage.used ? `Cheap triage: ${triage.error ? `error (${triage.error})` : "used"}` : "Cheap triage: skipped",
+    `ACK requested: reply ACK ${eventId} and your next action.`,
   ].join("\n");
 
   const payload = {
@@ -232,7 +261,7 @@ async function postWake(decision, triage) {
 
   if (dryRun || !unclickApiKey) {
     console.log(JSON.stringify({ dry_run: true, missing_key: !unclickApiKey, payload }, null, 2));
-    return { posted: false, dry_run: true };
+    return { posted: false, dry_run: true, payload };
   }
 
   const response = await fetch(`${apiUrl}?action=fishbowl_post`, {
@@ -246,7 +275,73 @@ async function postWake(decision, triage) {
   const body = await response.text();
   console.log(`Fishbowl wake post HTTP ${response.status}`);
   console.log(body);
-  return { posted: response.ok, status: response.status };
+  let messageId = null;
+  try {
+    messageId = JSON.parse(body)?.message?.id || null;
+  } catch {
+    messageId = null;
+  }
+  return { posted: response.ok, status: response.status, message_id: messageId };
+}
+
+function writeLedger({ eventId, event, decision, triage, result, status }) {
+  const eventSeconds = secondsSince(decision.eventCreatedAt);
+  const ledger = {
+    event_id: eventId,
+    status,
+    repository,
+    event_name: eventName,
+    action: event.action || null,
+    subject: eventSubject(event),
+    source_url: sourceUrl(event),
+    event_at: decision.eventCreatedAt || null,
+    router_received_at: receivedAt,
+    router_finished_at: new Date().toISOString(),
+    event_to_router_seconds: eventSeconds,
+    target_worker: decision.owner,
+    urgency: decision.urgency,
+    reason: decision.reason,
+    cheap_triage: {
+      used: Boolean(triage.used),
+      model: triage.model || null,
+      error: triage.error || null,
+      usage: triage.usage || null,
+    },
+    fishbowl: {
+      posted: Boolean(result?.posted),
+      dry_run: Boolean(result?.dry_run),
+      status: result?.status || null,
+      message_id: result?.message_id || null,
+    },
+    ack: {
+      requested: status === "wake_posted" || status === "wake_dry_run",
+      expected_within_seconds: 120,
+      warning_after_seconds: 300,
+      fail_after_seconds: 960,
+      observed_at: null,
+    },
+  };
+
+  mkdirSync(ledgerDir, { recursive: true });
+  const ledgerPath = join(ledgerDir, `${eventId}.json`);
+  writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
+  console.log(`Wake ledger written: ${ledgerPath}`);
+
+  const summary = [
+    "## Wake Router Ledger",
+    "",
+    `- Event ID: \`${eventId}\``,
+    `- Status: \`${status}\``,
+    `- Route: \`${decision.owner}\``,
+    `- Source: ${sourceUrl(event)}`,
+    `- Event-to-router: ${eventSeconds === null ? "unknown" : `${eventSeconds}s`}`,
+    `- Fishbowl posted: ${result?.posted ? "yes" : result?.dry_run ? "dry run" : "no"}`,
+    `- Cheap triage: ${triage.used ? triage.error ? `error (${triage.error})` : "used" : "skipped"}`,
+    "",
+  ].join("\n");
+
+  if (stepSummaryPath) appendFileSync(stepSummaryPath, summary);
+  return ledger;
 }
 
 const event = readEvent();
@@ -254,13 +349,17 @@ const initialDecision = baseDecision(event);
 const brief = eventBrief(event, initialDecision);
 const triage = await cheapTriage(brief, initialDecision);
 const finalDecision = triage.decision;
+const eventId = wakeEventId(event, finalDecision);
 
-console.log(JSON.stringify({ brief, finalDecision, triage }, null, 2));
+console.log(JSON.stringify({ eventId, brief, finalDecision, triage }, null, 2));
 
 if (!finalDecision.wake) {
   console.log("No wake needed.");
+  writeLedger({ eventId, event, decision: finalDecision, triage, result: null, status: "no_wake" });
   process.exit(0);
 }
 
-const result = await postWake(finalDecision, triage);
+const result = await postWake(finalDecision, triage, eventId);
+const status = result.posted ? "wake_posted" : result.dry_run ? "wake_dry_run" : "wake_failed";
+writeLedger({ eventId, event, decision: finalDecision, triage, result, status });
 if (!result.posted && !result.dry_run) process.exitCode = 1;

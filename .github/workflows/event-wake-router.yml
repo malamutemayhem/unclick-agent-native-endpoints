@@ -39,3 +39,12 @@ jobs:
           OPENROUTER_WAKE_MODEL: ${{ vars.OPENROUTER_WAKE_MODEL }}
           WAKE_ROUTER_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
         run: node scripts/event-wake-router.mjs
+
+      - name: Upload wake ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-ledger-${{ github.run_id }}
+          path: .wake-ledger/*.json
+          if-no-files-found: ignore
+          retention-days: 14
