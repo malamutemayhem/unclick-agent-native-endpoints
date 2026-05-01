@@ -113,6 +113,28 @@ describe("planFishbowlMessageHandoffs", () => {
     ).toEqual([]);
   });
 
+  it("normalizes tags and recipients before reliability routing", () => {
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        tags: [" Needs-Doing "],
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        recipients: [" ALL "],
+      }),
+    ).toEqual([]);
+
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        tags: ["needs-doing", " Wake "],
+      }),
+    ).toEqual([]);
+  });
   it("stays silent for wake-router posts that already registered dispatch proof", () => {
     expect(
       planFishbowlMessageHandoffs({
@@ -129,3 +151,4 @@ describe("planFishbowlMessageHandoffs", () => {
     ).toEqual([]);
   });
 });
+
