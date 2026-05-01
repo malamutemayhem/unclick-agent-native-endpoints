@@ -3,7 +3,7 @@ description: Run a TestPass pack against an MCP server and surface verdict outpu
 
 inputs:
   token:
-    description: Supabase JWT used as Bearer token against /api/testpass-run.
+    description: Bearer token for TestPass; use a Supabase JWT for session calls or a uc_ UnClick API key for CI.
     required: true
   pack_id:
     description: Slug of the TestPass pack to run (e.g. testpass-core).
@@ -18,7 +18,7 @@ inputs:
     required: false
     default: ""
   api_url:
-    description: TestPass API endpoint.
+    description: TestPass run API endpoint; this action calls it and passes server_url as the MCP target under test.
     required: false
     default: https://unclick.world/api/testpass-run
   source:
