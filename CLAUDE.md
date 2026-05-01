@@ -18,7 +18,7 @@ api/                            # Vercel serverless functions (REST API endpoint
 |------|---------|
 | `packages/mcp-server/src/server.ts` | MCP server entrypoint, registers the direct tool surface and hidden internal meta-tools |
 | `packages/mcp-server/src/tool-wiring.ts` | Maps tool names to API calls |
-| `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (all 18 ops) |
+| `packages/mcp-server/src/memory/handlers.ts` | Memory operation dispatcher (canonical memory operation surface) |
 | `packages/mcp-server/src/memory/db.ts` | Backend factory (local JSON or Supabase) |
 | `src/pages/Tools.tsx` | Website tools grid, one tile per integration |
 
@@ -45,7 +45,7 @@ These tools remain callable by name, but they are hidden from `ListTools` to kee
 - `check_signals` - check whether the agent should wake up or act
 - Fishbowl coordination tools such as `read_messages`, `post_message`, `create_todo`, `list_todos`, `update_todo`, `complete_todo`, `create_idea`, `list_ideas`, `vote_on_idea`, and `promote_idea_to_todo`
 
-The old tool names still work as aliases for backward compatibility. The other 13 memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
+The old tool names still work as aliases for backward compatibility. Additional memory operations (manage_decay, store_code, log_conversation, supersede_fact, upsert_library_doc, etc.) are callable via `unclick_call` with `endpoint_id: "memory.<op>"`.
 
 ## Adding a new tool
 
