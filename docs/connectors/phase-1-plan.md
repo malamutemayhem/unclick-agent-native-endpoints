@@ -94,6 +94,10 @@ Recommended additive fields:
 - `capabilitySummary`: short operator-facing text
 - optional `docsUrl` normalization if currently uneven
 
+RotatePass consumes only safe metadata from this layer. Use
+`docs/rotatepass-connector-metadata.md` for owner hints, used-by tags,
+probe kinds, evidence sources, rotation dates, and redaction boundaries.
+
 ### MCP and server connector registry
 
 - `packages/mcp-server/src/connectors/index.ts`

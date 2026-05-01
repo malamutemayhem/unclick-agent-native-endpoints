@@ -126,6 +126,9 @@ Provider labels are metadata only in Chunk 2. Provider-specific rotation automat
 
 BackstagePass remains the source of truth for stored credentials and connection metadata.
 
+The metadata intake vocabulary is defined in `docs/rotatepass-connector-metadata.md`.
+RotatePass should consume that contract before inventing new credential fields.
+
 RotatePass may also consume findings from:
 
 - SecurityPass credential findings
