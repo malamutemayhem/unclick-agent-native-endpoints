@@ -21,7 +21,7 @@ export interface DogfoodTrendPoint {
 export const dogfoodReport = {
   generatedAt: "2026-05-01T00:50:00Z",
   lastRunAt: "2026-05-01T00:50:00Z",
-  status: "pending",
+  status: "blocked",
   source: "public seed receipt",
   headline: "We dogfood UnClick on UnClick.",
   target: "UnClick public and agent-facing product surfaces",
@@ -46,10 +46,11 @@ export const dogfoodReport = {
     {
       id: "securitypass",
       name: "SecurityPass",
-      status: "pending",
-      summary: "Queued for recurring security review.",
-      evidence: "SecurityPass remains scope-gated until a small recurring runner proof is ready.",
+      status: "blocked",
+      summary: "SecurityPass is blocked until the recurring runner proof is ready.",
+      evidence: "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
       checkedAt: "2026-05-01T00:50:00Z",
+      blockedReason: "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
     },
     {
       id: "seopass",
@@ -79,11 +80,11 @@ export const dogfoodReport = {
   trend: [
     { date: "2026-04-29", passing: 0, failing: 0, pending: 6 },
     { date: "2026-04-30", passing: 1, failing: 0, pending: 5 },
-    { date: "2026-05-01", passing: 1, failing: 0, pending: 5 },
+    { date: "2026-05-01", passing: 1, failing: 0, blocked: 1, pending: 4 },
   ] satisfies DogfoodTrendPoint[],
   lastActionableFailure: {
-    title: "Canonical public check target needs confirmation",
-    detail: "The next automated receipt should lock the exact public URL set that represents UnClick's production experience.",
-    owner: "Dogfood automation follow-up",
+    title: "SecurityPass needs attention",
+    detail: "SecurityPass is blocked until the recurring runner proof is ready. Blocked reason: SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
+    owner: "Dogfood automation",
   },
 };

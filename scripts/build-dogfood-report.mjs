@@ -234,11 +234,12 @@ function buildLastActionableFailure(results) {
 const results = [
   await runTestPass(),
   await runUXPass(),
-  pendingResult(
+  blockedResult(
     "securitypass",
     "SecurityPass",
-    "Queued for recurring security review.",
-    "SecurityPass remains scope-gated until a small recurring runner proof is ready.",
+    "SecurityPass is blocked until the recurring runner proof is ready.",
+    "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
+    "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
   ),
   pendingResult(
     "seopass",
