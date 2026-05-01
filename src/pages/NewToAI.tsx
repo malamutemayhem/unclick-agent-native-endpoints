@@ -24,7 +24,7 @@ const FEATURES = [
     title: "Tools",
     subtitle: "The toolbox",
     icon: Wrench,
-    analogy: "Like giving your assistant access to email, calendar, weather, news, and 172 other services. They can check the weather, search Amazon, look up stocks, and more - without you doing it manually.",
+    analogy: "Like giving your assistant access to email, calendar, weather, news, and 178 other services. They can check the weather, search Amazon, look up stocks, and more - without you doing it manually.",
   },
   {
     id: "memory",
@@ -65,7 +65,7 @@ const FAQ = [
   },
   {
     q: "Is it free?",
-    a: "Yes! The free plan gives you 172+ tools. Pro is $29/month for unlimited access and advanced features.",
+    a: "Yes! The free plan gives you 178+ tools. Pro is $29/month for unlimited access and advanced features.",
   },
   {
     q: "What AI does it work with?",
@@ -105,7 +105,7 @@ const HowItWorks = [
 const PRODUCTS = [
   {
     name: "Tools",
-    desc: "172+ integrations: email, weather, finance, social media, and more.",
+    desc: "178+ integrations: email, weather, finance, social media, and more.",
     link: "/tools",
     icon: Wrench,
   },

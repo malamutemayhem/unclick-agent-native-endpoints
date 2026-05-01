@@ -134,7 +134,7 @@ const Crews = () => {
             <p className="mt-4 text-lg text-body max-w-2xl mx-auto leading-relaxed">
               UnClick Crews lets you define AI agent personas - each with their own tools, memory context, and expertise.
               A developer, a researcher, a writer, an organiser. They collaborate through Claude's Agent Teams, powered by
-              UnClick's 172+ MCP tools.
+              UnClick's 178+ MCP tools.
             </p>
           </FadeIn>
 
@@ -250,7 +250,7 @@ const Crews = () => {
                   <h3 className="text-sm font-semibold text-heading">Tools</h3>
                 </div>
                 <p className="text-xs text-body leading-relaxed">
-                  Each agent gets a curated subset of 172+ MCP tools. Developer gets GitHub and build tools. Writer gets CMS and formatting tools. No tool bloat, maximum focus.
+                  Each agent gets a curated subset of 178+ MCP tools. Developer gets GitHub and build tools. Writer gets CMS and formatting tools. No tool bloat, maximum focus.
                 </p>
               </div>
             </FadeIn>

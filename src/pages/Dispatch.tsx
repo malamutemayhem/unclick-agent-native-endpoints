@@ -7,7 +7,7 @@ import { GitBranch, Zap, Brain, Lock, ArrowRight, Network, CheckCircle2, Termina
 
 const DISPATCH_FEATURES = [
   {
-    title: "172+ MCP Tools",
+    title: "178+ MCP Tools",
     desc: "Every tool available in both Cowork and Claude Code",
     icon: Network,
   },

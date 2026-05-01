@@ -16,7 +16,7 @@ const TIERS = [
     ctaHref: "#install",
     highlight: false,
     features: [
-      "172+ tools (100 calls/day)",
+      "178+ tools (100 calls/day)",
       "Arena browsing",
       "Memory (self-hosted, direct mode)",
       "BackstagePass (5 credentials)",
