@@ -23,7 +23,7 @@ Two audiences, one platform:
 3. **Credential vault (BackstagePass).** AES-256-GCM at rest, PBKDF2 key derivation, proof-of-possession auth, full audit log. One place for user-owned API keys and OAuth tokens.
 4. **Signals.** Notifications hub with a shared `withSignals` bolt-on so every tool emits the same shape of events.
 5. **Crews.** Composable AI crews assembled from agent personas (developer, researcher, writer, organiser). Users run multi-agent workflows without writing orchestration code.
-6. **TestPass.** QA pack runner for MCP servers. Developers ship a tool; TestPass proves it meets compliance before it reaches users.
+6. **Pass family and XPass.** TestPass is the QA pack runner for MCP servers. XPass is the umbrella conductor for running the relevant Pass-family checks and returning one combined receipt. See [XPass](./xpass.md).
 7. **Agents (Build Desk).** Task and worker orchestration across multiple code backends (Claude Code, Codex, Cursor, Gemini CLI). One desk, many engines.
 8. **Marketplace.** Developer portal with Stripe Connect and an 80/20 revenue split. Coming soon.
 
