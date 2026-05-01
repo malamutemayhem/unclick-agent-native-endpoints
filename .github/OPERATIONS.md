@@ -52,7 +52,7 @@ error. Fix the migration, push again. The CLI is idempotent about already
 applied migrations.
 
 As a belt-and-braces safety net, `api/install-ticket.ts` also self-heals its
-table via `ensureSchema()` on cold start — so even a missed migration won't
+table via `ensureSchema()` on cold start, so even a missed migration won't
 break install-ticket issuance.
 
 ## Publishing the MCP server
@@ -68,7 +68,7 @@ workflow:
 5. Polls `npm view` to confirm propagation.
 
 To cut a minor or major release, bump manually in `packages/mcp-server/package.json`
-and push — the workflow will still publish (its `npm version patch` becomes a
+and push, the workflow will still publish (its `npm version patch` becomes a
 no-op if the working tree is dirty, but simpler: just skip the workflow by
 including `[skip ci]` in your message and running `npm publish` locally).
 
@@ -82,7 +82,7 @@ including `[skip ci]` in your message and running `npm publish` locally).
    Generate a new **Automation** token (not Classic) and update the secret.
 3. **`apply-migrations.yml` link failure** - the access token may have been
    rotated. Regenerate at https://supabase.com/dashboard/account/tokens.
-4. **`apply-migrations.yml` migration error** — open the run logs. If it's a
+4. **`apply-migrations.yml` migration error** - open the run logs. If it's a
    destructive change we don't want automated, revert the migration commit
    and apply it manually via the SQL editor instead.
 
