@@ -102,6 +102,10 @@ import {
   planFishbowlMessageHandoffs,
 } from "./lib/fishbowl-message-handoff.js";
 import {
+  buildFishbowlIdeaCouncilDispatchRow,
+  planFishbowlIdeaCouncilHandoffs,
+} from "./lib/fishbowl-idea-council.js";
+import {
   buildFishbowlTodoHandoffDispatchRow,
   planFishbowlTodoHandoff,
 } from "./lib/fishbowl-todo-handoff.js";
@@ -7784,6 +7788,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             "idea-created",
             `New idea: ${titleRes}`,
           );
+
+          // Ideas Council: a fresh idea should invite a small worker quorum to
+          // comment/vote. Register ACK-required dispatches so stale participation
+          // becomes visible without waking humans or the idea author.
+          try {
+            const { data: profileRows, error: profileErr } = await supabase
+              .from("mc_fishbowl_profiles")
+              .select("agent_id, emoji, display_name, user_agent_hint, last_seen_at, current_status_updated_at")
+              .eq("api_key_hash", apiKeyHash);
+            if (profileErr) throw profileErr;
+
+            const councilPlans = planFishbowlIdeaCouncilHandoffs({
+              ideaId: data.id,
+              title: titleRes,
+              description: descRes,
+              createdByAgentId: agentId,
+              profiles: (profileRows ?? []).map((profileRow) => ({
+                agentId: profileRow.agent_id,
+                emoji: profileRow.emoji,
+                displayName: profileRow.display_name,
+                userAgentHint: profileRow.user_agent_hint,
+                lastSeenAt: profileRow.last_seen_at,
+                currentStatusUpdatedAt: profileRow.current_status_updated_at,
+              })),
+            });
+
+            for (const councilPlan of councilPlans) {
+              const dispatchId = createDispatchId({
+                source: councilPlan.source,
+                targetAgentId: councilPlan.targetAgentId,
+                taskRef: councilPlan.taskRef,
+              });
+              const now = new Date();
+              const { data: dispatchRows, error: upsertErr } = await supabase
+                .from("mc_agent_dispatches")
+                .upsert(
+                  buildFishbowlIdeaCouncilDispatchRow({
+                    apiKeyHash,
+                    dispatchId,
+                    plan: councilPlan,
+                    now,
+                  }),
+                  { onConflict: "api_key_hash,dispatch_id" },
+                )
+                .select("dispatch_id,status,lease_owner,lease_expires_at");
+              if (upsertErr) throw upsertErr;
+
+              const dispatchRow = dispatchRows?.[0];
+              if (
+                !dispatchRow ||
+                dispatchRow.status !== "leased" ||
+                dispatchRow.lease_owner !== councilPlan.targetAgentId ||
+                !dispatchRow.lease_expires_at
+              ) {
+                throw new Error("idea council dispatch lease was not persisted");
+              }
+            }
+          } catch (err) {
+            console.warn("[fishbowl_create_idea] council dispatch wrapping failed:", err);
+          }
+
           return res.status(200).json({ idea: data });
         }
 
