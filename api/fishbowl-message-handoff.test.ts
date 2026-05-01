@@ -146,6 +146,13 @@ describe("planFishbowlMessageHandoffs", () => {
     expect(
       planFishbowlMessageHandoffs({
         ...baseInput,
+        authorAgentId: "  GITHUB-ACTION-WAKE-ROUTER ",
+        tags: ["needs-doing"],
+      }),
+    ).toEqual([]);
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
         tags: ["needs-doing", "wake"],
       }),
     ).toEqual([]);

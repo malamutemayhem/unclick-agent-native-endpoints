@@ -64,7 +64,8 @@ export interface FishbowlMessageHandoffDispatchRow {
 export function planFishbowlMessageHandoffs(
   input: FishbowlMessageHandoffInput,
 ): FishbowlMessageHandoffPlan[] {
-  if (PRE_DISPATCHED_AUTHORS.has(input.authorAgentId)) return [];
+  const normalizedAuthorAgentId = normalizeToken(input.authorAgentId);
+  if (PRE_DISPATCHED_AUTHORS.has(normalizedAuthorAgentId)) return [];
   const normalizedTags = input.tags.map(normalizeToken).filter(Boolean);
   const tagSet = new Set(normalizedTags);
   if (tagSet.has("wake")) return [];
@@ -74,7 +75,7 @@ export function planFishbowlMessageHandoffs(
   const authorProfile = input.recipientProfiles.find(
     (profile) =>
       !isHumanProfile(profile) &&
-      profile.agentId === input.authorAgentId,
+      normalizeToken(profile.agentId) === normalizedAuthorAgentId,
   );
   if (!authorProfile) return [];
 
