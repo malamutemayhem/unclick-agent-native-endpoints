@@ -106,7 +106,9 @@ runs:
           status="infra_transport_error"
           failure_kind="infra_transport"
         elif [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
-          echo "::warning::TestPass auth failure (HTTP $http_code) - TESTPASS_TOKEN is likely stale. Refresh the secret and retry." >&2
+          auth_reason=$(jq -r '.auth_reason // "unknown"' response.json 2>/dev/null || echo "unknown")
+          how_to_fix=$(jq -r '.how_to_fix // "Refresh TESTPASS_TOKEN and retry."' response.json 2>/dev/null || echo "Refresh TESTPASS_TOKEN and retry.")
+          echo "::warning::TestPass auth failure (HTTP $http_code, $auth_reason) - $how_to_fix" >&2
           status="infra_auth_error"
           failure_kind="infra_auth"
           response=$(jq -c '.' response.json 2>/dev/null || echo "{}")

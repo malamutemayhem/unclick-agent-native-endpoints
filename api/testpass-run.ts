@@ -1,8 +1,9 @@
 /**
  * TestPass CI escape hatch - POST /api/testpass-run
  *
- * Bearer-auth (Supabase JWT) entry point for CI pipelines. Runs a named
- * pack against a target MCP server without going through MCP.
+ * Bearer-auth entry point for CI pipelines. Accepts either a Supabase JWT
+ * or an UnClick API key (uc_...). Runs a named pack against a target MCP
+ * server without going through MCP.
  *
  * Body/query: { pack_id: string, pack_name?: string, profile?: "smoke"|"standard"|"deep", server_url?: string }
  * Returns: { run_id: string, status: RunStatus, verdict_summary?: VerdictSummary }
@@ -62,6 +63,94 @@ async function getActorUserId(
   if (!r.ok) return null;
   const u = (await r.json()) as { id?: string };
   return u.id ?? null;
+}
+
+type ActorAuthResult =
+  | { ok: true; actorUserId: string; tokenKind: "api_key" | "session" }
+  | {
+      ok: false;
+      status: 401 | 500;
+      auth_reason: string;
+      error: string;
+      how_to_fix: string;
+    };
+
+async function getActorUserIdFromApiKey(
+  supabaseUrl: string,
+  serviceKey: string,
+  apiKey: string,
+): Promise<ActorAuthResult> {
+  const keyHash = sha256hex(apiKey);
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/api_keys?key_hash=eq.${encodeURIComponent(keyHash)}&select=user_id,is_active&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+  );
+  if (!r.ok) {
+    return {
+      ok: false,
+      status: 500,
+      auth_reason: "api_key_lookup_failed",
+      error: "Could not verify UnClick API key",
+      how_to_fix: "Retry the workflow. If this repeats, check Supabase service-role access for api_keys.",
+    };
+  }
+
+  const rows = (await r.json().catch(() => [])) as Array<{
+    user_id?: string | null;
+    is_active?: boolean | null;
+  }>;
+  const row = rows[0];
+  if (!row) {
+    return {
+      ok: false,
+      status: 401,
+      auth_reason: "api_key_not_found",
+      error: "UnClick API key not found",
+      how_to_fix: "Update TESTPASS_TOKEN to an active key from /admin/you and rerun the workflow.",
+    };
+  }
+  if (row.is_active === false) {
+    return {
+      ok: false,
+      status: 401,
+      auth_reason: "api_key_inactive",
+      error: "UnClick API key is inactive",
+      how_to_fix: "Reissue or choose an active UnClick API key, update TESTPASS_TOKEN, and rerun the workflow.",
+    };
+  }
+  if (!row.user_id) {
+    return {
+      ok: false,
+      status: 401,
+      auth_reason: "api_key_unlinked",
+      error: "UnClick API key is not linked to a user",
+      how_to_fix: "Use an API key from a signed-in account on /admin/you, or link this key to a user before using it for TestPass.",
+    };
+  }
+
+  return { ok: true, actorUserId: row.user_id, tokenKind: "api_key" };
+}
+
+export async function resolveTestPassRunActor(
+  supabaseUrl: string,
+  serviceKey: string,
+  token: string,
+): Promise<ActorAuthResult> {
+  if (token.startsWith("uc_")) {
+    return getActorUserIdFromApiKey(supabaseUrl, serviceKey, token);
+  }
+
+  const actorUserId = await getActorUserId(supabaseUrl, token);
+  if (!actorUserId) {
+    return {
+      ok: false,
+      status: 401,
+      auth_reason: "session_invalid",
+      error: "Invalid session",
+      how_to_fix: "Use a valid Supabase session token or an active UnClick API key.",
+    };
+  }
+  return { ok: true, actorUserId, tokenKind: "session" };
 }
 
 async function getPackIdBySlug(
@@ -254,8 +343,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
   } else {
-    actorUserId = await getActorUserId(supabaseUrl, token);
-    if (!actorUserId) return json(res, 401, { error: "Invalid session" });
+    const actor = await resolveTestPassRunActor(supabaseUrl, serviceKey, token);
+    if (!actor.ok) {
+      return json(res, actor.status, {
+        error: actor.error,
+        auth_reason: actor.auth_reason,
+        how_to_fix: actor.how_to_fix,
+      });
+    }
+    actorUserId = actor.actorUserId;
   }
   const apiKeyHash = shouldEmitScheduledSignal(input.source) || profile !== "smoke"
     ? await getApiKeyHashForUser(supabaseUrl, serviceKey, actorUserId)
