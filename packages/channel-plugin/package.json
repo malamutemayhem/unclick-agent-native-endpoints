@@ -9,6 +9,7 @@
     "unclick-channel": "./index.js"
   },
   "files": [
+    "http.js",
     "index.js",
     "README.md"
   ],

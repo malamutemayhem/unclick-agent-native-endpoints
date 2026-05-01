@@ -6,7 +6,7 @@ test("apiFetchJson returns parsed JSON on success", async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => ({
     ok: true,
-    json: async () => ({ ok: true }),
+    text: async () => JSON.stringify({ ok: true }),
   });
 
   try {
@@ -55,9 +55,6 @@ test("apiFetchJson throws useful error when JSON decoding fails", async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => ({
     ok: true,
-    json: async () => {
-      throw new SyntaxError("Unexpected token < in JSON");
-    },
     text: async () => "<html>upstream proxy error</html>",
   });
 

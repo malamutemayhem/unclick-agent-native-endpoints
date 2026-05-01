@@ -24,10 +24,10 @@ export async function apiFetchJson({
       const text = await res.text().catch(() => "");
       throw new Error(`api ${action} -> ${res.status} ${text.slice(0, 200)}`);
     }
+    const text = await res.text();
     try {
-      return await res.json();
+      return JSON.parse(text);
     } catch (err) {
-      const text = await res.text().catch(() => "");
       const reason = err instanceof Error ? err.message : String(err);
       throw new Error(
         `api ${action} invalid json response: ${reason}${text ? ` body=${text.slice(0, 200)}` : ""}`
