@@ -448,7 +448,7 @@ describe("event wake router reliability dispatch", () => {
     }
   });
 
-  it("caps ACK fail seconds to one day", () => {
+  it("caps ACK fail seconds to the 10-minute WakePass contract", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
     const eventPath = join(tempDir, "event.json");
     const ledgerDir = join(tempDir, "ledger");
@@ -484,7 +484,7 @@ describe("event wake router reliability dispatch", () => {
       });
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(result.stdout, /"ack_fail_after_seconds": 86400/);
+      assert.match(result.stdout, /"ack_fail_after_seconds": 600/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

@@ -13,7 +13,7 @@ const runId = process.env.GITHUB_RUN_ID || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";
 const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AUTOCLOSE_TOKEN || "";
 const dryRun = process.env.WAKE_ROUTER_DRY_RUN === "1" || process.env.WAKE_ROUTER_DRY_RUN === "true";
-const ackFailSeconds = parseBoundedSeconds(process.env.WAKE_ACK_FAIL_SECONDS, 600, 86400);
+const ackFailSeconds = parseBoundedSeconds(process.env.WAKE_ACK_FAIL_SECONDS, 600, 600);
 const receivedAt = new Date().toISOString();
 const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || "";
