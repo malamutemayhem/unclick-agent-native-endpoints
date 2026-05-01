@@ -294,6 +294,31 @@ describe("reliability helpers", () => {
     expect(numericAck.action).toBe("handoff_ack_missing");
   });
 
+  it("requires non-empty handoff IDs before classifying as missing ACK", () => {
+    const emptyHandoff = createReclaimSignal(
+      {
+        dispatchId: "dispatch_empty_handoff",
+        source: "wakepass",
+        targetAgentId: "coder",
+        payload: { handoff_message_id: "   " },
+      },
+      61,
+    );
+
+    const validHandoff = createReclaimSignal(
+      {
+        dispatchId: "dispatch_valid_handoff",
+        source: "wakepass",
+        targetAgentId: "coder",
+        payload: { handoff_thread_id: "thread-123" },
+      },
+      61,
+    );
+
+    expect(emptyHandoff.action).toBe("stale_dispatch_reclaimed");
+    expect(validHandoff.action).toBe("handoff_ack_missing");
+  });
+
   it("marks non-ack reclaim as a generic stale dispatch", () => {
     const signal = createReclaimSignal(
       {

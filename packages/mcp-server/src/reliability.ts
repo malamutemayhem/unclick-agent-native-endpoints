@@ -295,6 +295,8 @@ export function createReclaimSignal(
   staleSeconds: number,
 ): ReclaimSignalDescriptor {
   const payload = dispatch.payload ?? {};
+  const hasNonEmptyString = (value: unknown): boolean =>
+    typeof value === "string" && value.trim().length > 0;
   const hasAckFlag = (value: unknown): boolean => {
     if (value === true) return true;
     if (typeof value === "string") {
@@ -307,8 +309,8 @@ export function createReclaimSignal(
   const expectsAck =
     hasAckFlag(payload.ack_required) ||
     hasAckFlag(payload.require_ack) ||
-    typeof payload.handoff_message_id === "string" ||
-    typeof payload.handoff_thread_id === "string";
+    hasNonEmptyString(payload.handoff_message_id) ||
+    hasNonEmptyString(payload.handoff_thread_id);
 
   if (expectsAck) {
     return {
