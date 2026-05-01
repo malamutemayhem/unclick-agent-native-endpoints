@@ -24,7 +24,15 @@ export async function apiFetchJson({
       const text = await res.text().catch(() => "");
       throw new Error(`api ${action} -> ${res.status} ${text.slice(0, 200)}`);
     }
-    return res.json();
+    try {
+      return await res.json();
+    } catch (err) {
+      const text = await res.text().catch(() => "");
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `api ${action} invalid json response: ${reason}${text ? ` body=${text.slice(0, 200)}` : ""}`
+      );
+    }
   } catch (err) {
     if (err && typeof err === "object" && err.name === "AbortError") {
       throw new Error(`api ${action} timeout after ${timeoutMs}ms`);

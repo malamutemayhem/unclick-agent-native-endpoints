@@ -50,3 +50,29 @@ test("apiFetchJson throws timeout error when request hangs", async () => {
     global.fetch = originalFetch;
   }
 });
+
+test("apiFetchJson throws useful error when JSON decoding fails", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => {
+      throw new SyntaxError("Unexpected token < in JSON");
+    },
+    text: async () => "<html>upstream proxy error</html>",
+  });
+
+  try {
+    await assert.rejects(
+      () =>
+        apiFetchJson({
+          apiBase: "https://unclick.world",
+          apiKey: "k",
+          action: "admin_channel_heartbeat",
+          timeoutMs: 50,
+        }),
+      /api admin_channel_heartbeat invalid json response:.*body=<html>upstream proxy error<\/html>/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
