@@ -101,6 +101,22 @@ function uniqueHats(evaluations: CheckEvaluation[]): string[] {
   return Array.from(new Set(evaluations.map((e) => e.hat))).sort();
 }
 
+function failedResult(): {
+  status: "failed";
+  stats: RunSummaryStats;
+  uxScore: number;
+  checkCount: number;
+  hats: string[];
+} {
+  return {
+    status: "failed",
+    stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
+    uxScore: 0,
+    checkCount: 0,
+    hats: uniqueHats(CORE_CHECKS as unknown as CheckEvaluation[]),
+  };
+}
+
 /**
  * Capture + evaluate without touching the database. Used by tests and any
  * caller that wants the raw evaluations (e.g. the local CLI when offline).
@@ -143,47 +159,43 @@ export async function runDeterministicChecks(
   checkCount: number;
   hats: string[];
 }> {
-  let evaluations: CheckEvaluation[];
+  let failureSummaryPrefix = "Capture failed";
   try {
     const context = await captureContext(targetUrl, opts);
-    evaluations = evaluateAllChecks(context);
+    const evaluations = evaluateAllChecks(context);
+
+    const findings = failingFindings(evaluations);
+    failureSummaryPrefix = "Persistence failed";
+    await createFindings(config, runId, findings);
+
+    const stats = summariseStats(evaluations);
+    const uxScore = computeUxScore(evaluations);
+    const breakdown = buildBreakdown(evaluations);
+    const summary = buildSummaryText(stats, uxScore);
+
+    failureSummaryPrefix = "Completion failed";
+    await updateRunStatus(config, runId, {
+      status: "complete",
+      ux_score: uxScore,
+      breakdown,
+      summary,
+    });
+
+    return {
+      status: "complete",
+      stats,
+      uxScore,
+      checkCount: evaluations.length,
+      hats: uniqueHats(evaluations),
+    };
   } catch (err) {
     const message = (err as Error).message;
     await updateRunStatus(config, runId, {
       status: "failed",
       ux_score: null,
-      summary: `Capture failed: ${message}`,
+      summary: `${failureSummaryPrefix}: ${message}`,
       error: message,
     });
-    return {
-      status: "failed",
-      stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
-      uxScore: 0,
-      checkCount: 0,
-      hats: uniqueHats(CORE_CHECKS as unknown as CheckEvaluation[]),
-    };
+    return failedResult();
   }
-
-  const findings = failingFindings(evaluations);
-  await createFindings(config, runId, findings);
-
-  const stats = summariseStats(evaluations);
-  const uxScore = computeUxScore(evaluations);
-  const breakdown = buildBreakdown(evaluations);
-  const summary = buildSummaryText(stats, uxScore);
-
-  await updateRunStatus(config, runId, {
-    status: "complete",
-    ux_score: uxScore,
-    breakdown,
-    summary,
-  });
-
-  return {
-    status: "complete",
-    stats,
-    uxScore,
-    checkCount: evaluations.length,
-    hats: uniqueHats(evaluations),
-  };
 }

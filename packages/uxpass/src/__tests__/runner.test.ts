@@ -176,6 +176,63 @@ describe("runDeterministicChecks", () => {
       vi.stubGlobal("fetch", originalFetch);
     }
   });
+
+  it("returns failed and closes the run when finding persistence fails", async () => {
+    const updateBodies: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const urlString = String(url);
+        if (urlString.includes("uxpass_findings")) {
+          return new Response("insert failed", { status: 500 });
+        }
+        if (urlString.includes("uxpass_runs")) {
+          updateBodies.push(init?.body ? JSON.parse(String(init.body)) : null);
+          return new Response("[]", { status: 200 });
+        }
+        throw new Error(`unexpected fetch: ${urlString}`);
+      }),
+    );
+
+    try {
+      const result = await runDeterministicChecks(
+        {
+          supabaseUrl: "https://example.supabase.co",
+          serviceRoleKey: "service-role",
+        },
+        "run-stuck",
+        "http://example.test",
+        {
+          fetch: async (url) => {
+            const urlString = String(url);
+            if (urlString.endsWith("/llms.txt")) {
+              return new Response("# llms", { status: 200 });
+            }
+            return new Response(goodHtml, {
+              status: 200,
+              headers: { "Strict-Transport-Security": "max-age=63072000; includeSubDomains" },
+            });
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "failed",
+        uxScore: 0,
+        checkCount: 0,
+        stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
+      });
+      expect(updateBodies[0]).toMatchObject({
+        status: "failed",
+        ux_score: null,
+        summary: expect.stringContaining("Persistence failed: Supabase POST uxpass_findings -> 500"),
+        error: expect.stringContaining("Supabase POST uxpass_findings -> 500"),
+      });
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
 });
 
 describe("summariseStats", () => {
