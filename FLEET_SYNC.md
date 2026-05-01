@@ -230,6 +230,11 @@ Every material status should include:
 - PR, todo, or issue link.
 - ETA or next check-in.
 
+Use `docs/fishbowl-board-priority-system.md` when triaging the todo board.
+The active board lanes are NOW, NEXT, LATER, PARKED, and BLOCKED. A large
+todo list is acceptable when items are truthful, evidenced, and clearly
+classified.
+
 ## PR And Merge Policy
 
 - Keep one PR to one chip.
