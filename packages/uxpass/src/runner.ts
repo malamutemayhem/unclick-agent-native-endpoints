@@ -136,7 +136,13 @@ export async function runDeterministicChecks(
   runId: string,
   targetUrl: string,
   opts: CaptureOptions = {},
-): Promise<{ stats: RunSummaryStats; uxScore: number; checkCount: number; hats: string[] }> {
+): Promise<{
+  status: "complete" | "failed";
+  stats: RunSummaryStats;
+  uxScore: number;
+  checkCount: number;
+  hats: string[];
+}> {
   let evaluations: CheckEvaluation[];
   try {
     const context = await captureContext(targetUrl, opts);
@@ -150,6 +156,7 @@ export async function runDeterministicChecks(
       error: message,
     });
     return {
+      status: "failed",
       stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
       uxScore: 0,
       checkCount: 0,
@@ -173,6 +180,7 @@ export async function runDeterministicChecks(
   });
 
   return {
+    status: "complete",
     stats,
     uxScore,
     checkCount: evaluations.length,

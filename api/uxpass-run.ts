@@ -147,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await runDeterministicChecks(config, runId, targetUrl);
     return json(res, 200, {
       run_id: runId,
-      status: "complete",
+      status: result.status,
       ux_score: result.uxScore,
       target_url: targetUrl,
       stats: result.stats,

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { captureContext, evaluateUrl, summariseStats } from "../runner.js";
+import { captureContext, evaluateUrl, runDeterministicChecks, summariseStats } from "../runner.js";
 
 interface MockServer {
   url: string;
@@ -129,6 +129,51 @@ describe("evaluateUrl - integration with live HTTP server", () => {
       });
     } finally {
       server.close();
+    }
+  });
+});
+
+describe("runDeterministicChecks", () => {
+  it("returns failed and persists failed status when capture fails", async () => {
+    const updateBodies: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        updateBodies.push(init?.body ? JSON.parse(String(init.body)) : null);
+        return new Response("[]", { status: 200 });
+      }),
+    );
+
+    try {
+      const result = await runDeterministicChecks(
+        {
+          supabaseUrl: "https://example.supabase.co",
+          serviceRoleKey: "service-role",
+        },
+        "run-fail",
+        "https://broken.example",
+        {
+          fetch: async () => {
+            throw new Error("network boom");
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "failed",
+        uxScore: 0,
+        checkCount: 0,
+        stats: { total: 0, pass: 0, fail: 0, na: 0, pass_rate: 0 },
+      });
+      expect(updateBodies[0]).toMatchObject({
+        status: "failed",
+        ux_score: null,
+        summary: "Capture failed: network boom",
+        error: "network boom",
+      });
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
     }
   });
 });
