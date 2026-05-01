@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildReliabilityDispatchRequest,
+  normalizeDispatchOwner,
   wakeDispatchId,
 } from "./event-wake-router.mjs";
 
@@ -111,6 +112,24 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(request.payload.ack_required, true);
     assert.equal(request.payload.route_attempted, "fishbowl");
     assert.equal(request.payload.handoff_message_id, null);
+  });
+
+  it("normalizes fanout owner to a concrete ACK owner for reliability dispatch", () => {
+    const request = buildReliabilityDispatchRequest({
+      eventId: "wake-issue_comment-comment-123-xyz",
+      decision: {
+        owner: "all",
+        reason: "Escalate broadly",
+        urgency: "urgent",
+      },
+      triage: { used: true },
+      result: { message_id: "msg-all-1" },
+      event: { comment: { id: 123 }, issue: { number: 99 } },
+    });
+
+    assert.equal(normalizeDispatchOwner("all"), "🤖");
+    assert.equal(request.target_agent_id, "🤖");
+    assert.equal(request.payload.wake_owner, "all");
   });
 
   it("keeps successful PR workflow green echoes silent", () => {

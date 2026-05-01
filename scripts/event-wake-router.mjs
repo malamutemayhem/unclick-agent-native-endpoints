@@ -87,6 +87,10 @@ export function wakeDispatchId(eventId) {
   return `dispatch_${digest}`;
 }
 
+export function normalizeDispatchOwner(owner) {
+  return owner === "all" ? "🤖" : owner;
+}
+
 function baseDecision(event) {
   const action = String(event.action || "");
 
@@ -346,7 +350,7 @@ export function buildReliabilityDispatchRequest({
   return {
     dispatch_id: wakeDispatchId(eventId),
     source: "wakepass",
-    target_agent_id: decision.owner,
+    target_agent_id: normalizeDispatchOwner(decision.owner),
     task_ref: eventId,
     time_bucket_seconds: ackSeconds,
     payload: {
@@ -379,7 +383,7 @@ async function registerWakeDispatch({ eventId, decision, triage, result, event }
 
   const claimRequest = {
     dispatch_id: dispatchRequest.dispatch_id,
-    agent_id: decision.owner,
+    agent_id: normalizeDispatchOwner(decision.owner),
     lease_seconds: ackFailSeconds,
   };
 
