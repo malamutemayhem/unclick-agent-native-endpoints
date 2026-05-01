@@ -553,6 +553,20 @@ async function main() {
     result: null,
     event,
   });
+  if (!reliability?.registered && !reliability?.dry_run) {
+    console.error("Reliability dispatch registration failed, skipping Fishbowl wake post.");
+    writeLedger({
+      eventId,
+      event,
+      decision: finalDecision,
+      triage,
+      result: null,
+      reliability,
+      status: "wake_failed",
+    });
+    process.exitCode = 1;
+    return;
+  }
   const result = await postWake(finalDecision, triage, eventId, event);
   const status = result.posted ? "wake_posted" : result.dry_run ? "wake_dry_run" : "wake_failed";
   writeLedger({ eventId, event, decision: finalDecision, triage, result, reliability, status });
