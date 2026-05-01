@@ -32,6 +32,8 @@ jobs:
       - name: Tests
         run: npm test --if-present
         continue-on-error: true
+      - name: RotatePass redaction guard
+        run: npm run test:rotatepass-redaction
 
   mcp-server:
     name: MCP server package
