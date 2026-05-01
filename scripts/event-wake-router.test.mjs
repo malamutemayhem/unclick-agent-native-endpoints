@@ -149,6 +149,8 @@ describe("event wake router reliability dispatch", () => {
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(result.stdout, /reliability_dispatch_dry_run/);
+      assert.match(result.stdout, /"wake_owner": "🍿"/);
+      assert.match(result.stdout, /"ack_required": true/);
       assert.ok(
         result.stdout.indexOf("reliability_dispatch_dry_run") <
           result.stdout.indexOf('"text": "Wake event id:'),
@@ -315,7 +317,29 @@ describe("event wake router reliability dispatch", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /PR #330 is ready for review/);
+    assert.match(result.stdout, /"wake_owner": "🍿"/);
     assert.match(result.stdout, /"wake_urgency": "high"/);
+    assert.match(result.stdout, /reliability_dispatch_dry_run/);
+    assert.match(result.stdout, /"ack_required": true/);
+  });
+
+  it("keeps ordinary PR updates silent", () => {
+    const result = runDryWake("pull_request", {
+      action: "synchronize",
+      number: 331,
+      pull_request: {
+        number: 331,
+        title: "Refresh implementation branch",
+        draft: false,
+        state: "open",
+        html_url: "https://github.com/acme/repo/pull/331",
+        updated_at: "2026-04-30T15:10:00Z",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /No wake needed/);
+    assert.doesNotMatch(result.stdout, /reliability_dispatch_dry_run/);
   });
 
   it("keeps non-wake issue comments silent", () => {

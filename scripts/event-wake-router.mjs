@@ -125,7 +125,7 @@ function baseDecision(event) {
     if (run.status === "completed" && run.conclusion === "success" && prs.length > 0) {
       return {
         wake: true,
-        owner: "🤖",
+        owner: "🍿",
         urgency: "high",
         reason: `PR checks completed green for ${run.name || "workflow"} on PR #${prs[0].number}`,
         eventCreatedAt: run.updated_at || run.created_at,
@@ -139,7 +139,7 @@ function baseDecision(event) {
     if (["ready_for_review", "review_requested", "reopened"].includes(action)) {
       return {
         wake: true,
-        owner: "🤖",
+        owner: "🍿",
         urgency: "high",
         reason: `PR #${pr.number || event.number} is ${action.replaceAll("_", " ")}`,
         eventCreatedAt: pr.updated_at || pr.created_at,
