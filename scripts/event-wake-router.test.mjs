@@ -489,4 +489,46 @@ describe("event wake router reliability dispatch", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("floors ACK fail seconds to avoid immediate no-ACK false failures", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const eventPath = join(tempDir, "event.json");
+    const ledgerDir = join(tempDir, "ledger");
+    writeFileSync(
+      eventPath,
+      JSON.stringify({
+        action: "completed",
+        workflow_run: {
+          id: 463,
+          name: "TestPass Scheduled Smoke",
+          status: "completed",
+          conclusion: "failure",
+          html_url: "https://github.com/acme/repo/actions/runs/463",
+          created_at: "2026-04-30T17:30:00Z",
+          updated_at: "2026-04-30T17:35:00Z",
+          pull_requests: [],
+        },
+      }),
+    );
+
+    try {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_run",
+          GITHUB_EVENT_PATH: eventPath,
+          WAKE_LEDGER_DIR: ledgerDir,
+          WAKE_ROUTER_DRY_RUN: "true",
+          WAKE_ACK_FAIL_SECONDS: "1",
+        },
+        encoding: "utf8",
+      });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /"ack_fail_after_seconds": 60/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
