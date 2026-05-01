@@ -28,6 +28,12 @@ import * as path from "node:path";
 import * as url from "node:url";
 import { createHash } from "node:crypto";
 import type { RunProfile, RunTarget } from "../packages/testpass/src/types.js";
+import {
+  buildTestPassBackgroundFailureDispatchRow,
+  DEFAULT_TESTPASS_BACKGROUND_HANDOFF_AGENT_ID,
+  planTestPassBackgroundFailureHandoff,
+  testPassBackgroundFailureDispatchId,
+} from "./lib/testpass-background-handoff.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
@@ -128,6 +134,58 @@ function emitScheduledRunSignal(params: {
   });
 }
 
+async function createBackgroundFailureDispatch(params: {
+  supabaseUrl: string;
+  serviceKey: string;
+  apiKeyHash: string | null;
+  runId: string;
+  packSlug: string;
+  packName: string;
+  profile: RunProfile;
+  target: RunTarget;
+  error: unknown;
+}) {
+  if (!params.apiKeyHash) return;
+  const targetAgentId =
+    process.env.TESTPASS_WAKE_AGENT_ID ?? DEFAULT_TESTPASS_BACKGROUND_HANDOFF_AGENT_ID;
+  const plan = planTestPassBackgroundFailureHandoff({
+    runId: params.runId,
+    packSlug: params.packSlug,
+    packName: params.packName,
+    profile: params.profile,
+    target: params.target,
+    targetAgentId,
+    errorMessage: params.error instanceof Error ? params.error.message : String(params.error),
+  });
+  if (!plan) return;
+
+  const row = buildTestPassBackgroundFailureDispatchRow({
+    apiKeyHash: params.apiKeyHash,
+    dispatchId: testPassBackgroundFailureDispatchId(params.runId),
+    plan,
+    now: new Date(),
+  });
+
+  const response = await fetch(`${params.supabaseUrl}/rest/v1/mc_agent_dispatches`, {
+    method: "POST",
+    headers: {
+      apikey: params.serviceKey,
+      Authorization: `Bearer ${params.serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=ignore-duplicates",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!response.ok && response.status !== 409) {
+    const body = await response.text().catch(() => "");
+    console.error(
+      `testpass-run failed to create background failure dispatch for ${params.runId}:`,
+      response.status,
+      body,
+    );
+  }
+}
+
 function queryString(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -199,7 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     actorUserId = await getActorUserId(supabaseUrl, token);
     if (!actorUserId) return json(res, 401, { error: "Invalid session" });
   }
-  const apiKeyHash = shouldEmitScheduledSignal(input.source)
+  const apiKeyHash = shouldEmitScheduledSignal(input.source) || profile !== "smoke"
     ? await getApiKeyHashForUser(supabaseUrl, serviceKey, actorUserId)
     : null;
 
@@ -297,8 +355,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  runWork().catch((err) => {
+  runWork().catch(async (err) => {
     console.error(`testpass-run background work failed for ${runId}:`, (err as Error).message);
+    try {
+      await createBackgroundFailureDispatch({
+        supabaseUrl,
+        serviceKey,
+        apiKeyHash,
+        runId,
+        packSlug,
+        packName,
+        profile,
+        target,
+        error: err,
+      });
+    } catch (dispatchErr) {
+      console.error(
+        `testpass-run background failure dispatch errored for ${runId}:`,
+        (dispatchErr as Error).message,
+      );
+    }
   });
   return json(res, 202, {
     run_id: runId,
