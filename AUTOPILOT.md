@@ -2,6 +2,8 @@
 
 This file defines what workers may do without waiting for Chris, what needs one approval, and what remains gated. It is the shared decision matrix for Fishbowl handoffs, scheduled workers, and async coding agents.
 
+Read `FLEET_SYNC.md` first. It is the current cross-PC fleet alignment layer and defines source-of-truth order, worker lanes, no-stomp rules, and continuity expectations. This file only defines autonomy tiers.
+
 The goal is simple: keep the fleet moving while protecting secrets, security, billing, migrations, and public claims.
 
 ## Operating Principles

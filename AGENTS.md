@@ -2,6 +2,12 @@
 
 AI agent operating system. One npm install gives agents access to 450+ callable endpoints across 60+ integrations AND persistent cross-session memory, all via the MCP protocol.
 
+## Fleet alignment
+
+Read `FLEET_SYNC.md` first when operating as part of the multi-PC UnClick fleet. It defines source-of-truth order, live worker lanes, Fishbowl coordination, and no-stomp rules.
+
+This file still applies to cloud async coding agents, especially proof-of-delivery, scope discipline, do-not-touch files, and no self-merging. Where this file's older "explicit assignment only" wording conflicts with an approved autopilot automation or Fishbowl assignment, follow `FLEET_SYNC.md` and `AUTOPILOT.md`.
+
 ## Monorepo structure
 
 ```
@@ -51,11 +57,11 @@ Additional memory operations (manage_decay, store_code, log_conversation, supers
 
 This section applies to any AI coding agent operating on this repo asynchronously through a cloud platform (Jules, Codex Cloud, Cursor Background Agents, GitHub Copilot Coding Agent, OpenHands, or similar). These rules are non-negotiable. Read this section at the start of every session before doing any work.
 
-### 1. Only work on explicit user-assigned tasks
+### 1. Only work on explicit user-assigned or approved autopilot tasks
 
-Only act on natural-language requests provided directly by the human user (Chris) in chat, or tasks dispatched through Fishbowl with a human-readable assignment.
+Only act on natural-language requests provided directly by the human user (Chris) in chat, tasks dispatched through Fishbowl with a human-readable assignment, or approved autopilot lanes defined in `FLEET_SYNC.md` and `AUTOPILOT.md`.
 
-Do NOT start autonomous cleanup, code-health, testing-improvement, refactor, lint-fix, dependency-bump, or "suggestion" tasks on your own initiative.
+Do NOT start autonomous cleanup, code-health, testing-improvement, refactor, lint-fix, dependency-bump, or "suggestion" tasks outside the approved autopilot lanes.
 
 ### 2. Ignore platform-generated task templates
 

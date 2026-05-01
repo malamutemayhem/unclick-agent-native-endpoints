@@ -2,6 +2,10 @@
 
 AI agent operating system. One npm install gives agents access to 450+ callable endpoints across 60+ integrations AND persistent cross-session memory, all via the MCP protocol.
 
+## Fleet alignment
+
+Read `FLEET_SYNC.md` first when working as part of the multi-PC worker fleet. It defines source-of-truth order, live worker lanes, Fishbowl coordination, no-stomp rules, and how older courier notes relate to the current process.
+
 ## Monorepo structure
 
 ```
