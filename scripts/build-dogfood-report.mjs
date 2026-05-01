@@ -21,21 +21,29 @@ function trimTrailingSlash(value) {
 }
 
 function statusFromFailureKind(failureKind) {
-  if (failureKind === "missing_secret") return "failing";
+  if (failureKind === "missing_secret") return "blocked";
   if (failureKind === "network" || failureKind === "http" || failureKind === "parse") return "failing";
   return "pending";
 }
 
+function result(id, name, status, summary, evidence, details = {}) {
+  return { id, name, status, summary, evidence, checkedAt: generatedAt, ...details };
+}
+
 function pendingResult(id, name, summary, evidence) {
-  return { id, name, status: "pending", summary, evidence };
+  return result(id, name, "pending", summary, evidence);
+}
+
+function blockedResult(id, name, summary, evidence, blockedReason) {
+  return result(id, name, "blocked", summary, evidence, { blockedReason });
 }
 
 function failureResult(id, name, summary, evidence) {
-  return { id, name, status: "failing", summary, evidence };
+  return result(id, name, "failing", summary, evidence);
 }
 
 function passResult(id, name, summary, evidence) {
-  return { id, name, status: "passing", summary, evidence };
+  return result(id, name, "passing", summary, evidence);
 }
 
 async function postJson(url, token, body) {
@@ -69,11 +77,12 @@ async function runTestPass() {
     );
   }
   if (!token) {
-    return failureResult(
+    return blockedResult(
       "testpass",
       "TestPass",
       "Scheduled TestPass could not run because DOGFOOD_TESTPASS_TOKEN or TESTPASS_TOKEN is missing.",
       "Set the GitHub secret so the nightly dogfood workflow can create a fresh testpass_runs row.",
+      "Missing DOGFOOD_TESTPASS_TOKEN or TESTPASS_TOKEN.",
     );
   }
 
@@ -108,13 +117,13 @@ async function runTestPass() {
     }
 
     const statusLabel = json.status || "unknown";
-    return {
-      id: "testpass",
-      name: "TestPass",
-      status: statusFromFailureKind(statusLabel === "running" ? "pending" : "http"),
-      summary: `Scheduled TestPass returned status ${statusLabel} with ${failCount} failures.`,
-      evidence: `Run ${runId} checked ${mcpUrl}.`,
-    };
+    return result(
+      "testpass",
+      "TestPass",
+      statusFromFailureKind(statusLabel === "running" ? "pending" : "http"),
+      `Scheduled TestPass returned status ${statusLabel} with ${failCount} failures.`,
+      `Run ${runId} checked ${mcpUrl}.`,
+    );
   } catch (err) {
     return failureResult(
       "testpass",
@@ -136,11 +145,12 @@ async function runUXPass() {
     );
   }
   if (!token) {
-    return failureResult(
+    return blockedResult(
       "uxpass",
       "UXPass",
       "Scheduled UXPass could not run because DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET is missing.",
       "Set one workflow secret so the nightly dogfood workflow can create a fresh uxpass_runs row.",
+      "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
     );
   }
 
@@ -192,12 +202,20 @@ function buildTrend(results) {
     date: today,
     passing: results.filter((result) => result.status === "passing").length,
     failing: results.filter((result) => result.status === "failing").length,
+    blocked: results.filter((result) => result.status === "blocked").length,
     pending: results.filter((result) => result.status === "pending").length,
   }];
 }
 
+function buildStatus(results) {
+  if (results.some((result) => result.status === "failing")) return "failing";
+  if (results.some((result) => result.status === "blocked")) return "blocked";
+  if (results.some((result) => result.status === "pending")) return "pending";
+  return "passing";
+}
+
 function buildLastActionableFailure(results) {
-  const failing = results.find((result) => result.status === "failing");
+  const failing = results.find((result) => result.status === "failing" || result.status === "blocked");
   if (!failing) {
     return {
       title: "No actionable dogfood failure in the latest receipt",
@@ -208,7 +226,7 @@ function buildLastActionableFailure(results) {
 
   return {
     title: `${failing.name} needs attention`,
-    detail: failing.summary,
+    detail: failing.blockedReason ? `${failing.summary} Blocked reason: ${failing.blockedReason}` : failing.summary,
     owner: "Dogfood automation",
   };
 }
@@ -238,6 +256,8 @@ const results = [
 
 const report = {
   generatedAt,
+  lastRunAt: generatedAt,
+  status: buildStatus(results),
   source: dryRun ? "dogfood receipt dry run" : "nightly dogfood workflow",
   headline: "We dogfood UnClick on UnClick.",
   target: "UnClick public and agent-facing product surfaces",
@@ -253,7 +273,9 @@ await fs.writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`Wrote dogfood report to ${outputPath}`);
 console.log(JSON.stringify({
   generatedAt: report.generatedAt,
+  status: report.status,
   passing: report.trend[0].passing,
   failing: report.trend[0].failing,
+  blocked: report.trend[0].blocked,
   pending: report.trend[0].pending,
 }, null, 2));

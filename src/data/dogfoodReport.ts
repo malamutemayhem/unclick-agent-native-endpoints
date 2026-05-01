@@ -1,4 +1,4 @@
-export type DogfoodStatus = "passing" | "failing" | "pending";
+export type DogfoodStatus = "passing" | "failing" | "pending" | "blocked";
 
 export interface DogfoodPassResult {
   id: string;
@@ -6,17 +6,22 @@ export interface DogfoodPassResult {
   status: DogfoodStatus;
   summary: string;
   evidence: string;
+  checkedAt?: string;
+  blockedReason?: string;
 }
 
 export interface DogfoodTrendPoint {
   date: string;
   passing: number;
   failing: number;
+  blocked?: number;
   pending: number;
 }
 
 export const dogfoodReport = {
   generatedAt: "2026-05-01T00:50:00Z",
+  lastRunAt: "2026-05-01T00:50:00Z",
+  status: "pending",
   source: "public seed receipt",
   headline: "We dogfood UnClick on UnClick.",
   target: "UnClick public and agent-facing product surfaces",
@@ -28,6 +33,7 @@ export const dogfoodReport = {
       status: "passing",
       summary: "PR smoke checks are producing green receipts.",
       evidence: "Recent TestPass PR checks completed successfully on UnClick PRs.",
+      checkedAt: "2026-05-01T00:50:00Z",
     },
     {
       id: "uxpass",
@@ -35,6 +41,7 @@ export const dogfoodReport = {
       status: "pending",
       summary: "Queued for recurring UX review.",
       evidence: "Public UX receipts will appear here once recurring checks begin.",
+      checkedAt: "2026-05-01T00:50:00Z",
     },
     {
       id: "seopass",
@@ -42,6 +49,7 @@ export const dogfoodReport = {
       status: "pending",
       summary: "Queued for recurring search and metadata review.",
       evidence: "Public SEO receipts will appear here once recurring checks begin.",
+      checkedAt: "2026-05-01T00:50:00Z",
     },
     {
       id: "copypass",
@@ -49,6 +57,7 @@ export const dogfoodReport = {
       status: "pending",
       summary: "Queued for recurring copy quality review.",
       evidence: "Public copy-quality receipts will appear here once recurring checks begin.",
+      checkedAt: "2026-05-01T00:50:00Z",
     },
     {
       id: "legalpass",
@@ -56,6 +65,7 @@ export const dogfoodReport = {
       status: "pending",
       summary: "Queued for recurring policy and claims review.",
       evidence: "Public legal-quality receipts will appear here once recurring checks begin.",
+      checkedAt: "2026-05-01T00:50:00Z",
     },
   ] satisfies DogfoodPassResult[],
   trend: [

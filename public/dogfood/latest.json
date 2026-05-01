@@ -1,5 +1,7 @@
 {
   "generatedAt": "2026-05-01T00:50:00Z",
+  "lastRunAt": "2026-05-01T00:50:00Z",
+  "status": "pending",
   "source": "public seed receipt",
   "headline": "We dogfood UnClick on UnClick.",
   "target": "UnClick public and agent-facing product surfaces",
@@ -10,35 +12,40 @@
       "name": "TestPass",
       "status": "passing",
       "summary": "PR smoke checks are producing green receipts.",
-      "evidence": "Recent TestPass PR checks completed successfully on UnClick PRs."
+      "evidence": "Recent TestPass PR checks completed successfully on UnClick PRs.",
+      "checkedAt": "2026-05-01T00:50:00Z"
     },
     {
       "id": "uxpass",
       "name": "UXPass",
       "status": "pending",
       "summary": "Queued for recurring UX review.",
-      "evidence": "Public UX receipts will appear here once recurring checks begin."
+      "evidence": "Public UX receipts will appear here once recurring checks begin.",
+      "checkedAt": "2026-05-01T00:50:00Z"
     },
     {
       "id": "seopass",
       "name": "SEOPass",
       "status": "pending",
       "summary": "Queued for recurring search and metadata review.",
-      "evidence": "Public SEO receipts will appear here once recurring checks begin."
+      "evidence": "Public SEO receipts will appear here once recurring checks begin.",
+      "checkedAt": "2026-05-01T00:50:00Z"
     },
     {
       "id": "copypass",
       "name": "CopyPass",
       "status": "pending",
       "summary": "Queued for recurring copy quality review.",
-      "evidence": "Public copy-quality receipts will appear here once recurring checks begin."
+      "evidence": "Public copy-quality receipts will appear here once recurring checks begin.",
+      "checkedAt": "2026-05-01T00:50:00Z"
     },
     {
       "id": "legalpass",
       "name": "LegalPass",
       "status": "pending",
       "summary": "Queued for recurring policy and claims review.",
-      "evidence": "Public legal-quality receipts will appear here once recurring checks begin."
+      "evidence": "Public legal-quality receipts will appear here once recurring checks begin.",
+      "checkedAt": "2026-05-01T00:50:00Z"
     }
   ],
   "trend": [

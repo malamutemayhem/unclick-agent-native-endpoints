@@ -25,6 +25,11 @@ const STATUS_STYLES: Record<DogfoodStatus, { label: string; badge: string; icon:
     badge: "border-amber-400/20 bg-amber-400/10 text-amber-200",
     icon: Clock3,
   },
+  blocked: {
+    label: "Blocked",
+    badge: "border-sky-400/25 bg-sky-400/10 text-sky-200",
+    icon: AlertTriangle,
+  },
 };
 
 function countByStatus(results: DogfoodPassResult[], status: DogfoodStatus): number {
@@ -62,8 +67,11 @@ export default function DogfoodReportPage() {
   const counts = useMemo(() => ({
     passing: countByStatus(report.results, "passing"),
     failing: countByStatus(report.results, "failing"),
+    blocked: countByStatus(report.results, "blocked"),
     pending: countByStatus(report.results, "pending"),
   }), [report.results]);
+  const receiptStatus = STATUS_STYLES[(report.status || "pending") as DogfoodStatus] || STATUS_STYLES.pending;
+  const ReceiptIcon = receiptStatus.icon;
 
   return (
     <div className="min-h-screen bg-background">
@@ -85,9 +93,8 @@ export default function DogfoodReportPage() {
                   {report.headline}
                 </h1>
                 <p className="mt-4 max-w-2xl text-lg leading-relaxed text-body">
-                  This is the public receipt board for UnClick's own Pass-family checks. Today it
-                  shows the first receipt contract; future receipts will update it with fresh
-                  automated evidence.
+                  This page shows the latest Pass-family receipt evidence from checks running
+                  against UnClick itself.
                 </p>
               </div>
 
@@ -95,17 +102,25 @@ export default function DogfoodReportPage() {
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-custom">
                   Latest receipt
                 </p>
-                <p className="mt-2 text-sm text-heading">{formatDate(report.generatedAt)}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${receiptStatus.badge}`}>
+                    <ReceiptIcon className="h-3.5 w-3.5" />
+                    {receiptStatus.label}
+                  </span>
+                  <span className="text-xs text-muted-custom">{report.source}</span>
+                </div>
+                <p className="mt-3 text-sm text-heading">Last run: {formatDate(report.lastRunAt || report.generatedAt)}</p>
                 <p className="mt-3 text-xs leading-relaxed text-body">{report.nextAutomation}</p>
               </div>
             </div>
           </FadeIn>
         </section>
 
-        <section className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
+        <section className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-4">
           {([
             ["Passing", counts.passing, "text-emerald-200"],
             ["Needs action", counts.failing, "text-red-200"],
+            ["Blocked", counts.blocked, "text-sky-200"],
             ["Pending automation", counts.pending, "text-amber-200"],
           ] as const).map(([label, value, className]) => (
             <FadeIn key={label} delay={0.08}>
@@ -139,6 +154,14 @@ export default function DogfoodReportPage() {
                     <p className="mt-4 rounded-xl border border-border/50 bg-background/40 p-3 text-xs leading-relaxed text-muted-custom">
                       {result.evidence}
                     </p>
+                    {result.blockedReason ? (
+                      <p className="mt-3 text-xs leading-relaxed text-sky-200">
+                        Blocked reason: {result.blockedReason}
+                      </p>
+                    ) : null}
+                    {result.checkedAt ? (
+                      <p className="mt-3 text-[11px] text-muted-custom">Checked: {formatDate(result.checkedAt)}</p>
+                    ) : null}
                   </article>
                 </FadeIn>
               );
@@ -160,13 +183,14 @@ export default function DogfoodReportPage() {
 
           <FadeIn delay={0.05}>
             <div className="rounded-2xl border border-border/70 bg-card/40 p-5">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-custom">7-day trend seed</p>
-              <div className="mt-4 overflow-hidden rounded-xl border border-border/60">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-custom">Receipt trend</p>
+              <div className="mt-4 overflow-x-auto rounded-xl border border-border/60">
                 {report.trend.map((point) => (
-                  <div key={point.date} className="grid grid-cols-4 gap-2 border-b border-border/50 px-4 py-3 text-xs last:border-b-0">
+                  <div key={point.date} className="grid min-w-[460px] grid-cols-5 gap-2 border-b border-border/50 px-4 py-3 text-xs last:border-b-0">
                     <span className="text-heading">{point.date}</span>
                     <span className="text-emerald-200">Pass {point.passing}</span>
                     <span className="text-red-200">Fail {point.failing}</span>
+                    <span className="text-sky-200">Blocked {point.blocked || 0}</span>
                     <span className="text-amber-200">Pending {point.pending}</span>
                   </div>
                 ))}

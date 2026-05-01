@@ -51,11 +51,14 @@ jobs:
           {
             echo "### Public dogfood receipt"
             echo ""
+            echo "- Last run: \`$(jq -r '.lastRunAt // .generatedAt' public/dogfood/latest.json)\`"
+            echo "- Status: \`$(jq -r '.status // \"unknown\"' public/dogfood/latest.json)\`"
+            echo "- Source: \`$(jq -r '.source // \"unknown\"' public/dogfood/latest.json)\`"
             echo "- Output: \`public/dogfood/latest.json\`"
             echo "- Public URL: \`${{ inputs.public_url || 'https://unclick.world' }}\`"
             echo "- MCP URL: \`${{ inputs.mcp_url || 'https://unclick.world/api/mcp' }}\`"
             echo ""
-            jq -r '.results[] | "- \(.name): \(.status) - \(.summary)"' public/dogfood/latest.json
+            jq -r '.results[] | "- \(.name): \(.status) - \(.summary)\(if .blockedReason then " Blocked reason: \(.blockedReason)" else "" end)"' public/dogfood/latest.json
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit public receipt
