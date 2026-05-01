@@ -5,6 +5,7 @@ const PRODUCT_LINKS = [
   { label: "Memory", href: "/memory" },
   { label: "Connections", href: "/admin/keychain" },
   { label: "TestPass", href: "/admin/testpass" },
+  { label: "Dogfood Report", href: "/dogfood" },
 ];
 
 const RESOURCES_LINKS = [
