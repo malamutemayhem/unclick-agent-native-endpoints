@@ -154,6 +154,138 @@ const PLATFORM_PROBES: Record<string, {
   },
 };
 
+type CredentialHealthStatus = "healthy" | "untested" | "failing" | "stale" | "needs_rotation";
+
+interface CredentialFieldMetadata {
+  name:   string;
+  label:  string;
+  secret: boolean;
+}
+
+interface CredentialUsageMetadata {
+  usedBy: string[];
+  fields: CredentialFieldMetadata[];
+  rotationNote: string;
+}
+
+const STALE_TEST_DAYS = 30;
+const ROTATION_WARNING_DAYS = 90;
+const EXPIRING_SOON_DAYS = 14;
+
+const DEFAULT_CREDENTIAL_FIELDS: CredentialFieldMetadata[] = [
+  { name: "api_key", label: "API key or token", secret: true },
+];
+
+const CREDENTIAL_USAGE: Record<string, CredentialUsageMetadata> = {
+  github: {
+    usedBy: ["GitHub PR checks", "workflow automation", "repository dispatch"],
+    fields: [
+      { name: "api_key", label: "GitHub token", secret: true },
+      { name: "token", label: "GitHub token", secret: true },
+    ],
+    rotationNote: "Rotate in GitHub first, then update this BackstagePass row before PR checks need it.",
+  },
+  supabase: {
+    usedBy: ["Fishbowl", "admin APIs", "memory tables"],
+    fields: [
+      { name: "url", label: "Project URL", secret: false },
+      { name: "service_role_key", label: "Service role key", secret: true },
+      { name: "anon_key", label: "Anon key", secret: true },
+    ],
+    rotationNote: "Rotate Supabase keys with a planned deploy window; service-role changes can break admin and Fishbowl flows.",
+  },
+  vercel: {
+    usedBy: ["deployments", "scheduled jobs", "preview checks"],
+    fields: [
+      { name: "api_key", label: "Vercel token", secret: true },
+      { name: "team_id", label: "Team ID", secret: false },
+      { name: "project_id", label: "Project ID", secret: false },
+    ],
+    rotationNote: "Create the replacement Vercel token first, update BackstagePass, then revoke the old token.",
+  },
+  openai: {
+    usedBy: ["AI features", "model calls", "embeddings where configured"],
+    fields: [{ name: "api_key", label: "OpenAI API key", secret: true }],
+    rotationNote: "Rotate from the OpenAI project that owns the workload, then retest before revoking the old key.",
+  },
+  openrouter: {
+    usedBy: ["model routing", "fallback model calls"],
+    fields: [{ name: "api_key", label: "OpenRouter API key", secret: true }],
+    rotationNote: "Rotate from OpenRouter, then retest any model-routing lane that depends on it.",
+  },
+  anthropic: {
+    usedBy: ["Claude model calls", "AI workflows"],
+    fields: [{ name: "api_key", label: "Anthropic API key", secret: true }],
+    rotationNote: "Rotate from Anthropic Console, update BackstagePass, then run a connection test.",
+  },
+  posthog: {
+    usedBy: ["analytics pageviews", "product telemetry"],
+    fields: [
+      { name: "api_key", label: "Project API key", secret: true },
+      { name: "host", label: "PostHog host", secret: false },
+    ],
+    rotationNote: "PostHog project keys affect analytics capture; update deployments that read the same key.",
+  },
+  slack: {
+    usedBy: ["Slack notifications", "worker handoffs"],
+    fields: [{ name: "bot_token", label: "Bot token", secret: true }],
+    rotationNote: "Rotate Slack app tokens and confirm message delivery before revoking the previous token.",
+  },
+  discord: {
+    usedBy: ["Discord notifications", "community actions"],
+    fields: [{ name: "bot_token", label: "Bot token", secret: true }],
+    rotationNote: "Rotate the bot token, update BackstagePass, then confirm the bot can still post.",
+  },
+  telegram: {
+    usedBy: ["Telegram notifications", "bot actions"],
+    fields: [{ name: "bot_token", label: "Bot token", secret: true }],
+    rotationNote: "Rotate the bot token through BotFather, then update and test this row.",
+  },
+};
+
+function daysSinceIso(iso: unknown, now = Date.now()): number | null {
+  if (typeof iso !== "string" || !iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.floor((now - t) / 86_400_000);
+}
+
+function daysUntilIso(iso: unknown, now = Date.now()): number | null {
+  if (typeof iso !== "string" || !iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - now) / 86_400_000);
+}
+
+function credentialHealth(row: Record<string, unknown>): CredentialHealthStatus {
+  const now = Date.now();
+  const daysUntilExpiry = daysUntilIso(row.expires_at, now);
+  if (daysUntilExpiry !== null && daysUntilExpiry <= EXPIRING_SOON_DAYS) return "needs_rotation";
+
+  const rotationAge = daysSinceIso(row.last_rotated_at, now);
+  if (rotationAge !== null && rotationAge >= ROTATION_WARNING_DAYS) return "needs_rotation";
+
+  if (row.is_valid === false) return "failing";
+
+  const testAge = daysSinceIso(row.last_tested_at, now);
+  if (testAge === null) return "untested";
+  if (testAge >= STALE_TEST_DAYS) return "stale";
+  return "healthy";
+}
+
+function credentialRotationNote(row: Record<string, unknown>, metadata: CredentialUsageMetadata): string {
+  const daysUntilExpiry = daysUntilIso(row.expires_at);
+  if (daysUntilExpiry !== null && daysUntilExpiry < 0) return "Expired; rotate before using this connection again.";
+  if (daysUntilExpiry !== null && daysUntilExpiry <= EXPIRING_SOON_DAYS) {
+    return `Expires in ${daysUntilExpiry}d; prepare a safe rotation before dependent workflows need it.`;
+  }
+
+  const rotationAge = daysSinceIso(row.last_rotated_at);
+  if (rotationAge === null) return "No rotation timestamp yet; confirm ownership before relying on this key.";
+  if (rotationAge >= ROTATION_WARNING_DAYS) return `Last rotated ${rotationAge}d ago. ${metadata.rotationNote}`;
+  return metadata.rotationNote;
+}
+
 // ─── Supabase REST helper ────────────────────────────────────────
 
 function supaHeaders(serviceRoleKey: string): Record<string, string> {
@@ -370,17 +502,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const enriched = rows.map((r) => {
       const slug = r.platform_slug as string;
       const c = connectors[slug];
+      const metadata = CREDENTIAL_USAGE[slug] ?? {
+        usedBy: ["manual connection"],
+        fields: DEFAULT_CREDENTIAL_FIELDS,
+        rotationNote: "Rotate at the provider first, then update this BackstagePass row and test the connection.",
+      };
       return {
-        id:              r.id,
-        platform:        slug,
-        label:           r.label ?? null,
-        is_valid:        r.is_valid !== false,
-        last_tested_at:  r.last_tested_at ?? null,
-        last_used_at:    r.last_used_at ?? null,
-        expires_at:      r.expires_at ?? null,
-        created_at:      r.created_at,
-        updated_at:      r.updated_at,
-        connector:       c
+        id:                       r.id,
+        platform:                 slug,
+        label:                    r.label ?? null,
+        is_valid:                 r.is_valid !== false,
+        health_status:            credentialHealth(r),
+        last_checked_at:          r.last_tested_at ?? null,
+        last_tested_at:           r.last_tested_at ?? null,
+        last_used_at:             r.last_used_at ?? null,
+        last_rotated_at:          r.last_rotated_at ?? null,
+        expires_at:               r.expires_at ?? null,
+        created_at:               r.created_at,
+        updated_at:               r.updated_at,
+        owner_email:              tenant.email ?? null,
+        used_by:                  metadata.usedBy,
+        expected_fields:          metadata.fields,
+        supports_connection_test: Boolean(PLATFORM_PROBES[slug]),
+        rotation_note:            credentialRotationNote(r, metadata),
+        connector:                c
           ? { id: slug, name: c.name, category: c.category, icon: c.icon }
           : null,
       };

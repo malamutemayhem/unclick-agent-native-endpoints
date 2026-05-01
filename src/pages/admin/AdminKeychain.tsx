@@ -46,6 +46,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // ─── Platform catalog ─────────────────────────────────────────────
 
@@ -103,12 +104,23 @@ interface Credential {
   platform:         string;
   label:            string | null;
   is_valid:         boolean;
+  health_status?:   CredentialHealthStatus;
+  last_checked_at?: string | null;
   last_tested_at:   string | null;
   last_used_at:     string | null;
   last_rotated_at:  string | null;
   expires_at:       string | null;
   created_at:       string;
   updated_at:       string;
+  owner_email?:     string | null;
+  used_by?:         string[];
+  expected_fields?: Array<{
+    name:   string;
+    label:  string;
+    secret: boolean;
+  }>;
+  supports_connection_test?: boolean;
+  rotation_note?:   string;
   connector: {
     id:       string;
     name:     string;
@@ -117,10 +129,13 @@ interface Credential {
   } | null;
 }
 
+type CredentialHealthStatus = "healthy" | "untested" | "failing" | "stale" | "needs_rotation";
+
 // Rotation-reminder threshold. Credentials whose last_rotated_at is
 // older than this show an inline warning pill in the admin list. Kept
 // as a module constant so it is easy to find and tune.
 const ROTATION_WARNING_DAYS = 90;
+const STALE_TEST_DAYS = 30;
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
@@ -169,6 +184,62 @@ function maskValue(v: string): string {
   if (v.length <= 8) return "•".repeat(Math.max(v.length, 4));
   return `${v.slice(0, 4)}${"•".repeat(8)}${v.slice(-4)}`;
 }
+
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - Date.now()) / 86_400_000);
+}
+
+function credentialHealth(cred: Credential): CredentialHealthStatus {
+  if (cred.health_status) return cred.health_status;
+
+  const expiresIn = daysUntil(cred.expires_at);
+  if (expiresIn !== null && expiresIn <= 14) return "needs_rotation";
+
+  const rotationAge = daysSince(cred.last_rotated_at);
+  if (rotationAge !== null && rotationAge >= ROTATION_WARNING_DAYS) return "needs_rotation";
+
+  if (!cred.is_valid) return "failing";
+
+  const testAge = daysSince(cred.last_tested_at);
+  if (testAge === null) return "untested";
+  if (testAge >= STALE_TEST_DAYS) return "stale";
+  return "healthy";
+}
+
+const HEALTH_BADGES: Record<CredentialHealthStatus, {
+  label: string;
+  className: string;
+  icon: LucideIcon;
+}> = {
+  healthy: {
+    label: "Healthy",
+    className: "border-green-500/20 bg-green-500/10 text-green-400",
+    icon: CheckCircle2,
+  },
+  untested: {
+    label: "Untested",
+    className: "border-[#E2B93B]/20 bg-[#E2B93B]/10 text-[#E2B93B]",
+    icon: AlertTriangle,
+  },
+  failing: {
+    label: "Failing",
+    className: "border-red-500/20 bg-red-500/10 text-red-400",
+    icon: XCircle,
+  },
+  stale: {
+    label: "Stale",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+    icon: AlertTriangle,
+  },
+  needs_rotation: {
+    label: "Needs rotation",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+    icon: RotateCw,
+  },
+};
 
 // ─── Component ──────────────────────────────────────────────────
 
@@ -500,6 +571,17 @@ export default function AdminKeychain() {
     return acc;
   }, {});
 
+  const healthCounts = credentials.reduce<Record<CredentialHealthStatus, number>>((acc, cred) => {
+    acc[credentialHealth(cred)] += 1;
+    return acc;
+  }, {
+    healthy:        0,
+    untested:       0,
+    failing:        0,
+    stale:          0,
+    needs_rotation: 0,
+  });
+
   return (
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">
@@ -545,6 +627,34 @@ export default function AdminKeychain() {
         </div>
       </div>
 
+      {credentials.length > 0 && (
+        <div className="mb-6 rounded-xl border border-white/[0.06] bg-[#111111] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential health</p>
+              <p className="mt-1 text-[11px] text-[#888]">
+                Metadata only: ownership, usage, checks, and rotation notes.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {(Object.keys(HEALTH_BADGES) as CredentialHealthStatus[]).map((status) => {
+                const badge = HEALTH_BADGES[status];
+                const Icon = badge.icon;
+                return (
+                  <div key={status} className={`rounded-lg border px-3 py-2 ${badge.className}`}>
+                    <div className="flex items-center gap-1.5 text-[10px] font-medium">
+                      <Icon className="h-3 w-3" />
+                      {badge.label}
+                    </div>
+                    <p className="mt-1 text-sm font-semibold">{healthCounts[status]}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* List */}
       {error && (
         <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs text-red-400">
@@ -585,6 +695,12 @@ export default function AdminKeychain() {
                   const isOpen    = Boolean(plaintext);
                   const busy      = revealing[cred.id];
                   const errMsg    = revealError[cred.id];
+                  const health    = credentialHealth(cred);
+                  const badge     = HEALTH_BADGES[health];
+                  const HealthIcon = badge.icon;
+                  const usedBy    = cred.used_by?.filter(Boolean) ?? ["manual connection"];
+                  const fields    = cred.expected_fields?.filter((f) => f.name || f.label) ?? [];
+                  const lastChecked = cred.last_checked_at ?? cred.last_tested_at;
 
                   return (
                     <div
@@ -608,15 +724,9 @@ export default function AdminKeychain() {
                         </div>
 
                         <div className="flex shrink-0 items-center gap-2">
-                          {cred.is_valid ? (
-                            <span className="flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400">
-                              <CheckCircle2 className="h-3 w-3" /> Connected
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400">
-                              <XCircle className="h-3 w-3" /> Needs reconnection
-                            </span>
-                          )}
+                          <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                            <HealthIcon className="h-3 w-3" /> {badge.label}
+                          </span>
 
                           {(() => {
                             const age = daysSince(cred.last_rotated_at);
@@ -656,7 +766,7 @@ export default function AdminKeychain() {
                             onClick={() => void handleTestConnection(cred)}
                             disabled={testing[cred.id]}
                             className="rounded-md p-1.5 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-40"
-                            title="Test connection"
+                            title={cred.supports_connection_test === false ? "No automated probe yet" : "Test connection"}
                           >
                             {testing[cred.id] ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -679,6 +789,47 @@ export default function AdminKeychain() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 border-t border-white/[0.04] pt-3 text-[11px] sm:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                          <p className="text-[#555]">Owner</p>
+                          <p className="mt-0.5 truncate text-[#ccc]">{cred.owner_email ?? "This UnClick account"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[#555]">Last checked</p>
+                          <p className="mt-0.5 text-[#ccc]">
+                            {lastChecked ? timeAgo(lastChecked) : "never"}
+                            {cred.supports_connection_test === false ? " · manual" : ""}
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-[#555]">Used by</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {usedBy.slice(0, 4).map((usage) => (
+                              <span key={usage} className="rounded border border-white/[0.05] bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-[#aaa]">
+                                {usage}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {fields.length > 0 && (
+                          <div className="sm:col-span-2 xl:col-span-4">
+                            <p className="text-[#555]">Expected fields</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {fields.map((field) => (
+                                <span key={`${field.name}-${field.label}`} className="rounded border border-white/[0.05] bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-[#aaa]">
+                                  {field.label || field.name}{field.secret ? " · secret" : ""}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {cred.rotation_note && (
+                          <p className="sm:col-span-2 xl:col-span-4 text-[11px] text-[#777]">
+                            {cred.rotation_note}
+                          </p>
+                        )}
                       </div>
 
                       {errMsg && (
