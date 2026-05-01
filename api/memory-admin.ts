@@ -101,6 +101,10 @@ import {
   buildFishbowlTodoHandoffDispatchRow,
   planFishbowlTodoHandoff,
 } from "./lib/fishbowl-todo-handoff.js";
+import {
+  buildFishbowlMessageHandoffDispatchRow,
+  planFishbowlMessageHandoff,
+} from "./lib/fishbowl-message-handoff.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -7136,17 +7140,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const needsDoing = tagSet.has("needs-doing");
             const broadcastsAll = recipientList.includes("all");
 
-            // Discover this tenant's human admin profiles so we can match
-            // recipients against the human's actual emoji and agent_id, not
-            // just the canonical 😎 fallback.
-            const { data: humanRows } = await supabase
+            // Discover this tenant's profiles so human wake policy and worker
+            // handoff dispatches can resolve emoji recipients consistently.
+            const { data: recipientProfiles } = await supabase
               .from("mc_fishbowl_profiles")
-              .select("agent_id, emoji")
-              .eq("api_key_hash", apiKeyHash)
-              .eq("user_agent_hint", "admin-ui");
+              .select("agent_id, emoji, user_agent_hint")
+              .eq("api_key_hash", apiKeyHash);
             const humanEmojis = new Set<string>(["😎"]);
             const humanAgentIds = new Set<string>();
-            for (const h of humanRows ?? []) {
+            for (const h of recipientProfiles ?? []) {
+              if (h?.user_agent_hint !== "admin-ui") continue;
               if (h?.emoji) humanEmojis.add(h.emoji);
               if (h?.agent_id) humanAgentIds.add(h.agent_id);
             }
@@ -7163,6 +7166,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             else if (needsDoing) severity = "action_needed";
             else if (broadcastsAll && isBlocker) severity = "action_needed";
             else if (isBlocker) severity = "action_needed";
+
+            const handoffPlan = planFishbowlMessageHandoff({
+              messageId: inserted.id,
+              text: inserted.text ?? text,
+              tags: tagList,
+              recipients: recipientList,
+              authorAgentId: inserted.author_agent_id,
+              authorEmoji: inserted.author_emoji,
+              recipientProfiles: recipientProfiles ?? [],
+            });
+            if (handoffPlan) {
+              const dispatchId = createDispatchId({
+                source: handoffPlan.source,
+                targetAgentId: handoffPlan.targetAgentId,
+                taskRef: handoffPlan.taskRef,
+              });
+              const { data: dispatchRows, error: dispatchErr } = await supabase
+                .from("mc_agent_dispatches")
+                .upsert(
+                  buildFishbowlMessageHandoffDispatchRow({
+                    apiKeyHash,
+                    dispatchId,
+                    plan: handoffPlan,
+                    now: new Date(),
+                  }),
+                  { onConflict: "api_key_hash,dispatch_id" },
+                )
+                .select("dispatch_id,status,lease_owner,lease_expires_at");
+              if (dispatchErr) throw dispatchErr;
+              const dispatchRow = dispatchRows?.[0];
+              if (
+                !dispatchRow ||
+                dispatchRow.status !== "leased" ||
+                dispatchRow.lease_owner !== handoffPlan.targetAgentId ||
+                !dispatchRow.lease_expires_at
+              ) {
+                throw new Error("message handoff dispatch lease was not persisted");
+              }
+            }
 
             const summarySource = inserted.text ?? text;
             const summary =
@@ -7186,7 +7228,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           } catch (publishErr) {
             console.error(
-              "[fishbowl_post] signal publish failed:",
+              "[fishbowl_post] async wake plumbing failed:",
               (publishErr as Error).message,
             );
           }
