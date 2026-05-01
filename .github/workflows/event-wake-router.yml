@@ -6,6 +6,7 @@ on:
       - Website
       - MCP server package
       - TestPass PR Check
+      - TestPass Scheduled Smoke
     types: [completed]
   pull_request:
     types: [ready_for_review, review_requested, reopened]

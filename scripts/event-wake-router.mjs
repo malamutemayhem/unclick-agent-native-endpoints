@@ -90,6 +90,22 @@ function baseDecision(event) {
   if (eventName === "workflow_run") {
     const run = event.workflow_run || {};
     const prs = Array.isArray(run.pull_requests) ? run.pull_requests : [];
+    if (
+      run.status === "completed" &&
+      run.name === "TestPass Scheduled Smoke" &&
+      run.conclusion &&
+      run.conclusion !== "success"
+    ) {
+      return {
+        wake: true,
+        owner: "🤖",
+        urgency: "urgent",
+        reason: `Scheduled TestPass smoke ${run.conclusion}`,
+        eventCreatedAt: run.updated_at || run.created_at,
+        needsTriage: false,
+      };
+    }
+
     if (run.status === "completed" && run.conclusion === "success" && prs.length > 0) {
       return {
         wake: true,

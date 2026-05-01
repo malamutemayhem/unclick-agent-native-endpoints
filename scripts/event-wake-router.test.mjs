@@ -160,6 +160,48 @@ describe("event wake router reliability dispatch", () => {
     }
   });
 
+  it("wakes urgently when scheduled TestPass smoke fails", () => {
+    const result = runDryWake("workflow_run", {
+      action: "completed",
+      workflow_run: {
+        id: 456,
+        name: "TestPass Scheduled Smoke",
+        status: "completed",
+        conclusion: "failure",
+        html_url: "https://github.com/acme/repo/actions/runs/456",
+        created_at: "2026-04-30T15:00:00Z",
+        updated_at: "2026-04-30T15:04:00Z",
+        pull_requests: [],
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Scheduled TestPass smoke failure/);
+    assert.match(result.stdout, /"wake_urgency": "urgent"/);
+    assert.match(result.stdout, /reliability_dispatch_dry_run/);
+    assert.match(result.stdout, /"ack_required": true/);
+  });
+
+  it("keeps successful scheduled TestPass smoke runs silent", () => {
+    const result = runDryWake("workflow_run", {
+      action: "completed",
+      workflow_run: {
+        id: 457,
+        name: "TestPass Scheduled Smoke",
+        status: "completed",
+        conclusion: "success",
+        html_url: "https://github.com/acme/repo/actions/runs/457",
+        created_at: "2026-04-30T15:00:00Z",
+        updated_at: "2026-04-30T15:04:00Z",
+        pull_requests: [],
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /No wake needed/);
+    assert.doesNotMatch(result.stdout, /reliability_dispatch_dry_run/);
+  });
+
   it("dogfoods issue comments with /wake into ACK-required dispatches", () => {
     const result = runDryWake("issue_comment", {
       action: "created",

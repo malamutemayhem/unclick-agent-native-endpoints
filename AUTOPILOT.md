@@ -124,6 +124,9 @@ reclaim path even if the first route fails. Do not wrap quiet health checks,
 dashboard reads, or zero-event heartbeats in PinballWake, because that creates
 alert noise without useful recovery.
 
+Scheduled TestPass success is a receipt, not a wake. Scheduled TestPass failure
+is action-needed and should wake through PinballWake immediately.
+
 ## Scheduled TestPass Clock
 
 GitHub Actions `schedule` is a backup clock, not the primary TestPass cadence.
