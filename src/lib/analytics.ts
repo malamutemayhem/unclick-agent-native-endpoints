@@ -27,3 +27,22 @@ export function track(event: string, data?: EventData): void {
     // Never let analytics break the app.
   }
 }
+
+export function trackPageView(path: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const properties = {
+      path,
+      title: document.title || undefined,
+      $current_url: window.location.href,
+      $pathname: path,
+    };
+    posthog.capture("$pageview", properties);
+    const umami = (window as unknown as UmamiWindow).umami;
+    if (umami && typeof umami.track === "function") {
+      umami.track("pageview", properties);
+    }
+  } catch {
+    // Never let analytics break the app.
+  }
+}
