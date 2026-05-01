@@ -32,6 +32,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import process from "node:process";
 import readline from "node:readline";
+import { apiFetchJson } from "./http.js";
 
 const API_BASE       = process.env.UNCLICK_API_BASE     || "https://unclick.world";
 const API_KEY        = process.env.UNCLICK_API_KEY      || "";
@@ -39,6 +40,7 @@ const SUPABASE_URL   = process.env.UNCLICK_SUPABASE_URL || "";
 const SUPABASE_ANON  = process.env.UNCLICK_SUPABASE_ANON || "";
 const POLL_INTERVAL  = parseInt(process.env.UNCLICK_CHANNEL_POLL || "5000", 10);
 const HEARTBEAT_MS   = 30_000;
+const API_TIMEOUT_MS = parseInt(process.env.UNCLICK_API_TIMEOUT_MS || "10000", 10);
 const RESPONSE_TIMEOUT_MS = 5 * 60_000;
 
 function log(...args) {
@@ -184,20 +186,15 @@ function startStdioLoop() {
 // ─── Admin API calls ────────────────────────────────────────────────────────
 
 async function apiFetch(action, { method = "GET", body, query = {} } = {}) {
-  const qs = new URLSearchParams({ action, ...query }).toString();
-  const res = await fetch(`${API_BASE}/api/memory-admin?${qs}`, {
+  return apiFetchJson({
+    apiBase: API_BASE,
+    apiKey: API_KEY,
+    action,
     method,
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    body,
+    query,
+    timeoutMs: API_TIMEOUT_MS,
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`api ${action} -> ${res.status} ${text.slice(0, 200)}`);
-  }
-  return res.json();
 }
 
 async function sendHeartbeat() {
