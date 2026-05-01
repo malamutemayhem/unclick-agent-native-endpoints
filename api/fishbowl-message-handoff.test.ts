@@ -7,6 +7,7 @@ import {
 import { createReclaimSignal } from "../packages/mcp-server/src/reliability";
 
 const recipientProfiles = [
+  { agentId: "agent_author", emoji: "A" },
   { agentId: "agent_builder", emoji: "B" },
   { agentId: "agent_qc", emoji: "Q" },
   { agentId: "human_chris", emoji: "C", userAgentHint: "admin-ui" },
@@ -84,7 +85,14 @@ describe("planFishbowlMessageHandoffs", () => {
 
   it("stays silent for broadcasts, humans, self-handoffs, FYI, and ambiguous recipients", () => {
     expect(planFishbowlMessageHandoffs({ ...baseInput, recipients: ["all"] })).toEqual([]);
+    expect(planFishbowlMessageHandoffs({ ...baseInput, recipients: ["B", "Q"] })).toEqual([]);
     expect(planFishbowlMessageHandoffs({ ...baseInput, recipients: ["C"] })).toEqual([]);
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        authorAgentId: "human_chris",
+      }),
+    ).toEqual([]);
     expect(
       planFishbowlMessageHandoffs({
         ...baseInput,
