@@ -8,6 +8,13 @@ export interface DogfoodPassResult {
   evidence: string;
   checkedAt?: string;
   blockedReason?: string;
+  runId?: string;
+  targetUrl?: string;
+  proof?: {
+    kind: "testpass_run" | "uxpass_run" | "planned";
+    runId?: string;
+    targetUrl?: string;
+  };
 }
 
 export interface DogfoodTrendPoint {

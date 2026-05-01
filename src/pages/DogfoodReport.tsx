@@ -5,9 +5,17 @@ import Footer from "@/components/Footer";
 import FadeIn from "@/components/FadeIn";
 import { useCanonical } from "@/hooks/use-canonical";
 import { useMetaTags } from "@/hooks/useMetaTags";
-import { dogfoodReport as fallbackReport, type DogfoodPassResult, type DogfoodStatus } from "@/data/dogfoodReport";
+import {
+  dogfoodReport as fallbackReport,
+  type DogfoodPassResult,
+  type DogfoodStatus,
+  type DogfoodTrendPoint,
+} from "@/data/dogfoodReport";
 
-type DogfoodReportData = typeof fallbackReport;
+type DogfoodReportData = Omit<typeof fallbackReport, "results" | "trend"> & {
+  results: DogfoodPassResult[];
+  trend: DogfoodTrendPoint[];
+};
 
 const STATUS_STYLES: Record<DogfoodStatus, { label: string; badge: string; icon: typeof CheckCircle2 }> = {
   passing: {
@@ -161,6 +169,12 @@ export default function DogfoodReportPage() {
                     ) : null}
                     {result.checkedAt ? (
                       <p className="mt-3 text-[11px] text-muted-custom">Checked: {formatDate(result.checkedAt)}</p>
+                    ) : null}
+                    {result.runId || result.targetUrl ? (
+                      <div className="mt-3 space-y-1 text-[11px] text-muted-custom">
+                        {result.runId ? <p>Run: {result.runId}</p> : null}
+                        {result.targetUrl ? <p className="break-all">Target: {result.targetUrl}</p> : null}
+                      </div>
                     ) : null}
                   </article>
                 </FadeIn>

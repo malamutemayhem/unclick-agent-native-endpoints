@@ -30,20 +30,20 @@ function result(id, name, status, summary, evidence, details = {}) {
   return { id, name, status, summary, evidence, checkedAt: generatedAt, ...details };
 }
 
-function pendingResult(id, name, summary, evidence) {
-  return result(id, name, "pending", summary, evidence);
+function pendingResult(id, name, summary, evidence, details = {}) {
+  return result(id, name, "pending", summary, evidence, details);
 }
 
 function blockedResult(id, name, summary, evidence, blockedReason) {
   return result(id, name, "blocked", summary, evidence, { blockedReason });
 }
 
-function failureResult(id, name, summary, evidence) {
-  return result(id, name, "failing", summary, evidence);
+function failureResult(id, name, summary, evidence, details = {}) {
+  return result(id, name, "failing", summary, evidence, details);
 }
 
-function passResult(id, name, summary, evidence) {
-  return result(id, name, "passing", summary, evidence);
+function passResult(id, name, summary, evidence, details = {}) {
+  return result(id, name, "passing", summary, evidence, details);
 }
 
 async function postJson(url, token, body) {
@@ -113,6 +113,11 @@ async function runTestPass() {
         "TestPass",
         `Scheduled TestPass completed with ${total} checks and 0 failures.`,
         `Run ${runId} checked ${mcpUrl}.`,
+        {
+          runId,
+          targetUrl: mcpUrl,
+          proof: { kind: "testpass_run", runId, targetUrl: mcpUrl },
+        },
       );
     }
 
@@ -123,6 +128,11 @@ async function runTestPass() {
       statusFromFailureKind(statusLabel === "running" ? "pending" : "http"),
       `Scheduled TestPass returned status ${statusLabel} with ${failCount} failures.`,
       `Run ${runId} checked ${mcpUrl}.`,
+      {
+        runId,
+        targetUrl: mcpUrl,
+        proof: { kind: "testpass_run", runId, targetUrl: mcpUrl },
+      },
     );
   } catch (err) {
     return failureResult(
@@ -158,6 +168,7 @@ async function runUXPass() {
     const { ok, status, json } = await postJson(`${apiBase}/api/uxpass-run`, token, {
       url: publicUrl,
       target_url: publicUrl,
+      source: "scheduled",
     });
 
     if (!ok) {
@@ -177,6 +188,11 @@ async function runUXPass() {
         "UXPass",
         `Scheduled UXPass completed${uxScore === null ? "" : ` with UX score ${uxScore}`}.`,
         `Run ${runId} checked ${publicUrl}.`,
+        {
+          runId,
+          targetUrl: publicUrl,
+          proof: { kind: "uxpass_run", runId, targetUrl: publicUrl },
+        },
       );
     }
 
@@ -185,6 +201,11 @@ async function runUXPass() {
       "UXPass",
       `Scheduled UXPass returned status ${json.status || "unknown"}${uxScore === null ? "" : ` with UX score ${uxScore}`}.`,
       `Run ${runId} checked ${publicUrl}.`,
+      {
+        runId,
+        targetUrl: publicUrl,
+        proof: { kind: "uxpass_run", runId, targetUrl: publicUrl },
+      },
     );
   } catch (err) {
     return failureResult(
