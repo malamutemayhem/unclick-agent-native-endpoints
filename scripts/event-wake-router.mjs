@@ -13,14 +13,22 @@ const runId = process.env.GITHUB_RUN_ID || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";
 const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AUTOCLOSE_TOKEN || "";
 const dryRun = process.env.WAKE_ROUTER_DRY_RUN === "1" || process.env.WAKE_ROUTER_DRY_RUN === "true";
-const ackFailSeconds = parsePositiveInt(process.env.WAKE_ACK_FAIL_SECONDS, 600);
+const ACK_FAIL_SECONDS_MAX = 86_400;
+const ackFailSeconds = parsePositiveInt(
+  process.env.WAKE_ACK_FAIL_SECONDS,
+  600,
+  ACK_FAIL_SECONDS_MAX,
+);
 const receivedAt = new Date().toISOString();
 const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || "";
 
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(String(value || ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function parsePositiveInt(value, fallback, max = Number.POSITIVE_INFINITY) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return fallback;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
 }
 
 function readEvent() {
