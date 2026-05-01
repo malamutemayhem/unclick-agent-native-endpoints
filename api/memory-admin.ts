@@ -97,6 +97,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
+import { planFishbowlTodoHandoff } from "./lib/fishbowl-todo-handoff.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -7371,6 +7372,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             "todo-created",
             `New todo: ${titleRes}`,
           );
+
+          // Universal ACK Handoff: assigning a todo to a different worker is an
+          // action-needed handoff, so register an ACK-required dispatch with a
+          // 10-min lease. Self-assignment / unassigned stays silent.
+          const handoffPlan = planFishbowlTodoHandoff({
+            todoId: data.id,
+            title: titleRes,
+            priority,
+            assignedToAgentId: assignee,
+            createdByAgentId: agentId,
+          });
+          if (handoffPlan) {
+            try {
+              const dispatchId = createDispatchId({
+                source: handoffPlan.source,
+                targetAgentId: handoffPlan.targetAgentId,
+                taskRef: handoffPlan.taskRef,
+              });
+              const now = new Date();
+              const leaseExpiresAt = new Date(
+                now.getTime() + handoffPlan.leaseSeconds * 1000,
+              ).toISOString();
+              const { error: upsertErr } = await supabase
+                .from("mc_agent_dispatches")
+                .insert({
+                  api_key_hash: apiKeyHash,
+                  dispatch_id: dispatchId,
+                  source: handoffPlan.source,
+                  target_agent_id: handoffPlan.targetAgentId,
+                  task_ref: handoffPlan.taskRef,
+                  status: "queued",
+                  payload: handoffPlan.payload,
+                });
+              if (upsertErr && (upsertErr as { code?: string }).code !== "23505") {
+                throw upsertErr;
+              }
+              await supabase
+                .from("mc_agent_dispatches")
+                .update({
+                  status: "leased",
+                  lease_owner: handoffPlan.targetAgentId,
+                  lease_expires_at: leaseExpiresAt,
+                  updated_at: now.toISOString(),
+                })
+                .eq("api_key_hash", apiKeyHash)
+                .eq("dispatch_id", dispatchId)
+                .eq("status", "queued");
+            } catch (err) {
+              console.warn("[fishbowl_create_todo] dispatch wrapping failed:", err);
+            }
+          }
+
           return res.status(200).json({ todo: data });
         }
 
