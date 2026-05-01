@@ -16,7 +16,7 @@ on:
       server_url:
         description: Optional target MCP server URL.
         required: false
-        default: ""
+        default: https://unclick.world/api/mcp
 
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
           token: ${{ secrets.TESTPASS_TOKEN }}
           pack_id: ${{ inputs.pack_id || 'testpass-core' }}
           profile: ${{ inputs.profile || 'smoke' }}
-          server_url: ${{ inputs.server_url || '' }}
+          server_url: ${{ inputs.server_url || 'https://unclick.world/api/mcp' }}
 
       - name: Post PR comment
         # Run regardless of TestPass step outcome - infra failures still need a
