@@ -1,0 +1,72 @@
+name: Dogfood Report
+
+on:
+  schedule:
+    - cron: "17 16 * * *"
+  workflow_dispatch:
+    inputs:
+      public_url:
+        description: Public UnClick URL for UXPass.
+        required: false
+        default: https://unclick.world
+      mcp_url:
+        description: MCP endpoint URL for TestPass.
+        required: false
+        default: https://unclick.world/api/mcp
+
+permissions:
+  contents: write
+
+jobs:
+  dogfood-report:
+    name: Build public dogfood receipt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Build receipt
+        env:
+          DOGFOOD_API_BASE: https://unclick.world
+          DOGFOOD_PUBLIC_URL: ${{ inputs.public_url || 'https://unclick.world' }}
+          DOGFOOD_MCP_URL: ${{ inputs.mcp_url || 'https://unclick.world/api/mcp' }}
+          DOGFOOD_TESTPASS_TOKEN: ${{ secrets.TESTPASS_TOKEN }}
+          DOGFOOD_UXPASS_TOKEN: ${{ secrets.UXPASS_TOKEN || secrets.CRON_SECRET }}
+        run: node scripts/build-dogfood-report.mjs
+
+      - name: Upload receipt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-latest
+          path: public/dogfood/latest.json
+
+      - name: Summarize receipt
+        shell: bash
+        run: |
+          {
+            echo "### Public dogfood receipt"
+            echo ""
+            echo "- Output: \`public/dogfood/latest.json\`"
+            echo "- Public URL: \`${{ inputs.public_url || 'https://unclick.world' }}\`"
+            echo "- MCP URL: \`${{ inputs.mcp_url || 'https://unclick.world/api/mcp' }}\`"
+            echo ""
+            jq -r '.results[] | "- \(.name): \(.status) - \(.summary)"' public/dogfood/latest.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit public receipt
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/dogfood/latest.json
+          if git diff --cached --quiet; then
+            echo "Dogfood receipt unchanged."
+            exit 0
+          fi
+          git commit -m "chore(dogfood): update public receipt"
+          git push
