@@ -39,6 +39,25 @@ describe("system credential inventory", () => {
     }
   });
 
+  it("explains what breaks when expected critical credentials rotate", () => {
+    const criticalExpected = listSystemCredentialInventory().filter(
+      (entry) => entry.expected && entry.risk === "critical",
+    );
+
+    expect(criticalExpected.map((entry) => entry.name)).toEqual(expect.arrayContaining([
+      "TESTPASS_TOKEN",
+      "TESTPASS_CRON_SECRET",
+      "FISHBOWL_WAKE_TOKEN",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "CRON_SECRET",
+    ]));
+
+    for (const entry of criticalExpected) {
+      expect(entry.rotationImpact?.length ?? 0).toBeGreaterThan(20);
+      expect(entry.rotationImpact?.toLowerCase()).not.toContain("secret value");
+    }
+  });
+
   it("filters built-in or public runtime names that are not credential inventory", () => {
     expect(shouldTrackCredentialName("TESTPASS_TOKEN")).toBe(true);
     expect(shouldTrackCredentialName("GITHUB_TOKEN")).toBe(false);
@@ -70,6 +89,7 @@ describe("system credential inventory", () => {
       risk: "critical",
       expected: true,
       docsHint: "Name and timestamps only.",
+      rotationImpact: "PR checks may fail until the replacement is wired.",
     })).toEqual({
       provider: "github",
       source: "github_actions_secret",
@@ -79,6 +99,7 @@ describe("system credential inventory", () => {
       risk: "critical",
       expected: true,
       docsHint: "Name and timestamps only.",
+      rotationImpact: "PR checks may fail until the replacement is wired.",
     });
   });
 });

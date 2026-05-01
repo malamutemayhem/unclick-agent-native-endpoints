@@ -712,6 +712,11 @@ export default function AdminKeychain() {
                       <div className="min-w-0">
                         <p className="text-[#ccc]">{entry.workload}</p>
                         <p className="mt-0.5 text-[#666]">{entry.docsHint}</p>
+                        {entry.rotationImpact && (
+                          <p className="mt-1 text-[#888]">
+                            If rotated: {entry.rotationImpact}
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-start gap-1 md:justify-end">
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>

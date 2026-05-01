@@ -11,6 +11,7 @@ export interface SystemCredentialInventoryEntry {
   risk: SystemCredentialRisk;
   expected: boolean;
   docsHint: string;
+  rotationImpact?: string;
 }
 
 const BLOCKED_VALUE_FIELDS = new Set([
@@ -41,6 +42,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "critical",
     expected: true,
     docsHint: "GitHub Actions secret metadata can confirm name and timestamps without returning the value.",
+    rotationImpact: "Changing this can block PR TestPass checks until the GitHub Actions secret is updated and a smoke run passes.",
   },
   {
     provider: "github",
@@ -51,6 +53,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "critical",
     expected: true,
     docsHint: "Track by secret name only; scheduled proof should verify the cron gate.",
+    rotationImpact: "Changing this can stop scheduled TestPass smoke runs and overnight proof receipts.",
   },
   {
     provider: "github",
@@ -61,6 +64,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "high",
     expected: true,
     docsHint: "Shared cron gates need rotation notes before any key swap.",
+    rotationImpact: "Changing this can break scheduled route gates until every caller uses the new value.",
   },
   {
     provider: "github",
@@ -81,6 +85,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "critical",
     expected: true,
     docsHint: "Wake dispatch proof is the safe health signal.",
+    rotationImpact: "Changing this can break WakePass and Fishbowl routing dispatch until the wake router is updated.",
   },
   {
     provider: "github",
@@ -101,6 +106,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "high",
     expected: true,
     docsHint: "Only static dry-run prompts should be used for future health probes.",
+    rotationImpact: "Changing this can disable the wake/no-wake classifier and model routing used by automation.",
   },
   {
     provider: "github",
@@ -171,6 +177,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "critical",
     expected: true,
     docsHint: "Service-role rotation needs human review and deploy coordination.",
+    rotationImpact: "Changing this can break privileged admin and server operations until Vercel runtime env is redeployed.",
   },
   {
     provider: "vercel",
@@ -191,6 +198,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "normal",
     expected: true,
     docsHint: "Anon keys are not service-role secrets, but rotation can still break login flows.",
+    rotationImpact: "Changing this can break browser Supabase access until the public runtime env is redeployed.",
   },
   {
     provider: "vercel",
@@ -221,6 +229,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "high",
     expected: false,
     docsHint: "Inventory by name only; never copy Vercel env values into RotatePass.",
+    rotationImpact: "Changing this can break runtime model routing until the deployment picks up the replacement.",
   },
   {
     provider: "vercel",
@@ -231,6 +240,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "critical",
     expected: true,
     docsHint: "Cron gate changes can break scheduled Pass receipts.",
+    rotationImpact: "Changing this can break scheduled route gates and Pass receipts until cron callers are updated.",
   },
   {
     provider: "vercel",
@@ -261,6 +271,7 @@ export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntr
     risk: "normal",
     expected: false,
     docsHint: "Prefer existing analytics receipt evidence over synthetic events.",
+    rotationImpact: "Changing this can stop analytics capture until the replacement key is deployed.",
   },
   {
     provider: "vercel",
@@ -359,6 +370,7 @@ export function sanitizeInventoryRecord(record: Record<string, unknown>): System
     risk: record.risk === "critical" || record.risk === "high" ? record.risk : "normal",
     expected: record.expected === true,
     docsHint: typeof record.docsHint === "string" ? record.docsHint : "Metadata only; no secret value is available.",
+    rotationImpact: typeof record.rotationImpact === "string" ? record.rotationImpact : undefined,
   };
 }
 
