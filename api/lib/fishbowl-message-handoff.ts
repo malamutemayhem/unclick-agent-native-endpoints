@@ -96,7 +96,10 @@ export function planFishbowlMessageHandoffs(
     if (matches.length !== 1) continue;
 
     const targetAgentId = matches[0].agentId;
-    if (targetAgentId === input.authorAgentId || plannedTargets.has(targetAgentId)) continue;
+    if (
+      normalizeToken(targetAgentId) === normalizedAuthorAgentId ||
+      plannedTargets.has(targetAgentId)
+    ) continue;
     plannedTargets.add(targetAgentId);
 
     plans.push({

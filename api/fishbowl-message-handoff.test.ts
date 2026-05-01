@@ -135,6 +135,17 @@ describe("planFishbowlMessageHandoffs", () => {
       }),
     ).toEqual([]);
   });
+
+  it("normalizes author id when suppressing self-handoffs", () => {
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        authorAgentId: " AGENT_BUILDER ",
+        recipients: ["B"],
+      }),
+    ).toEqual([]);
+  });
+
   it("stays silent for wake-router posts that already registered dispatch proof", () => {
     expect(
       planFishbowlMessageHandoffs({
