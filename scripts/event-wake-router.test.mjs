@@ -405,4 +405,88 @@ describe("event wake router reliability dispatch", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("falls back to default ACK fail seconds when env value is malformed", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const eventPath = join(tempDir, "event.json");
+    const ledgerDir = join(tempDir, "ledger");
+    writeFileSync(
+      eventPath,
+      JSON.stringify({
+        action: "completed",
+        workflow_run: {
+          id: 461,
+          name: "TestPass Scheduled Smoke",
+          status: "completed",
+          conclusion: "failure",
+          html_url: "https://github.com/acme/repo/actions/runs/461",
+          created_at: "2026-04-30T17:10:00Z",
+          updated_at: "2026-04-30T17:15:00Z",
+          pull_requests: [],
+        },
+      }),
+    );
+
+    try {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_run",
+          GITHUB_EVENT_PATH: eventPath,
+          WAKE_LEDGER_DIR: ledgerDir,
+          WAKE_ROUTER_DRY_RUN: "true",
+          WAKE_ACK_FAIL_SECONDS: "600s",
+        },
+        encoding: "utf8",
+      });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /"ack_fail_after_seconds": 600/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("caps ACK fail seconds to one day", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const eventPath = join(tempDir, "event.json");
+    const ledgerDir = join(tempDir, "ledger");
+    writeFileSync(
+      eventPath,
+      JSON.stringify({
+        action: "completed",
+        workflow_run: {
+          id: 462,
+          name: "TestPass Scheduled Smoke",
+          status: "completed",
+          conclusion: "failure",
+          html_url: "https://github.com/acme/repo/actions/runs/462",
+          created_at: "2026-04-30T17:20:00Z",
+          updated_at: "2026-04-30T17:25:00Z",
+          pull_requests: [],
+        },
+      }),
+    );
+
+    try {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_run",
+          GITHUB_EVENT_PATH: eventPath,
+          WAKE_LEDGER_DIR: ledgerDir,
+          WAKE_ROUTER_DRY_RUN: "true",
+          WAKE_ACK_FAIL_SECONDS: "999999",
+        },
+        encoding: "utf8",
+      });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /"ack_fail_after_seconds": 86400/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
