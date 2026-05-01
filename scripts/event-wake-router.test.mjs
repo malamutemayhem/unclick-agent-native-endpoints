@@ -113,7 +113,7 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(request.payload.handoff_message_id, null);
   });
 
-  it("runs the wake path in dry-run mode without crashing", () => {
+  it("keeps successful PR workflow green echoes silent", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
     const eventPath = join(tempDir, "event.json");
     const ledgerDir = join(tempDir, "ledger");
@@ -148,14 +148,12 @@ describe("event wake router reliability dispatch", () => {
       });
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(result.stdout, /reliability_dispatch_dry_run/);
-      assert.match(result.stdout, /"wake_owner": "🍿"/);
-      assert.match(result.stdout, /"ack_required": true/);
-      assert.ok(
-        result.stdout.indexOf("reliability_dispatch_dry_run") <
-          result.stdout.indexOf('"text": "Wake event id:'),
-        "PinballWake reliability proof should be prepared before the Fishbowl route payload",
-      );
+      assert.match(result.stdout, /PR checks completed green for TestPass PR Check on PR #316; no action needed/);
+      assert.match(result.stdout, /No wake needed/);
+      assert.doesNotMatch(result.stdout, /reliability_dispatch_dry_run/);
+      assert.doesNotMatch(result.stdout, /"ack_required": true/);
+      assert.doesNotMatch(result.stdout, /"wake_owner": "🍿"/);
+      assert.doesNotMatch(result.stdout, /ACK requested: reply ACK/);
       assert.doesNotMatch(result.stderr, /ReferenceError/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -321,6 +319,7 @@ describe("event wake router reliability dispatch", () => {
     assert.match(result.stdout, /"wake_urgency": "high"/);
     assert.match(result.stdout, /reliability_dispatch_dry_run/);
     assert.match(result.stdout, /"ack_required": true/);
+    assert.match(result.stdout, /ACK requested: reply ACK/);
   });
 
   it("keeps ordinary PR updates silent", () => {

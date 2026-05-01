@@ -124,10 +124,10 @@ function baseDecision(event) {
 
     if (run.status === "completed" && run.conclusion === "success" && prs.length > 0) {
       return {
-        wake: true,
-        owner: "🍿",
-        urgency: "high",
-        reason: `PR checks completed green for ${run.name || "workflow"} on PR #${prs[0].number}`,
+        wake: false,
+        owner: "none",
+        urgency: "low",
+        reason: `PR checks completed green for ${run.name || "workflow"} on PR #${prs[0].number}; no action needed`,
         eventCreatedAt: run.updated_at || run.created_at,
         needsTriage: false,
       };
