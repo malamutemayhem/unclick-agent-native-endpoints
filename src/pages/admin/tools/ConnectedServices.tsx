@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Plug, ExternalLink } from "lucide-react";
+import { getConnectedServiceStatus } from "./connectedServiceStatus";
 
 interface Connector {
   id: string;
@@ -19,18 +20,6 @@ interface ConnectedServicesProps {
 }
 
 export default function ConnectedServices({ connectors, loading }: ConnectedServicesProps) {
-  function formatLastTested(value: string | null): string {
-    if (!value) return "not tested yet";
-
-    const testedAt = new Date(value);
-    if (Number.isNaN(testedAt.getTime())) return "test time unknown";
-
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(testedAt);
-  }
-
   function getSetupLabel(authType?: Connector["auth_type"]): string {
     switch (authType) {
       case "oauth2":
@@ -41,48 +30,6 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
       default:
         return "API key";
     }
-  }
-
-  function getStatus(connector: Connector): {
-    dot: string;
-    pillClass: string;
-    pill: string;
-    note: string;
-  } {
-    const credential = connector.credential;
-    if (!credential) {
-      return {
-        dot: "bg-white/20",
-        pillClass: "border border-white/[0.08] bg-white/[0.04] text-white/75",
-        pill: "Setup required",
-        note: "No saved connection yet.",
-      };
-    }
-
-    if (!credential.is_valid) {
-      return {
-        dot: "bg-amber-400",
-        pillClass: "bg-amber-400/10 text-amber-200",
-        pill: "Needs reconnection",
-        note: `Reconnect or retest this service in Connections. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
-      };
-    }
-
-    if (!credential.last_tested_at) {
-      return {
-        dot: "bg-sky-400",
-        pillClass: "bg-sky-400/10 text-sky-200",
-        pill: "Setup incomplete",
-        note: "Saved, but not validated with a connection test yet.",
-      };
-    }
-
-    return {
-      dot: "bg-green-500",
-      pillClass: "bg-green-500/10 text-green-200",
-      pill: "Connected",
-      note: `Ready for approved agent workflows. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
-    };
   }
 
   if (loading) {
@@ -116,7 +63,7 @@ export default function ConnectedServices({ connectors, loading }: ConnectedServ
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {connectors.map((c) => {
-        const status = getStatus(c);
+        const status = getConnectedServiceStatus(c);
         const setupLabel = getSetupLabel(c.auth_type);
         const hasTest = Boolean(c.test_endpoint);
 
