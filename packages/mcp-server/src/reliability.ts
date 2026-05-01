@@ -222,7 +222,10 @@ export function createHeartbeat(params: {
   if (params.dispatchId) heartbeat.dispatchId = params.dispatchId;
   if (params.currentTask) heartbeat.currentTask = params.currentTask;
   if (params.nextAction) heartbeat.nextAction = params.nextAction;
-  if (typeof params.etaMinutes === "number") heartbeat.etaMinutes = params.etaMinutes;
+  const parsedEtaMinutes = parseHeartbeatEtaMinutes(params.etaMinutes);
+  if (typeof parsedEtaMinutes === "number") {
+    heartbeat.etaMinutes = parsedEtaMinutes;
+  }
   if (params.blocker) heartbeat.blocker = params.blocker;
   if (params.lastRealActionAt) {
     heartbeat.lastRealActionAt = params.lastRealActionAt.toISOString();

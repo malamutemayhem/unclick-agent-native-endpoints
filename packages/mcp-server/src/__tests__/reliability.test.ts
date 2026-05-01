@@ -175,6 +175,27 @@ describe("reliability helpers", () => {
     });
   });
 
+  it("sanitizes heartbeat ETA values in createHeartbeat", () => {
+    const invalid = createHeartbeat({
+      apiKeyHash: "hash_123",
+      agentId: "bailey",
+      state: "working",
+      etaMinutes: Number.NaN,
+      createdAt: new Date("2026-04-30T11:00:00.000Z"),
+    });
+
+    const clamped = createHeartbeat({
+      apiKeyHash: "hash_123",
+      agentId: "bailey",
+      state: "working",
+      etaMinutes: 20000,
+      createdAt: new Date("2026-04-30T11:00:00.000Z"),
+    });
+
+    expect(invalid.etaMinutes).toBeUndefined();
+    expect(clamped.etaMinutes).toBe(10080);
+  });
+
   it("parses heartbeat ETA from number and numeric string inputs", () => {
     expect(parseHeartbeatEtaMinutes(4.8)).toBe(4);
     expect(parseHeartbeatEtaMinutes("12")).toBe(12);
