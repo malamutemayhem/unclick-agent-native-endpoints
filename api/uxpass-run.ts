@@ -16,9 +16,16 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { createHash } from "node:crypto";
 import { CORE_CHECKS } from "../packages/uxpass/src/checks.js";
 import { createRun } from "../packages/uxpass/src/run-manager.js";
 import { runDeterministicChecks } from "../packages/uxpass/src/runner.js";
+import {
+  buildUxPassRunFailureDispatchRow,
+  DEFAULT_UXPASS_RUN_HANDOFF_AGENT_ID,
+  planUxPassRunFailureHandoff,
+  uxPassRunFailureDispatchId,
+} from "./lib/uxpass-run-handoff.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +54,86 @@ async function getActorUserIdFromJwt(
   if (!r.ok) return null;
   const u = (await r.json()) as { id?: string };
   return u.id ?? null;
+}
+
+function sha256hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function getApiKeyHashForUser(
+  supabaseUrl: string,
+  serviceKey: string,
+  userId: string,
+): Promise<string | null> {
+  const r = await fetch(
+    `${supabaseUrl}/rest/v1/api_keys?user_id=eq.${encodeURIComponent(userId)}&is_active=eq.true&select=key_hash,api_key&order=last_used_at.desc.nullslast,created_at.desc&limit=1`,
+    { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+  );
+  if (!r.ok) return null;
+  const rows = (await r.json().catch(() => [])) as Array<{
+    key_hash?: string | null;
+    api_key?: string | null;
+  }>;
+  const row = rows[0];
+  return row?.key_hash ?? (row?.api_key ? sha256hex(row.api_key) : null);
+}
+
+function shouldCreateScheduledFailureDispatch(params: {
+  isCron: boolean;
+  source?: string;
+}): boolean {
+  return params.isCron || params.source === "scheduled";
+}
+
+async function createUxPassRunFailureDispatch(params: {
+  supabaseUrl: string;
+  serviceKey: string;
+  apiKeyHash: string | null;
+  runId: string;
+  targetUrl: string;
+  isScheduled: boolean;
+  status?: string | null;
+  errorMessage?: string | null;
+  taskId?: string | null;
+}) {
+  if (!params.apiKeyHash) return;
+  const targetAgentId = process.env.UXPASS_WAKE_AGENT_ID ?? DEFAULT_UXPASS_RUN_HANDOFF_AGENT_ID;
+  const plan = planUxPassRunFailureHandoff({
+    runId: params.runId,
+    targetUrl: params.targetUrl,
+    targetAgentId,
+    isScheduled: params.isScheduled,
+    status: params.status,
+    errorMessage: params.errorMessage,
+    taskId: params.taskId,
+  });
+  if (!plan) return;
+
+  const row = buildUxPassRunFailureDispatchRow({
+    apiKeyHash: params.apiKeyHash,
+    dispatchId: uxPassRunFailureDispatchId(params.runId),
+    plan,
+    now: new Date(),
+  });
+
+  const response = await fetch(`${params.supabaseUrl}/rest/v1/mc_agent_dispatches`, {
+    method: "POST",
+    headers: {
+      apikey: params.serviceKey,
+      Authorization: `Bearer ${params.serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=ignore-duplicates",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!response.ok && response.status !== 409) {
+    const body = await response.text().catch(() => "");
+    console.error(
+      `uxpass-run failed to create failure dispatch for ${params.runId}:`,
+      response.status,
+      body,
+    );
+  }
 }
 
 function queryString(value: string | string[] | undefined): string | undefined {
@@ -88,8 +175,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? {
         url: queryString(req.query.url) ?? queryString(req.query.target_url),
         task_id: queryString(req.query.task_id),
+        source: queryString(req.query.source),
       }
-    : ((req.body ?? {}) as { url?: string; target_url?: string; task_id?: string });
+    : ((req.body ?? {}) as {
+        url?: string;
+        target_url?: string;
+        task_id?: string;
+        source?: string;
+      });
 
   const targetUrl = input.url ?? input.target_url ?? "";
   if (!targetUrl) return json(res, 400, { error: "url required" });
@@ -111,6 +204,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const taskId = input.task_id && input.task_id !== "" ? input.task_id.toLowerCase() : undefined;
 
   const config = { supabaseUrl, serviceRoleKey: serviceKey };
+  const isScheduledAction = shouldCreateScheduledFailureDispatch({
+    isCron,
+    source: input.source,
+  });
+  const apiKeyHash = isScheduledAction
+    ? await getApiKeyHashForUser(supabaseUrl, serviceKey, actorUserId)
+    : null;
   const { id: runId, was_duplicate } = await createRun(config, {
     targetUrl,
     actorUserId,
@@ -145,6 +245,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const result = await runDeterministicChecks(config, runId, targetUrl);
+    if (result.status === "failed") {
+      await createUxPassRunFailureDispatch({
+        supabaseUrl,
+        serviceKey,
+        apiKeyHash,
+        runId,
+        targetUrl,
+        isScheduled: isScheduledAction,
+        status: result.status,
+        taskId: taskId ?? null,
+      });
+    }
     return json(res, 200, {
       run_id: runId,
       status: result.status,
@@ -155,6 +267,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       task_id: taskId ?? null,
     });
   } catch (err) {
+    await createUxPassRunFailureDispatch({
+      supabaseUrl,
+      serviceKey,
+      apiKeyHash,
+      runId,
+      targetUrl,
+      isScheduled: isScheduledAction,
+      status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      taskId: taskId ?? null,
+    });
     return json(res, 500, {
       run_id: runId,
       error: `runner failed: ${(err as Error).message}`,
