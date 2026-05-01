@@ -7172,23 +7172,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const summary =
               summarySource.length > 200 ? `${summarySource.slice(0, 197)}...` : summarySource;
 
-            await supabase.from("mc_signals").insert({
-              api_key_hash: apiKeyHash,
-              tool: "fishbowl",
-              action: "message_posted",
-              severity,
-              summary,
-              deep_link: `/admin/fishbowl#msg-${inserted.id}`,
-              payload: {
-                author_emoji: inserted.author_emoji,
-                author_agent_id: inserted.author_agent_id,
-                recipients: recipientList,
-                tags: tagList,
-                message_id: inserted.id,
-                policy_label: needsDoing ? "warning" : severity,
-              },
-            });
-
             const handoffPlans = planFishbowlMessageHandoffs({
               messageId: inserted.id,
               text: summarySource,
@@ -7232,9 +7215,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 throw new Error("message handoff dispatch lease was not persisted");
               }
             }
+
+            await supabase.from("mc_signals").insert({
+              api_key_hash: apiKeyHash,
+              tool: "fishbowl",
+              action: "message_posted",
+              severity,
+              summary,
+              deep_link: `/admin/fishbowl#msg-${inserted.id}`,
+              payload: {
+                author_emoji: inserted.author_emoji,
+                author_agent_id: inserted.author_agent_id,
+                recipients: recipientList,
+                tags: tagList,
+                message_id: inserted.id,
+                policy_label: needsDoing ? "warning" : severity,
+              },
+            });
           } catch (publishErr) {
             console.error(
-              "[fishbowl_post] signal publish failed:",
+              "[fishbowl_post] async wake plumbing failed:",
               (publishErr as Error).message,
             );
           }

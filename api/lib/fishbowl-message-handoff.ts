@@ -51,12 +51,19 @@ export interface FishbowlMessageHandoffDispatchRow {
 export function planFishbowlMessageHandoffs(
   input: FishbowlMessageHandoffInput,
 ): FishbowlMessageHandoffPlan[] {
-  const tagSet = new Set(input.tags);
   const hasActionTag = input.tags.some((tag) => ACTION_TAGS.has(tag));
   if (!hasActionTag) return [];
 
+  const authorProfile = input.recipientProfiles.find(
+    (profile) =>
+      profile.userAgentHint !== "admin-ui" &&
+      !profile.agentId.startsWith("human-") &&
+      profile.agentId === input.authorAgentId,
+  );
+  if (!authorProfile) return [];
+
   const recipients = input.recipients.map((recipient) => recipient.trim()).filter(Boolean);
-  if (recipients.length === 0 || recipients.includes("all")) return [];
+  if (recipients.length !== 1 || recipients[0] === "all") return [];
 
   const summary = input.text.length > 200 ? `${input.text.slice(0, 197)}...` : input.text;
   const plans: FishbowlMessageHandoffPlan[] = [];
