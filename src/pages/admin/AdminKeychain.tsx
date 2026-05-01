@@ -47,6 +47,12 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import {
+  listSystemCredentialInventory,
+  type SystemCredentialInventoryEntry,
+  type SystemCredentialProvider,
+  type SystemCredentialRisk,
+} from "./systemCredentialInventory";
 
 // ─── Platform catalog ─────────────────────────────────────────────
 
@@ -239,6 +245,29 @@ const HEALTH_BADGES: Record<CredentialHealthStatus, {
     className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
     icon: RotateCw,
   },
+};
+
+const INVENTORY_RISK_BADGES: Record<SystemCredentialRisk, {
+  label: string;
+  className: string;
+}> = {
+  critical: {
+    label: "Critical",
+    className: "border-red-500/20 bg-red-500/10 text-red-300",
+  },
+  high: {
+    label: "High",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-300",
+  },
+  normal: {
+    label: "Normal",
+    className: "border-white/[0.06] bg-white/[0.03] text-[#aaa]",
+  },
+};
+
+const PROVIDER_LABELS: Record<SystemCredentialProvider, string> = {
+  github: "GitHub",
+  vercel: "Vercel",
 };
 
 // ─── Component ──────────────────────────────────────────────────
@@ -582,6 +611,20 @@ export default function AdminKeychain() {
     needs_rotation: 0,
   });
 
+  const systemCredentialInventory = useMemo(() => listSystemCredentialInventory(), []);
+  const inventorySummary = useMemo(() => ({
+    total:    systemCredentialInventory.length,
+    critical: systemCredentialInventory.filter((entry) => entry.risk === "critical").length,
+    high:     systemCredentialInventory.filter((entry) => entry.risk === "high").length,
+    expected: systemCredentialInventory.filter((entry) => entry.expected).length,
+  }), [systemCredentialInventory]);
+  const inventoryByProvider = useMemo(() => (
+    systemCredentialInventory.reduce<Record<SystemCredentialProvider, SystemCredentialInventoryEntry[]>>((acc, entry) => {
+      acc[entry.provider].push(entry);
+      return acc;
+    }, { github: [], vercel: [] })
+  ), [systemCredentialInventory]);
+
   return (
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">
@@ -624,6 +667,66 @@ export default function AdminKeychain() {
             Connection secrets are AES-256-GCM encrypted with a key derived from your UnClick API key.
             UnClick staff cannot decrypt them — even revealing a value requires your API key to be present in this browser.
           </p>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-white/[0.06] bg-[#111111] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential inventory</p>
+            <p className="mt-1 text-[11px] text-[#888]">
+              Name-only map of which GitHub and Vercel credentials power each workflow.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              ["Tracked", inventorySummary.total],
+              ["Expected", inventorySummary.expected],
+              ["Critical", inventorySummary.critical],
+              ["High", inventorySummary.high],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[#555]">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {(Object.keys(inventoryByProvider) as SystemCredentialProvider[]).map((provider) => (
+            <div key={provider} className="rounded-lg border border-white/[0.05] bg-black/20">
+              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2">
+                <p className="text-xs font-semibold text-white">{PROVIDER_LABELS[provider]}</p>
+                <p className="text-[10px] text-[#666]">{inventoryByProvider[provider].length} names</p>
+              </div>
+              <div className="divide-y divide-white/[0.04]">
+                {inventoryByProvider[provider].map((entry) => {
+                  const risk = INVENTORY_RISK_BADGES[entry.risk];
+                  return (
+                    <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.9fr)_minmax(12rem,1fr)_auto]">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-[#ddd]">{entry.name}</p>
+                        <p className="mt-0.5 text-[#555]">{entry.scope}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[#ccc]">{entry.workload}</p>
+                        <p className="mt-0.5 text-[#666]">{entry.docsHint}</p>
+                      </div>
+                      <div className="flex flex-wrap items-start gap-1 md:justify-end">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>
+                          {risk.label}
+                        </span>
+                        <span className="rounded-full border border-white/[0.05] bg-white/[0.03] px-2 py-0.5 text-[10px] text-[#aaa]">
+                          {entry.expected ? "Expected" : "Optional"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
