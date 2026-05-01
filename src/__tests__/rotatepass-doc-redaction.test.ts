@@ -33,7 +33,8 @@ describe("RotatePass public docs redaction", () => {
       const content = withoutAllowedPrefixReferenceLines(readFileSync(file, "utf8"));
       for (const { name, pattern } of SECRET_PATTERNS) {
         for (const match of content.matchAll(pattern)) {
-          findings.push(`${file}: ${name} near ${match[0].slice(0, 12)}...`);
+          const line = content.slice(0, match.index ?? 0).split(/\r?\n/).length;
+          findings.push(`${file}:${line}: ${name}`);
         }
       }
     }
