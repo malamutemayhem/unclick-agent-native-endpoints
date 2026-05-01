@@ -19,8 +19,13 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import {
+  createQueuedDispatch,
+  createTimeBucket,
+  type AgentDispatch,
+} from "../packages/mcp-server/src/reliability.js";
 
-interface ProfileRow {
+export interface ProfileRow {
   api_key_hash: string;
   agent_id: string;
   emoji: string;
@@ -42,6 +47,74 @@ const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
+export const CHECKIN_ACK_LEASE_SECONDS = 600;
+
+export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
+  if (!profile.next_checkin_at) return false;
+  const dueMs = new Date(profile.next_checkin_at).getTime();
+  if (Number.isNaN(dueMs)) return false;
+  if (dueMs >= nowMs) return false;
+  const seenMs = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0;
+  return seenMs < dueMs;
+}
+
+export function buildMissedCheckinDispatch(
+  profile: ProfileRow,
+  nowMs: number,
+): AgentDispatch {
+  const now = new Date(nowMs);
+  const dueMs = profile.next_checkin_at
+    ? new Date(profile.next_checkin_at).getTime()
+    : nowMs;
+  const overdueMinutes = Number.isFinite(dueMs)
+    ? Math.max(1, Math.round((nowMs - dueMs) / 60_000))
+    : 1;
+  const dispatch = createQueuedDispatch({
+    apiKeyHash: profile.api_key_hash,
+    source: "wakepass",
+    targetAgentId: profile.agent_id,
+    taskRef: `fishbowl-checkin:${profile.agent_id}:${profile.next_checkin_at ?? "unknown"}`,
+    timeBucket: createTimeBucket(now, CHECKIN_ACK_LEASE_SECONDS),
+    payload: {
+      ack_required: true,
+      route_attempted: "fishbowl-watcher",
+      wake_reason: "missed_next_checkin",
+      wake_urgency: "high",
+      ack_fail_after_seconds: CHECKIN_ACK_LEASE_SECONDS,
+      agent_id: profile.agent_id,
+      emoji: profile.emoji,
+      display_name: profile.display_name,
+      next_checkin_at: profile.next_checkin_at,
+      last_seen_at: profile.last_seen_at,
+      overdue_minutes: overdueMinutes,
+    },
+    createdAt: now,
+  });
+
+  return {
+    ...dispatch,
+    status: "leased",
+    leaseOwner: profile.agent_id,
+    leaseExpiresAt: new Date(nowMs + CHECKIN_ACK_LEASE_SECONDS * 1000).toISOString(),
+  };
+}
+
+function dispatchToDbRow(dispatch: AgentDispatch) {
+  return {
+    api_key_hash: dispatch.apiKeyHash,
+    dispatch_id: dispatch.dispatchId,
+    source: dispatch.source,
+    target_agent_id: dispatch.targetAgentId,
+    task_ref: dispatch.taskRef ?? null,
+    status: dispatch.status,
+    lease_owner: dispatch.leaseOwner ?? null,
+    lease_expires_at: dispatch.leaseExpiresAt ?? null,
+    last_real_action_at: dispatch.lastRealActionAt ?? null,
+    payload: dispatch.payload ?? null,
+    created_at: dispatch.createdAt,
+    updated_at: dispatch.updatedAt,
+  };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
@@ -61,6 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const nowIso = new Date(nowMs).toISOString();
 
   let checkinSignalsEmitted = 0;
+  let checkinDispatchesEmitted = 0;
   let digestSignalsEmitted = 0;
   let staleStatusesCleared = 0;
 
@@ -76,14 +150,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: profileErr.message });
   }
 
-  const candidates = ((overdueProfiles ?? []) as ProfileRow[]).filter((p) => {
-    if (!p.next_checkin_at) return false;
-    const dueMs = new Date(p.next_checkin_at).getTime();
-    if (Number.isNaN(dueMs)) return false;
-    if (dueMs >= nowMs) return false;
-    const seenMs = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
-    return seenMs < dueMs;
-  });
+  const candidates = ((overdueProfiles ?? []) as ProfileRow[]).filter((p) =>
+    isMissedCheckinCandidate(p, nowMs),
+  );
 
   for (const profile of candidates) {
     const dedupCutoff = new Date(nowMs - CHECKIN_DEDUP_WINDOW_MS).toISOString();
@@ -104,6 +173,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dueMs = new Date(profile.next_checkin_at as string).getTime();
     const overdueMin = Math.max(1, Math.round((nowMs - dueMs) / 60_000));
     const summary = `🪪 ${profile.emoji} missed expected check-in (was due ${overdueMin} min ago)`;
+    const dispatch = buildMissedCheckinDispatch(profile, nowMs);
+
+    const { error: dispatchErr } = await supabase
+      .from("mc_agent_dispatches")
+      .upsert(dispatchToDbRow(dispatch), { onConflict: "api_key_hash,dispatch_id" });
+    if (dispatchErr) {
+      console.error(
+        "[fishbowl-watcher] missed checkin dispatch upsert error:",
+        dispatchErr.message,
+      );
+      continue;
+    }
+    checkinDispatchesEmitted++;
 
     const { error: insertErr } = await supabase.from("mc_signals").insert({
       api_key_hash: profile.api_key_hash,
@@ -119,6 +201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         next_checkin_at: profile.next_checkin_at,
         last_seen_at: profile.last_seen_at,
         overdue_minutes: overdueMin,
+        dispatch_id: dispatch.dispatchId,
       },
     });
     if (insertErr) {
@@ -221,6 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     checkin_signals_emitted: checkinSignalsEmitted,
+    checkin_dispatches_emitted: checkinDispatchesEmitted,
     digest_signals_emitted: digestSignalsEmitted,
     stale_statuses_cleared: staleStatusesCleared,
     overdue_candidates: candidates.length,
