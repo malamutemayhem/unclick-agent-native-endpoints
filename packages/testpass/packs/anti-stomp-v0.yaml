@@ -166,7 +166,7 @@ items:
     check_type: deterministic
     description: >
       If the PR title contains any of: restore, reorg, refactor, fix nav,
-      fix sidebar — the PR body must contain a section titled "## Archaeology"
+      fix sidebar - the PR body must contain a section titled "## Archaeology"
       or "## Pre-restore audit" with git log output and a disposition per
       item found. This check is a no-op for unmatched PR titles.
     expected:
@@ -190,7 +190,7 @@ items:
     check_type: deterministic
     description: >
       For any row in mc_extracted_facts where category is one of "built",
-      "shipped", or "change" — at least one of commit_sha or pr_number must
+      "shipped", or "change" - at least one of commit_sha or pr_number must
       be non-null. Facts without linkage cannot be audited or attributed.
       This check is a no-op for other categories.
     expected:
