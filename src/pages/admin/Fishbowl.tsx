@@ -36,6 +36,7 @@ interface FishbowlProfile {
 }
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+const STALE_IDLE_VISIBILITY_MS = 24 * 60 * 60 * 1000;
 
 interface FishbowlResponse {
   room: { id: string; slug: string; name: string } | null;
@@ -231,6 +232,21 @@ function isStale(profile: FishbowlProfile, nowMs: number): boolean {
   return nowMs - new Date(profile.last_seen_at).getTime() > STALE_THRESHOLD_MS;
 }
 
+function hasVisibleNowPlayingState(profile: FishbowlProfile, nowMs: number): boolean {
+  const statusText = profile.current_status?.trim();
+  if (statusText) return true;
+
+  const seenMs = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0;
+  if (seenMs && nowMs - seenMs <= STALE_THRESHOLD_MS) return true;
+
+  const checkinMs = profile.next_checkin_at ? new Date(profile.next_checkin_at).getTime() : null;
+  if (checkinMs === null) return false;
+  if (checkinMs >= nowMs) return true;
+
+  const isMia = seenMs < checkinMs;
+  return isMia && nowMs - checkinMs <= STALE_IDLE_VISIBILITY_MS;
+}
+
 function NowPlayingStrip({
   profiles,
   clusters,
@@ -250,6 +266,14 @@ function NowPlayingStrip({
   if (profiles.length === 0) return null;
 
   const nowMs = Date.now();
+  const visibleClusters = clusters
+    .map((c) => ({
+      ...c,
+      primaries: c.primaries.filter((p) => hasVisibleNowPlayingState(p, nowMs)),
+    }))
+    .filter((c) => c.primaries.length > 0);
+
+  if (visibleClusters.length === 0) return null;
 
   return (
     <section
@@ -265,7 +289,7 @@ function NowPlayingStrip({
       </div>
       <div className="overflow-x-auto">
         <ul className="flex gap-2 px-3 py-3">
-          {clusters.map((c) => (
+          {visibleClusters.map((c) => (
             <Fragment key={c.key}>
               {c.primaries.map((p) => {
                 const stale = isStale(p, nowMs);
