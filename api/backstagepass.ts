@@ -152,6 +152,18 @@ const PLATFORM_PROBES: Record<string, {
       Authorization: `Bearer ${v.api_key ?? ""}`,
     }),
   },
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/models",
+    buildHeaders: (v) => ({
+      Authorization: `Bearer ${v.api_key ?? v.token ?? ""}`,
+    }),
+  },
+  vercel: {
+    url: "https://api.vercel.com/v2/user",
+    buildHeaders: (v) => ({
+      Authorization: `Bearer ${v.api_key ?? v.token ?? ""}`,
+    }),
+  },
 };
 
 // ─── Supabase REST helper ────────────────────────────────────────
@@ -377,6 +389,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         is_valid:        r.is_valid !== false,
         last_tested_at:  r.last_tested_at ?? null,
         last_used_at:    r.last_used_at ?? null,
+        last_rotated_at: r.last_rotated_at ?? null,
         expires_at:      r.expires_at ?? null,
         created_at:      r.created_at,
         updated_at:      r.updated_at,
@@ -570,7 +583,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const testedAt = new Date().toISOString();
     let ok = false;
     let status = 0;
-    let message = "";
+    let message: string;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5_000);

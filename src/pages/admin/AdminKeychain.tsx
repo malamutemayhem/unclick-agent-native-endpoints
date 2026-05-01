@@ -27,6 +27,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "@/lib/auth";
 import {
+  buildSystemCredentialHealthRows,
+  type SystemCredentialHealthRow,
+  type SystemCredentialStatus,
+} from "@/lib/systemCredentialsHealth";
+import {
   AlertTriangle,
   CheckCircle2,
   Clipboard,
@@ -53,6 +58,7 @@ const PLATFORMS = [
   // AI / LLM
   { slug: "anthropic",  name: "Anthropic",   category: "AI",           desc: "Claude models" },
   { slug: "openai",     name: "OpenAI",       category: "AI",           desc: "GPT and Assistants" },
+  { slug: "openrouter", name: "OpenRouter",   category: "AI",           desc: "Model routing" },
   { slug: "google-ai",  name: "Google AI",    category: "AI",           desc: "Gemini models" },
   { slug: "cohere",     name: "Cohere",       category: "AI",           desc: "Command models" },
   { slug: "mistral",    name: "Mistral",      category: "AI",           desc: "Mistral models" },
@@ -170,10 +176,32 @@ function maskValue(v: string): string {
   return `${v.slice(0, 4)}${"•".repeat(8)}${v.slice(-4)}`;
 }
 
+function healthStatusClasses(status: SystemCredentialStatus): string {
+  switch (status) {
+    case "healthy":
+      return "border-green-500/20 bg-green-500/10 text-green-300";
+    case "failing":
+      return "border-red-500/20 bg-red-500/10 text-red-300";
+    case "stale":
+      return "border-amber-500/20 bg-amber-500/10 text-amber-300";
+    case "needs_rotation":
+      return "border-orange-500/20 bg-orange-500/10 text-orange-300";
+    case "untested":
+    default:
+      return "border-sky-500/20 bg-sky-500/10 text-sky-300";
+  }
+}
+
+function healthStatusIcon(status: SystemCredentialStatus) {
+  if (status === "healthy") return <CheckCircle2 className="h-3 w-3" />;
+  if (status === "failing") return <XCircle className="h-3 w-3" />;
+  return <AlertTriangle className="h-3 w-3" />;
+}
+
 // ─── Component ──────────────────────────────────────────────────
 
 export default function AdminKeychain() {
-  const { session } = useSession();
+  const { session, user } = useSession();
 
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -499,6 +527,14 @@ export default function AdminKeychain() {
     acc[cat].push(cred);
     return acc;
   }, {});
+  const healthRows = useMemo(
+    () => buildSystemCredentialHealthRows(credentials, user?.email ?? null),
+    [credentials, user?.email],
+  );
+  const healthCounts = healthRows.reduce<Record<SystemCredentialStatus, number>>((acc, row) => {
+    acc[row.status] += 1;
+    return acc;
+  }, { healthy: 0, untested: 0, failing: 0, stale: 0, needs_rotation: 0 });
 
   return (
     <div>
@@ -544,6 +580,12 @@ export default function AdminKeychain() {
           </p>
         </div>
       </div>
+
+      <SystemCredentialsHealthPanel
+        rows={healthRows}
+        counts={healthCounts}
+        formatLastTested={timeAgo}
+      />
 
       {/* List */}
       {error && (
@@ -1026,6 +1068,98 @@ export default function AdminKeychain() {
   );
 }
 
+function SystemCredentialsHealthPanel({
+  rows,
+  counts,
+  formatLastTested,
+}: {
+  rows: SystemCredentialHealthRow[];
+  counts: Record<SystemCredentialStatus, number>;
+  formatLastTested: (iso: string | null) => string;
+}) {
+  const attentionCount = counts.failing + counts.stale + counts.needs_rotation + counts.untested;
+
+  return (
+    <section className="mb-6 rounded-xl border border-white/[0.06] bg-[#111111]">
+      <div className="flex flex-col gap-3 border-b border-white/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-white">System credentials health</h2>
+          <p className="mt-0.5 text-[11px] text-[#777]">
+            Metadata only. Secret values stay encrypted in BackstagePass.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] text-green-300">
+            {counts.healthy} healthy
+          </span>
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-[#aaa]">
+            {attentionCount} need attention
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-white/[0.06] text-left">
+          <thead className="bg-black/20">
+            <tr className="text-[10px] uppercase tracking-wider text-[#666]">
+              <th className="px-4 py-2 font-semibold">Credential</th>
+              <th className="px-4 py-2 font-semibold">Owner</th>
+              <th className="px-4 py-2 font-semibold">Used by</th>
+              <th className="px-4 py-2 font-semibold">Status</th>
+              <th className="px-4 py-2 font-semibold">Last checked</th>
+              <th className="px-4 py-2 font-semibold">Rotation note</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.04]">
+            {rows.map((row) => (
+              <tr key={row.id} className="align-top">
+                <td className="px-4 py-3">
+                  <p className="text-xs font-medium text-white">{row.name}</p>
+                  <p className="mt-0.5 text-[10px] text-[#666]">
+                    {row.matchedCredentialCount > 0
+                      ? row.matchedCredentialLabels.join(", ")
+                      : `Expected fields: ${row.expectedFields.join(", ")}`}
+                  </p>
+                  {row.probeSupported ? (
+                    <span className="mt-1 inline-flex rounded-full border border-[#61C1C4]/20 bg-[#61C1C4]/10 px-2 py-0.5 text-[10px] text-[#61C1C4]">
+                      Probe supported
+                    </span>
+                  ) : null}
+                </td>
+                <td className="px-4 py-3 text-[11px] text-[#aaa]">{row.owner}</td>
+                <td className="px-4 py-3">
+                  <div className="flex max-w-xs flex-wrap gap-1">
+                    {row.usedBy.map((use) => (
+                      <span
+                        key={use}
+                        className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] text-[#999]"
+                      >
+                        {use}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${healthStatusClasses(row.status)}`}>
+                    {healthStatusIcon(row.status)}
+                    {row.statusLabel}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[11px] text-[#aaa]">
+                  {row.lastCheckedAt ? formatLastTested(row.lastCheckedAt) : "not checked"}
+                </td>
+                <td className="px-4 py-3 text-[11px] text-[#888]">
+                  {row.rotationNote}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // ─── Modals ───────────────────────────────────────────────────────
 
 function ModalShell({
@@ -1151,7 +1285,8 @@ function RotateValuesModal({
           throw new Error("Values must be a JSON object of string fields.");
         }
       } catch (e) {
-        throw new Error(e instanceof Error ? e.message : "Invalid JSON");
+        setErr(e instanceof Error ? e.message : "Invalid JSON");
+        return;
       }
 
       const apiKey = readLocalApiKey();
