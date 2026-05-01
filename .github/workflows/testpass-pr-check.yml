@@ -16,7 +16,7 @@ on:
       server_url:
         description: Optional target MCP server URL.
         required: false
-        default: ""
+        default: https://unclick.world/api/mcp
 
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
           token: ${{ secrets.TESTPASS_TOKEN }}
           pack_id: ${{ inputs.pack_id || 'testpass-core' }}
           profile: ${{ inputs.profile || 'smoke' }}
-          server_url: ${{ inputs.server_url || '' }}
+          server_url: ${{ inputs.server_url || 'https://unclick.world/api/mcp' }}
 
       - name: Post PR comment
         # Run regardless of TestPass step outcome - infra failures still need a
@@ -150,12 +150,21 @@ jobs:
               body,
             });
 
-      - name: Fail job if checks failed
-        # Only block the PR on real product regressions. Infra failures
-        # (stale token, transport, 5xx) are surfaced via the comment above
-        # and don't gate the merge.
-        if: ${{ steps.testpass.outputs.failure_kind == 'product' && steps.testpass.outputs.fail_count != '0' }}
+      - name: Fail job unless TestPass completed cleanly
+        # Keep PR trust fail-closed: only a complete TestPass run with zero
+        # failed checks is green. Running, unknown, and infra states must stay
+        # visible/retryable instead of looking like evaluated product passes.
+        if: ${{ always() && (steps.testpass.outputs.status != 'complete' || steps.testpass.outputs.fail_count != '0') }}
         shell: bash
+        env:
+          STATUS: ${{ steps.testpass.outputs.status }}
+          FAIL_COUNT: ${{ steps.testpass.outputs.fail_count }}
+          FAILURE_KIND: ${{ steps.testpass.outputs.failure_kind }}
+          HTTP_CODE: ${{ steps.testpass.outputs.http_code }}
         run: |
-          echo "TestPass reported ${{ steps.testpass.outputs.fail_count }} failed checks" >&2
+          echo "TestPass did not complete cleanly." >&2
+          echo "status=${STATUS:-unknown}" >&2
+          echo "fail_count=${FAIL_COUNT:-unknown}" >&2
+          echo "failure_kind=${FAILURE_KIND:-unknown}" >&2
+          echo "http_code=${HTTP_CODE:-000}" >&2
           exit 1
