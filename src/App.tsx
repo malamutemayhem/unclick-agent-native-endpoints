@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -73,11 +74,20 @@ import SignalsCatalog from "./pages/admin/signals/SignalsCatalog.tsx";
 import SignalsSettings from "./pages/admin/signals/SignalsSettings.tsx";
 import Fishbowl from "./pages/admin/Fishbowl.tsx";
 import BuildDeskPage from "./pages/BuildDesk.tsx";
-import { initPostHog } from "./lib/posthog.ts";
-
-initPostHog();
+import { trackPageView } from "./lib/analytics.ts";
 
 const queryClient = new QueryClient();
+
+function AnalyticsPageviewTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = `${location.pathname}${location.search}${location.hash}`;
+    trackPageView(path);
+  }, [location.hash, location.pathname, location.search]);
+
+  return null;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -86,6 +96,7 @@ const App = () => (
       <Sonner />
       <Analytics />
       <BrowserRouter>
+        <AnalyticsPageviewTracker />
         <BetaBanner />
         <Routes>
           <Route path="/" element={<Index />} />

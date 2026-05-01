@@ -11,7 +11,8 @@ export function initPostHog(): void {
     api_host: host,
     defaults: "2026-01-30",
     autocapture: true,
-    capture_pageview: "history_change",
+    capture_pageview: false,
+    capture_pageleave: false,
     persistence: "localStorage",
     respect_dnt: true,
   });
