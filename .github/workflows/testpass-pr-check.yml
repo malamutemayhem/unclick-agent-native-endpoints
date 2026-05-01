@@ -68,9 +68,14 @@ jobs:
             const failureKind = process.env.FAILURE_KIND || 'unknown';
             const httpCode = process.env.HTTP_CODE || '000';
 
-            let summary = {};
-            try { summary = JSON.parse(process.env.RESPONSE || '{}').verdict_summary || {}; }
-            catch { summary = {}; }
+            let responseJson = {};
+            try { responseJson = JSON.parse(process.env.RESPONSE || '{}'); }
+            catch { responseJson = {}; }
+            const summary = responseJson.verdict_summary || {};
+            const authReason =
+              typeof responseJson.auth_reason === 'string' ? responseJson.auth_reason : '';
+            const howToFix =
+              typeof responseJson.how_to_fix === 'string' ? responseJson.how_to_fix : '';
 
             const isInfra = failureKind && failureKind.startsWith('infra_');
 
@@ -83,12 +88,14 @@ jobs:
                 infra_http:      ':warning: TestPass: infra issue (API error)',
                 infra_transport: ':warning: TestPass: infra issue (transport)',
               };
+              const authReasonSuffix = authReason ? ` (${authReason})` : '';
               const explanations = {
                 infra_auth:
-                  `The TestPass API rejected our token (HTTP ${httpCode}). ` +
-                  `This is almost always a stale \`TESTPASS_TOKEN\` secret, ` +
-                  `**not** a problem with this PR. Refresh the secret in repo ` +
-                  `settings and re-run the workflow.`,
+                  `The TestPass API rejected the provided bearer token${authReasonSuffix} ` +
+                  `(HTTP ${httpCode}). ` +
+                  (howToFix ||
+                    `Use a valid Supabase JWT or uc_ UnClick API key in ` +
+                    `\`TESTPASS_TOKEN\`, then re-run the workflow.`),
                 infra_http:
                   `The TestPass API returned HTTP ${httpCode}. This is a ` +
                   `service-side issue, **not** a problem with this PR. ` +
