@@ -31,6 +31,8 @@ const EXCLUDED_NAMES = new Set([
 ]);
 
 const NAME_PATTERN = /^[A-Z][A-Z0-9_]*$/;
+const UNSAFE_METADATA_COPY_PATTERN =
+  /(authorization:|bearer\s+[a-z0-9._-]{8,}|x-api-key|apikey|api[_ -]?key|refresh[_ -]?token|set-cookie:|cookie:|sk-[a-z0-9_-]{8,}|ghp_[a-z0-9]{8,}|xox[baprs]-[a-z0-9-]{8,})/i;
 
 export const SYSTEM_CREDENTIAL_INVENTORY: readonly SystemCredentialInventoryEntry[] = Object.freeze([
   {
@@ -369,11 +371,19 @@ export function sanitizeInventoryRecord(record: Record<string, unknown>): System
     workload: typeof record.workload === "string" ? record.workload : "unknown",
     risk: record.risk === "critical" || record.risk === "high" ? record.risk : "normal",
     expected: record.expected === true,
-    docsHint: typeof record.docsHint === "string" ? record.docsHint : "Metadata only; no secret value is available.",
-    rotationImpact: typeof record.rotationImpact === "string" ? record.rotationImpact : undefined,
+    docsHint: sanitizeMetadataCopy(record.docsHint, "Metadata only; no secret value is available."),
+    rotationImpact: sanitizeMetadataCopy(record.rotationImpact),
   };
 }
 
 export function listSystemCredentialInventory(): readonly SystemCredentialInventoryEntry[] {
   return SYSTEM_CREDENTIAL_INVENTORY;
+}
+
+function sanitizeMetadataCopy(value: unknown, fallback?: string): string | undefined {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  if (UNSAFE_METADATA_COPY_PATTERN.test(trimmed)) return fallback;
+  return trimmed;
 }

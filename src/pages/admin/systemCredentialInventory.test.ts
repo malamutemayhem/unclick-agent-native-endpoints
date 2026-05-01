@@ -102,4 +102,24 @@ describe("system credential inventory", () => {
       rotationImpact: "PR checks may fail until the replacement is wired.",
     });
   });
+
+  it("drops unsafe metadata copy from docs hint and rotation impact", () => {
+    expect(sanitizeInventoryRecord({
+      provider: "github",
+      source: "github_actions_secret",
+      name: "TESTPASS_TOKEN",
+      docsHint: "Authorization: Bearer sk-secret-never-show",
+      rotationImpact: "Provider body contained set-cookie: session=123",
+    })).toEqual({
+      provider: "github",
+      source: "github_actions_secret",
+      name: "TESTPASS_TOKEN",
+      scope: "unknown",
+      workload: "unknown",
+      risk: "normal",
+      expected: false,
+      docsHint: "Metadata only; no secret value is available.",
+      rotationImpact: undefined,
+    });
+  });
 });
