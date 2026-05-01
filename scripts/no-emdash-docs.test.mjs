@@ -14,9 +14,12 @@ const docPaths = [
   "CLAUDE.md",
   "README.md",
   ".github/OPERATIONS.md",
+  "packages/testpass/packs/anti-stomp-v0.yaml",
+  "packages/testpass/packs/testpass-core.yaml",
+  "packages/testpass/packs/testpass-fishbowl-v0.yaml",
 ];
 
-test("core docs do not contain em dashes", () => {
+test("core docs and TestPass packs do not contain em dashes", () => {
   const offenders = [];
 
   for (const relativePath of docPaths) {
