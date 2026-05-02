@@ -16,6 +16,7 @@ const scanPaths = [
   "docs/connectors/spec.md",
   "docs/connectors/system-credentials-health-panel.md",
   "docs/prd/backstagepass.md",
+  "api/credentials.ts",
   "tests/rotatepass/fixtures/system-credentials.metadata.json",
 ];
 
@@ -47,6 +48,18 @@ const blockedPatterns = [
   {
     name: "authorization-header",
     pattern: /\bAuthorization:\s*(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}/gi,
+  },
+  {
+    name: "provider-response-access-token",
+    pattern: /["']access_token["']\s*:\s*["'][A-Za-z0-9._-]{12,}["']/gi,
+  },
+  {
+    name: "provider-response-refresh-token",
+    pattern: /["']refresh_token["']\s*:\s*["'][A-Za-z0-9._-]{12,}["']/gi,
+  },
+  {
+    name: "provider-response-id-token",
+    pattern: /["']id_token["']\s*:\s*["'][A-Za-z0-9._-]{12,}["']/gi,
   },
   {
     name: "private-key-block",
