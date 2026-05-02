@@ -9,12 +9,15 @@ import {
   dogfoodReport as fallbackReport,
   type DogfoodPassResult,
   type DogfoodStatus,
+  type DogfoodStatusLegend,
   type DogfoodTrendPoint,
 } from "@/data/dogfoodReport";
 
 type DogfoodReportData = Omit<typeof fallbackReport, "results" | "trend"> & {
   results: DogfoodPassResult[];
   trend: DogfoodTrendPoint[];
+  statusLegend: DogfoodStatusLegend;
+  proofPolicy: string;
 };
 
 const STATUS_STYLES: Record<DogfoodStatus, { label: string; badge: string; icon: typeof CheckCircle2 }> = {
@@ -142,6 +145,35 @@ export default function DogfoodReportPage() {
               </div>
             </FadeIn>
           ))}
+        </section>
+
+        <section className="mx-auto mt-10 max-w-5xl">
+          <FadeIn delay={0.1}>
+            <div className="rounded-2xl border border-border/70 bg-card/40 p-5">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-custom">
+                Proof policy
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-body">{report.proofPolicy}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {(Object.keys(report.statusLegend) as DogfoodStatus[]).map((statusKey) => {
+                  const status = STATUS_STYLES[statusKey];
+                  const Icon = status.icon;
+
+                  return (
+                    <div key={statusKey} className="rounded-xl border border-border/50 bg-background/40 p-3">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${status.badge}`}>
+                        <Icon className="h-3.5 w-3.5" />
+                        {status.label}
+                      </span>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-custom">
+                        {report.statusLegend[statusKey]}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </FadeIn>
         </section>
 
         <section className="mx-auto mt-10 max-w-5xl">
