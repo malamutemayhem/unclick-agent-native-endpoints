@@ -6,6 +6,15 @@
 <!-- Files and modules touched. Be specific enough that a reviewer can spot what's missing. -->
 -
 
+## Owner and lift status
+<!-- Required before marking ready:
+     - Name the owner lane or worker.
+     - State the non-overlap check.
+     - Say whether this is draft, HOLD, or ready for review. -->
+- Owner:
+- Non-overlap:
+- Status:
+
 ## Deletions
 <!-- Required: list every file, route, or component removed, with rationale.
      "None" is a valid answer if nothing was deleted.
