@@ -151,13 +151,13 @@ System Credentials uses a status model that can be shared with RotatePass.
 | Status | Meaning | UI color |
 | --- | --- | --- |
 | `healthy` | Last safe probe succeeded within the allowed window | Green |
-| `untested` | Credential is configured or referenced but no recent safe probe exists | Gray |
+| `untested` | Default for configured or referenced credentials when only safe metadata exists and no recent safe probe evidence is available | Neutral info |
 | `failing` | A safe probe failed or a dependent workflow is auth-failing | Red |
 | `stale` | Last check or rotation evidence is older than the configured window | Amber |
 | `needs_rotation` | Rotation is due, manually requested, or prompted by a security finding | Orange |
 | `unknown` | Metadata is incomplete and the panel cannot make a useful claim | Gray |
 
-Do not show `healthy` from presence alone.
+Do not show `healthy` from presence alone. `Untested` is a deliberate safety label, not a warning by itself.
 
 `healthy` requires one of:
 
@@ -272,7 +272,7 @@ The first implementation is acceptable when:
 - System Credentials appears inside the Connections admin story.
 - Cards show name, owner/account when safely knowable, used-by, status, last checked, and rotation notes.
 - No raw secret value or sensitive prefix is rendered.
-- Untested credentials are labelled `untested`, not `healthy`.
+- Untested credentials are labelled `Untested`, not `healthy`.
 - Failing credential state points at the dependent workflow or probe evidence.
 - Rotation copy explains what breaks if rotated.
 - BackstagePass remains the secure substrate.
@@ -283,7 +283,8 @@ The first implementation is acceptable when:
 Minimum tests for the first implementation:
 
 - static inventory renders without secret values
-- `healthy`, `untested`, `failing`, `stale`, and `needs_rotation` badges render correctly
+- `healthy`, `untested`, `failing`, `stale`, and `needs_rotation` badges render correctly when those states are implemented
+- static metadata-only inventory rows default to `untested` until safe probe evidence exists
 - missing owner displays `Unknown`, not an empty string
 - raw secret-looking strings are blocked from fixture output
 - rotation notes render for every seeded critical credential
