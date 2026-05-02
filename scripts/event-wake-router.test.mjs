@@ -10,6 +10,7 @@ import {
   buildReliabilityDispatchHandoffSyncRequest,
   buildReliabilityDispatchRequest,
   deriveAckThresholds,
+  normalizeHandoffMessageId,
   normalizeDispatchOwner,
   shouldFailMissingHandoffMessageId,
   wakeDispatchId,
@@ -164,6 +165,24 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(upsert.dispatch_id, wakeDispatchId("wake-workflow_run-workflow-run-321-jkl"));
     assert.equal(upsert.payload.handoff_message_id, "msg-321");
     assert.equal(upsert.payload.ack_fail_after_seconds, 120);
+  });
+
+  it("skips dispatch handoff sync when message id is whitespace only", () => {
+    const upsert = buildReliabilityDispatchHandoffSyncRequest({
+      eventId: "wake-workflow_run-workflow-run-321-jkl",
+      decision: {
+        owner: "🤖",
+        reason: "Scheduled TestPass smoke failure",
+        urgency: "urgent",
+      },
+      triage: { used: false },
+      result: { message_id: "   " },
+      event: { workflow_run: { id: 321 } },
+      ackSeconds: 120,
+    });
+
+    assert.equal(upsert, null);
+    assert.equal(normalizeHandoffMessageId("   "), null);
   });
 
   it("normalizes fanout owner to a concrete ACK owner for reliability dispatch", () => {
@@ -509,6 +528,7 @@ describe("event wake router reliability dispatch", () => {
 
   it("fails closed when Fishbowl post succeeds without a message id", () => {
     assert.equal(shouldFailMissingHandoffMessageId({ posted: true, message_id: null, dry_run: false }), true);
+    assert.equal(shouldFailMissingHandoffMessageId({ posted: true, message_id: "   ", dry_run: false }), true);
     assert.equal(shouldFailMissingHandoffMessageId({ posted: true, message_id: "msg-1", dry_run: false }), false);
     assert.equal(shouldFailMissingHandoffMessageId({ posted: true, message_id: null, dry_run: true }), false);
     assert.equal(shouldFailMissingHandoffMessageId({ posted: false, message_id: null, dry_run: false }), false);

@@ -114,6 +114,11 @@ export function normalizeDispatchOwner(owner) {
   return normalized === "all" ? "🤖" : owner;
 }
 
+export function normalizeHandoffMessageId(messageId) {
+  const normalized = String(messageId ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function baseDecision(event) {
   const action = String(event.action || "");
 
@@ -370,6 +375,7 @@ export function buildReliabilityDispatchRequest({
   event,
   ackSeconds = 600,
 }) {
+  const handoffMessageId = normalizeHandoffMessageId(result?.message_id);
   return {
     dispatch_id: wakeDispatchId(eventId),
     source: "wakepass",
@@ -378,7 +384,7 @@ export function buildReliabilityDispatchRequest({
     time_bucket_seconds: ackSeconds,
     payload: {
       ack_required: true,
-      handoff_message_id: result?.message_id ?? null,
+      handoff_message_id: handoffMessageId,
       route_attempted: "fishbowl",
       wake_event_id: eventId,
       wake_reason: decision.reason,
@@ -402,7 +408,7 @@ export function buildReliabilityDispatchHandoffSyncRequest({
   event,
   ackSeconds = 600,
 }) {
-  if (!result?.message_id) return null;
+  if (!normalizeHandoffMessageId(result?.message_id)) return null;
   return buildReliabilityDispatchRequest({
     eventId,
     decision,
@@ -414,7 +420,7 @@ export function buildReliabilityDispatchHandoffSyncRequest({
 }
 
 export function shouldFailMissingHandoffMessageId(result) {
-  return Boolean(result?.posted) && !result?.message_id && !result?.dry_run;
+  return Boolean(result?.posted) && !normalizeHandoffMessageId(result?.message_id) && !result?.dry_run;
 }
 
 async function registerWakeDispatch({ eventId, decision, triage, result, event }) {
