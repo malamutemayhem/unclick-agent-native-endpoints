@@ -26,6 +26,17 @@ function parseBoundedSeconds(value, fallback, min, max) {
   return Math.max(min, Math.min(parsed, max));
 }
 
+export function deriveAckThresholds(failAfterSeconds) {
+  const fail = Number.isFinite(failAfterSeconds) ? Math.max(1, Math.floor(failAfterSeconds)) : 600;
+  const expected = Math.min(120, Math.max(15, Math.floor(fail * 0.2)));
+  const warning = Math.min(300, Math.max(expected + 1, Math.floor(fail * 0.5)));
+  return {
+    expected_within_seconds: expected,
+    warning_after_seconds: warning,
+    fail_after_seconds: fail,
+  };
+}
+
 function readEvent() {
   if (!eventPath) return {};
   try {
@@ -460,6 +471,7 @@ async function registerWakeDispatch({ eventId, decision, triage, result, event }
 
 function writeLedger({ eventId, event, decision, triage, result, reliability, status }) {
   const eventSeconds = secondsSince(decision.eventCreatedAt);
+  const ackThresholds = deriveAckThresholds(ackFailSeconds);
   const ledger = {
     event_id: eventId,
     status,
@@ -496,9 +508,9 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, st
     },
     ack: {
       requested: status === "wake_posted" || status === "wake_dry_run",
-      expected_within_seconds: Math.min(120, ackFailSeconds),
-      warning_after_seconds: Math.min(300, ackFailSeconds),
-      fail_after_seconds: ackFailSeconds,
+      expected_within_seconds: ackThresholds.expected_within_seconds,
+      warning_after_seconds: ackThresholds.warning_after_seconds,
+      fail_after_seconds: ackThresholds.fail_after_seconds,
       observed_at: null,
     },
   };

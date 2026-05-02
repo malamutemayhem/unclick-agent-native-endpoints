@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildReliabilityDispatchRequest,
+  deriveAckThresholds,
   normalizeDispatchOwner,
   wakeDispatchId,
 } from "./event-wake-router.mjs";
@@ -551,5 +552,21 @@ describe("event wake router reliability dispatch", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("derives monotonic ACK telemetry thresholds for short leases", () => {
+    const thresholds = deriveAckThresholds(60);
+    assert.equal(thresholds.fail_after_seconds, 60);
+    assert.equal(thresholds.expected_within_seconds, 15);
+    assert.equal(thresholds.warning_after_seconds, 30);
+    assert.ok(thresholds.expected_within_seconds < thresholds.warning_after_seconds);
+    assert.ok(thresholds.warning_after_seconds < thresholds.fail_after_seconds);
+  });
+
+  it("preserves default ACK telemetry thresholds for ten-minute leases", () => {
+    const thresholds = deriveAckThresholds(600);
+    assert.equal(thresholds.expected_within_seconds, 120);
+    assert.equal(thresholds.warning_after_seconds, 300);
+    assert.equal(thresholds.fail_after_seconds, 600);
   });
 });
