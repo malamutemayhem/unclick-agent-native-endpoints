@@ -382,6 +382,25 @@ export function buildReliabilityDispatchRequest({
   };
 }
 
+export function buildReliabilityDispatchHandoffSyncRequest({
+  eventId,
+  decision,
+  triage,
+  result,
+  event,
+  ackSeconds = 600,
+}) {
+  if (!result?.message_id) return null;
+  return buildReliabilityDispatchRequest({
+    eventId,
+    decision,
+    triage,
+    result,
+    event,
+    ackSeconds,
+  });
+}
+
 async function registerWakeDispatch({ eventId, decision, triage, result, event }) {
   const dispatchRequest = buildReliabilityDispatchRequest({
     eventId,
@@ -466,6 +485,58 @@ async function registerWakeDispatch({ eventId, decision, triage, result, event }
     status: claimResponse.status,
     dispatch_id: dispatchRequest.dispatch_id,
     error: claimResponse.ok ? null : compactText(claimBody, 500),
+  };
+}
+
+async function syncWakeDispatchHandoffMessage({ eventId, decision, triage, result, event }) {
+  const upsert = buildReliabilityDispatchHandoffSyncRequest({
+    eventId,
+    decision,
+    triage,
+    result,
+    event,
+    ackSeconds: ackFailSeconds,
+  });
+
+  if (!upsert) {
+    return { attempted: false, synced: false, skipped: true, reason: "missing_message_id" };
+  }
+
+  if (dryRun) {
+    console.log(
+      JSON.stringify(
+        {
+          reliability_dispatch_handoff_sync_dry_run: true,
+          missing_key: !unclickApiKey,
+          upsert,
+        },
+        null,
+        2,
+      ),
+    );
+    return { attempted: true, synced: true, dry_run: true };
+  }
+
+  if (!unclickApiKey) {
+    return { attempted: true, synced: false, error: "missing_wake_token" };
+  }
+
+  const response = await fetch(`${apiUrl}?action=reliability_dispatches&method=upsert`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${unclickApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(upsert),
+  });
+  const body = await response.text();
+  console.log(`Reliability dispatch handoff sync HTTP ${response.status}`);
+  console.log(body);
+  return {
+    attempted: true,
+    synced: response.ok,
+    status: response.status,
+    error: response.ok ? null : compactText(body, 500),
   };
 }
 
@@ -584,11 +655,19 @@ async function main() {
     return;
   }
   const result = await postWake(finalDecision, triage, eventId, event);
+  const handoffSync = await syncWakeDispatchHandoffMessage({
+    eventId,
+    decision: finalDecision,
+    triage,
+    result,
+    event,
+  });
   const status = result.posted ? "wake_posted" : result.dry_run ? "wake_dry_run" : "wake_failed";
   writeLedger({ eventId, event, decision: finalDecision, triage, result, reliability, status });
   if (
     (!result.posted && !result.dry_run) ||
-    (!reliability?.registered && !reliability?.dry_run)
+    (!reliability?.registered && !reliability?.dry_run) ||
+    (handoffSync.attempted && !handoffSync.synced)
   ) {
     process.exitCode = 1;
   }
