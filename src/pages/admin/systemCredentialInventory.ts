@@ -1,6 +1,8 @@
 export type SystemCredentialProvider = "github" | "vercel";
 export type SystemCredentialSource = "github_actions_secret" | "vercel_env";
 export type SystemCredentialRisk = "critical" | "high" | "normal";
+export type SystemCredentialOwnerConfidence = "known" | "inferred" | "unknown";
+export type SystemCredentialDisplayStatus = "metadata_only" | "manual_check_required";
 
 export interface SystemCredentialInventoryEntry {
   provider: SystemCredentialProvider;
@@ -12,6 +14,14 @@ export interface SystemCredentialInventoryEntry {
   expected: boolean;
   docsHint: string;
   rotationImpact?: string;
+}
+
+export interface SystemCredentialHealthRow extends SystemCredentialInventoryEntry {
+  ownerLabel: string;
+  ownerConfidence: SystemCredentialOwnerConfidence;
+  displayStatus: SystemCredentialDisplayStatus;
+  lastCheckedAt: string | null;
+  safeRotationNotes: readonly string[];
 }
 
 const BLOCKED_VALUE_FIELDS = new Set([
@@ -393,6 +403,21 @@ export function listSystemCredentialInventory(): readonly SystemCredentialInvent
   return SYSTEM_CREDENTIAL_INVENTORY;
 }
 
+export function listSystemCredentialHealthRows(): readonly SystemCredentialHealthRow[] {
+  return SYSTEM_CREDENTIAL_INVENTORY.map((entry) => deriveSystemCredentialHealthRow(entry));
+}
+
+export function deriveSystemCredentialHealthRow(entry: SystemCredentialInventoryEntry): SystemCredentialHealthRow {
+  return {
+    ...entry,
+    ownerLabel: ownerLabelFor(entry),
+    ownerConfidence: "inferred",
+    displayStatus: "metadata_only",
+    lastCheckedAt: null,
+    safeRotationNotes: rotationNotesFor(entry),
+  };
+}
+
 function sanitizeMetadataCopy(
   value: unknown,
   fallback?: string,
@@ -404,4 +429,42 @@ function sanitizeMetadataCopy(
   if (UNSAFE_METADATA_COPY_PATTERN.test(trimmed)) return fallback;
   if (options?.forbidAutomationClaims && UNSAFE_ROTATION_GUIDANCE_PATTERN.test(trimmed)) return fallback;
   return trimmed;
+}
+
+function ownerLabelFor(entry: SystemCredentialInventoryEntry): string {
+  switch (entry.source) {
+    case "github_actions_secret":
+      return "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints";
+    case "vercel_env":
+      return "Vercel project environment";
+  }
+}
+
+function rotationNotesFor(entry: SystemCredentialInventoryEntry): readonly string[] {
+  const notes = [
+    entry.rotationImpact ?? "Confirm the owner and dependent workflow before changing this credential.",
+    verificationNoteFor(entry),
+  ];
+
+  if (entry.risk === "critical") {
+    notes.push("Use human review for rotation and keep dependent checks fail-closed.");
+  }
+
+  return notes;
+}
+
+function verificationNoteFor(entry: SystemCredentialInventoryEntry): string {
+  const workload = entry.workload.toLowerCase();
+  if (entry.name === "TESTPASS_TOKEN") return "After rotation, rerun the TestPass PR check.";
+  if (entry.name === "TESTPASS_CRON_SECRET") return "After rotation, trigger the scheduled TestPass smoke.";
+  if (entry.name === "UXPASS_TOKEN") return "After rotation, run the UXPass dogfood capture.";
+  if (entry.name === "FISHBOWL_WAKE_TOKEN") return "After rotation, run a dry WakePass route proof.";
+  if (entry.name === "FISHBOWL_AUTOCLOSE_TOKEN") return "After rotation, verify the Fishbowl todo auto-close workflow.";
+  if (entry.name === "OPENROUTER_API_KEY") return "After rotation, run a static wake classifier dry-run.";
+  if (entry.name === "SUPABASE_SERVICE_ROLE_KEY") return "After rotation, verify privileged admin/server health with human review.";
+  if (entry.name === "CRON_SECRET") return "After rotation, verify scheduled route gates and Pass receipts.";
+  if (workload.includes("analytics")) return "After rotation, confirm analytics receipt evidence.";
+  if (workload.includes("payment")) return "After rotation, verify payment webhook handling with explicit approval.";
+  if (workload.includes("email")) return "After rotation, verify delivery metadata only.";
+  return "After rotation, run the narrowest safe metadata or workflow receipt check.";
 }

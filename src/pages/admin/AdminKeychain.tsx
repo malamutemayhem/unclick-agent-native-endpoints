@@ -48,8 +48,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
-  listSystemCredentialInventory,
-  type SystemCredentialInventoryEntry,
+  listSystemCredentialHealthRows,
+  type SystemCredentialDisplayStatus,
+  type SystemCredentialHealthRow,
   type SystemCredentialProvider,
   type SystemCredentialRisk,
 } from "./systemCredentialInventory";
@@ -262,6 +263,20 @@ const INVENTORY_RISK_BADGES: Record<SystemCredentialRisk, {
   normal: {
     label: "Normal",
     className: "border-white/[0.06] bg-white/[0.03] text-[#aaa]",
+  },
+};
+
+const INVENTORY_STATUS_BADGES: Record<SystemCredentialDisplayStatus, {
+  label: string;
+  className: string;
+}> = {
+  metadata_only: {
+    label: "Metadata only",
+    className: "border-sky-500/20 bg-sky-500/10 text-sky-300",
+  },
+  manual_check_required: {
+    label: "Manual check",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-300",
   },
 };
 
@@ -611,7 +626,7 @@ export default function AdminKeychain() {
     needs_rotation: 0,
   });
 
-  const systemCredentialInventory = useMemo(() => listSystemCredentialInventory(), []);
+  const systemCredentialInventory = useMemo(() => listSystemCredentialHealthRows(), []);
   const inventorySummary = useMemo(() => ({
     total:    systemCredentialInventory.length,
     critical: systemCredentialInventory.filter((entry) => entry.risk === "critical").length,
@@ -619,7 +634,7 @@ export default function AdminKeychain() {
     expected: systemCredentialInventory.filter((entry) => entry.expected).length,
   }), [systemCredentialInventory]);
   const inventoryByProvider = useMemo(() => (
-    systemCredentialInventory.reduce<Record<SystemCredentialProvider, SystemCredentialInventoryEntry[]>>((acc, entry) => {
+    systemCredentialInventory.reduce<Record<SystemCredentialProvider, SystemCredentialHealthRow[]>>((acc, entry) => {
       acc[entry.provider].push(entry);
       return acc;
     }, { github: [], vercel: [] })
@@ -675,7 +690,7 @@ export default function AdminKeychain() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential inventory</p>
             <p className="mt-1 text-[11px] text-[#888]">
-              Name-only map of which GitHub and Vercel credentials power each workflow.
+              Name-only map of what powers each workflow, who owns it, and how to rotate safely.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -703,22 +718,30 @@ export default function AdminKeychain() {
               <div className="divide-y divide-white/[0.04]">
                 {inventoryByProvider[provider].map((entry) => {
                   const risk = INVENTORY_RISK_BADGES[entry.risk];
+                  const status = INVENTORY_STATUS_BADGES[entry.displayStatus];
                   return (
-                    <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.9fr)_minmax(12rem,1fr)_auto]">
+                    <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_auto]">
                       <div className="min-w-0">
                         <p className="truncate font-mono text-[#ddd]">{entry.name}</p>
                         <p className="mt-0.5 text-[#555]">{entry.scope}</p>
                       </div>
                       <div className="min-w-0">
                         <p className="text-[#ccc]">{entry.workload}</p>
-                        <p className="mt-0.5 text-[#666]">{entry.docsHint}</p>
-                        {entry.rotationImpact && (
-                          <p className="mt-1 text-[#888]">
-                            If rotated: {entry.rotationImpact}
-                          </p>
-                        )}
+                        <div className="mt-1 grid gap-1 text-[#666] sm:grid-cols-2">
+                          <p>Owner: {entry.ownerLabel} ({entry.ownerConfidence})</p>
+                          <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "manual check required"}</p>
+                        </div>
+                        <p className="mt-1 text-[#666]">{entry.docsHint}</p>
+                        <div className="mt-1 space-y-0.5 text-[#888]">
+                          {entry.safeRotationNotes.map((note) => (
+                            <p key={note}>Rotate: {note}</p>
+                          ))}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-start gap-1 md:justify-end">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.className}`}>
+                          {status.label}
+                        </span>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>
                           {risk.label}
                         </span>

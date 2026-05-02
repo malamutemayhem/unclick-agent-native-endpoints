@@ -1,5 +1,6 @@
 import {
   hasSecretValueField,
+  listSystemCredentialHealthRows,
   listSystemCredentialInventory,
   sanitizeInventoryRecord,
   shouldTrackCredentialName,
@@ -75,6 +76,42 @@ describe("system credential inventory", () => {
     for (const entry of criticalExpected) {
       expect(entry.rotationImpact?.length ?? 0).toBeGreaterThan(20);
       expect(entry.rotationImpact?.toLowerCase()).not.toContain("secret value");
+    }
+  });
+
+  it("derives metadata-only health rows with owner, status, and manual check state", () => {
+    const rows = listSystemCredentialHealthRows();
+    const testpass = rows.find((entry) => entry.name === "TESTPASS_TOKEN");
+
+    expect(testpass).toMatchObject({
+      ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
+      ownerConfidence: "inferred",
+      displayStatus: "metadata_only",
+      lastCheckedAt: null,
+    });
+    expect(testpass?.safeRotationNotes).toEqual(expect.arrayContaining([
+      "After rotation, rerun the TestPass PR check.",
+    ]));
+  });
+
+  it("adds safe rotation notes without claiming live credential health", () => {
+    for (const entry of listSystemCredentialHealthRows()) {
+      expect(entry.displayStatus).toBe("metadata_only");
+      expect(entry.lastCheckedAt).toBeNull();
+      expect(entry.safeRotationNotes.length).toBeGreaterThan(0);
+      expect(entry.safeRotationNotes.join("\n").toLowerCase()).not.toContain("secret value");
+
+      for (const pattern of FORBIDDEN_SECRET_LIKE_PATTERNS) {
+        expect(entry.safeRotationNotes.join("\n")).not.toMatch(pattern);
+      }
+    }
+  });
+
+  it("requires human review notes for critical system credentials", () => {
+    const criticalRows = listSystemCredentialHealthRows().filter((entry) => entry.risk === "critical");
+
+    for (const entry of criticalRows) {
+      expect(entry.safeRotationNotes.join("\n").toLowerCase()).toContain("human review");
     }
   });
 
