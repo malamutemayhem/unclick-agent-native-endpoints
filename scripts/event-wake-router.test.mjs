@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildReliabilityDispatchRequest,
+  buildReliabilityDispatchHandoffSyncRequest,
   wakeDispatchId,
 } from "./event-wake-router.mjs";
 
@@ -111,6 +112,26 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(request.payload.ack_required, true);
     assert.equal(request.payload.route_attempted, "fishbowl");
     assert.equal(request.payload.handoff_message_id, null);
+  });
+
+  it("builds a dispatch upsert sync when Fishbowl returns a message id", () => {
+    const upsert = buildReliabilityDispatchHandoffSyncRequest({
+      eventId: "wake-workflow_run-workflow-run-321-jkl",
+      decision: {
+        owner: "🤖",
+        reason: "Scheduled TestPass smoke failure",
+        urgency: "urgent",
+      },
+      triage: { used: false },
+      result: { message_id: "msg-321" },
+      event: { workflow_run: { id: 321 } },
+      ackSeconds: 120,
+    });
+
+    assert.ok(upsert);
+    assert.equal(upsert.dispatch_id, wakeDispatchId("wake-workflow_run-workflow-run-321-jkl"));
+    assert.equal(upsert.payload.handoff_message_id, "msg-321");
+    assert.equal(upsert.payload.ack_fail_after_seconds, 120);
   });
 
   it("keeps successful PR workflow green echoes silent", () => {
