@@ -97,25 +97,37 @@ describe("system credential inventory", () => {
     const testpass = rows.find((entry) => entry.name === "TESTPASS_TOKEN");
 
     expect(testpass).toMatchObject({
+      sourceLabel: "GitHub Actions secret name",
       ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
       ownerConfidence: "inferred",
       displayStatus: "metadata_only",
+      healthEvidenceLabel: "Use latest TestPass PR check receipt.",
       lastCheckedAt: null,
     });
+    expect(testpass?.rotationImpactSummary).toContain("TestPass checks");
     expect(testpass?.safeRotationNotes).toEqual(expect.arrayContaining([
       "After rotation, rerun the TestPass PR check.",
     ]));
   });
 
-  it("adds safe rotation notes without claiming live credential health", () => {
+  it("adds operator card answers without claiming live credential health", () => {
     for (const entry of listSystemCredentialHealthRows()) {
       expect(entry.displayStatus).toBe("metadata_only");
       expect(entry.lastCheckedAt).toBeNull();
+      expect(entry.sourceLabel.length).toBeGreaterThan(0);
+      expect(entry.healthEvidenceLabel.length).toBeGreaterThan(0);
+      expect(entry.rotationImpactSummary.length).toBeGreaterThan(0);
       expect(entry.safeRotationNotes.length).toBeGreaterThan(0);
-      expect(entry.safeRotationNotes.join("\n").toLowerCase()).not.toContain("secret value");
+      const combinedCopy = [
+        entry.sourceLabel,
+        entry.healthEvidenceLabel,
+        entry.rotationImpactSummary,
+        ...entry.safeRotationNotes,
+      ].join("\n");
+      expect(combinedCopy.toLowerCase()).not.toContain("secret value");
 
       for (const pattern of FORBIDDEN_SECRET_LIKE_PATTERNS) {
-        expect(entry.safeRotationNotes.join("\n")).not.toMatch(pattern);
+        expect(combinedCopy).not.toMatch(pattern);
       }
     }
   });

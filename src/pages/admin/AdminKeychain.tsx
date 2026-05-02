@@ -743,15 +743,18 @@ export default function AdminKeychain() {
                     <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_auto]">
                       <div className="min-w-0">
                         <p className="truncate font-mono text-[#ddd]">{entry.name}</p>
-                        <p className="mt-0.5 text-[#555]">{entry.scope}</p>
+                        <p className="mt-0.5 text-[#555]">{entry.sourceLabel}</p>
+                        <p className="mt-0.5 text-[#666]">{entry.scope}</p>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[#ccc]">{entry.workload}</p>
+                        <p className="text-[#ccc]">Used by: {entry.workload}</p>
                         <div className="mt-1 grid gap-1 text-[#666] sm:grid-cols-2">
                           <p>Owner: {entry.ownerLabel} ({entry.ownerConfidence})</p>
                           <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "manual check required"}</p>
                         </div>
+                        <p className="mt-1 text-[#666]">Health evidence: {entry.healthEvidenceLabel}</p>
                         <p className="mt-1 text-[#666]">{entry.docsHint}</p>
+                        <p className="mt-1 text-[#888]">Impact: {entry.rotationImpactSummary}</p>
                         <div className="mt-1 space-y-0.5 text-[#888]">
                           {entry.safeRotationNotes.map((note) => (
                             <p key={note}>Rotate: {note}</p>

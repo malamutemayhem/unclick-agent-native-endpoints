@@ -17,10 +17,13 @@ export interface SystemCredentialInventoryEntry {
 }
 
 export interface SystemCredentialHealthRow extends SystemCredentialInventoryEntry {
+  sourceLabel: string;
   ownerLabel: string;
   ownerConfidence: SystemCredentialOwnerConfidence;
   displayStatus: SystemCredentialDisplayStatus;
+  healthEvidenceLabel: string;
   lastCheckedAt: string | null;
+  rotationImpactSummary: string;
   safeRotationNotes: readonly string[];
 }
 
@@ -410,10 +413,13 @@ export function listSystemCredentialHealthRows(): readonly SystemCredentialHealt
 export function deriveSystemCredentialHealthRow(entry: SystemCredentialInventoryEntry): SystemCredentialHealthRow {
   return {
     ...entry,
+    sourceLabel: sourceLabelFor(entry),
     ownerLabel: ownerLabelFor(entry),
     ownerConfidence: "inferred",
     displayStatus: "metadata_only",
+    healthEvidenceLabel: healthEvidenceLabelFor(entry),
     lastCheckedAt: null,
+    rotationImpactSummary: rotationImpactSummaryFor(entry),
     safeRotationNotes: rotationNotesFor(entry),
   };
 }
@@ -440,9 +446,38 @@ function ownerLabelFor(entry: SystemCredentialInventoryEntry): string {
   }
 }
 
+function sourceLabelFor(entry: SystemCredentialInventoryEntry): string {
+  switch (entry.source) {
+    case "github_actions_secret":
+      return "GitHub Actions secret name";
+    case "vercel_env":
+      return "Vercel environment variable name";
+  }
+}
+
+function healthEvidenceLabelFor(entry: SystemCredentialInventoryEntry): string {
+  const workload = entry.workload.toLowerCase();
+  if (entry.name === "TESTPASS_TOKEN") return "Use latest TestPass PR check receipt.";
+  if (entry.name === "TESTPASS_CRON_SECRET") return "Use scheduled TestPass smoke receipt.";
+  if (entry.name === "UXPASS_TOKEN") return "Use UXPass dogfood capture receipt.";
+  if (entry.name === "FISHBOWL_WAKE_TOKEN") return "Use Wake Router dispatch proof.";
+  if (entry.name === "FISHBOWL_AUTOCLOSE_TOKEN") return "Use Fishbowl auto-close workflow result.";
+  if (entry.name === "OPENROUTER_API_KEY") return "Use static classifier dry-run proof.";
+  if (entry.name === "SUPABASE_SERVICE_ROLE_KEY") return "Use human-reviewed admin/server health proof.";
+  if (entry.name === "CRON_SECRET") return "Use scheduled route gate receipt.";
+  if (workload.includes("analytics")) return "Use analytics receipt evidence.";
+  if (workload.includes("payment")) return "Use approved payment webhook proof.";
+  if (workload.includes("email")) return "Use delivery metadata evidence.";
+  return "No live probe is claimed; use manual metadata review.";
+}
+
+function rotationImpactSummaryFor(entry: SystemCredentialInventoryEntry): string {
+  return entry.rotationImpact ?? `Changing this can affect ${entry.workload}.`;
+}
+
 function rotationNotesFor(entry: SystemCredentialInventoryEntry): readonly string[] {
   const notes = [
-    entry.rotationImpact ?? "Confirm the owner and dependent workflow before changing this credential.",
+    rotationImpactSummaryFor(entry),
     verificationNoteFor(entry),
   ];
 
