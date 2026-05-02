@@ -6,6 +6,7 @@ import {
   buildMissedCheckinDispatch,
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
+  shouldMarkDispatchStaleAfterReclaimSignalInsert,
   type DispatchRow,
   type ProfileRow,
 } from "./fishbowl-watcher.js";
@@ -160,5 +161,15 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
         afterExpiryMs,
       ),
     ).toBe(false);
+  });
+
+  it("keeps expired leases retryable when reclaim signal insert fails", () => {
+    expect(
+      shouldMarkDispatchStaleAfterReclaimSignalInsert({
+        message: "temporary mc_signals insert failure",
+      }),
+    ).toBe(false);
+
+    expect(shouldMarkDispatchStaleAfterReclaimSignalInsert(null)).toBe(true);
   });
 });

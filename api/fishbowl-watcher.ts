@@ -170,6 +170,12 @@ export function buildDispatchReclaimSignal(row: DispatchRow, nowMs: number) {
   );
 }
 
+export function shouldMarkDispatchStaleAfterReclaimSignalInsert(
+  signalErr: { message?: string } | null | undefined,
+): boolean {
+  return !signalErr;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
@@ -291,6 +297,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const signal = buildDispatchReclaimSignal(row, nowMs);
     if (!signal) continue;
 
+    const { error: signalErr } = await supabase.from("mc_signals").insert({
+      api_key_hash: row.api_key_hash,
+      tool: "wakepass",
+      action: signal.action,
+      severity: signal.action === "handoff_ack_missing" ? "action_needed" : "info",
+      summary: signal.summary,
+      deep_link: "/admin/fishbowl",
+      payload: signal.payload,
+    });
+    if (!shouldMarkDispatchStaleAfterReclaimSignalInsert(signalErr)) {
+      console.error(
+        "[fishbowl-watcher] stale dispatch signal insert error:",
+        signalErr?.message ?? "unknown error",
+      );
+      continue;
+    }
+
     let reclaimQuery = supabase
       .from("mc_agent_dispatches")
       .update({
@@ -319,20 +342,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!reclaimed) continue;
 
-    const { error: signalErr } = await supabase.from("mc_signals").insert({
-      api_key_hash: row.api_key_hash,
-      tool: "wakepass",
-      action: signal.action,
-      severity: signal.action === "handoff_ack_missing" ? "action_needed" : "info",
-      summary: signal.summary,
-      deep_link: "/admin/fishbowl",
-      payload: signal.payload,
-    });
-    if (signalErr) {
-      console.error("[fishbowl-watcher] stale dispatch signal insert error:", signalErr.message);
-    } else {
-      staleDispatchesReclaimed++;
-    }
+    staleDispatchesReclaimed++;
   }
 
   // ── 3. Unread mention digest ────────────────────────────────────────────
