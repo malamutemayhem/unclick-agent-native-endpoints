@@ -13,7 +13,18 @@ export function hasMessageLaneTag(
   message: FishbowlLaneMessage,
   tag: FishbowlMessageLaneTag,
 ): boolean {
+  return hasMessageTag(message, tag);
+}
+
+export function hasMessageTag(
+  message: FishbowlLaneMessage,
+  tag: string,
+): boolean {
   return message.tags?.includes(tag) ?? false;
+}
+
+export function isHandoffMessage(message: FishbowlLaneMessage): boolean {
+  return hasMessageTag(message, "handoff");
 }
 
 export function isRoutineLaneOnlyMessage(message: FishbowlLaneMessage): boolean {

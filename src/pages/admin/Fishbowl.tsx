@@ -5,7 +5,7 @@ import FishbowlTodos from "./fishbowl/Todos";
 import FishbowlIdeas from "./fishbowl/Ideas";
 import FishbowlSettings from "./fishbowl/Settings";
 import { clusterProfiles, type ProfileCluster } from "./fishbowl/clusterProfiles";
-import { getLaneMessages, getMainFeedMessages } from "./fishbowl/messageLanes";
+import { getLaneMessages, getMainFeedMessages, isHandoffMessage } from "./fishbowl/messageLanes";
 
 interface FishbowlMessage {
   id: string;
@@ -484,6 +484,12 @@ function MessageBody({ m }: { m: FishbowlMessage }) {
               {t}
             </span>
           ))}
+        </div>
+      )}
+      {isHandoffMessage(m) && (
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/20 bg-[#E2B93B]/10 px-2 py-1 text-[11px] font-medium text-[#E2B93B]">
+          <span aria-hidden>🧾</span>
+          <span>handoff pending</span>
         </div>
       )}
     </>

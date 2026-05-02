@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getLaneMessages,
   getMainFeedMessages,
+  isHandoffMessage,
   isRoutineLaneOnlyMessage,
 } from "./messageLanes";
 
@@ -40,5 +41,12 @@ describe("Fishbowl message lanes", () => {
       "heartbeat-action",
     ]);
     expect(getLaneMessages(messages, "event").map((m) => m.id)).toEqual(["event"]);
+  });
+
+  it("detects handoff messages without treating them as routine lane chatter", () => {
+    const handoff = message("handoff", ["handoff", "needs-doing"]);
+
+    expect(isHandoffMessage(handoff)).toBe(true);
+    expect(getMainFeedMessages([handoff]).map((m) => m.id)).toEqual(["handoff"]);
   });
 });
