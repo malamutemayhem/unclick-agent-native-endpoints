@@ -56,10 +56,10 @@ export function deriveConnectorStatus(
     return {
       dot: "bg-sky-400",
       pillClass: "bg-sky-400/10 text-sky-200",
-      pill: "Setup incomplete",
+      pill: hasTest ? "Setup incomplete" : "Untested",
       note: hasTest
         ? "Saved, but not validated with a connection test yet."
-        : "Saved. Probe support is not available for this connector, so status is metadata-only.",
+        : "Saved. No server-gated probe is available for this connector, so this remains untested.",
     };
   }
 
@@ -67,8 +67,8 @@ export function deriveConnectorStatus(
     return {
       dot: "bg-sky-400",
       pillClass: "bg-sky-400/10 text-sky-200",
-      pill: "Metadata only",
-      note: `Credential metadata is present. Last checked: ${formatLastTested(credential.last_tested_at)}. No server-gated probe is available for this connector.`,
+      pill: "Untested",
+      note: `No server-gated probe is available for this connector, so it remains untested. Last metadata activity: ${formatLastTested(credential.last_tested_at)}.`,
     };
   }
 
