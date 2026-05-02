@@ -449,6 +449,32 @@ describe("event wake router reliability dispatch", () => {
     }
   });
 
+  it("fails closed when the GitHub event payload is invalid JSON", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const eventPath = join(tempDir, "event.json");
+    const ledgerDir = join(tempDir, "ledger");
+    writeFileSync(eventPath, "{ not json");
+
+    try {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_run",
+          GITHUB_EVENT_PATH: eventPath,
+          WAKE_LEDGER_DIR: ledgerDir,
+          WAKE_ROUTER_DRY_RUN: "true",
+        },
+        encoding: "utf8",
+      });
+
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.match(result.stderr, /Failed to read GitHub event payload:/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("falls back to default ACK fail seconds when env value is malformed", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
     const eventPath = join(tempDir, "event.json");

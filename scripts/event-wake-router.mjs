@@ -613,6 +613,29 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, st
 
 async function main() {
   const event = readEvent();
+  if (event.read_error) {
+    const fallbackDecision = {
+      wake: false,
+      owner: "none",
+      urgency: "low",
+      reason: `Failed to read GitHub event payload: ${compactText(event.read_error, 200)}`,
+      eventCreatedAt: new Date().toISOString(),
+      needsTriage: false,
+    };
+    const eventId = wakeEventId(event, fallbackDecision);
+    console.error(fallbackDecision.reason);
+    writeLedger({
+      eventId,
+      event,
+      decision: fallbackDecision,
+      triage: { used: false, error: fallbackDecision.reason, decision: fallbackDecision },
+      result: null,
+      reliability: null,
+      status: "wake_failed",
+    });
+    process.exitCode = 1;
+    return;
+  }
   const initialDecision = baseDecision(event);
   const brief = eventBrief(event, initialDecision);
   const triage = await cheapTriage(brief, initialDecision);
