@@ -189,6 +189,9 @@ export function decideStaleLease(
   }
 
   const staleMs = now.getTime() - leaseExpiresAtMs;
+  if (!Number.isFinite(staleMs)) {
+    return { isStale: false, reason: "lease_active", staleSeconds: 0 };
+  }
   if (staleMs <= 0) {
     return { isStale: false, reason: "lease_active", staleSeconds: 0 };
   }

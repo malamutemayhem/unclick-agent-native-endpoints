@@ -149,6 +149,18 @@ describe("reliability helpers", () => {
     ).toEqual({ isStale: false, reason: "missing_lease_expiry", staleSeconds: 0 });
   });
 
+  it("fails closed when stale lease check receives an invalid current time", () => {
+    expect(
+      decideStaleLease(
+        {
+          status: "leased",
+          leaseExpiresAt: "2026-04-30T11:00:00.000Z",
+        },
+        new Date("invalid"),
+      ),
+    ).toEqual({ isStale: false, reason: "lease_active", staleSeconds: 0 });
+  });
+
   it("creates compact heartbeat metadata", () => {
     const heartbeat = createHeartbeat({
       apiKeyHash: "hash_123",
