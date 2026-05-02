@@ -33,6 +33,7 @@ import os from "node:os";
 import process from "node:process";
 import readline from "node:readline";
 import { apiFetchJson } from "./http.js";
+import { createHeartbeatGate } from "./heartbeat-gate.js";
 
 const API_BASE       = process.env.UNCLICK_API_BASE     || "https://unclick.world";
 const API_KEY        = process.env.UNCLICK_API_KEY      || "";
@@ -42,6 +43,7 @@ const POLL_INTERVAL  = parseInt(process.env.UNCLICK_CHANNEL_POLL || "5000", 10);
 const HEARTBEAT_MS   = 30_000;
 const API_TIMEOUT_MS = parseInt(process.env.UNCLICK_API_TIMEOUT_MS || "10000", 10);
 const RESPONSE_TIMEOUT_MS = 5 * 60_000;
+const heartbeatGate = createHeartbeatGate();
 
 function log(...args) {
   // Channel hosts use stdio for JSON-RPC, so keep human logs on stderr.
@@ -198,6 +200,11 @@ async function apiFetch(action, { method = "GET", body, query = {} } = {}) {
 }
 
 async function sendHeartbeat() {
+  if (!heartbeatGate.tryAcquire()) {
+    log("heartbeat skipped: previous request still in flight");
+    return;
+  }
+
   try {
     await apiFetch("admin_channel_heartbeat", {
       method: "POST",
@@ -207,6 +214,8 @@ async function sendHeartbeat() {
     });
   } catch (err) {
     log("heartbeat failed:", err.message);
+  } finally {
+    heartbeatGate.release();
   }
 }
 
