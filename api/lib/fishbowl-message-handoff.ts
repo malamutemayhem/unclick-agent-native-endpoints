@@ -88,19 +88,22 @@ export function planFishbowlMessageHandoffs(
   const plannedTargets = new Set<string>();
 
   for (const recipient of recipients) {
+    const normalizedRecipient = normalizeToken(recipient);
     const matches = input.recipientProfiles.filter(
       (profile) =>
         !isHumanProfile(profile) &&
-        (profile.agentId === recipient || profile.emoji === recipient),
+        (normalizeToken(profile.agentId) === normalizedRecipient ||
+          normalizeToken(profile.emoji ?? "") === normalizedRecipient),
     );
     if (matches.length !== 1) continue;
 
     const targetAgentId = matches[0].agentId;
+    const normalizedTargetAgentId = normalizeToken(targetAgentId);
     if (
-      normalizeToken(targetAgentId) === normalizedAuthorAgentId ||
-      plannedTargets.has(targetAgentId)
+      normalizedTargetAgentId === normalizedAuthorAgentId ||
+      plannedTargets.has(normalizedTargetAgentId)
     ) continue;
-    plannedTargets.add(targetAgentId);
+    plannedTargets.add(normalizedTargetAgentId);
 
     plans.push({
       source: "fishbowl",

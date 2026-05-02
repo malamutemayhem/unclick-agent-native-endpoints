@@ -136,6 +136,22 @@ describe("planFishbowlMessageHandoffs", () => {
     ).toEqual([]);
   });
 
+  it("matches recipient by normalized agent id and emoji", () => {
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        recipients: [" AGENT_BUILDER "],
+      }),
+    ).toHaveLength(1);
+
+    expect(
+      planFishbowlMessageHandoffs({
+        ...baseInput,
+        recipients: [" b "],
+      }),
+    ).toHaveLength(1);
+  });
+
   it("normalizes author id when suppressing self-handoffs", () => {
     expect(
       planFishbowlMessageHandoffs({
