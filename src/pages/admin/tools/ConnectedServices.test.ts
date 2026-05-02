@@ -6,6 +6,8 @@ function fakeFormatLastTested(value: string | null): string {
 }
 
 describe("deriveConnectorStatus", () => {
+  const now = Date.parse("2026-05-02T00:00:00.000Z");
+
   it("uses metadata-only wording when a connector has no server test support", () => {
     const status = deriveConnectorStatus({
       test_endpoint: null,
@@ -13,7 +15,7 @@ describe("deriveConnectorStatus", () => {
         is_valid: true,
         last_tested_at: "2026-05-01T00:00:00.000Z",
       },
-    }, fakeFormatLastTested);
+    }, fakeFormatLastTested, now);
 
     expect(status.pill).toBe("Metadata only");
     expect(status.note.toLowerCase()).toContain("metadata");
@@ -27,9 +29,35 @@ describe("deriveConnectorStatus", () => {
         is_valid: true,
         last_tested_at: null,
       },
-    }, fakeFormatLastTested);
+    }, fakeFormatLastTested, now);
 
     expect(status.pill).toBe("Setup incomplete");
     expect(status.note).toContain("not validated");
+  });
+
+  it("marks old test evidence as stale", () => {
+    const status = deriveConnectorStatus({
+      test_endpoint: "/api/probe",
+      credential: {
+        is_valid: true,
+        last_tested_at: "2026-03-01T00:00:00.000Z",
+      },
+    }, fakeFormatLastTested, now);
+
+    expect(status.pill).toBe("Check stale");
+    expect(status.note.toLowerCase()).toContain("stale");
+  });
+
+  it("uses cautious wording for recent test evidence", () => {
+    const status = deriveConnectorStatus({
+      test_endpoint: "/api/probe",
+      credential: {
+        is_valid: true,
+        last_tested_at: "2026-05-01T00:00:00.000Z",
+      },
+    }, fakeFormatLastTested, now);
+
+    expect(status.pill).toBe("Check recent");
+    expect(status.note.toLowerCase()).toContain("not a live secret check");
   });
 });

@@ -25,9 +25,12 @@ interface ConnectorStatus {
   note: string;
 }
 
+const STALE_TEST_EVIDENCE_MS = 1000 * 60 * 60 * 24 * 30;
+
 export function deriveConnectorStatus(
   connector: Pick<Connector, "credential" | "test_endpoint">,
   formatLastTested: (value: string | null) => string,
+  now = Date.now(),
 ): ConnectorStatus {
   const credential = connector.credential;
   const hasTest = Boolean(connector.test_endpoint);
@@ -69,11 +72,30 @@ export function deriveConnectorStatus(
     };
   }
 
+  const testedAt = new Date(credential.last_tested_at);
+  if (Number.isNaN(testedAt.getTime())) {
+    return {
+      dot: "bg-sky-400",
+      pillClass: "bg-sky-400/10 text-sky-200",
+      pill: "Check unknown",
+      note: `Credential metadata is present, but test time is unknown. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+    };
+  }
+
+  if (now - testedAt.getTime() > STALE_TEST_EVIDENCE_MS) {
+    return {
+      dot: "bg-yellow-400",
+      pillClass: "bg-yellow-400/10 text-yellow-200",
+      pill: "Check stale",
+      note: `Credential exists, but test evidence is stale. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+    };
+  }
+
   return {
     dot: "bg-green-500",
     pillClass: "bg-green-500/10 text-green-200",
-    pill: "Connected",
-    note: `Ready for approved agent workflows. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+    pill: "Check recent",
+    note: `Recent test evidence exists, but this is not a live secret check. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
   };
 }
 
