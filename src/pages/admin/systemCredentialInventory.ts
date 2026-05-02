@@ -2,7 +2,7 @@ export type SystemCredentialProvider = "github" | "vercel";
 export type SystemCredentialSource = "github_actions_secret" | "vercel_env";
 export type SystemCredentialRisk = "critical" | "high" | "normal";
 export type SystemCredentialOwnerConfidence = "known" | "inferred" | "unknown";
-export type SystemCredentialDisplayStatus = "metadata_only" | "manual_check_required";
+export type SystemCredentialDisplayStatus = "untested" | "manual_check_required";
 
 export interface SystemCredentialInventoryEntry {
   provider: SystemCredentialProvider;
@@ -416,7 +416,7 @@ export function deriveSystemCredentialHealthRow(entry: SystemCredentialInventory
     sourceLabel: sourceLabelFor(entry),
     ownerLabel: ownerLabelFor(entry),
     ownerConfidence: "inferred",
-    displayStatus: "metadata_only",
+    displayStatus: "untested",
     healthEvidenceLabel: healthEvidenceLabelFor(entry),
     lastCheckedAt: null,
     rotationImpactSummary: rotationImpactSummaryFor(entry),

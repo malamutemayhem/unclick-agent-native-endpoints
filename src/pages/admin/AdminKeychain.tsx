@@ -271,8 +271,8 @@ const INVENTORY_STATUS_BADGES: Record<SystemCredentialDisplayStatus, {
   label: string;
   className: string;
 }> = {
-  metadata_only: {
-    label: "Metadata only",
+  untested: {
+    label: "Untested",
     className: "border-sky-500/20 bg-sky-500/10 text-sky-300",
   },
   manual_check_required: {
