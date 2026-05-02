@@ -49,7 +49,11 @@ export function deriveAckThresholds(failAfterSeconds) {
 function readEvent() {
   if (!eventPath) return {};
   try {
-    return JSON.parse(readFileSync(eventPath, "utf8"));
+    const parsed = JSON.parse(readFileSync(eventPath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { read_error: "GitHub event payload must be a JSON object." };
+    }
+    return parsed;
   } catch (err) {
     return { read_error: err instanceof Error ? err.message : String(err) };
   }
