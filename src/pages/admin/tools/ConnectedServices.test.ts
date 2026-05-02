@@ -8,7 +8,7 @@ function fakeFormatLastTested(value: string | null): string {
 describe("deriveConnectorStatus", () => {
   const now = Date.parse("2026-05-02T00:00:00.000Z");
 
-  it("uses metadata-only wording when a connector has no server test support", () => {
+  it("marks connectors without server test support as untested", () => {
     const status = deriveConnectorStatus({
       test_endpoint: null,
       credential: {
@@ -17,9 +17,23 @@ describe("deriveConnectorStatus", () => {
       },
     }, fakeFormatLastTested, now);
 
-    expect(status.pill).toBe("Metadata only");
-    expect(status.note.toLowerCase()).toContain("metadata");
+    expect(status.pill).toBe("Untested");
+    expect(status.note.toLowerCase()).toContain("untested");
+    expect(status.note.toLowerCase()).toContain("metadata activity");
     expect(status.note.toLowerCase()).toContain("no server-gated probe");
+  });
+
+  it("keeps untested wording when test support is missing and no test has run", () => {
+    const status = deriveConnectorStatus({
+      test_endpoint: null,
+      credential: {
+        is_valid: true,
+        last_tested_at: null,
+      },
+    }, fakeFormatLastTested, now);
+
+    expect(status.pill).toBe("Untested");
+    expect(status.note.toLowerCase()).toContain("remains untested");
   });
 
   it("keeps setup incomplete when test support exists but no test has run", () => {
