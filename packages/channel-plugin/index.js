@@ -34,14 +34,15 @@ import process from "node:process";
 import readline from "node:readline";
 import { apiFetchJson } from "./http.js";
 import { createHeartbeatGate } from "./heartbeat-gate.js";
+import { parseEnvInt } from "./config.js";
 
 const API_BASE       = process.env.UNCLICK_API_BASE     || "https://unclick.world";
 const API_KEY        = process.env.UNCLICK_API_KEY      || "";
 const SUPABASE_URL   = process.env.UNCLICK_SUPABASE_URL || "";
 const SUPABASE_ANON  = process.env.UNCLICK_SUPABASE_ANON || "";
-const POLL_INTERVAL  = parseInt(process.env.UNCLICK_CHANNEL_POLL || "5000", 10);
+const POLL_INTERVAL  = parseEnvInt(process.env.UNCLICK_CHANNEL_POLL, 5000, { min: 250, max: 60_000 });
 const HEARTBEAT_MS   = 30_000;
-const API_TIMEOUT_MS = parseInt(process.env.UNCLICK_API_TIMEOUT_MS || "10000", 10);
+const API_TIMEOUT_MS = parseEnvInt(process.env.UNCLICK_API_TIMEOUT_MS, 10_000, { min: 1000, max: 120_000 });
 const RESPONSE_TIMEOUT_MS = 5 * 60_000;
 const heartbeatGate = createHeartbeatGate();
 
