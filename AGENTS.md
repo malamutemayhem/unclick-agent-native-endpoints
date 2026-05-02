@@ -6,6 +6,8 @@ AI agent operating system. One npm install gives agents access to 450+ callable 
 
 Read `FLEET_SYNC.md` first when operating as part of the multi-PC UnClick fleet. It defines source-of-truth order, live worker lanes, Fishbowl coordination, and no-stomp rules.
 
+If you are unsure which worker should own a handoff, review `docs/fleet-worker-roles.md` for the current emoji role map and routing guide.
+
 This file still applies to cloud async coding agents, especially proof-of-delivery, scope discipline, do-not-touch files, and no self-merging. Where this file's older "explicit assignment only" wording conflicts with an approved autopilot automation or Fishbowl assignment, follow `FLEET_SYNC.md` and `AUTOPILOT.md`.
 
 ## Before you touch code

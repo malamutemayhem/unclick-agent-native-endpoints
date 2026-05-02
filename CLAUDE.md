@@ -6,6 +6,8 @@ AI agent operating system. One npm install gives agents access to 450+ callable 
 
 Read `FLEET_SYNC.md` first when working as part of the multi-PC worker fleet. It defines source-of-truth order, live worker lanes, Fishbowl coordination, no-stomp rules, and how older courier notes relate to the current process.
 
+If you are unsure which worker should own a handoff, review `docs/fleet-worker-roles.md` for the current emoji role map and routing guide.
+
 ## Before you touch code
 
 Use this as the short start ritual before any edit, branch, or PR action:
