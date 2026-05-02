@@ -400,7 +400,9 @@ describe("event wake router reliability dispatch", () => {
       });
 
       assert.equal(result.status, 1, result.stderr || result.stdout);
-      assert.match(result.stderr, /required for reliability dispatch|required for wake posting/);
+      assert.match(result.stderr, /required for reliability dispatch/);
+      assert.match(result.stderr, /Reliability dispatch registration failed, skipping Fishbowl wake post/);
+      assert.doesNotMatch(result.stderr, /required for wake posting/);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
