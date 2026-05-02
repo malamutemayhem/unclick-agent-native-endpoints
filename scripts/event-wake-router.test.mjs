@@ -590,4 +590,13 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(thresholds.warning_after_seconds, 300);
     assert.equal(thresholds.fail_after_seconds, 600);
   });
+
+  it("keeps ACK telemetry thresholds ordered for tiny direct inputs", () => {
+    const thresholds = deriveAckThresholds(1);
+    assert.equal(thresholds.fail_after_seconds, 3);
+    assert.equal(thresholds.expected_within_seconds, 1);
+    assert.equal(thresholds.warning_after_seconds, 2);
+    assert.ok(thresholds.expected_within_seconds < thresholds.warning_after_seconds);
+    assert.ok(thresholds.warning_after_seconds < thresholds.fail_after_seconds);
+  });
 });

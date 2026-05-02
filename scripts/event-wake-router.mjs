@@ -27,9 +27,11 @@ function parseBoundedSeconds(value, fallback, min, max) {
 }
 
 export function deriveAckThresholds(failAfterSeconds) {
-  const fail = Number.isFinite(failAfterSeconds) ? Math.max(1, Math.floor(failAfterSeconds)) : 600;
-  const expected = Math.min(120, Math.max(15, Math.floor(fail * 0.2)));
-  const warning = Math.min(300, Math.max(expected + 1, Math.floor(fail * 0.5)));
+  const fail = Number.isFinite(failAfterSeconds) ? Math.max(3, Math.floor(failAfterSeconds)) : 600;
+  const expectedBase = fail >= 60 ? Math.max(15, Math.floor(fail * 0.2)) : Math.max(1, Math.floor(fail * 0.2));
+  const expected = Math.min(120, Math.min(fail - 2, expectedBase));
+  const warningBase = fail >= 60 ? Math.floor(fail * 0.5) : Math.max(expected + 1, Math.floor(fail * 0.5));
+  const warning = Math.min(300, Math.max(expected + 1, Math.min(fail - 1, warningBase)));
   return {
     expected_within_seconds: expected,
     warning_after_seconds: warning,
