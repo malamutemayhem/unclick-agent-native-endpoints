@@ -423,6 +423,14 @@ export function shouldFailMissingHandoffMessageId(result) {
   return Boolean(result?.posted) && !normalizeHandoffMessageId(result?.message_id) && !result?.dry_run;
 }
 
+export function deriveWakeStatus(result, handoffSync) {
+  const baseStatus = result?.posted ? "wake_posted" : result?.dry_run ? "wake_dry_run" : "wake_failed";
+  if (handoffSync?.attempted && !handoffSync?.synced) {
+    return "wake_failed";
+  }
+  return baseStatus;
+}
+
 async function registerWakeDispatch({ eventId, decision, triage, result, event }) {
   const dispatchRequest = buildReliabilityDispatchRequest({
     eventId,
@@ -738,7 +746,7 @@ async function main() {
     result,
     event,
   });
-  const status = result.posted ? "wake_posted" : result.dry_run ? "wake_dry_run" : "wake_failed";
+  const status = deriveWakeStatus(result, handoffSync);
   writeLedger({ eventId, event, decision: finalDecision, triage, result, reliability, handoffSync, status });
   if (
     (!result.posted && !result.dry_run) ||

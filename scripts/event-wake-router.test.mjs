@@ -10,6 +10,7 @@ import {
   buildReliabilityDispatchHandoffSyncRequest,
   buildReliabilityDispatchRequest,
   deriveAckThresholds,
+  deriveWakeStatus,
   normalizeHandoffMessageId,
   normalizeDispatchOwner,
   shouldFailMissingHandoffMessageId,
@@ -797,5 +798,13 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(thresholds.warning_after_seconds, 2);
     assert.ok(thresholds.expected_within_seconds < thresholds.warning_after_seconds);
     assert.ok(thresholds.warning_after_seconds < thresholds.fail_after_seconds);
+  });
+
+  it("marks ledger status failed when handoff sync attempt is unsynced", () => {
+    assert.equal(deriveWakeStatus({ posted: true, dry_run: false }, { attempted: true, synced: false }), "wake_failed");
+  });
+
+  it("keeps ledger status posted when handoff sync succeeds", () => {
+    assert.equal(deriveWakeStatus({ posted: true, dry_run: false }, { attempted: true, synced: true }), "wake_posted");
   });
 });
