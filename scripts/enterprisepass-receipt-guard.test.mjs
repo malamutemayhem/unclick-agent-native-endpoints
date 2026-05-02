@@ -32,6 +32,10 @@ const FORBIDDEN_SECRET_KEYS = new Set([
   "value",
 ]);
 
+const ALLOWED_METADATA_KEY_PATHS = new Set([
+  "readiness_score.value",
+]);
+
 const FORBIDDEN_SECRET_VALUE_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{16,}/,
   /\bgh[pousr]_[A-Za-z0-9_]{20,}/,
@@ -39,22 +43,32 @@ const FORBIDDEN_SECRET_VALUE_PATTERNS = [
   /\bxox[baprs]-[A-Za-z0-9-]{20,}/,
 ];
 
-function collectKeysAndStrings(value, keys = [], strings = []) {
+function collectKeysAndStrings(value, path = [], keys = [], strings = []) {
   if (Array.isArray(value)) {
-    for (const item of value) collectKeysAndStrings(item, keys, strings);
+    for (const [index, item] of value.entries()) collectKeysAndStrings(item, path.concat(String(index)), keys, strings);
     return { keys, strings };
   }
 
   if (value && typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
-      keys.push(key);
-      collectKeysAndStrings(child, keys, strings);
+      const childPath = path.concat(key);
+      keys.push({ key, path: childPath.join(".") });
+      collectKeysAndStrings(child, childPath, keys, strings);
     }
     return { keys, strings };
   }
 
   if (typeof value === "string") strings.push(value);
   return { keys, strings };
+}
+
+function findForbiddenSecretKeys(value) {
+  return collectKeysAndStrings(value).keys
+    .filter(({ key, path }) =>
+      FORBIDDEN_SECRET_KEYS.has(key.toLowerCase()) &&
+      !ALLOWED_METADATA_KEY_PATHS.has(path),
+    )
+    .map(({ path }) => path);
 }
 
 describe("EnterprisePass public receipt guard", () => {
@@ -98,14 +112,28 @@ describe("EnterprisePass public receipt guard", () => {
       assert.ok(evidence.summary);
     }
 
-    const { keys, strings } = collectKeysAndStrings(receipt);
-    const forbiddenKeys = keys.filter((key) => FORBIDDEN_SECRET_KEYS.has(key.toLowerCase()));
+    assert.equal(receipt.readiness_score.value, null);
+
+    const { strings } = collectKeysAndStrings(receipt);
+    const forbiddenKeys = findForbiddenSecretKeys(receipt);
     assert.deepEqual(forbiddenKeys, []);
 
     const secretLikeStrings = strings.filter((text) =>
       FORBIDDEN_SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(text)),
     );
     assert.deepEqual(secretLikeStrings, []);
+  });
+
+  it("still rejects secret-shaped value fields outside approved score metadata", () => {
+    assert.deepEqual(findForbiddenSecretKeys({
+      readiness_score: { value: null },
+      evidence: [{ summary: "safe metadata" }],
+      leaked: { value: "never store this" },
+      nested: { auth: { token: "also forbidden" } },
+    }), [
+      "leaked.value",
+      "nested.auth.token",
+    ]);
   });
 
   it("keeps exclusions and next actions conservative", () => {

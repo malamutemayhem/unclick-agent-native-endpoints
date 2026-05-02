@@ -34,6 +34,8 @@ jobs:
         continue-on-error: true
       - name: RotatePass redaction guard
         run: npm run test:rotatepass-redaction
+      - name: EnterprisePass receipt guard
+        run: npm run test:enterprisepass-receipt
 
   mcp-server:
     name: MCP server package
