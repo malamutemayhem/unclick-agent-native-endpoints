@@ -5,7 +5,12 @@ import FishbowlTodos from "./fishbowl/Todos";
 import FishbowlIdeas from "./fishbowl/Ideas";
 import FishbowlSettings from "./fishbowl/Settings";
 import { clusterProfiles, type ProfileCluster } from "./fishbowl/clusterProfiles";
-import { getLaneMessages, getMainFeedMessages, isHandoffMessage } from "./fishbowl/messageLanes";
+import {
+  getActionQueueMessages,
+  getLaneMessages,
+  getMainFeedMessages,
+  isHandoffMessage,
+} from "./fishbowl/messageLanes";
 
 interface FishbowlMessage {
   id: string;
@@ -594,6 +599,7 @@ export default function Fishbowl() {
     () => getLaneMessages(messages, "event"),
     [messages],
   );
+  const actionQueueMessages = useMemo(() => getActionQueueMessages(messages), [messages]);
   const mainFeedMessages = useMemo(() => getMainFeedMessages(messages), [messages]);
   const groupedMessages = useMemo(
     () => groupMessagesByThread(mainFeedMessages),
@@ -715,6 +721,8 @@ export default function Fishbowl() {
       <FishbowlIdeas authHeader={authHeader} humanAgentId={humanAgentId} />
 
       <PostBox disabled={!humanAgentId} onPost={postMessage} />
+
+      <MessageLane title="Action queue" icon="🟡" messages={actionQueueMessages} />
 
       <div className="grid gap-3 md:grid-cols-2">
         <MessageLane title="Heartbeats" icon="💓" messages={heartbeatMessages} />

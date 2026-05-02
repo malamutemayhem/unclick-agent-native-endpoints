@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getActionQueueMessages,
   getLaneMessages,
   getMainFeedMessages,
   isHandoffMessage,
@@ -48,5 +49,25 @@ describe("Fishbowl message lanes", () => {
 
     expect(isHandoffMessage(handoff)).toBe(true);
     expect(getMainFeedMessages([handoff]).map((m) => m.id)).toEqual(["handoff"]);
+  });
+
+  it("collects action-needed tags into the action queue", () => {
+    const messages = [
+      message("blocker", ["blocker"]),
+      message("handoff", ["handoff"]),
+      message("needs-doing", ["needs-doing"]),
+      message("tripwire", ["tripwire"]),
+      message("heartbeat-action", ["heartbeat", "needs-doing"]),
+      message("routine", ["heartbeat"]),
+      message("normal", ["note"]),
+    ];
+
+    expect(getActionQueueMessages(messages).map((m) => m.id)).toEqual([
+      "blocker",
+      "handoff",
+      "needs-doing",
+      "tripwire",
+      "heartbeat-action",
+    ]);
   });
 });
