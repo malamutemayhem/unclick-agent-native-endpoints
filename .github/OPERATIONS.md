@@ -156,3 +156,6 @@ one ready, make the missing proof explicit:
    secrets, token prefixes, auth headers, cookies, or provider response bodies.
 6. Leave the PR draft or HOLD if any proof is incomplete, even when the visible
    checks are green.
+7. Treat a pending Vercel context as incomplete proof. Wait for `Vercel` to
+   report `success`, or comment the exact Vercel blocker before any lift or
+   merge recommendation.
