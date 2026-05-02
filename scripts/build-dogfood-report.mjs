@@ -41,11 +41,14 @@ function result(id, name, status, summary, evidence, details = {}) {
 }
 
 function pendingResult(id, name, summary, evidence, details = {}) {
-  return result(id, name, "pending", summary, evidence, details);
+  return result(id, name, "pending", summary, evidence, {
+    reasonCode: "planned_runner",
+    ...details,
+  });
 }
 
-function blockedResult(id, name, summary, evidence, blockedReason) {
-  return result(id, name, "blocked", summary, evidence, { blockedReason });
+function blockedResult(id, name, summary, evidence, blockedReason, details = {}) {
+  return result(id, name, "blocked", summary, evidence, { blockedReason, ...details });
 }
 
 function failureResult(id, name, summary, evidence, details = {}) {
@@ -93,6 +96,10 @@ async function runTestPass() {
       "Scheduled TestPass could not run because DOGFOOD_TESTPASS_TOKEN or TESTPASS_TOKEN is missing.",
       "Set the GitHub secret so the nightly dogfood workflow can create a fresh testpass_runs row.",
       "Missing DOGFOOD_TESTPASS_TOKEN or TESTPASS_TOKEN.",
+      {
+        reasonCode: "missing_credential",
+        nextProof: "Set one TestPass workflow secret, then rerun the dogfood report workflow.",
+      },
     );
   }
 
@@ -171,6 +178,10 @@ async function runUXPass() {
       "Scheduled UXPass could not run because DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET is missing.",
       "Set one workflow secret so the nightly dogfood workflow can create a fresh uxpass_runs row.",
       "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      {
+        reasonCode: "missing_credential",
+        nextProof: "Set one UXPass workflow secret, then rerun the dogfood report workflow.",
+      },
     );
   }
 
@@ -271,31 +282,41 @@ const results = [
     "SecurityPass is blocked until the recurring runner proof is ready.",
     "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
     "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
+    {
+      reasonCode: "scope_gate",
+      nextProof: "Land a safe recurring SecurityPass runner receipt before marking this passing.",
+    },
   ),
   pendingResult(
     "seopass",
     "SEOPass",
     "Queued for recurring search and metadata review.",
     "SEOPass is still scaffold-only for public dogfood receipts.",
+    { nextProof: "Add a recurring SEOPass receipt before moving this out of pending." },
   ),
   pendingResult(
     "copypass",
     "CopyPass",
     "Queued for recurring copy quality review.",
     "CopyPass recurring public receipts will land after the runner surface is available.",
+    { nextProof: "Add a recurring CopyPass receipt before moving this out of pending." },
   ),
   pendingResult(
     "legalpass",
     "LegalPass",
     "Queued for recurring policy and claims review.",
     "LegalPass recurring public receipts will land after the runner surface is available.",
+    { nextProof: "Add a recurring LegalPass receipt before moving this out of pending." },
   ),
   pendingResult(
     "enterprisepass",
     "EnterprisePass",
     "Seed enterprise-readiness report is published; automated evidence checks are not live yet.",
     "See /enterprise/latest.json for the readiness-report boundary and pending category map.",
-    { proof: { kind: "planned", targetUrl: "/enterprise/latest.json" } },
+    {
+      proof: { kind: "planned", targetUrl: "/enterprise/latest.json" },
+      nextProof: "Wire automated evidence checks before moving this beyond readiness guidance.",
+    },
   ),
 ];
 

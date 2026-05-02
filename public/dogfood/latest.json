@@ -36,7 +36,9 @@
       "summary": "Scheduled UXPass could not run because DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET is missing.",
       "evidence": "Set one workflow secret so the nightly dogfood workflow can create a fresh uxpass_runs row.",
       "checkedAt": "2026-05-01T17:16:13.158Z",
-      "blockedReason": "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET."
+      "blockedReason": "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      "reasonCode": "missing_credential",
+      "nextProof": "Set one UXPass workflow secret, then rerun the dogfood report workflow."
     },
     {
       "id": "securitypass",
@@ -45,7 +47,9 @@
       "summary": "SecurityPass is blocked until the recurring runner proof is ready.",
       "evidence": "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
       "checkedAt": "2026-05-01T17:16:13.158Z",
-      "blockedReason": "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands."
+      "blockedReason": "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
+      "reasonCode": "scope_gate",
+      "nextProof": "Land a safe recurring SecurityPass runner receipt before marking this passing."
     },
     {
       "id": "seopass",
@@ -53,7 +57,9 @@
       "status": "pending",
       "summary": "Queued for recurring search and metadata review.",
       "evidence": "SEOPass is still scaffold-only for public dogfood receipts.",
-      "checkedAt": "2026-05-01T17:16:13.158Z"
+      "checkedAt": "2026-05-01T17:16:13.158Z",
+      "reasonCode": "planned_runner",
+      "nextProof": "Add a recurring SEOPass receipt before moving this out of pending."
     },
     {
       "id": "copypass",
@@ -61,7 +67,9 @@
       "status": "pending",
       "summary": "Queued for recurring copy quality review.",
       "evidence": "CopyPass recurring public receipts will land after the runner surface is available.",
-      "checkedAt": "2026-05-01T17:16:13.158Z"
+      "checkedAt": "2026-05-01T17:16:13.158Z",
+      "reasonCode": "planned_runner",
+      "nextProof": "Add a recurring CopyPass receipt before moving this out of pending."
     },
     {
       "id": "legalpass",
@@ -69,7 +77,9 @@
       "status": "pending",
       "summary": "Queued for recurring policy and claims review.",
       "evidence": "LegalPass recurring public receipts will land after the runner surface is available.",
-      "checkedAt": "2026-05-01T17:16:13.158Z"
+      "checkedAt": "2026-05-01T17:16:13.158Z",
+      "reasonCode": "planned_runner",
+      "nextProof": "Add a recurring LegalPass receipt before moving this out of pending."
     },
     {
       "id": "enterprisepass",
@@ -81,7 +91,9 @@
       "proof": {
         "kind": "planned",
         "targetUrl": "/enterprise/latest.json"
-      }
+      },
+      "reasonCode": "planned_runner",
+      "nextProof": "Wire automated evidence checks before moving this beyond readiness guidance."
     }
   ],
   "trend": [

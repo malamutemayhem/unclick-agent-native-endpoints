@@ -8,5 +8,13 @@ describe("Dogfood report proof policy", () => {
     expect(dogfoodReport.statusLegend.blocked).toMatch(/action is needed/i);
     expect(dogfoodReport.statusLegend.pending).toMatch(/live proof is not available yet/i);
     expect(dogfoodReport.proofPolicy).toMatch(/passing only when a live check actually ran/i);
+
+    const uxpass = dogfoodReport.results.find((result) => result.id === "uxpass");
+    const securitypass = dogfoodReport.results.find((result) => result.id === "securitypass");
+
+    expect(uxpass?.reasonCode).toBe("missing_credential");
+    expect(uxpass?.nextProof).toMatch(/rerun the dogfood report workflow/i);
+    expect(securitypass?.reasonCode).toBe("scope_gate");
+    expect(securitypass?.nextProof).toMatch(/before marking this passing/i);
   });
 });

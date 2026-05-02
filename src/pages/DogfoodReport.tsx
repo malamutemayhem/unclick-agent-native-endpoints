@@ -203,6 +203,20 @@ export default function DogfoodReportPage() {
                         Blocked reason: {result.blockedReason}
                       </p>
                     ) : null}
+                    {result.reasonCode || result.nextProof ? (
+                      <div className="mt-3 rounded-xl border border-border/50 bg-background/40 p-3 text-xs leading-relaxed text-muted-custom">
+                        {result.reasonCode ? (
+                          <p>
+                            Reason code: <span className="font-mono text-heading">{result.reasonCode}</span>
+                          </p>
+                        ) : null}
+                        {result.nextProof ? (
+                          <p className={result.reasonCode ? "mt-1" : undefined}>
+                            Next proof: {result.nextProof}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {result.checkedAt ? (
                       <p className="mt-3 text-[11px] text-muted-custom">Checked: {formatDate(result.checkedAt)}</p>
                     ) : null}

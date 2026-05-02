@@ -27,7 +27,11 @@ test("dogfood receipt marks SecurityPass as blocked with a reason", async () => 
 
     assert.equal(securitypass?.status, "blocked");
     assert.match(securitypass?.blockedReason ?? "", /scope-gated/i);
+    assert.equal(securitypass?.reasonCode, "scope_gate");
+    assert.match(securitypass?.nextProof ?? "", /safe recurring SecurityPass runner receipt/i);
     assert.equal(enterprisepass?.status, "pending");
+    assert.equal(enterprisepass?.reasonCode, "planned_runner");
+    assert.match(enterprisepass?.nextProof ?? "", /automated evidence checks/i);
     assert.deepEqual(enterprisepass?.proof, {
       kind: "planned",
       targetUrl: "/enterprise/latest.json",
@@ -124,6 +128,37 @@ test("dogfood receipt includes structured proof for live TestPass and UXPass run
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("dogfood receipt uses structured missing-credential proof for blocked UXPass", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "dogfood-report-"));
+  const output = path.join(dir, "latest.json");
+
+  try {
+    await execFileAsync(process.execPath, [
+      "scripts/build-dogfood-report.mjs",
+      "--output",
+      output,
+    ], {
+      env: {
+        ...process.env,
+        TESTPASS_TOKEN: "",
+        DOGFOOD_TESTPASS_TOKEN: "",
+        UXPASS_TOKEN: "",
+        DOGFOOD_UXPASS_TOKEN: "",
+        CRON_SECRET: "",
+      },
+    });
+
+    const report = JSON.parse(await fs.readFile(output, "utf8"));
+    const uxpass = report.results.find((result) => result.id === "uxpass");
+
+    assert.equal(uxpass?.status, "blocked");
+    assert.equal(uxpass?.reasonCode, "missing_credential");
+    assert.match(uxpass?.nextProof ?? "", /rerun the dogfood report workflow/i);
+  } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
