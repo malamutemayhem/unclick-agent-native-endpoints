@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -40,6 +40,35 @@ describe("event wake router reliability dispatch", () => {
 
     rmSync(tempDir, { recursive: true, force: true });
     return result;
+  }
+
+  function runDryWakeWithLedger(eventName, event) {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const eventPath = join(tempDir, "event.json");
+    const ledgerDir = join(tempDir, "ledger");
+    writeFileSync(eventPath, JSON.stringify(event));
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: eventName,
+        GITHUB_EVENT_PATH: eventPath,
+        WAKE_LEDGER_DIR: ledgerDir,
+        WAKE_ROUTER_DRY_RUN: "true",
+      },
+      encoding: "utf8",
+    });
+
+    const eventIdMatch = result.stdout.match(/"eventId":\s*"([^"]+)"/);
+    const eventId = eventIdMatch?.[1] || null;
+    const ledger =
+      eventId && result.status === 0
+        ? JSON.parse(readFileSync(join(ledgerDir, `${eventId}.json`), "utf8"))
+        : null;
+
+    rmSync(tempDir, { recursive: true, force: true });
+    return { result, ledger };
   }
 
   it("creates stable dispatch IDs from wake event IDs", () => {
@@ -222,6 +251,30 @@ describe("event wake router reliability dispatch", () => {
     assert.match(result.stdout, /"wake_urgency": "urgent"/);
     assert.match(result.stdout, /reliability_dispatch_dry_run/);
     assert.match(result.stdout, /"ack_required": true/);
+  });
+
+  it("records handoff sync skip telemetry in dry-run wake ledger", () => {
+    const { result, ledger } = runDryWakeWithLedger("workflow_run", {
+      action: "completed",
+      workflow_run: {
+        id: 4561,
+        name: "TestPass Scheduled Smoke",
+        status: "completed",
+        conclusion: "failure",
+        html_url: "https://github.com/acme/repo/actions/runs/4561",
+        created_at: "2026-04-30T15:00:00Z",
+        updated_at: "2026-04-30T15:04:00Z",
+        pull_requests: [],
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.ok(ledger);
+    assert.equal(ledger.reliability_dispatch.handoff_sync.attempted, false);
+    assert.equal(ledger.reliability_dispatch.handoff_sync.synced, false);
+    assert.equal(ledger.reliability_dispatch.handoff_sync.dry_run, false);
+    assert.equal(ledger.reliability_dispatch.handoff_sync.skipped, true);
+    assert.equal(ledger.reliability_dispatch.handoff_sync.reason, "missing_message_id");
   });
 
   it("keeps successful scheduled TestPass smoke runs silent", () => {

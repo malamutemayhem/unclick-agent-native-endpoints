@@ -546,7 +546,7 @@ async function syncWakeDispatchHandoffMessage({ eventId, decision, triage, resul
   };
 }
 
-function writeLedger({ eventId, event, decision, triage, result, reliability, status }) {
+function writeLedger({ eventId, event, decision, triage, result, reliability, handoffSync, status }) {
   const eventSeconds = secondsSince(decision.eventCreatedAt);
   const ackThresholds = deriveAckThresholds(ackFailSeconds);
   const ledger = {
@@ -582,6 +582,15 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, st
       status: reliability?.status || null,
       dispatch_id: reliability?.dispatch_id || null,
       error: reliability?.error || null,
+      handoff_sync: {
+        attempted: Boolean(handoffSync?.attempted),
+        synced: Boolean(handoffSync?.synced),
+        dry_run: Boolean(handoffSync?.dry_run),
+        skipped: Boolean(handoffSync?.skipped),
+        status: handoffSync?.status || null,
+        reason: handoffSync?.reason || null,
+        error: handoffSync?.error || null,
+      },
     },
     ack: {
       requested: status === "wake_posted" || status === "wake_dry_run",
@@ -635,6 +644,7 @@ async function main() {
       triage: { used: false, error: fallbackDecision.reason, decision: fallbackDecision },
       result: null,
       reliability: null,
+      handoffSync: null,
       status: "wake_failed",
     });
     process.exitCode = 1;
@@ -657,6 +667,7 @@ async function main() {
       triage,
       result: null,
       reliability: null,
+      handoffSync: null,
       status: "no_wake",
     });
     return;
@@ -678,6 +689,7 @@ async function main() {
       triage,
       result: null,
       reliability,
+      handoffSync: null,
       status: "wake_failed",
     });
     process.exitCode = 1;
@@ -697,6 +709,7 @@ async function main() {
       triage,
       result,
       reliability: reliabilityWithError,
+      handoffSync: null,
       status: "wake_failed",
     });
     process.exitCode = 1;
@@ -710,7 +723,7 @@ async function main() {
     event,
   });
   const status = result.posted ? "wake_posted" : result.dry_run ? "wake_dry_run" : "wake_failed";
-  writeLedger({ eventId, event, decision: finalDecision, triage, result, reliability, status });
+  writeLedger({ eventId, event, decision: finalDecision, triage, result, reliability, handoffSync, status });
   if (
     (!result.posted && !result.dry_run) ||
     (!reliability?.registered && !reliability?.dry_run) ||
