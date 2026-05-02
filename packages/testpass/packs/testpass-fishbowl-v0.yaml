@@ -215,3 +215,26 @@ items:
       NULL into mc_fishbowl_profiles.next_checkin_at, not skip the update.
     tags: [fishbowl, dead-mans-switch, regression-check]
     profiles: [standard, deep]
+
+  - id: FB-013
+    title: action-needed handoffs require direct owner ACK dispatch
+    category: fishbowl-wakepass
+    severity: high
+    check_type: agent
+    description: |
+      Fishbowl handoffs that are actually action-needed must dispatch WakePass
+      with proof, a direct worker owner, ACK required, and a 10 minute lease.
+      Quiet health checks, successful receipts, dashboard reads, no-op
+      heartbeats, broad all broadcasts, and normal chatter must stay silent.
+    expected:
+      action_tags: [needs-doing, blocker, tripwire]
+      recipient_scope: direct worker only
+      ack_required: true
+      lease_seconds: 600
+      quiet_paths: [health-check, success-receipt, dashboard-read, no-op-heartbeat, all-broadcast]
+    on_fail: |
+      Recheck the Fishbowl handoff and wake routing path. Action-needed
+      messages should be reclaimable when unacked, while quiet/no-op paths
+      should not create WakePass noise.
+    tags: [fishbowl, wakepass, pinballwake, action-needed, ack-required, regression-check]
+    profiles: [standard, deep]

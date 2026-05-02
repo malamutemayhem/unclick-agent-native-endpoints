@@ -4,6 +4,7 @@ import { loadPackFromFile, loadPackFromYaml, packToJsonb, packFromJsonb, packToY
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CORE_PACK_PATH = path.resolve(__dirname, "../../packs/testpass-core.yaml");
+const FISHBOWL_PACK_PATH = path.resolve(__dirname, "../../packs/testpass-fishbowl-v0.yaml");
 
 describe("loadPackFromFile", () => {
   it("loads and validates testpass-core.yaml without errors", () => {
@@ -11,6 +12,21 @@ describe("loadPackFromFile", () => {
     expect(pack.id).toBe("testpass-core");
     expect(pack.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(pack.items.length).toBeGreaterThanOrEqual(26);
+  });
+
+  it("loads the Fishbowl WakePass action-needed guard", () => {
+    const pack = loadPackFromFile(FISHBOWL_PACK_PATH);
+    const guard = pack.items.find((item) => item.id === "FB-013");
+
+    expect(pack.id).toBe("testpass-fishbowl-v0");
+    expect(guard?.title).toBe("action-needed handoffs require direct owner ACK dispatch");
+    expect(guard?.expected).toMatchObject({
+      action_tags: ["needs-doing", "blocker", "tripwire"],
+      recipient_scope: "direct worker only",
+      ack_required: true,
+      lease_seconds: 600,
+    });
+    expect(guard?.tags).toEqual(expect.arrayContaining(["wakepass", "action-needed", "ack-required"]));
   });
 
   it("throws when file does not exist", () => {
