@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Settings as SettingsIcon } from "lucide-react";
+import { findDuplicateProfileAgentIds } from "./clusterProfiles";
 
 /* -- types -- */
 interface FishbowlProfile {
@@ -111,6 +112,10 @@ export default function FishbowlSettings({
   const agentProfiles = useMemo(
     () => profiles.filter((p) => !p.agent_id.startsWith("human-")),
     [profiles],
+  );
+  const duplicateAgentIds = useMemo(
+    () => findDuplicateProfileAgentIds(agentProfiles),
+    [agentProfiles],
   );
 
   return (
@@ -254,6 +259,7 @@ export default function FishbowlSettings({
               <div className="flex flex-wrap gap-2">
                 {agentProfiles.map((p) => {
                   const muted = prefs.mutedAgentIds.includes(p.agent_id);
+                  const duplicate = duplicateAgentIds.has(p.agent_id);
                   return (
                     <button
                       key={p.agent_id}
@@ -269,6 +275,14 @@ export default function FishbowlSettings({
                       <span className="max-w-[100px] truncate">
                         {p.display_name ?? p.agent_id}
                       </span>
+                      {duplicate && (
+                        <span
+                          className="rounded bg-white/[0.05] px-1 py-0.5 font-mono text-[9px] text-[#888]"
+                          title={p.agent_id}
+                        >
+                          {p.agent_id.slice(0, 6)}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

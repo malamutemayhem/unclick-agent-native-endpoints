@@ -63,3 +63,27 @@ export function clusterProfiles<P extends FishbowlProfileForCluster>(
   }
   return result;
 }
+
+export function findDuplicateProfileAgentIds<P extends FishbowlProfileForCluster>(
+  profiles: P[],
+): Set<string> {
+  const buckets = new Map<string, P[]>();
+  for (const profile of profiles) {
+    const key = clusterKey(profile.emoji, profile.display_name);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(profile);
+    } else {
+      buckets.set(key, [profile]);
+    }
+  }
+
+  const duplicateAgentIds = new Set<string>();
+  for (const bucket of buckets.values()) {
+    if (bucket.length <= 1) continue;
+    for (const profile of bucket) {
+      duplicateAgentIds.add(profile.agent_id);
+    }
+  }
+  return duplicateAgentIds;
+}

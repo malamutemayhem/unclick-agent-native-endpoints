@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clusterProfiles,
   clusterKey,
+  findDuplicateProfileAgentIds,
   CLUSTER_FRESH_THRESHOLD_MS,
   type FishbowlProfileForCluster,
 } from "./clusterProfiles";
@@ -99,5 +100,26 @@ describe("clusterProfiles", () => {
     expect(clusters[0].primaries).toHaveLength(1);
     expect(clusters[0].primaries[0].agent_id).toBe("fresh-1");
     expect(clusters[0].staleAliasCount).toBe(1);
+  });
+
+  it("finds duplicate profile ids by emoji and display name", () => {
+    const duplicates = findDuplicateProfileAgentIds([
+      profile("fresh-1", "🐠", "Fishy", 60_000),
+      profile("old-1", "🐠", "Fishy", CLUSTER_FRESH_THRESHOLD_MS + 60_000),
+      profile("different-emoji", "🦊", "Fishy", 60_000),
+      profile("different-name", "🐠", "Other", 60_000),
+    ]);
+
+    expect([...duplicates].sort()).toEqual(["fresh-1", "old-1"]);
+  });
+
+  it("treats null display names as their own duplicate group", () => {
+    const duplicates = findDuplicateProfileAgentIds([
+      { agent_id: "null-name-1", emoji: "🐠", display_name: null, last_seen_at: null },
+      { agent_id: "null-name-2", emoji: "🐠", display_name: null, last_seen_at: null },
+      { agent_id: "named", emoji: "🐠", display_name: "Fishy", last_seen_at: null },
+    ]);
+
+    expect([...duplicates].sort()).toEqual(["null-name-1", "null-name-2"]);
   });
 });
