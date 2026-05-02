@@ -144,7 +144,9 @@ Proof and reliability PRs should not merge on green CI alone. Before marking
 one ready, make the missing proof explicit:
 
 1. Confirm the diff only touches the expected files.
-2. Run the narrow local test command for the package or script under review.
+2. Run the narrow local test command for the package or script under review,
+   then record the exact command and PASS/FAIL result in the PR body before
+   lifting it from draft.
 3. If the local command cannot run, explain why and point to the equivalent CI
    job that covered the same code path.
 4. Check that public receipts stay honest: `passing` means a live check ran,

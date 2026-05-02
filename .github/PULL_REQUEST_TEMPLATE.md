@@ -22,7 +22,10 @@ None
 N/A - not a restore/reorg PR
 
 ## Testing
-<!-- How was this verified? Include commands run, screenshots, or links to CI. -->
+<!-- Required before marking ready: include exact command(s) run and PASS/FAIL result.
+     If relying on CI instead of local or equivalent verification, name the exact
+     job and why it covers the changed path.
+     If verification is incomplete, keep the PR draft/HOLD and list the missing proof. -->
 -
 
 ## UnClick Memory linkage
