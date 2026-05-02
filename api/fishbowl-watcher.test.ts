@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createHeartbeat, createReclaimSignal } from "../packages/mcp-server/src/reliability.js";
 import {
   CHECKIN_ACK_LEASE_SECONDS,
+  buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
   isMissedCheckinCandidate,
+  isReclaimableDispatchCandidate,
+  type DispatchRow,
   type ProfileRow,
 } from "./fishbowl-watcher.js";
 
@@ -16,6 +19,25 @@ const baseProfile: ProfileRow = {
   current_status: "working",
   current_status_updated_at: "2026-05-01T01:00:00.000Z",
   next_checkin_at: "2026-05-01T01:10:00.000Z",
+};
+
+const baseDispatch: DispatchRow = {
+  api_key_hash: "hash_123",
+  dispatch_id: "dispatch_abc",
+  source: "wakepass",
+  target_agent_id: "worker-1",
+  task_ref: "wake-pr-123",
+  status: "leased",
+  lease_owner: "worker-1",
+  lease_expires_at: "2026-05-01T01:10:00.000Z",
+  last_real_action_at: null,
+  payload: {
+    ack_required: true,
+    handoff_message_id: "msg-123",
+    wake_reason: "PR ready for review",
+  },
+  created_at: "2026-05-01T01:00:00.000Z",
+  updated_at: "2026-05-01T01:00:00.000Z",
 };
 
 describe("fishbowl watcher PinballWake ACK coverage", () => {
@@ -97,5 +119,46 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
       dispatchId: dispatch.dispatchId,
       state: "completed",
     });
+  });
+
+  it("classifies expired ACK leases as reclaimable missing-ACK work", () => {
+    const nowMs = Date.parse("2026-05-01T01:12:30.000Z");
+
+    expect(isReclaimableDispatchCandidate(baseDispatch, nowMs)).toBe(true);
+
+    const signal = buildDispatchReclaimSignal(baseDispatch, nowMs);
+
+    expect(signal).toMatchObject({
+      action: "handoff_ack_missing",
+      summary: "WakePass reliability miss: no ACK arrived before reclaim for worker-1",
+      payload: {
+        dispatch_id: "dispatch_abc",
+        source: "wakepass",
+        target_agent_id: "worker-1",
+        task_ref: "wake-pr-123",
+        stale_seconds: 150,
+        ack_required: true,
+        handoff_message_id: "msg-123",
+        wake_reason: "PR ready for review",
+      },
+    });
+  });
+
+  it("does not reclaim active or non-leased dispatches", () => {
+    const beforeExpiryMs = Date.parse("2026-05-01T01:09:59.000Z");
+    const afterExpiryMs = Date.parse("2026-05-01T01:12:30.000Z");
+
+    expect(isReclaimableDispatchCandidate(baseDispatch, beforeExpiryMs)).toBe(false);
+    expect(buildDispatchReclaimSignal(baseDispatch, beforeExpiryMs)).toBeNull();
+
+    expect(
+      isReclaimableDispatchCandidate(
+        {
+          ...baseDispatch,
+          status: "completed",
+        },
+        afterExpiryMs,
+      ),
+    ).toBe(false);
   });
 });

@@ -21,8 +21,11 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import {
   createQueuedDispatch,
+  createReclaimSignal,
   createTimeBucket,
+  decideStaleLease,
   type AgentDispatch,
+  type DispatchSource,
 } from "../packages/mcp-server/src/reliability.js";
 
 export interface ProfileRow {
@@ -43,11 +46,27 @@ interface SignalRow {
   created_at: string;
 }
 
+export interface DispatchRow {
+  api_key_hash: string;
+  dispatch_id: string;
+  source: DispatchSource;
+  target_agent_id: string;
+  task_ref: string | null;
+  status: string;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
+  last_real_action_at: string | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
 const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
 export const CHECKIN_ACK_LEASE_SECONDS = 600;
+const STALE_DISPATCH_RECLAIM_LIMIT = 50;
 
 export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
   if (!profile.next_checkin_at) return false;
@@ -116,6 +135,41 @@ function dispatchToDbRow(dispatch: AgentDispatch) {
   };
 }
 
+export function isReclaimableDispatchCandidate(row: DispatchRow, nowMs: number): boolean {
+  return decideStaleLease(
+    {
+      status: row.status as AgentDispatch["status"],
+      leaseExpiresAt: row.lease_expires_at,
+      lastRealActionAt: row.last_real_action_at,
+    },
+    new Date(nowMs),
+  ).isStale;
+}
+
+export function buildDispatchReclaimSignal(row: DispatchRow, nowMs: number) {
+  const staleDecision = decideStaleLease(
+    {
+      status: row.status as AgentDispatch["status"],
+      leaseExpiresAt: row.lease_expires_at,
+      lastRealActionAt: row.last_real_action_at,
+    },
+    new Date(nowMs),
+  );
+
+  if (!staleDecision.isStale) return null;
+
+  return createReclaimSignal(
+    {
+      dispatchId: row.dispatch_id,
+      source: row.source,
+      targetAgentId: row.target_agent_id,
+      taskRef: row.task_ref ?? undefined,
+      payload: row.payload ?? {},
+    },
+    staleDecision.staleSeconds,
+  );
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
@@ -135,6 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let checkinSignalsEmitted = 0;
   let checkinDispatchesEmitted = 0;
+  let staleDispatchesReclaimed = 0;
   let digestSignalsEmitted = 0;
   let staleStatusesCleared = 0;
 
@@ -214,7 +269,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── 2. Unread mention digest ────────────────────────────────────────────
+  // ── 2. WakePass missed-ACK reclaim sweep ────────────────────────────────
+  const { data: staleDispatchRows, error: staleDispatchErr } = await supabase
+    .from("mc_agent_dispatches")
+    .select(
+      "api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+    )
+    .eq("status", "leased")
+    .not("lease_expires_at", "is", null)
+    .lt("lease_expires_at", nowIso)
+    .order("lease_expires_at", { ascending: true })
+    .limit(STALE_DISPATCH_RECLAIM_LIMIT);
+
+  if (staleDispatchErr) {
+    console.error("[fishbowl-watcher] stale dispatch fetch error:", staleDispatchErr.message);
+    return res.status(500).json({ error: staleDispatchErr.message });
+  }
+
+  for (const row of (staleDispatchRows ?? []) as DispatchRow[]) {
+    if (!isReclaimableDispatchCandidate(row, nowMs)) continue;
+    const signal = buildDispatchReclaimSignal(row, nowMs);
+    if (!signal) continue;
+
+    let reclaimQuery = supabase
+      .from("mc_agent_dispatches")
+      .update({
+        status: "stale",
+        lease_owner: null,
+        lease_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("api_key_hash", row.api_key_hash)
+      .eq("dispatch_id", row.dispatch_id)
+      .eq("status", row.status)
+      .eq("updated_at", row.updated_at);
+    reclaimQuery = row.lease_owner
+      ? reclaimQuery.eq("lease_owner", row.lease_owner)
+      : reclaimQuery.is("lease_owner", null);
+    reclaimQuery = row.lease_expires_at
+      ? reclaimQuery.eq("lease_expires_at", row.lease_expires_at)
+      : reclaimQuery.is("lease_expires_at", null);
+
+    const { data: reclaimed, error: reclaimErr } = await reclaimQuery
+      .select("dispatch_id")
+      .maybeSingle();
+    if (reclaimErr) {
+      console.error("[fishbowl-watcher] stale dispatch reclaim error:", reclaimErr.message);
+      continue;
+    }
+    if (!reclaimed) continue;
+
+    const { error: signalErr } = await supabase.from("mc_signals").insert({
+      api_key_hash: row.api_key_hash,
+      tool: "wakepass",
+      action: signal.action,
+      severity: signal.action === "handoff_ack_missing" ? "action_needed" : "info",
+      summary: signal.summary,
+      deep_link: "/admin/fishbowl",
+      payload: signal.payload,
+    });
+    if (signalErr) {
+      console.error("[fishbowl-watcher] stale dispatch signal insert error:", signalErr.message);
+    } else {
+      staleDispatchesReclaimed++;
+    }
+  }
+
+  // ── 3. Unread mention digest ────────────────────────────────────────────
   const mentionAgeCutoff = new Date(nowMs - MENTION_AGE_THRESHOLD_MS).toISOString();
   const { data: unreadMentions } = await supabase
     .from("mc_signals")
@@ -263,7 +384,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── 3. Stale Now Playing cleanup ─────────────────────────────────────────
+  // ── 4. Stale Now Playing cleanup ─────────────────────────────────────────
   const staleStatusCutoff = new Date(nowMs - STATUS_STALE_WINDOW_MS).toISOString();
   const { data: staleStatusProfiles, error: staleStatusErr } = await supabase
     .from("mc_fishbowl_profiles")
@@ -305,6 +426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     checkin_signals_emitted: checkinSignalsEmitted,
     checkin_dispatches_emitted: checkinDispatchesEmitted,
+    stale_dispatches_reclaimed: staleDispatchesReclaimed,
     digest_signals_emitted: digestSignalsEmitted,
     stale_statuses_cleared: staleStatusesCleared,
     overdue_candidates: candidates.length,
