@@ -53,11 +53,11 @@ const blockedPatterns = [
   },
   {
     name: "cookie-header",
-    pattern: /\bCookie:\s*[A-Za-z0-9._~+/%=-]{8,}\s*=\s*[A-Za-z0-9._~+/%=-]{8,}/gi,
+    pattern: /\bCookie:\s*[A-Za-z0-9._~+/%-]{2,}\s*=\s*[A-Za-z0-9._~+/%=-]{8,}/gi,
   },
   {
     name: "set-cookie-header",
-    pattern: /\bSet-Cookie:\s*[A-Za-z0-9._~+/%=-]{8,}\s*=\s*[A-Za-z0-9._~+/%=-]{8,}/gi,
+    pattern: /\bSet-Cookie:\s*[A-Za-z0-9._~+/%-]{2,}\s*=\s*[A-Za-z0-9._~+/%=-]{8,}/gi,
   },
   {
     name: "provider-response-access-token",
@@ -80,6 +80,31 @@ const blockedPatterns = [
 function lineForOffset(content, offset) {
   return content.slice(0, offset).split(/\r?\n/).length;
 }
+
+test("redaction guard patterns catch representative secret-shaped examples", () => {
+  const examples = new Map([
+    ["openai-or-anthropic-key", "sk-exampleSecretValue123456"],
+    ["github-token", "ghp_exampleSecretValue1234567890"],
+    ["slack-token", "xoxb-123456789012-secret"],
+    ["stripe-secret", "sk_live_exampleSecretValue"],
+    ["jwt-shaped-token", "eyJaaaaaaaaaaaaaaaaaaaa.eyJbbbbbbbbbbbbbbbbbbbb.cccccccccccccccccccccc"],
+    ["unclick-api-key", "uc_exampleSecretValue123"],
+    ["authorization-header", "Authorization: Bearer exampleSecretValue123"],
+    ["cookie-header", "Cookie: sid=exampleSecretValue123"],
+    ["set-cookie-header", "Set-Cookie: sid=exampleSecretValue123"],
+    ["provider-response-access-token", "\"access_token\":\"exampleSecretValue\""],
+    ["provider-response-refresh-token", "\"refresh_token\":\"exampleSecretValue\""],
+    ["provider-response-id-token", "\"id_token\":\"exampleSecretValue\""],
+    ["private-key-block", "-----BEGIN PRIVATE KEY-----"],
+  ]);
+
+  for (const { name, pattern } of blockedPatterns) {
+    const example = examples.get(name);
+    assert.ok(example, `Missing positive fixture for ${name}`);
+    pattern.lastIndex = 0;
+    assert.match(example, pattern, `${name} did not match its positive fixture`);
+  }
+});
 
 test("RotatePass and System Credentials public surfaces do not include secret-shaped values", () => {
   const offenders = [];
