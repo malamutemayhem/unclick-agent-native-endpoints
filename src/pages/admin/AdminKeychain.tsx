@@ -217,6 +217,23 @@ function credentialHealth(cred: Credential): CredentialHealthStatus {
   return "healthy";
 }
 
+export function credentialLastCheckDisplay(cred: Pick<Credential, "last_checked_at" | "last_tested_at" | "supports_connection_test">): {
+  label: string;
+  value: string;
+} {
+  const lastChecked = cred.last_checked_at ?? cred.last_tested_at;
+  if (cred.supports_connection_test === false) {
+    return {
+      label: "Last metadata activity",
+      value: `${lastChecked ? timeAgo(lastChecked) : "never"} - untested`,
+    };
+  }
+  return {
+    label: "Last checked",
+    value: lastChecked ? timeAgo(lastChecked) : "never",
+  };
+}
+
 const HEALTH_BADGES: Record<CredentialHealthStatus, {
   label: string;
   className: string;
@@ -863,7 +880,7 @@ export default function AdminKeychain() {
                   const HealthIcon = badge.icon;
                   const usedBy    = cred.used_by?.filter(Boolean) ?? ["manual connection"];
                   const fields    = cred.expected_fields?.filter((f) => f.name || f.label) ?? [];
-                  const lastChecked = cred.last_checked_at ?? cred.last_tested_at;
+                  const lastCheckDisplay = credentialLastCheckDisplay(cred);
 
                   return (
                     <div
@@ -960,11 +977,8 @@ export default function AdminKeychain() {
                           <p className="mt-0.5 truncate text-[#ccc]">{cred.owner_email ?? "This UnClick account"}</p>
                         </div>
                         <div>
-                          <p className="text-[#555]">Last checked</p>
-                          <p className="mt-0.5 text-[#ccc]">
-                            {lastChecked ? timeAgo(lastChecked) : "never"}
-                            {cred.supports_connection_test === false ? " · manual" : ""}
-                          </p>
+                          <p className="text-[#555]">{lastCheckDisplay.label}</p>
+                          <p className="mt-0.5 text-[#ccc]">{lastCheckDisplay.value}</p>
                         </div>
                         <div className="sm:col-span-2">
                           <p className="text-[#555]">Used by</p>
