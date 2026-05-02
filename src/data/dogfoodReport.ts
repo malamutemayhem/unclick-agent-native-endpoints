@@ -25,6 +25,8 @@ export interface DogfoodTrendPoint {
   pending: number;
 }
 
+export type DogfoodStatusLegend = Record<DogfoodStatus, string>;
+
 export const dogfoodReport = {
   generatedAt: "2026-05-01T17:16:13.158Z",
   lastRunAt: "2026-05-01T17:16:13.158Z",
@@ -33,6 +35,13 @@ export const dogfoodReport = {
   headline: "We dogfood UnClick on UnClick.",
   target: "UnClick public and agent-facing product surfaces",
   nextAutomation: "Nightly dogfood receipts refresh this board with live scheduled evidence.",
+  statusLegend: {
+    passing: "A live check ran and returned a passing result.",
+    failing: "A live check ran and returned a failing result or could not reach its API.",
+    blocked: "The check could not run because an action is needed, such as a missing credential or scope gate.",
+    pending: "The check is planned or scaffolded, but live proof is not available yet.",
+  } satisfies DogfoodStatusLegend,
+  proofPolicy: "Public dogfood receipts mark passing only when a live check actually ran. Blocked and pending are honest product states, not failures to hide.",
   results: [
     {
       id: "testpass",
