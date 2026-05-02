@@ -10,6 +10,9 @@ This note keeps new worker chats aligned before they act.
 
 Every worker must refresh live GitHub and Fishbowl state before acting. This file is not a substitute for live state. It is the role map that prevents duplicate work, stale assumptions, and unclear handoffs.
 
+For group pushes, use `docs/fleet-broadcast-template.md`. That file is the
+canonical copy-paste message for waking or aligning multiple workers at once.
+
 ## Core rules
 
 - Refresh live GitHub and Fishbowl before acting.
@@ -90,4 +93,3 @@ Merge only when:
 - blocker notes are resolved
 
 If verification is incomplete, leave the PR draft or hold it with the exact missing proof.
-

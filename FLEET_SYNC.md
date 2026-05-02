@@ -17,6 +17,10 @@ When instructions conflict, use this order:
 
 If two repo docs conflict, stop and open a small docs alignment PR instead of guessing.
 
+For mass fleet pushes, use `docs/fleet-broadcast-template.md` instead of
+reconstructing a group message from memory. The template keeps Lenovo, Plex,
+cloud agents, scheduled workers, and future hosts on the same safety rules.
+
 ## Core Workflow
 
 - GitHub `main` is the code source of truth.
