@@ -85,6 +85,7 @@ In build or scoped:
 - SecurityPass
 - GEOPass
 - RotatePass
+- EnterprisePass
 - WakePass
 
 Archived or parked:
