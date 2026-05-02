@@ -415,7 +415,7 @@ export function deriveSystemCredentialHealthRow(entry: SystemCredentialInventory
     ...entry,
     sourceLabel: sourceLabelFor(entry),
     ownerLabel: ownerLabelFor(entry),
-    ownerConfidence: "inferred",
+    ownerConfidence: ownerConfidenceFor(entry),
     displayStatus: "untested",
     healthEvidenceLabel: healthEvidenceLabelFor(entry),
     lastCheckedAt: null,
@@ -443,6 +443,15 @@ function ownerLabelFor(entry: SystemCredentialInventoryEntry): string {
       return "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints";
     case "vercel_env":
       return "Vercel project environment";
+  }
+}
+
+function ownerConfidenceFor(entry: SystemCredentialInventoryEntry): SystemCredentialOwnerConfidence {
+  switch (entry.source) {
+    case "github_actions_secret":
+      return "inferred";
+    case "vercel_env":
+      return "unknown";
   }
 }
 

@@ -60,7 +60,7 @@ describe("system credential inventory", () => {
     });
     expect(byName.get("SUPABASE_SERVICE_ROLE_KEY")).toMatchObject({
       ownerLabel: "Vercel project environment",
-      ownerConfidence: "inferred",
+      ownerConfidence: "unknown",
     });
   });
 
