@@ -137,3 +137,20 @@ including `[skip ci]` in your message and running `npm publish` locally).
 Most live workflows here, including publish, migrations, scheduled TestPass,
 and dogfood report, accept `workflow_dispatch`, so you can re-run them from
 the Actions tab without needing a new commit.
+
+## Proof PR review checklist
+
+Proof and reliability PRs should not merge on green CI alone. Before marking
+one ready, make the missing proof explicit:
+
+1. Confirm the diff only touches the expected files.
+2. Run the narrow local test command for the package or script under review.
+3. If the local command cannot run, explain why and point to the equivalent CI
+   job that covered the same code path.
+4. Check that public receipts stay honest: `passing` means a live check ran,
+   `blocked` means an action is needed, and `pending` means the proof is not
+   live yet.
+5. Check that logs, JSON receipts, docs, and review comments do not expose raw
+   secrets, token prefixes, auth headers, cookies, or provider response bodies.
+6. Leave the PR draft or HOLD if any proof is incomplete, even when the visible
+   checks are green.
