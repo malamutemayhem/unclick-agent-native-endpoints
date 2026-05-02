@@ -8,6 +8,8 @@ export interface DogfoodPassResult {
   evidence: string;
   checkedAt?: string;
   blockedReason?: string;
+  reasonCode?: string;
+  nextProof?: string;
   runId?: string;
   targetUrl?: string;
   proof?: {
@@ -66,6 +68,8 @@ export const dogfoodReport = {
       evidence: "Set one workflow secret so the nightly dogfood workflow can create a fresh uxpass_runs row.",
       checkedAt: "2026-05-01T17:16:13.158Z",
       blockedReason: "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      reasonCode: "missing_credential",
+      nextProof: "Set one UXPass workflow secret, then rerun the dogfood report workflow.",
     },
     {
       id: "securitypass",
@@ -75,6 +79,8 @@ export const dogfoodReport = {
       evidence: "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
       checkedAt: "2026-05-01T17:16:13.158Z",
       blockedReason: "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
+      reasonCode: "scope_gate",
+      nextProof: "Land a safe recurring SecurityPass runner receipt before marking this passing.",
     },
     {
       id: "seopass",
@@ -83,6 +89,8 @@ export const dogfoodReport = {
       summary: "Queued for recurring search and metadata review.",
       evidence: "SEOPass is still scaffold-only for public dogfood receipts.",
       checkedAt: "2026-05-01T17:16:13.158Z",
+      reasonCode: "planned_runner",
+      nextProof: "Add a recurring SEOPass receipt before moving this out of pending.",
     },
     {
       id: "copypass",
@@ -91,6 +99,8 @@ export const dogfoodReport = {
       summary: "Queued for recurring copy quality review.",
       evidence: "CopyPass recurring public receipts will land after the runner surface is available.",
       checkedAt: "2026-05-01T17:16:13.158Z",
+      reasonCode: "planned_runner",
+      nextProof: "Add a recurring CopyPass receipt before moving this out of pending.",
     },
     {
       id: "legalpass",
@@ -99,6 +109,8 @@ export const dogfoodReport = {
       summary: "Queued for recurring policy and claims review.",
       evidence: "LegalPass recurring public receipts will land after the runner surface is available.",
       checkedAt: "2026-05-01T17:16:13.158Z",
+      reasonCode: "planned_runner",
+      nextProof: "Add a recurring LegalPass receipt before moving this out of pending.",
     },
     {
       id: "enterprisepass",
@@ -108,6 +120,8 @@ export const dogfoodReport = {
       evidence: "See /enterprise/latest.json for the readiness-report boundary and pending category map.",
       checkedAt: "2026-05-02T02:30:00Z",
       proof: { kind: "planned", targetUrl: "/enterprise/latest.json" },
+      reasonCode: "planned_runner",
+      nextProof: "Wire automated evidence checks before moving this beyond readiness guidance.",
     },
   ] satisfies DogfoodPassResult[],
   trend: [
