@@ -19,6 +19,11 @@ const SECRET_PATTERNS = [
   { name: "Cookie header", pattern: /\bCookie:\s*[^\r\n;]{8,}/gi },
   { name: "Set-Cookie header", pattern: /\bSet-Cookie:\s*[^\r\n;]{8,}/gi },
   { name: "Provider response body wording", pattern: /\b(?:provider|api)\s+response\s+body\b/gi },
+  {
+    name: "JSON secret-like field value",
+    pattern:
+      /"(?:access_token|refresh_token|api_key|token|secret|password)"\s*:\s*"(?!<redacted>|REDACTED|\*{3,})[A-Za-z0-9._~+/=-]{10,}"/gi,
+  },
 ];
 
 function withoutAllowedPrefixReferenceLines(content: string): string {
@@ -27,6 +32,8 @@ function withoutAllowedPrefixReferenceLines(content: string): string {
     .filter((line) => !line.includes("common secret prefixes"))
     .filter((line) => !line.includes("approved redacted example"))
     .filter((line) => !line.includes("such as `sk-`"))
+    .filter((line) => !line.includes('"<redacted>"'))
+    .filter((line) => !line.includes('"REDACTED"'))
     .join("\n");
 }
 
