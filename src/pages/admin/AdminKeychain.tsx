@@ -269,14 +269,17 @@ const INVENTORY_RISK_BADGES: Record<SystemCredentialRisk, {
 
 const INVENTORY_STATUS_BADGES: Record<SystemCredentialDisplayStatus, {
   label: string;
+  description: string;
   className: string;
 }> = {
   untested: {
     label: "Untested",
+    description: "Name-only inventory; no safe health probe has confirmed this credential yet.",
     className: "border-sky-500/20 bg-sky-500/10 text-sky-300",
   },
   manual_check_required: {
     label: "Manual check",
+    description: "Human review is needed before this credential can claim health.",
     className: "border-amber-500/20 bg-amber-500/10 text-amber-300",
   },
 };
@@ -709,7 +712,7 @@ export default function AdminKeychain() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential inventory</p>
             <p className="mt-1 text-[11px] text-[#888]">
-              Name-only map of what powers each workflow, who owns it, and how to rotate safely.
+              Name-only map of what powers each workflow, who owns it, and how to rotate safely. Untested means no safe probe has confirmed health yet.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -750,7 +753,7 @@ export default function AdminKeychain() {
                         <p className="text-[#ccc]">Used by: {entry.workload}</p>
                         <div className="mt-1 grid gap-1 text-[#666] sm:grid-cols-2">
                           <p>Owner: {entry.ownerLabel} ({entry.ownerConfidence})</p>
-                          <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "manual check required"}</p>
+                          <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "no safe check yet"}</p>
                         </div>
                         <p className="mt-1 text-[#666]">Health evidence: {entry.healthEvidenceLabel}</p>
                         <p className="mt-1 text-[#666]">{entry.docsHint}</p>
@@ -762,7 +765,10 @@ export default function AdminKeychain() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-start gap-1 md:justify-end">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.className}`}>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.className}`}
+                          title={status.description}
+                        >
                           {status.label}
                         </span>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>
