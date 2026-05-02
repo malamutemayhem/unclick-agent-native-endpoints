@@ -184,6 +184,10 @@ describe("event wake router reliability dispatch", () => {
     assert.equal(request.payload.wake_owner, "all");
   });
 
+  it("normalizes trimmed case-variant all owner to concrete ACK owner", () => {
+    assert.equal(normalizeDispatchOwner(" ALL "), "🤖");
+  });
+
   it("keeps successful PR workflow green echoes silent", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
     const eventPath = join(tempDir, "event.json");

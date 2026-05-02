@@ -108,7 +108,10 @@ export function wakeDispatchId(eventId) {
 }
 
 export function normalizeDispatchOwner(owner) {
-  return owner === "all" ? "🤖" : owner;
+  const normalized = String(owner ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "all" ? "🤖" : owner;
 }
 
 function baseDecision(event) {
