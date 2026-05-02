@@ -53,6 +53,10 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+function proofTarget(result: DogfoodPassResult): string | null {
+  return result.targetUrl || result.proof?.targetUrl || null;
+}
+
 export default function DogfoodReportPage() {
   const [report, setReport] = useState<DogfoodReportData>(fallbackReport);
 
@@ -175,6 +179,15 @@ export default function DogfoodReportPage() {
                         {result.runId ? <p>Run: {result.runId}</p> : null}
                         {result.targetUrl ? <p className="break-all">Target: {result.targetUrl}</p> : null}
                       </div>
+                    ) : null}
+                    {proofTarget(result) ? (
+                      <a
+                        href={proofTarget(result) || undefined}
+                        className="mt-3 inline-flex items-center gap-1.5 break-all text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
+                      >
+                        View proof target
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
                     ) : null}
                   </article>
                 </FadeIn>
