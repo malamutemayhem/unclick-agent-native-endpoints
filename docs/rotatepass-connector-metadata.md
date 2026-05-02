@@ -229,6 +229,31 @@ Examples:
 
 If no check exists, use `verificationTarget: null` and show a manual checklist.
 
+## Known TestPass credential lanes
+
+The TestPass and Dogfood workflows currently use overlapping credentials. RotatePass should show this as blast-radius metadata, not as secret values.
+
+| Workflow | Credential order | Meaning |
+| --- | --- | --- |
+| TestPass PR check | `TESTPASS_TOKEN` | Runs the PR smoke check against `/api/testpass-run`. Use an active UnClick API key or valid session token. |
+| Scheduled TestPass smoke | `TESTPASS_CRON_SECRET` -> `CRON_SECRET` -> `TESTPASS_TOKEN` | The scheduled workflow prefers a dedicated scheduled TestPass credential, can fall back to the shared cron secret, then falls back to the normal TestPass token. |
+| Dogfood TestPass receipt | `DOGFOOD_TESTPASS_TOKEN` -> `TESTPASS_TOKEN` | The public dogfood receipt builder maps the GitHub secret `TESTPASS_TOKEN` into `DOGFOOD_TESTPASS_TOKEN` before calling `/api/testpass-run`. |
+| Dogfood UXPass receipt | `DOGFOOD_UXPASS_TOKEN` -> `UXPASS_TOKEN` -> `CRON_SECRET` | UXPass dogfood should prefer a UXPass-specific credential and only fall back to the shared cron secret when needed. |
+
+Operational rule:
+
+- rotating `TESTPASS_TOKEN` can affect PR checks and Dogfood TestPass
+- rotating `TESTPASS_CRON_SECRET` should affect scheduled TestPass first
+- rotating `CRON_SECRET` may affect scheduled TestPass fallback, Dogfood UXPass fallback, and other cron-gated endpoints
+- rotating `UXPASS_TOKEN` affects Dogfood UXPass
+
+Safe post-rotation proof:
+
+1. Rerun the TestPass PR check for `TESTPASS_TOKEN`.
+2. Manually run the scheduled TestPass smoke for `TESTPASS_CRON_SECRET` or `CRON_SECRET`.
+3. Manually run the Dogfood Report workflow for `DOGFOOD_TESTPASS_TOKEN`, `TESTPASS_TOKEN`, `DOGFOOD_UXPASS_TOKEN`, `UXPASS_TOKEN`, or `CRON_SECRET`.
+4. Confirm the public Dogfood receipt updates without exposing any token value.
+
 ## Implementation Acceptance Criteria
 
 A future implementation slice is complete when:
