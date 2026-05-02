@@ -145,11 +145,12 @@ Every worker should do this before acting:
 
 1. Pull or inspect latest `main`.
 2. Read this file, then `AUTOPILOT.md`.
-3. Check open PRs and recent merged PRs.
-4. Check Fishbowl direct mentions, assigned todos, and current worker statuses.
-5. Check whether the intended files are already owned by another active worker.
-6. Post or update worker status if starting material work.
-7. Choose one small chip or report the exact blocker.
+3. Read `docs/unclick-deep-context.md` when making product, strategy, summary, or roadmap judgments.
+4. Check open PRs and recent merged PRs.
+5. Check Fishbowl direct mentions, assigned todos, and current worker statuses.
+6. Check whether the intended files are already owned by another active worker.
+7. Post or update worker status if starting material work.
+8. Choose one small chip or report the exact blocker.
 
 Do not act from stale queue memory.
 
