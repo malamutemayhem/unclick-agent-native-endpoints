@@ -12,4 +12,3 @@ describe("System credential inventory status defaults", () => {
     expect(row.lastCheckedAt).toBeNull();
   });
 });
-
