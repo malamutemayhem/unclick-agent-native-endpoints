@@ -94,6 +94,15 @@ Examples:
 
 PARKED items should not wake workers. They are memory anchors, not active work.
 
+If the current board view has no lane filter, do not rely on a `PARKED:` or `FUTURE:` title prefix alone. An open card can still appear in actionable queues.
+
+Use this rule:
+
+- Keep a PARKED item open only when it has a real next action and should remain visible to workers soon.
+- If the next action is intentionally "not now", leave an evidence comment and move the todo to `dropped`.
+- Treat `dropped` as "parked for history", not "deleted".
+- Create a fresh open todo when the parked lane becomes active again.
+
 ### BLOCKED
 
 Use BLOCKED when work cannot move without a specific external input.
@@ -119,7 +128,7 @@ When a worker handles a stale todo:
 2. Decide lane: NOW, NEXT, LATER, PARKED, or BLOCKED.
 3. Add a short evidence comment.
 4. Close only if done.
-5. Drop only if obsolete or superseded.
+5. Drop if obsolete, superseded, or intentionally parked with no current next action.
 6. Do not bulk delete.
 
 Good comment format:
