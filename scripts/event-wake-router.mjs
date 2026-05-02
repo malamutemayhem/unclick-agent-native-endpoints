@@ -12,7 +12,14 @@ const serverUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
 const runId = process.env.GITHUB_RUN_ID || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";
 const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AUTOCLOSE_TOKEN || "";
-const dryRun = process.env.WAKE_ROUTER_DRY_RUN === "1" || process.env.WAKE_ROUTER_DRY_RUN === "true";
+function parseBooleanFlag(value) {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true";
+}
+
+const dryRun = parseBooleanFlag(process.env.WAKE_ROUTER_DRY_RUN);
 const ackFailSeconds = parseBoundedSeconds(process.env.WAKE_ACK_FAIL_SECONDS, 600, 60, 600);
 const receivedAt = new Date().toISOString();
 const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
