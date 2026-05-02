@@ -199,6 +199,9 @@ Allowed examples:
 - OpenRouter: model list or minimal classifier dry-run with a static non-sensitive prompt.
 - PostHog: only use existing receipt evidence unless a safe test event is explicitly allowed.
 
+For the current analytics reliability scout and the first-party fallback boundary,
+see `docs/analytics-reliability-scout.md`.
+
 Disallowed examples:
 
 - printing token prefixes for debugging
