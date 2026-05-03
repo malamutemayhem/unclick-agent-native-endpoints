@@ -158,6 +158,7 @@ System Credentials uses a status model that can be shared with RotatePass.
 | `unknown` | Metadata is incomplete and the panel cannot make a useful claim | Gray |
 
 Do not show `healthy` from presence alone. `Untested` is a deliberate safety label, not a warning by itself.
+Treat metadata activity timestamps as inventory evidence only. Metadata activity alone must not upgrade a credential to `healthy`.
 
 `healthy` requires one of:
 
