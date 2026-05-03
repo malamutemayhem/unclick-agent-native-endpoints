@@ -114,6 +114,12 @@ tag: act
 
 The handoff must not include secret values, token prefixes, auth headers, provider response bodies, or copied browser/session material.
 
+Rotation impact and follow-up guidance must stay metadata-only:
+
+- Name the affected workflow or product surface.
+- Name the next safe verification step after rotation.
+- Do not include key fragments, token prefixes, auth headers, cookies, passkeys, MFA material, or provider response snippets.
+
 ## ACK And Lease Rules
 
 Use ACK-required WakePass routing only for action-needed states.
