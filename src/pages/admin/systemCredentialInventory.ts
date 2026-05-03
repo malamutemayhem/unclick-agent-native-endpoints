@@ -37,6 +37,9 @@ const BLOCKED_VALUE_FIELDS = new Set([
   "token",
   "raw",
 ]);
+const CANONICAL_BLOCKED_VALUE_FIELDS = new Set(
+  Array.from(BLOCKED_VALUE_FIELDS).map((field) => field.replace(/[_\s-]/g, "").toLowerCase()),
+);
 
 const EXCLUDED_NAMES = new Set([
   "GITHUB_TOKEN",
@@ -377,7 +380,10 @@ export function shouldTrackCredentialName(name: string): boolean {
 }
 
 export function hasSecretValueField(record: Record<string, unknown>): boolean {
-  return Object.keys(record).some((key) => BLOCKED_VALUE_FIELDS.has(key));
+  return Object.keys(record).some((key) => {
+    const canonical = key.replace(/[_\s-]/g, "").toLowerCase();
+    return BLOCKED_VALUE_FIELDS.has(key) || CANONICAL_BLOCKED_VALUE_FIELDS.has(canonical);
+  });
 }
 
 export function sanitizeInventoryRecord(record: Record<string, unknown>): SystemCredentialInventoryEntry | null {
