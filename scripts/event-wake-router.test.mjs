@@ -587,6 +587,30 @@ describe("event wake router reliability dispatch", () => {
     }
   });
 
+  it("fails closed when a non-manual event is missing GITHUB_EVENT_PATH", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
+    const ledgerDir = join(tempDir, "ledger");
+
+    try {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_run",
+          GITHUB_EVENT_PATH: "",
+          WAKE_LEDGER_DIR: ledgerDir,
+          WAKE_ROUTER_DRY_RUN: "true",
+        },
+        encoding: "utf8",
+      });
+
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.match(result.stderr, /GITHUB_EVENT_PATH is required for non-manual wake router events/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("falls back to default ACK fail seconds when env value is malformed", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "wake-router-"));
     const eventPath = join(tempDir, "event.json");
