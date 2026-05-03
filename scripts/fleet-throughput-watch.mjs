@@ -111,6 +111,7 @@ export function latestCommentSignals(comments = []) {
   let lastPass = -1;
   let lastOverlap = -1;
   let lastFailedProof = -1;
+  let lastDirtyBranch = -1;
   let hasChrisOnly = false;
   let hasProof = false;
 
@@ -135,6 +136,13 @@ export function latestCommentSignals(comments = []) {
     if (/\b(targeted proof|focused proof|exact test)\b/.test(text) && /\b(fail|failed|failing|red)\b/.test(text)) {
       lastFailedProof = index;
     }
+    if (
+      /\b(dirty branch|merge state dirty|mergestatestatus[:\s]+dirty|merge state is dirty|branch is dirty|branch is not clean|not clean against main|rebase\/update\/fix branch|rebase\/update\/rebuild)\b/.test(
+        text,
+      )
+    ) {
+      lastDirtyBranch = index;
+    }
     if (/\b(chris-only|human decision|needs chris|user decision|refresh testpass_token|node 20 policy|semver-major policy)\b/.test(text)) {
       hasChrisOnly = true;
     }
@@ -144,6 +152,7 @@ export function latestCommentSignals(comments = []) {
     hasActiveHold: lastHold > lastPass,
     hasOverlap: lastOverlap > lastPass,
     hasFailedProof: lastFailedProof > lastPass,
+    hasDirtyBranch: lastDirtyBranch > lastPass,
     hasChrisOnly,
     hasProof,
   };
@@ -184,7 +193,7 @@ export function classifyPullRequest(input) {
   const dirty = ["dirty", "behind"].includes(mergeState);
 
   if (signals.hasChrisOnly) return { state: "blocked_chris_only", reason: "Chris-only or human policy blocker is present." };
-  if (dirty) return { state: "dirty_branch", reason: "Branch is not clean against main." };
+  if (dirty || signals.hasDirtyBranch) return { state: "dirty_branch", reason: "Branch is not clean against main." };
   if (signals.hasFailedProof) return { state: "failed_targeted_proof", reason: "Targeted proof was reported as failing." };
   if (signals.hasOverlap) return { state: "hold_overlap", reason: "Overlap or anti-stomp blocker is present." };
   if (pr.draft && green && clean) {

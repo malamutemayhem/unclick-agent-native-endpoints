@@ -232,4 +232,17 @@ describe("QueuePush signal helpers", () => {
     assert.equal(signals.hasActiveHold, true);
     assert.equal(signals.hasOverlap, true);
   });
+
+  it("keeps dirty branch signals active even when overlap words are also present", () => {
+    const signals = latestCommentSignals([
+      {
+        body: "HOLD: branch is not clean against main. Avoid anti-stomp overlap and rebase/update/rebuild.",
+        created_at: "2026-05-03T01:00:00Z",
+        user: { login: "malamutemayhem" },
+      },
+    ]);
+
+    assert.equal(signals.hasDirtyBranch, true);
+    assert.equal(signals.hasOverlap, true);
+  });
 });
