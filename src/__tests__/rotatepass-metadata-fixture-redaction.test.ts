@@ -22,9 +22,12 @@ const FIXTURE_PATH = "tests/rotatepass/fixtures/system-credentials.metadata.json
 
 const BANNED_PATTERNS = [
   { name: "OpenAI secret literal", pattern: /\bsk[-_][A-Za-z0-9_-]{10,}\b/g },
+  { name: "Anthropic secret literal", pattern: /\bsk-ant-[A-Za-z0-9_-]{10,}\b/g },
   { name: "GitHub token literal", pattern: /\b(?:gh[pous]|ghs|pat)_[A-Za-z0-9_]{10,}\b/g },
   { name: "Slack token literal", pattern: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g },
   { name: "Authorization bearer header", pattern: /\bAuthorization:\s*Bearer\s+\S+/gi },
+  { name: "X-API-Key header", pattern: /\bX-API-Key:\s*[A-Za-z0-9._~+/=-]{10,}\b/gi },
+  { name: "X-Auth-Token header", pattern: /\bX-Auth-Token:\s*[A-Za-z0-9._~+/=-]{10,}\b/gi },
   { name: "Cookie-like assignment", pattern: /\bset-cookie\s*:/gi },
   { name: "Provider response body wording", pattern: /\b(?:provider|api)\s+response\s+body\b/gi },
 ];
