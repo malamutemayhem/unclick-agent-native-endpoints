@@ -58,6 +58,7 @@ interface ConnectorSetupMetadata {
   connectorId: string;
   displayName: string;
   setupFlow: SetupFlow;
+  ownerConfidence: OwnerConfidence;
   supportsConnectionTest: boolean;
   capabilitySummary: string;
   docsUrl: string | null;
@@ -75,6 +76,11 @@ type SetupFlow =
   | "local_only"
   | "hybrid"
   | "not_applicable";
+
+type OwnerConfidence =
+  | "owner_mapped"
+  | "owner_inferred"
+  | "owner_unknown";
 
 type SafeProbeKind =
   | "none"
@@ -139,6 +145,18 @@ How the operator should expect to connect or verify the connector.
 | `not_applicable` | Connector has no user setup step | Public docs link |
 
 Use `system_secret` for GitHub Actions or Vercel env names that appear in System Credentials. Do not imply UnClick can read the value.
+
+### `ownerConfidence`
+
+How certain the setup metadata is about owner mapping, based on metadata only.
+
+| Value | Meaning |
+| --- | --- |
+| `owner_mapped` | Owner mapping is explicitly documented in inventory metadata |
+| `owner_inferred` | Owner mapping is inferred from scope, source, or workflow context |
+| `owner_unknown` | No safe owner mapping is known yet |
+
+UI copy should not claim certainty from these values alone. Prefer labels like `Owner mapped`, `Owner inferred`, and `Owner unknown`. Avoid copy like `Owner verified` unless human review evidence exists.
 
 ### `supportsConnectionTest`
 
