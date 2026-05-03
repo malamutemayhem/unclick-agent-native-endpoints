@@ -45,6 +45,7 @@ import {
   ShieldCheck,
   ScrollText,
   Fish,
+  BellRing,
 } from "lucide-react";
 
 function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
@@ -83,6 +84,7 @@ const ADMIN_SUBMENU = [
   { path: "/admin/orchestrator",  label: "Orchestrator",          icon: Terminal    },
   { path: "/admin/users",         label: "User Management",       icon: UsersIcon   },
   { path: "/admin/system-health", label: "System Health",         icon: HeartPulse  },
+  { path: "/admin/pinballwake",   label: "PinballWake",           icon: BellRing    },
   { path: "/admin/moderation",    label: "Marketplace Moderation", icon: ShieldCheck },
   { path: "/admin/audit-log",     label: "Audit Log",             icon: ScrollText  },
 ] as const;

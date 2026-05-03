@@ -68,6 +68,7 @@ import CrewsSettings from "./pages/admin/crews/CrewsSettings.tsx";
 import CrewRun from "./pages/admin/crews/CrewRun.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
 import AdminSystemHealth from "./pages/admin/AdminSystemHealth.tsx";
+import AdminPinballWake from "./pages/admin/AdminPinballWake.tsx";
 import AdminModeration from "./pages/admin/AdminModeration.tsx";
 import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
 import SignalsCatalog from "./pages/admin/signals/SignalsCatalog.tsx";
@@ -167,6 +168,7 @@ const App = () => (
             <Route path="orchestrator"   element={<RequireAdmin><AdminOrchestratorPage /></RequireAdmin>} />
             <Route path="users"          element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
             <Route path="system-health"  element={<RequireAdmin><AdminSystemHealth /></RequireAdmin>} />
+            <Route path="pinballwake"    element={<RequireAdmin><AdminPinballWake /></RequireAdmin>} />
             <Route path="moderation"     element={<RequireAdmin><AdminModeration /></RequireAdmin>} />
             <Route path="audit-log"      element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="signals"          element={<SignalsCatalog />} />
