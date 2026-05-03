@@ -100,7 +100,7 @@ describe("system credential inventory", () => {
       sourceLabel: "GitHub Actions secret name",
       ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
       ownerConfidence: "inferred",
-      displayStatus: "metadata_only",
+      displayStatus: "untested",
       healthEvidenceLabel: "Use latest TestPass PR check receipt.",
       lastCheckedAt: null,
     });
@@ -112,7 +112,7 @@ describe("system credential inventory", () => {
 
   it("adds operator card answers without claiming live credential health", () => {
     for (const entry of listSystemCredentialHealthRows()) {
-      expect(entry.displayStatus).toBe("metadata_only");
+      expect(entry.displayStatus).toBe("untested");
       expect(entry.lastCheckedAt).toBeNull();
       expect(entry.sourceLabel.length).toBeGreaterThan(0);
       expect(entry.healthEvidenceLabel.length).toBeGreaterThan(0);
@@ -130,6 +130,13 @@ describe("system credential inventory", () => {
         expect(combinedCopy).not.toMatch(pattern);
       }
     }
+  });
+
+  it("keeps no-probe fallback copy explicitly untested and server-gated", () => {
+    const row = listSystemCredentialHealthRows().find((entry) => entry.name === "ADMIN_NOTIFICATION_EMAIL");
+    expect(row?.healthEvidenceLabel).toBe(
+      "No live probe is claimed; status stays untested until a server-gated probe exists.",
+    );
   });
 
   it("requires human review notes for critical system credentials", () => {
