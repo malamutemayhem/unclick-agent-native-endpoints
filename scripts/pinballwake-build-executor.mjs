@@ -78,6 +78,17 @@ export function validateCodingRoomBuildPatch({ patch, ownedFiles = [], maxBytes 
 
   const changedFiles = new Set();
   const lines = text.split(/\r?\n/);
+  const unsafeMetadata = lines.find((line) =>
+    /^(rename|copy) (from|to) /.test(line) ||
+    /^(new|deleted) file mode /.test(line) ||
+    /^(old|new) mode /.test(line) ||
+    /^similarity index /.test(line) ||
+    /^dissimilarity index /.test(line)
+  );
+  if (unsafeMetadata) {
+    return { ok: false, reason: "unsafe_patch_metadata" };
+  }
+
   for (const line of lines) {
     if (line.startsWith("diff --git ")) {
       const match = /^diff --git\s+a\/(.+?)\s+b\/(.+)$/.exec(line);

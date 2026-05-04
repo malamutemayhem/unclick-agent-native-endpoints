@@ -101,6 +101,65 @@ describe("PinballWake build executor", () => {
     );
   });
 
+  it("rejects rename, copy, mode, and symlink metadata before git apply", () => {
+    const metadataCases = [
+      {
+        patch: `diff --git a/scripts/example.mjs b/scripts/renamed.mjs
+similarity index 100%
+rename from scripts/example.mjs
+rename to scripts/renamed.mjs
+`,
+        label: "rename",
+      },
+      {
+        patch: `diff --git a/scripts/example.mjs b/scripts/copied.mjs
+similarity index 100%
+copy from scripts/example.mjs
+copy to scripts/copied.mjs
+`,
+        label: "copy",
+      },
+      {
+        patch: `diff --git a/scripts/example.mjs b/scripts/example.mjs
+old mode 100644
+new mode 100755
+`,
+        label: "mode",
+      },
+      {
+        patch: `diff --git a/scripts/link.mjs b/scripts/link.mjs
+new file mode 120000
+--- /dev/null
++++ b/scripts/link.mjs
+@@ -0,0 +1 @@
++../outside
+`,
+        label: "symlink/new mode",
+      },
+      {
+        patch: `diff --git a/scripts/example.mjs b/scripts/example.mjs
+deleted file mode 100644
+--- a/scripts/example.mjs
++++ /dev/null
+@@ -1 +0,0 @@
+-old
+`,
+        label: "deleted mode",
+      },
+    ];
+
+    for (const item of metadataCases) {
+      assert.equal(
+        validateCodingRoomBuildPatch({
+          patch: item.patch,
+          ownedFiles: ["scripts/example.mjs", "scripts/renamed.mjs", "scripts/copied.mjs", "scripts/link.mjs"],
+        }).reason,
+        "unsafe_patch_metadata",
+        item.label,
+      );
+    }
+  });
+
   it("applies a checked owned-file patch and moves the job to testing", async () => {
     const calls = [];
     const result = await executeCodingRoomBuildJob({
