@@ -55,7 +55,7 @@ export const DEFAULT_QUEUEPUSH_RUNNERS = [
   },
 ];
 
-const queuepushRunnerRoster = parseRunnerRoster(process.env.QUEUEPUSH_RUNNER_ROSTER) || DEFAULT_QUEUEPUSH_RUNNERS;
+const queuepushRunnerRoster = resolveQueuePushRunnerRoster(process.env.QUEUEPUSH_RUNNER_ROSTER);
 
 const STATES = new Set([
   "draft_green_needs_owner_lift",
@@ -94,7 +94,7 @@ function parseAgentMap(value) {
   }
 }
 
-function parseRunnerRoster(value) {
+export function parseRunnerRoster(value) {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value);
@@ -114,6 +114,11 @@ function parseRunnerRoster(value) {
   } catch {
     return null;
   }
+}
+
+export function resolveQueuePushRunnerRoster(value, fallback = DEFAULT_QUEUEPUSH_RUNNERS) {
+  const parsed = parseRunnerRoster(value);
+  return parsed && parsed.length > 0 ? parsed : fallback;
 }
 
 function compactText(value, max = 240) {

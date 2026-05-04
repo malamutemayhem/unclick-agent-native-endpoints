@@ -9,6 +9,7 @@ import {
   filterDuplicatePackets,
   jobKindForState,
   latestCommentSignals,
+  resolveQueuePushRunnerRoster,
   routeWorkerForPr,
   runnerCanAcceptQueuePushJob,
   stateRequiresCode,
@@ -228,6 +229,15 @@ describe("QueuePush routing and packets", () => {
     );
 
     assert.equal(runner?.emoji, "🦾");
+  });
+
+  it("falls back to the safe default runner roster when custom roster is empty or malformed", () => {
+    const empty = resolveQueuePushRunnerRoster("[]");
+    const malformed = resolveQueuePushRunnerRoster("{ nope");
+
+    assert.equal(empty[0]?.emoji, "🛠️");
+    assert.equal(malformed[0]?.emoji, "🛠️");
+    assert.ok(empty.some((runner) => runner.emoji === "🍿"));
   });
 
   it("maps process states to job kinds and code requirements", () => {
