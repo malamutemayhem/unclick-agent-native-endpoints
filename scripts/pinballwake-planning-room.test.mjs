@@ -224,4 +224,36 @@ describe("PinballWake Planning Room", () => {
     assert.equal(result.computed_route.route, "deep-research-then-planning");
     assert.equal(result.computed_route.ack_required, true);
   });
+
+  it("blocks deep-tier supplied research routes without an explicit ACK", () => {
+    const result = createPlanningRoomScopePack(
+      {
+        id: "protected-deep-tier-no-ack",
+        title: "Credentials redaction fix",
+        context: "Touches credentials, tokens, secrets, and redaction.",
+        files: ["docs/copy.md"],
+        tests: ["node --test scripts/pinballwake-planning-room.test.mjs"],
+        estimated_lines: 10,
+        research_report: {
+          summary: "Generic research exists, but it is not an ACKed DeepDive result.",
+          recommendation: "Use docs-only wording.",
+        },
+      },
+      {
+        route: {
+          ok: true,
+          route: "research-then-planning",
+          tier: "deep",
+          ack_required: true,
+          suggested_action: "plan",
+          reason: "caller_supplied_deep_tier",
+          score: { axes: {}, total: 7, forced_deep_reasons: ["security_sensitive"] },
+        },
+      },
+    );
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "deep_research_ack_required_before_planning");
+    assert.equal(result.computed_route.route, "deep-research-then-planning");
+  });
 });

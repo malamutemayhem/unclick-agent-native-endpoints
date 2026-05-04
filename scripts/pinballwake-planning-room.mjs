@@ -63,6 +63,10 @@ function routeRiskRank(route = {}) {
   return 0;
 }
 
+function routeRequiresDeepAck(route = {}) {
+  return route.route === "deep-research-then-planning" || route.tier === "deep" || route.ack_required === true;
+}
+
 function defaultImplementationSteps(job = {}, route = {}) {
   const steps = safeList(job.implementation_steps || job.steps);
   if (steps.length) {
@@ -185,12 +189,13 @@ export function createPlanningRoomScopePack(job = {}, options = {}) {
 
   const research = researchArtifactForJob(job);
 
-  if (route.route === "deep-research-then-planning" && !researchAckComplete(research)) {
+  if ((routeRequiresDeepAck(computedRoute) || routeRequiresDeepAck(route)) && !researchAckComplete(research)) {
     return {
       ok: false,
       action: "blocker",
       reason: "deep_research_ack_required_before_planning",
       route,
+      computed_route: computedRoute,
     };
   }
 
