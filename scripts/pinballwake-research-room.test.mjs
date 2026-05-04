@@ -112,6 +112,7 @@ describe("PinballWake Research Room", () => {
   it("requires ACK on deep reports", () => {
     const result = validateResearchRoomReport({
       depth: "deep",
+      ack_required: true,
       verdict: "proceed_to_planning",
       summary: "Protected surface is safe with constraints.",
       recommendation: "Proceed only after ACK.",
@@ -123,6 +124,25 @@ describe("PinballWake Research Room", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.reason, "deep_report_requires_ack");
+    assert.equal(result.reason, "deep_report_ack_not_complete");
+  });
+
+  it("accepts deep reports only after explicit ACK completion", () => {
+    const result = validateResearchRoomReport({
+      depth: "deep",
+      ack_required: true,
+      ack_status: "PASS",
+      verdict: "proceed_to_planning",
+      summary: "Protected surface is safe with constraints.",
+      recommendation: "Proceed only after ACK.",
+      risks: ["Security-sensitive context."],
+      alternatives_considered: ["Defer."],
+      scopepack_constraints: ["No auth changes."],
+      proof_recommendations: ["Run safety tests."],
+      stop_conditions: ["Missing ACK."],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.report.ack_status, "PASS");
   });
 });

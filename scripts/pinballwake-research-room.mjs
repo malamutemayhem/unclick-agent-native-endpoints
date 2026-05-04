@@ -168,6 +168,10 @@ export function validateResearchRoomReport(report = {}) {
     return { ok: false, reason: "deep_report_requires_ack", field: "ack_required" };
   }
 
+  if (report.depth === "deep" && report.ack_complete !== true && report.ack_status !== "PASS" && report.ack !== "PASS") {
+    return { ok: false, reason: "deep_report_ack_not_complete", field: "ack_complete" };
+  }
+
   return {
     ok: true,
     report: {
