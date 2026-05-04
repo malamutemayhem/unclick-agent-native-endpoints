@@ -92,7 +92,7 @@ describe("system credential inventory", () => {
     }
   });
 
-  it("derives metadata-only health rows with owner, status, and manual check state", () => {
+  it("derives untested health rows with owner, status, and manual check state", () => {
     const rows = listSystemCredentialHealthRows();
     const testpass = rows.find((entry) => entry.name === "TESTPASS_TOKEN");
 
@@ -100,7 +100,7 @@ describe("system credential inventory", () => {
       sourceLabel: "GitHub Actions secret name",
       ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
       ownerConfidence: "inferred",
-      displayStatus: "metadata_only",
+      displayStatus: "untested",
       healthEvidenceLabel: "Use latest TestPass PR check receipt.",
       lastCheckedAt: null,
     });
@@ -112,7 +112,7 @@ describe("system credential inventory", () => {
 
   it("adds operator card answers without claiming live credential health", () => {
     for (const entry of listSystemCredentialHealthRows()) {
-      expect(entry.displayStatus).toBe("metadata_only");
+      expect(entry.displayStatus).toBe("untested");
       expect(entry.lastCheckedAt).toBeNull();
       expect(entry.sourceLabel.length).toBeGreaterThan(0);
       expect(entry.healthEvidenceLabel.length).toBeGreaterThan(0);
