@@ -16,6 +16,47 @@ const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
 const agentMap = parseAgentMap(process.env.QUEUEPUSH_AGENT_MAP);
 
+export const DEFAULT_QUEUEPUSH_RUNNERS = [
+  {
+    emoji: "🛠️",
+    readiness: "builder_ready",
+    capabilities: ["implementation", "owner_decision", "qc_review", "status_relay"],
+    safeFor: ["wakepass", "pinballwake", "queuepush", "reliability"],
+  },
+  {
+    emoji: "🧠",
+    readiness: "builder_ready",
+    capabilities: ["implementation", "owner_decision", "merge_proof", "status_relay"],
+    safeFor: ["blocked_chris_only", "chris-only", "human policy", "merge", "master"],
+  },
+  {
+    emoji: "🧪",
+    readiness: "context_only",
+    capabilities: ["owner_decision", "qc_review", "status_relay"],
+    safeFor: ["rotatepass", "xpass", "system credentials", "systemcredential", "adminkeychain", "connectedservices"],
+  },
+  {
+    emoji: "🍿",
+    readiness: "review_only",
+    capabilities: ["qc_review", "status_relay"],
+    safeFor: ["ready_for_qc", "qc", "second-read", "proof review"],
+  },
+  {
+    emoji: "📣",
+    readiness: "context_only",
+    capabilities: ["owner_decision", "status_relay"],
+    safeFor: ["docs", "prd", "brief", "handoff", "status"],
+  },
+  {
+    emoji: "🦾",
+    readiness: "needs_probe",
+    capabilities: ["implementation", "status_relay"],
+    safeFor: ["small implementation", "docs"],
+  },
+];
+
+const queuepushRunnerRoster = resolveQueuePushRunnerRoster(process.env.QUEUEPUSH_RUNNER_ROSTER);
+
 const STATES = new Set([
   "draft_green_needs_owner_lift",
   "hold_overlap",
@@ -53,6 +94,33 @@ function parseAgentMap(value) {
   }
 }
 
+export function parseRunnerRoster(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .map((runner) => ({
+        emoji: String(runner?.emoji || "").trim(),
+        readiness: String(runner?.readiness || "").trim(),
+        capabilities: Array.isArray(runner?.capabilities)
+          ? runner.capabilities.map((capability) => String(capability).trim()).filter(Boolean)
+          : [],
+        safeFor: Array.isArray(runner?.safeFor)
+          ? runner.safeFor.map((lane) => String(lane).trim()).filter(Boolean)
+          : [],
+      }))
+      .filter((runner) => runner.emoji && runner.readiness && runner.capabilities.length > 0);
+  } catch {
+    return null;
+  }
+}
+
+export function resolveQueuePushRunnerRoster(value, fallback = DEFAULT_QUEUEPUSH_RUNNERS) {
+  const parsed = parseRunnerRoster(value);
+  return parsed && parsed.length > 0 ? parsed : fallback;
+}
+
 function compactText(value, max = 240) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
@@ -76,10 +144,10 @@ function shortSha(sha) {
 export function queuepushPacketId(pr, state) {
   const sha = pr.head?.sha || pr.headRefOid || "unknown";
   const digest = createHash("sha256")
-    .update(`${repository}|direct-build-v2|${pr.number}|${state}|${sha}`)
+    .update(`${repository}|pinballwake-job-runner-v3|${pr.number}|${state}|${sha}`)
     .digest("hex")
     .slice(0, 10);
-  return `queuepush:v2:pr-${pr.number}:${state}:${shortSha(sha)}:${digest}`;
+  return `queuepush:v3:pr-${pr.number}:${state}:${shortSha(sha)}:${digest}`;
 }
 
 export function checksAreGreen(checkRuns = [], statuses = []) {
@@ -159,29 +227,94 @@ export function latestCommentSignals(comments = []) {
 }
 
 export function routeWorkerForPr(pr, files = [], state = "") {
-  if (state === "ready_for_qc") return "🍿";
-  if (state === "blocked_chris_only") return "🧠";
-  if (state === "hold_overlap") return "🧪";
-  if (state === "dirty_branch") return "🛠️";
-
   const haystack = normalizeText(
     [
+      state,
       pr.title,
       pr.body,
       ...files.map((file) => file.filename || file.path || ""),
     ].join(" "),
   );
+  const runner = chooseQueuePushRunner({
+    kind: jobKindForState(state),
+    lane: haystack,
+    title: pr.title || `PR #${pr.number}`,
+    requiresCode: stateRequiresCode(state),
+  });
+  return runner?.emoji || "📣";
+}
 
-  if (/\b(rotatepass|system credentials|systemcredential|xpass|adminkeychain|connectedservices|redaction)\b/.test(haystack)) {
-    return "🧪";
+export function jobKindForState(state) {
+  switch (state) {
+    case "dirty_branch":
+    case "failed_targeted_proof":
+      return "implementation";
+    case "ready_for_qc":
+      return "qc_review";
+    case "blocked_chris_only":
+    case "draft_green_needs_owner_lift":
+    case "hold_overlap":
+      return "owner_decision";
+    default:
+      return "status_relay";
   }
-  if (/\b(event-wake-router|fishbowl-watcher|wakepass|pinballwake|reliability)\b/.test(haystack)) {
-    return "🛠️";
+}
+
+export function stateRequiresCode(state) {
+  return jobKindForState(state) === "implementation";
+}
+
+export function runnerCanAcceptQueuePushJob(runner, job) {
+  if (!runner?.capabilities?.includes(job.kind)) return false;
+  if (runner.readiness === "offline") return false;
+  if (job.requiresCode) {
+    return runner.readiness === "builder_ready" || runner.readiness === "scoped_builder";
   }
-  if (/\b(docs|prd|brief)\b/.test(haystack)) {
-    return "📣";
+  if (runner.readiness === "needs_probe") return job.kind === "status_relay";
+  return true;
+}
+
+export function chooseQueuePushRunner(job, runners = queuepushRunnerRoster) {
+  const lane = normalizeText([job.lane, job.title].join(" "));
+  const candidates = runners.filter((runner) => runnerCanAcceptQueuePushJob(runner, job));
+  const laneMatches = candidates.filter((runner) =>
+    (runner.safeFor || []).some((safeLane) => lane.includes(normalizeText(safeLane))),
+  );
+  if (job.kind === "qc_review") {
+    return (
+      laneMatches.find((runner) => runner.readiness === "review_only") ||
+      candidates.find((runner) => runner.readiness === "review_only") ||
+      laneMatches[0] ||
+      candidates[0]
+    );
   }
-  return "📣";
+  return laneMatches[0] || candidates[0];
+}
+
+function packetHeadingForJobKind(jobKind) {
+  switch (jobKind) {
+    case "implementation":
+      return "DIRECT BUILD PACKET";
+    case "qc_review":
+      return "DIRECT QC PACKET";
+    case "owner_decision":
+      return "DIRECT DECISION PACKET";
+    default:
+      return "DIRECT STATUS PACKET";
+  }
+}
+
+function packetInstructionForJobKind(jobKind) {
+  switch (jobKind) {
+    case "implementation":
+      return "You are assigned this now. Build it or reply blocker; do not just observe.";
+    case "qc_review":
+      return "You are assigned QC now. Pass/block with evidence; do not rewrite the branch.";
+    case "owner_decision":
+      return "You are assigned the decision now. Decide, ACK, or reply blocker; do not start coding unless explicitly scoped.";
+    default:
+      return "You are assigned status follow-up now. ACK, route, or reply blocker.";
+  }
 }
 
 export function classifyPullRequest(input) {
@@ -261,6 +394,7 @@ export function buildQueuePacket(input) {
   if (!STATES.has(state)) throw new Error(`Unknown QueuePush state: ${state}`);
   const worker = routeWorkerForPr(pr, files, state);
   const packetId = queuepushPacketId(pr, state);
+  const jobKind = jobKindForState(state);
   const chip = `PR #${pr.number} ${state}`;
   const filePreview = files
     .slice(0, 4)
@@ -275,9 +409,11 @@ export function buildQueuePacket(input) {
   const directAction = directActionForState(state);
   const text = [
     `QueuePush ID: ${packetId}`,
-    "DIRECT BUILD PACKET",
-    "You are assigned this now. Build it or reply blocker; do not just observe.",
+    packetHeadingForJobKind(jobKind),
+    packetInstructionForJobKind(jobKind),
     `worker: ${worker}`,
+    `job kind: ${jobKind}`,
+    `requires code: ${stateRequiresCode(state) ? "yes" : "no"}`,
     `chip: ${chip}`,
     `context: ${context}`,
     `allowed files: ${allowedFilesText(files)}`,
@@ -292,6 +428,8 @@ export function buildQueuePacket(input) {
   return {
     packetId,
     worker,
+    jobKind,
+    requiresCode: stateRequiresCode(state),
     recipient: agentMap[worker] || worker,
     state,
     pr: pr.number,

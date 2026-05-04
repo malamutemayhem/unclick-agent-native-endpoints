@@ -2,10 +2,10 @@ import {
   BellRing,
   CheckCircle2,
   Clock3,
+  Cpu,
   ExternalLink,
   Gauge,
   RadioTower,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import {
@@ -14,6 +14,12 @@ import {
   type PinballWakeClockRoute,
   type PinballWakeClockStatus,
 } from "./pinballwakeClockRoutes";
+import {
+  PINBALLWAKE_JOB_RUNNERS,
+  summarizePinballWakeJobRunners,
+  type PinballWakeJobRunner,
+  type PinballWakeRunnerReadiness,
+} from "./pinballwakeJobRunners";
 
 const STATUS_STYLES: Record<PinballWakeClockStatus, string> = {
   live: "border-[#61C1C4]/40 bg-[#61C1C4]/10 text-[#61C1C4]",
@@ -23,10 +29,27 @@ const STATUS_STYLES: Record<PinballWakeClockStatus, string> = {
   later: "border-white/10 bg-white/[0.02] text-white/40",
 };
 
+const RUNNER_STYLES: Record<PinballWakeRunnerReadiness, string> = {
+  builder_ready: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300",
+  scoped_builder: "border-[#61C1C4]/40 bg-[#61C1C4]/10 text-[#61C1C4]",
+  needs_probe: "border-[#E2B93B]/40 bg-[#E2B93B]/10 text-[#E2B93B]",
+  review_only: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  context_only: "border-white/15 bg-white/[0.04] text-white/60",
+  offline: "border-white/10 bg-white/[0.02] text-white/35",
+};
+
 function StatusBadge({ status }: { status: PinballWakeClockStatus }) {
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${STATUS_STYLES[status]}`}>
       {status.replace("-", " ")}
+    </span>
+  );
+}
+
+function RunnerBadge({ readiness }: { readiness: PinballWakeRunnerReadiness }) {
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${RUNNER_STYLES[readiness]}`}>
+      {readiness.replaceAll("_", " ")}
     </span>
   );
 }
@@ -89,8 +112,51 @@ function RouteRow({ route }: { route: PinballWakeClockRoute }) {
   );
 }
 
+function RunnerRow({ runner }: { runner: PinballWakeJobRunner }) {
+  return (
+    <article className="rounded-lg border border-white/[0.06] bg-[#111111] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-white">
+              {runner.emoji} {runner.name}
+            </h2>
+            <RunnerBadge readiness={runner.readiness} />
+          </div>
+          <p className="mt-1 text-sm text-white/55">
+            {runner.kind} · {runner.host}
+          </p>
+        </div>
+        <div className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-white/55">
+          {runner.capabilities.join(", ")}
+        </div>
+      </div>
+
+      <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+        <div>
+          <dt className="text-xs font-medium uppercase text-white/35">Safe For</dt>
+          <dd className="mt-1 text-white/70">{runner.safeFor.join(", ")}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase text-white/35">Not For</dt>
+          <dd className="mt-1 text-white/70">{runner.notFor.join(", ")}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase text-white/35">Proof</dt>
+          <dd className="mt-1 text-white/70">{runner.proof}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase text-white/35">Next Probe</dt>
+          <dd className="mt-1 text-white/70">{runner.nextProbe}</dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
 export default function AdminPinballWake() {
   const summary = summarizePinballWakeClockRoutes();
+  const runnerSummary = summarizePinballWakeJobRunners();
 
   const primaryRoutes = PINBALLWAKE_CLOCK_ROUTES.filter((route) =>
     ["live", "watching", "ready"].includes(route.status),
@@ -125,8 +191,8 @@ export default function AdminPinballWake() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard icon={RadioTower} label="Clock Routes" value={summary.total} />
         <MetricCard icon={CheckCircle2} label="Live" value={summary.byStatus.live ?? 0} />
-        <MetricCard icon={Gauge} label="Automated" value={summary.automated} />
-        <MetricCard icon={ShieldCheck} label="No New Setup" value={summary.noNewUserSetup} />
+        <MetricCard icon={Cpu} label="Code Hands" value={runnerSummary.codeHands} />
+        <MetricCard icon={Gauge} label="Need Probe" value={runnerSummary.needsProbe} />
       </div>
 
       <section className="mb-6 rounded-lg border border-[#E2B93B]/25 bg-[#E2B93B]/[0.06] p-4">
@@ -137,7 +203,7 @@ export default function AdminPinballWake() {
             <p className="mt-1 text-sm leading-relaxed text-white/65">
               QueuePush should stay one safe button. PinballWake manages the clocks that press it,
               WakePass proves ACK or reclaim, and every late duplicate must re-read current state
-              before doing anything.
+              before doing anything. Build packets go only to job runners with proven code hands.
             </p>
           </div>
         </div>
@@ -154,6 +220,20 @@ export default function AdminPinballWake() {
           <div className="space-y-3">
             {primaryRoutes.map((route) => (
               <RouteRow key={route.id} route={route} />
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-emerald-300" />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">
+              Job Runners
+            </h2>
+          </div>
+          <div className="space-y-3">
+            {PINBALLWAKE_JOB_RUNNERS.map((runner) => (
+              <RunnerRow key={runner.id} runner={runner} />
             ))}
           </div>
         </section>
