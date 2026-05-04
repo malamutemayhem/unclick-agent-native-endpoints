@@ -1,15 +1,33 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  claimCodingRoomLedgerJob,
   claimCodingRoomJob,
+  createCodingRoomJobLedger,
   createCodingRoomJob,
+  createCodingRoomPrReviewJobs,
+  createCodingRoomQcJob,
   createCodingRoomReviewJob,
+  createCodingRoomSafetyJob,
+  listCodingRoomJobs,
   markReviewFallbackReady,
+  parseCodingRoomJobLedger,
+  readCodingRoomJobLedger,
+  reclaimExpiredCodingRoomJobs,
   reviewJobNeedsFallback,
   runnerCanClaimCodingRoomJob,
+  serializeCodingRoomJobLedger,
+  submitCodingRoomLedgerReviewAck,
   submitCodingRoomProof,
+  submitCodingRoomReviewAck,
+  upsertCodingRoomJob,
+  validateCodingRoomReviewAck,
   validateCodingRoomProof,
+  writeCodingRoomJobLedger,
 } from "./pinballwake-coding-room.mjs";
 
 const forgeRunner = {
@@ -99,7 +117,180 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(result.ok, true);
     assert.equal(result.job.status, "claimed");
     assert.equal(result.job.claimed_by, "forge");
+    assert.match(result.job.claim_id, /^coding-room-claim:/);
+    assert.equal(result.job.claimed_at, "2026-05-04T00:00:00.000Z");
     assert.equal(result.job.lease_expires_at, "2026-05-04T00:01:00.000Z");
+  });
+
+  it("upserts jobs into a ledger without duplicating the same job id", () => {
+    const first = createCodingRoomJob({
+      jobId: "coding-room:test:one",
+      worker: "forge",
+      chip: "first chip",
+      files: ["scripts/a.mjs"],
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+    const second = createCodingRoomJob({
+      jobId: "coding-room:test:one",
+      worker: "forge",
+      chip: "renamed chip",
+      files: ["scripts/a.mjs"],
+      createdAt: "2026-05-04T00:01:00.000Z",
+    });
+
+    const inserted = upsertCodingRoomJob({
+      ledger: createCodingRoomJobLedger({ updatedAt: "2026-05-04T00:00:00.000Z" }),
+      job: first,
+      now: "2026-05-04T00:00:01.000Z",
+    });
+    const updated = upsertCodingRoomJob({
+      ledger: inserted.ledger,
+      job: second,
+      now: "2026-05-04T00:00:02.000Z",
+    });
+
+    assert.equal(inserted.action, "inserted");
+    assert.equal(updated.action, "updated");
+    assert.equal(updated.ledger.jobs.length, 1);
+    assert.equal(updated.ledger.jobs[0].chip, "renamed chip");
+    assert.equal(updated.ledger.jobs[0].created_at, "2026-05-04T00:00:00.000Z");
+  });
+
+  it("claims a ledger job and returns a durable claim contract", () => {
+    const job = createCodingRoomJob({
+      jobId: "coding-room:test:claim",
+      worker: "forge",
+      chip: "claim me",
+      files: ["scripts/pinballwake-coding-room.mjs"],
+    });
+    const ledger = createCodingRoomJobLedger({ jobs: [job] });
+
+    const result = claimCodingRoomLedgerJob({
+      ledger,
+      jobId: job.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 90,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "claimed");
+    assert.equal(result.ledger.jobs[0].claimed_by, "forge");
+    assert.deepEqual(result.claim, {
+      claim_id: result.job.claim_id,
+      job_id: "coding-room:test:claim",
+      runner_id: "forge",
+      claimed_at: "2026-05-04T00:00:00.000Z",
+      lease_expires_at: "2026-05-04T00:01:30.000Z",
+      owned_files: ["scripts/pinballwake-coding-room.mjs"],
+      status: "claimed",
+    });
+  });
+
+  it("does not let two runners claim the same queued job", () => {
+    const job = createCodingRoomJob({
+      jobId: "coding-room:test:duplicate-claim",
+      worker: "forge",
+      chip: "claim once",
+      files: ["scripts/pinballwake-coding-room.mjs"],
+    });
+    const first = claimCodingRoomLedgerJob({
+      ledger: createCodingRoomJobLedger({ jobs: [job] }),
+      jobId: job.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+    });
+    const second = claimCodingRoomLedgerJob({
+      ledger: first.ledger,
+      jobId: job.job_id,
+      runner: { ...forgeRunner, id: "plex-builder" },
+      now: "2026-05-04T00:00:10.000Z",
+    });
+
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, false);
+    assert.equal(second.reason, "job_not_queued");
+  });
+
+  it("blocks ledger claims when another active job owns the same file", () => {
+    const active = createCodingRoomJob({
+      jobId: "coding-room:test:active",
+      status: "building",
+      worker: "forge",
+      chip: "already building",
+      files: ["api/fishbowl-watcher.ts"],
+    });
+    const waiting = createCodingRoomJob({
+      jobId: "coding-room:test:waiting",
+      worker: "plex-builder",
+      chip: "same file",
+      files: ["api/fishbowl-watcher.ts"],
+    });
+
+    const result = claimCodingRoomLedgerJob({
+      ledger: createCodingRoomJobLedger({ jobs: [active, waiting] }),
+      jobId: waiting.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "owned_file_overlap");
+    assert.equal(result.file, "api/fishbowl-watcher.ts");
+  });
+
+  it("reclaims expired runner leases so jobs can be picked up again", () => {
+    const claimed = claimCodingRoomJob({
+      runner: forgeRunner,
+      job: createCodingRoomJob({
+        jobId: "coding-room:test:expired",
+        worker: "forge",
+        chip: "lease expires",
+        files: ["scripts/pinballwake-coding-room.mjs"],
+      }),
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 60,
+    }).job;
+
+    const result = reclaimExpiredCodingRoomJobs({
+      ledger: createCodingRoomJobLedger({ jobs: [claimed] }),
+      now: "2026-05-04T00:01:01.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reclaimed, 1);
+    assert.equal(result.ledger.jobs[0].status, "queued");
+    assert.equal(result.ledger.jobs[0].claimed_by, null);
+    assert.equal(result.ledger.jobs[0].previous_claims[0].runner_id, "forge");
+    assert.equal(result.ledger.jobs[0].previous_claims[0].reason, "lease_expired");
+  });
+
+  it("round-trips job ledgers through JSON and disk", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coding-room-ledger-"));
+    const filePath = join(dir, "ledger.json");
+    try {
+      const ledger = createCodingRoomJobLedger({
+        jobs: [
+          createCodingRoomJob({
+            jobId: "coding-room:test:round-trip",
+            worker: "forge",
+            chip: "persist me",
+            files: ["scripts/pinballwake-coding-room.mjs"],
+          }),
+        ],
+        updatedAt: "2026-05-04T00:00:00.000Z",
+      });
+
+      const parsed = parseCodingRoomJobLedger(serializeCodingRoomJobLedger(ledger));
+      assert.equal(parsed.jobs[0].job_id, "coding-room:test:round-trip");
+
+      await writeCodingRoomJobLedger(filePath, ledger);
+      const loaded = await readCodingRoomJobLedger(filePath);
+      assert.equal(loaded.jobs[0].chip, "persist me");
+      assert.equal(listCodingRoomJobs({ ledger: loaded, statuses: "queued", worker: "forge" }).length, 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects proof that changes files outside ownership", () => {
@@ -211,8 +402,45 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(job.status, "queued");
     assert.deepEqual(job.owned_files, []);
     assert.equal(job.ack_deadline_at, "2026-05-04T00:10:00.000Z");
-    assert.equal(job.expected_ack, "done/blocker");
+    assert.equal(job.expected_ack, "PASS/BLOCKER");
     assert.equal(job.expected_proof.requires_tests, false);
+  });
+
+  it("creates first-class QC and safety review jobs for a PR", () => {
+    const [safety, qc] = createCodingRoomPrReviewJobs({
+      source: "queuepush",
+      prNumber: 517,
+      fallbackWorker: "master",
+      createdAt: "2026-05-04T00:00:00.000Z",
+      timeoutSeconds: 600,
+    });
+
+    assert.equal(safety.job_type, "review");
+    assert.equal(safety.review_kind, "release_safety");
+    assert.equal(safety.worker, "gatekeeper");
+    assert.equal(safety.review_contract.answer, "PASS/BLOCKER");
+    assert.match(safety.review_contract.checklist.join(" "), /secrets/);
+
+    assert.equal(qc.job_type, "review");
+    assert.equal(qc.review_kind, "qc_review");
+    assert.equal(qc.worker, "popcorn");
+    assert.match(qc.review_contract.checklist.join(" "), /PR body/);
+  });
+
+  it("supports standalone QC and safety job helpers with deterministic review contracts", () => {
+    const qc = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+    const safety = createCodingRoomSafetyJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(qc.chip, "QC review for PR #517");
+    assert.equal(qc.requested_reviewers[0], "popcorn");
+    assert.equal(safety.chip, "Safety review for PR #517");
+    assert.equal(safety.requested_reviewers[0], "gatekeeper");
   });
 
   it("lets review-ready workers claim review jobs without code ownership", () => {
@@ -238,6 +466,80 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(result.job.claimed_by, "popcorn");
   });
 
+  it("requires review runners to match the requested review kind and reviewer", () => {
+    const safetyJob = createCodingRoomSafetyJob({
+      prNumber: 517,
+      requestedReviewers: ["gatekeeper"],
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.deepEqual(
+      runnerCanClaimCodingRoomJob({
+        runner: {
+          id: "popcorn",
+          readiness: "review_only",
+          capabilities: ["qc_review"],
+        },
+        job: safetyJob,
+      }),
+      {
+        ok: false,
+        reason: "runner_lacks_review_kind_capability",
+        review_kind: "release_safety",
+      },
+    );
+
+    assert.equal(
+      runnerCanClaimCodingRoomJob({
+        runner: {
+          id: "gatekeeper",
+          readiness: "review_only",
+          capabilities: ["release_safety"],
+        },
+        job: safetyJob,
+      }).ok,
+      true,
+    );
+
+    const qcJob = createCodingRoomQcJob({
+      prNumber: 517,
+      requestedReviewers: ["popcorn"],
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(
+      runnerCanClaimCodingRoomJob({
+        runner: {
+          id: "gatekeeper",
+          readiness: "review_only",
+          capabilities: ["release_safety"],
+        },
+        job: qcJob,
+      }).reason,
+      "runner_lacks_review_kind_capability",
+    );
+  });
+
+  it("does not let a capable but unrequested reviewer claim someone else's review job", () => {
+    const qcJob = createCodingRoomQcJob({
+      prNumber: 517,
+      requestedReviewers: ["popcorn"],
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const decision = runnerCanClaimCodingRoomJob({
+      runner: {
+        id: "backup-qc",
+        readiness: "review_only",
+        capabilities: ["qc_review"],
+      },
+      job: qcJob,
+    });
+
+    assert.equal(decision.ok, false);
+    assert.equal(decision.reason, "runner_not_requested_reviewer");
+  });
+
   it("blocks builders with no review capability from review jobs", () => {
     const job = createCodingRoomReviewJob({
       worker: "gatekeeper",
@@ -254,7 +556,7 @@ describe("PinballWake Coding Room skeleton", () => {
     });
 
     assert.equal(decision.ok, false);
-    assert.equal(decision.reason, "runner_lacks_review_capability");
+    assert.equal(decision.reason, "runner_lacks_review_kind_capability");
   });
 
   it("keeps review jobs open before the deadline and fallback-ready after timeout", () => {
@@ -309,5 +611,96 @@ describe("PinballWake Coding Room skeleton", () => {
 
     assert.equal(fallback.ok, false);
     assert.equal(fallback.reason, "review_already_answered");
+  });
+
+  it("validates PASS/BLOCKER review ACKs instead of vague chat replies", () => {
+    const job = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "done" } }).reason, "review_ack_result_required");
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "pass" } }).reason, "pass_summary_required");
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "blocker" } }).reason, "blocker_text_required");
+
+    assert.equal(
+      validateCodingRoomReviewAck({
+        job,
+        ack: {
+          result: "pass",
+          summary: "PR body and checks are current.",
+        },
+      }).ok,
+      true,
+    );
+  });
+
+  it("records PASS review ACKs as done review jobs with reviewer proof", () => {
+    const job = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomReviewAck({
+      job,
+      ack: {
+        result: "PASS",
+        reviewer: "popcorn",
+        summary: "QC passed against current PR body and green checks.",
+        checkedItems: ["PR body current", "checks green"],
+      },
+      now: "2026-05-04T00:03:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "done");
+    assert.equal(result.job.proof.ack, "PASS");
+    assert.equal(result.job.proof.reviewer, "popcorn");
+    assert.equal(result.job.proof.submitted_at, "2026-05-04T00:03:00.000Z");
+  });
+
+  it("records BLOCKER review ACKs as blocked jobs", () => {
+    const job = createCodingRoomSafetyJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomReviewAck({
+      job,
+      ack: {
+        result: "blocker",
+        reviewer: "gatekeeper",
+        blocker: "PR touches a protected migration file.",
+      },
+      now: "2026-05-04T00:03:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "blocked");
+    assert.equal(result.job.proof.ack, "BLOCKER");
+    assert.equal(result.job.proof.blocker, "PR touches a protected migration file.");
+  });
+
+  it("updates ledger review jobs when QC submits PASS", () => {
+    const job = createCodingRoomQcJob({
+      jobId: "coding-room:review:qc",
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomLedgerReviewAck({
+      ledger: createCodingRoomJobLedger({ jobs: [job] }),
+      jobId: job.job_id,
+      ack: {
+        result: "pass",
+        reviewer: "popcorn",
+        summary: "QC passed.",
+      },
+      now: "2026-05-04T00:05:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ledger.jobs[0].status, "done");
+    assert.equal(result.ledger.jobs[0].proof.reviewer, "popcorn");
   });
 });
