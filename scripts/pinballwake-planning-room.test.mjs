@@ -169,4 +169,37 @@ describe("PinballWake Planning Room", () => {
     assert.equal(result.reason, "supplied_route_conflicts_with_job_risk");
     assert.equal(result.computed_route.route, "deep-research-then-planning");
   });
+
+  it("blocks caller-supplied routes that downgrade DeepDive to standard research", () => {
+    const result = createPlanningRoomScopePack(
+      {
+        id: "protected-research-downgrade",
+        title: "Credentials redaction fix",
+        context: "Touches credentials, tokens, secrets, and redaction.",
+        files: ["docs/copy.md"],
+        tests: ["node --test scripts/pinballwake-planning-room.test.mjs"],
+        estimated_lines: 10,
+        research_report: {
+          summary: "Generic research exists, but it is not an ACKed DeepDive result.",
+          recommendation: "Use docs-only wording.",
+        },
+      },
+      {
+        route: {
+          ok: true,
+          route: "research-then-planning",
+          tier: "scout",
+          ack_required: false,
+          suggested_action: "plan",
+          reason: "caller_supplied",
+          score: { axes: {}, total: 0, forced_deep_reasons: [] },
+        },
+      },
+    );
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "supplied_route_conflicts_with_job_risk");
+    assert.equal(result.computed_route.route, "deep-research-then-planning");
+    assert.equal(result.computed_route.ack_required, true);
+  });
 });

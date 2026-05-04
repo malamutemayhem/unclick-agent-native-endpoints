@@ -47,6 +47,13 @@ function routeNeedsResearch(route = {}) {
   return route.route === "research-then-planning" || route.route === "deep-research-then-planning";
 }
 
+function routeRiskRank(route = {}) {
+  if (route.route === "deep-research-then-planning" || route.tier === "deep") return 3;
+  if (route.route === "research-then-planning" && route.ack_required) return 2;
+  if (route.route === "research-then-planning") return 1;
+  return 0;
+}
+
 function defaultImplementationSteps(job = {}, route = {}) {
   const steps = safeList(job.implementation_steps || job.steps);
   if (steps.length) {
@@ -124,7 +131,13 @@ export function createPlanningRoomScopePack(job = {}, options = {}) {
   const suppliedRoute = options.route || job.route || null;
   const route = suppliedRoute || computedRoute;
 
-  if (suppliedRoute && routeNeedsResearch(computedRoute) && !routeNeedsResearch(suppliedRoute)) {
+  if (
+    suppliedRoute &&
+    routeNeedsResearch(computedRoute) &&
+    (!routeNeedsResearch(suppliedRoute) ||
+      routeRiskRank(suppliedRoute) < routeRiskRank(computedRoute) ||
+      (computedRoute.ack_required && !suppliedRoute.ack_required))
+  ) {
     return {
       ok: false,
       action: "blocker",
