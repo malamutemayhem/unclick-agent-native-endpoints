@@ -87,6 +87,13 @@ export function commandToArgv(command) {
   return parts;
 }
 
+function hasUnsafePathTraversal(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .some((part) => part === "..");
+}
+
 export function isProofCommandAllowed(command, allowlist = DEFAULT_PROOF_COMMAND_ALLOWLIST) {
   const normalized = String(command ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -94,6 +101,17 @@ export function isProofCommandAllowed(command, allowlist = DEFAULT_PROOF_COMMAND
   }
 
   if (/[;&|`$<>]/.test(normalized)) {
+    return false;
+  }
+
+  let argv;
+  try {
+    argv = commandToArgv(normalized);
+  } catch {
+    return false;
+  }
+
+  if (argv.some(hasUnsafePathTraversal)) {
     return false;
   }
 
@@ -107,7 +125,13 @@ export function getProofCommandsForJob(job) {
 }
 
 export async function runProofCommand(command, { cwd = process.cwd(), timeoutMs = 120000 } = {}) {
-  const [bin, ...args] = commandToArgv(command);
+  let bin;
+  let args;
+  try {
+    [bin, ...args] = commandToArgv(command);
+  } catch (error) {
+    return { command, status: "failed", exit_code: null, output: compactOutput(error.message) };
+  }
   if (!bin) {
     return { command, status: "failed", exit_code: null, output: "Empty command" };
   }

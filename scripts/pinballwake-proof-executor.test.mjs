@@ -60,6 +60,8 @@ describe("PinballWake proof executor", () => {
     assert.equal(isProofCommandAllowed("npm run test:api"), true);
     assert.equal(isProofCommandAllowed("node scripts/delete-everything.mjs"), false);
     assert.equal(isProofCommandAllowed("node --test scripts/a.mjs && echo unsafe"), false);
+    assert.equal(isProofCommandAllowed("node --test scripts/../evil.test.mjs"), false);
+    assert.equal(isProofCommandAllowed("node --test \"scripts/broken.test.mjs"), false);
     assert.equal(isProofCommandAllowed("npm run build"), false);
   });
 
@@ -102,6 +104,23 @@ describe("PinballWake proof executor", () => {
       runCommand: async () => {
         throw new Error("should not run");
       },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result, "blocker");
+    assert.equal(result.reason, "proof_command_not_allowlisted");
+    assert.equal(result.job.status, "blocked");
+    assert.match(result.job.proof.blocker, /not allowlisted/);
+  });
+
+  it("records blocker proof for malformed proof commands instead of throwing", async () => {
+    const job = proofJob({
+      tests: ["node --test \"scripts/broken.test.mjs"],
+    });
+
+    const result = await executeCodingRoomProofJob({
+      job,
+      now: "2026-05-04T00:01:00.000Z",
     });
 
     assert.equal(result.ok, true);
