@@ -106,7 +106,9 @@ export function createCodingRoomJob(input = {}) {
     status,
     owned_files: ownedFiles,
     expected_proof: {
-      tests: Array.isArray(expectedProof.tests) ? expectedProof.tests.map(compactText).filter(Boolean) : [],
+      tests: Array.isArray(expectedProof.tests)
+        ? expectedProof.tests.map((test) => compactText(test)).filter(Boolean)
+        : [],
       requires_pr: expectedProof.requiresPr !== false,
       requires_changed_files: expectedProof.requiresChangedFiles !== false,
       requires_non_overlap: expectedProof.requiresNonOverlap !== false,
