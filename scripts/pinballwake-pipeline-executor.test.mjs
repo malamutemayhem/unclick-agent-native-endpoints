@@ -120,7 +120,7 @@ function passingProofRunner(calls = []) {
 }
 
 describe("PinballWake pipeline executor", () => {
-  it("claims, builds, proves, and reports merge ready without executing merge", async () => {
+  it("claims, builds, proves, and reports Merge Room ready without executing merge", async () => {
     const buildCalls = [];
     const proofCalls = [];
     const job = codeJob();
@@ -135,13 +135,55 @@ describe("PinballWake pipeline executor", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.result, "merge_ready");
-    assert.equal(result.summary, "claimed -> built -> proved -> merge_ready");
+    assert.equal(result.result, "ready_to_merge");
+    assert.equal(result.summary, "claimed -> built -> proved -> ready_to_merge");
     assert.deepEqual(buildCalls, ["check", "apply"]);
     assert.deepEqual(proofCalls, ["node --test scripts/pinballwake-pipeline-executor.test.mjs"]);
     assert.equal(result.job.status, "proof_submitted");
     assert.deepEqual(result.job.proof.changed_files, ["scripts/pipeline-executor-example.mjs"]);
     assert.equal(result.merge.reason, "merge_ready");
+    assert.equal(result.merge.action, "merge_room");
+    assert.deepEqual(result.merge.execute_plan, ["merge", "watch_post_merge"]);
+  });
+
+  it("routes full-PASS draft PRs to Merge Room lift decision instead of vague merge blocker", async () => {
+    const job = codeJob();
+    const result = await executeCodingRoomPipeline({
+      ledger: createCodingRoomJobLedger({ jobs: [job, ...reviewJobs()] }),
+      runner,
+      jobId: job.job_id,
+      pr: readyPr({ isDraft: true }),
+      applyPatch: passingPatchRunner(),
+      runCommand: passingProofRunner(),
+      now: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result, "blocker");
+    assert.equal(result.reason, "draft_lift_not_authorized");
+    assert.equal(result.merge.result, "needs_lift");
+    assert.deepEqual(result.merge.missing, ["master_lift_authorization"]);
+    assert.equal(result.steps.at(-1).result, "merge_blocked");
+  });
+
+  it("allows explicit fallback evidence to produce a lift-and-merge room plan", async () => {
+    const job = codeJob();
+    const result = await executeCodingRoomPipeline({
+      ledger: createCodingRoomJobLedger({ jobs: [job, ...reviewJobs()] }),
+      runner,
+      jobId: job.job_id,
+      pr: readyPr({ isDraft: true }),
+      fallbackEvidence: { full_ack_set: true },
+      applyPatch: passingPatchRunner(),
+      runCommand: passingProofRunner(),
+      now: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result, "ready_to_lift_and_merge");
+    assert.equal(result.merge.draft_lift_required, true);
+    assert.deepEqual(result.merge.execute_plan, ["lift_draft", "merge", "watch_post_merge"]);
+    assert.equal(result.steps.at(-1).result, "ready_to_lift_and_merge");
   });
 
   it("stops after proof when no PR state is supplied", async () => {

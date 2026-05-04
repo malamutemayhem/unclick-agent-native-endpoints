@@ -17,7 +17,7 @@ import {
   getProofCommandsForJob,
   isProofCommandAllowed,
 } from "./pinballwake-proof-executor.mjs";
-import { evaluateMergeReadiness } from "./pinballwake-merge-controller.mjs";
+import { evaluateMergeRoom } from "./pinballwake-merge-room.mjs";
 
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -78,19 +78,20 @@ function buildBlocker(stage, reason, extra = {}) {
   };
 }
 
-function mergeResultStep(readiness) {
-  if (readiness.ok) {
-    return step("merge", "merge_ready", {
-      reason: readiness.reason,
-      pr_number: readiness.pr_number,
+function mergeResultStep(decision) {
+  if (decision.ok) {
+    return step("merge", decision.result, {
+      reason: decision.reason,
+      pr_number: decision.pr_number,
+      draft_lift_required: decision.draft_lift_required || false,
       execute: false,
     });
   }
 
   return step("merge", "merge_blocked", {
-    reason: readiness.reason,
-    missing_reviewers: readiness.missing_reviewers || [],
-    failed_checks: readiness.failed_checks || [],
+    reason: decision.reason,
+    missing_reviewers: decision.missing_reviewers || [],
+    failed_checks: decision.failed_checks || [],
   });
 }
 
@@ -103,6 +104,8 @@ export function planCodingRoomPipelineDryRun({
   proofJob,
   reviews,
   requiredReviewers,
+  fallbackEvidence,
+  allowDraftLift = false,
 } = {}) {
   const safeLedger = createCodingRoomJobLedger({
     jobs: cloneJson(ledger?.jobs || []),
@@ -269,19 +272,21 @@ export function planCodingRoomPipelineDryRun({
     };
   }
 
-  const readiness = evaluateMergeReadiness({
+  const readiness = evaluateMergeRoom({
     pr,
     ledger: safeLedger,
     proofJob,
     reviews,
     requiredReviewers,
+    fallbackEvidence,
+    allowDraftLift,
   });
   steps.push(mergeResultStep(readiness));
 
   return {
     ok: true,
     action: "dry_run",
-    result: readiness.ok ? "merge_ready" : "blocker",
+    result: readiness.ok ? readiness.result : "blocker",
     stage: "merge",
     reason: readiness.reason,
     job_id: job.job_id,

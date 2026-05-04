@@ -144,8 +144,8 @@ describe("PinballWake pipeline dry-run planner", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.result, "merge_ready");
-    assert.equal(result.summary, "would_claim -> build_would_validate_patch -> proof_would_run -> merge_ready");
+    assert.equal(result.result, "ready_to_merge");
+    assert.equal(result.summary, "would_claim -> build_would_validate_patch -> proof_would_run -> ready_to_merge");
     assert.deepEqual(result.steps.map((item) => item.stage), ["claim", "build", "proof", "merge"]);
     assert.equal(JSON.stringify(ledger), before);
     assert.equal(job.status, "queued");
@@ -209,8 +209,43 @@ describe("PinballWake pipeline dry-run planner", () => {
       pr: readyPr(),
     });
 
-    assert.equal(result.result, "merge_ready");
+    assert.equal(result.result, "ready_to_merge");
     assert.equal(result.merge.reason, "merge_ready");
+    assert.equal(result.merge.action, "merge_room");
+    assert.deepEqual(result.merge.execute_plan, ["merge", "watch_post_merge"]);
+  });
+
+  it("routes full-PASS draft PRs through Merge Room lift authorization", () => {
+    const job = codeJob();
+    const result = planCodingRoomPipelineDryRun({
+      ledger: createCodingRoomJobLedger({ jobs: [job, proofJob(), ...reviewJobs()] }),
+      runner,
+      jobId: job.job_id,
+      pr: readyPr({ isDraft: true }),
+    });
+
+    assert.equal(result.result, "blocker");
+    assert.equal(result.stage, "merge");
+    assert.equal(result.reason, "draft_lift_not_authorized");
+    assert.equal(result.merge.result, "needs_lift");
+    assert.deepEqual(result.merge.missing, ["master_lift_authorization"]);
+    assert.equal(result.steps.at(-1).result, "merge_blocked");
+  });
+
+  it("uses explicit fallback evidence to plan lift and merge without executing", () => {
+    const job = codeJob();
+    const result = planCodingRoomPipelineDryRun({
+      ledger: createCodingRoomJobLedger({ jobs: [job, proofJob(), ...reviewJobs()] }),
+      runner,
+      jobId: job.job_id,
+      pr: readyPr({ isDraft: true }),
+      fallbackEvidence: { full_ack_set: true },
+    });
+
+    assert.equal(result.result, "ready_to_lift_and_merge");
+    assert.equal(result.merge.draft_lift_required, true);
+    assert.deepEqual(result.merge.execute_plan, ["lift_draft", "merge", "watch_post_merge"]);
+    assert.equal(result.steps.at(-1).result, "ready_to_lift_and_merge");
   });
 
   it("reports idle when no queued job can be claimed", () => {
@@ -299,7 +334,7 @@ describe("PinballWake pipeline dry-run planner", () => {
       pr: readyPr(),
     });
 
-    assert.equal(result.result, "merge_ready");
+    assert.equal(result.result, "ready_to_merge");
     assert.equal(result.steps[0].result, "already_in_progress");
   });
 });

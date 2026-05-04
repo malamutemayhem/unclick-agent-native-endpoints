@@ -20,7 +20,7 @@ import {
   executeCodingRoomProofJob,
   runProofCommand,
 } from "./pinballwake-proof-executor.mjs";
-import { evaluateMergeReadiness } from "./pinballwake-merge-controller.mjs";
+import { evaluateMergeRoom } from "./pinballwake-merge-room.mjs";
 
 function parseBoolean(value) {
   const raw = String(value ?? "").trim().toLowerCase();
@@ -107,6 +107,8 @@ export async function executeCodingRoomPipeline({
   pr,
   reviews,
   requiredReviewers,
+  fallbackEvidence,
+  allowDraftLift = false,
   allowlist = DEFAULT_PROOF_COMMAND_ALLOWLIST,
   cwd = process.cwd(),
   applyPatch = runGitApplyPatch,
@@ -351,17 +353,20 @@ export async function executeCodingRoomPipeline({
     };
   }
 
-  const merge = evaluateMergeReadiness({
+  const merge = evaluateMergeRoom({
     pr,
     ledger: working,
     reviews,
     requiredReviewers,
+    fallbackEvidence,
+    allowDraftLift,
   });
   steps.push(
-    step("merge", merge.ok ? "merge_ready" : "merge_blocked", {
+    step("merge", merge.ok ? merge.result : "merge_blocked", {
       reason: merge.reason,
       missing_reviewers: merge.missing_reviewers || [],
       failed_checks: merge.failed_checks || [],
+      draft_lift_required: merge.draft_lift_required || false,
       execute: false,
     }),
   );
@@ -369,7 +374,7 @@ export async function executeCodingRoomPipeline({
   return {
     ok: true,
     action: "pipeline",
-    result: merge.ok ? "merge_ready" : "blocker",
+    result: merge.ok ? merge.result : "blocker",
     stage: "merge",
     reason: merge.reason,
     job_id: job.job_id,
