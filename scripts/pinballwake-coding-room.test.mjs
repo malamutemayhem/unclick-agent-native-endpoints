@@ -22,6 +22,7 @@ import {
   runnerCanClaimCodingRoomJob,
   serializeCodingRoomJobLedger,
   submitCodingRoomLedgerReviewAck,
+  submitCodingRoomBuildResult,
   submitCodingRoomProof,
   submitCodingRoomReviewAck,
   upsertCodingRoomJob,
@@ -383,6 +384,59 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(result.ok, true);
     assert.equal(result.job.status, "proof_submitted");
     assert.equal(result.job.proof.pr_url, "https://github.com/example/repo/pull/1");
+  });
+
+  it("records build results as testing without pretending proof is done", () => {
+    const job = createCodingRoomJob({
+      worker: "forge",
+      chip: "scoped build",
+      files: ["scripts/pinballwake-build-executor.mjs"],
+    });
+
+    const result = submitCodingRoomBuildResult({
+      job,
+      buildResult: {
+        result: "done",
+        changedFiles: ["scripts/pinballwake-build-executor.mjs"],
+        summary: "Patch applied.",
+      },
+      now: "2026-05-04T00:03:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "testing");
+    assert.deepEqual(result.job.build_result.changed_files, ["scripts/pinballwake-build-executor.mjs"]);
+    assert.equal(result.job.proof, null);
+  });
+
+  it("records build blockers and rejects changed files outside ownership", () => {
+    const job = createCodingRoomJob({
+      worker: "forge",
+      chip: "scoped build",
+      files: ["scripts/pinballwake-build-executor.mjs"],
+    });
+
+    assert.equal(
+      submitCodingRoomBuildResult({
+        job,
+        buildResult: {
+          result: "done",
+          changedFiles: ["api/unowned.ts"],
+        },
+      }).reason,
+      "changed_file_outside_ownership",
+    );
+
+    const blocker = submitCodingRoomBuildResult({
+      job,
+      buildResult: {
+        result: "blocker",
+        blocker: "Patch check failed.",
+      },
+    });
+    assert.equal(blocker.ok, true);
+    assert.equal(blocker.job.status, "blocked");
+    assert.equal(blocker.job.build_result.result, "blocker");
   });
 
   it("creates timed review jobs that do not need owned files", () => {

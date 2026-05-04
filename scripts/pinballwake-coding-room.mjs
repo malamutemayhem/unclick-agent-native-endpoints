@@ -30,6 +30,11 @@ function compactText(value, max = 240) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function compactMultiline(value, max = 12000) {
+  const text = String(value ?? "").trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
 function normalizePath(value) {
   return String(value ?? "")
     .replace(/\\/g, "/")
@@ -82,6 +87,7 @@ export function codingRoomClaimId({ jobId = "", runnerId = "", now = new Date().
 export function createCodingRoomJob(input = {}) {
   const ownedFiles = uniq((input.ownedFiles || input.files || []).map(normalizePath));
   const expectedProof = input.expectedProof || {};
+  const build = input.build || {};
   const status = input.status || "queued";
 
   if (!CODING_ROOM_STATUSES.has(status)) {
@@ -114,6 +120,10 @@ export function createCodingRoomJob(input = {}) {
       requires_non_overlap: expectedProof.requiresNonOverlap !== false,
       requires_tests: expectedProof.requiresTests !== false,
     },
+    build: {
+      patch: compactMultiline(build.patch || input.patch || ""),
+      patch_format: compactText(build.patchFormat || build.patch_format || "unified_diff", 80),
+    },
     safety: {
       no_secrets: true,
       draft_pr_only: true,
@@ -126,6 +136,63 @@ export function createCodingRoomJob(input = {}) {
     lease_expires_at: input.leaseExpiresAt || null,
     claimed_by: input.claimedBy || null,
     proof: input.proof || null,
+    build_result: input.buildResult || input.build_result || null,
+  };
+}
+
+export function submitCodingRoomBuildResult({ job, buildResult = {}, now = new Date().toISOString() }) {
+  if (!job) {
+    return { ok: false, reason: "missing_job" };
+  }
+
+  const result = String(buildResult.result || "").trim().toLowerCase();
+  if (!["done", "blocker"].includes(result)) {
+    return { ok: false, reason: "build_result_required" };
+  }
+
+  if (result === "blocker") {
+    const blocker = compactText(buildResult.blocker || "", 500);
+    if (!blocker) {
+      return { ok: false, reason: "blocker_text_required" };
+    }
+
+    return {
+      ok: true,
+      job: {
+        ...job,
+        status: "blocked",
+        build_result: {
+          result: "blocker",
+          blocker,
+          submitted_at: now,
+        },
+      },
+    };
+  }
+
+  const changedFiles = uniq((buildResult.changedFiles || []).map(normalizePath));
+  if (changedFiles.length === 0) {
+    return { ok: false, reason: "changed_files_required" };
+  }
+
+  const owned = new Set(job.owned_files || []);
+  const outside = changedFiles.find((file) => !owned.has(file));
+  if (outside) {
+    return { ok: false, reason: "changed_file_outside_ownership", file: outside };
+  }
+
+  return {
+    ok: true,
+    job: {
+      ...job,
+      status: "testing",
+      build_result: {
+        result: "done",
+        changed_files: changedFiles,
+        summary: compactText(buildResult.summary || "", 500),
+        submitted_at: now,
+      },
+    },
   };
 }
 
