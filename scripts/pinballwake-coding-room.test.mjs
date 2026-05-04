@@ -9,7 +9,10 @@ import {
   claimCodingRoomJob,
   createCodingRoomJobLedger,
   createCodingRoomJob,
+  createCodingRoomPrReviewJobs,
+  createCodingRoomQcJob,
   createCodingRoomReviewJob,
+  createCodingRoomSafetyJob,
   listCodingRoomJobs,
   markReviewFallbackReady,
   parseCodingRoomJobLedger,
@@ -18,8 +21,11 @@ import {
   reviewJobNeedsFallback,
   runnerCanClaimCodingRoomJob,
   serializeCodingRoomJobLedger,
+  submitCodingRoomLedgerReviewAck,
   submitCodingRoomProof,
+  submitCodingRoomReviewAck,
   upsertCodingRoomJob,
+  validateCodingRoomReviewAck,
   validateCodingRoomProof,
   writeCodingRoomJobLedger,
 } from "./pinballwake-coding-room.mjs";
@@ -396,8 +402,45 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(job.status, "queued");
     assert.deepEqual(job.owned_files, []);
     assert.equal(job.ack_deadline_at, "2026-05-04T00:10:00.000Z");
-    assert.equal(job.expected_ack, "done/blocker");
+    assert.equal(job.expected_ack, "PASS/BLOCKER");
     assert.equal(job.expected_proof.requires_tests, false);
+  });
+
+  it("creates first-class QC and safety review jobs for a PR", () => {
+    const [safety, qc] = createCodingRoomPrReviewJobs({
+      source: "queuepush",
+      prNumber: 517,
+      fallbackWorker: "master",
+      createdAt: "2026-05-04T00:00:00.000Z",
+      timeoutSeconds: 600,
+    });
+
+    assert.equal(safety.job_type, "review");
+    assert.equal(safety.review_kind, "release_safety");
+    assert.equal(safety.worker, "gatekeeper");
+    assert.equal(safety.review_contract.answer, "PASS/BLOCKER");
+    assert.match(safety.review_contract.checklist.join(" "), /secrets/);
+
+    assert.equal(qc.job_type, "review");
+    assert.equal(qc.review_kind, "qc_review");
+    assert.equal(qc.worker, "popcorn");
+    assert.match(qc.review_contract.checklist.join(" "), /PR body/);
+  });
+
+  it("supports standalone QC and safety job helpers with deterministic review contracts", () => {
+    const qc = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+    const safety = createCodingRoomSafetyJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(qc.chip, "QC review for PR #517");
+    assert.equal(qc.requested_reviewers[0], "popcorn");
+    assert.equal(safety.chip, "Safety review for PR #517");
+    assert.equal(safety.requested_reviewers[0], "gatekeeper");
   });
 
   it("lets review-ready workers claim review jobs without code ownership", () => {
@@ -494,5 +537,96 @@ describe("PinballWake Coding Room skeleton", () => {
 
     assert.equal(fallback.ok, false);
     assert.equal(fallback.reason, "review_already_answered");
+  });
+
+  it("validates PASS/BLOCKER review ACKs instead of vague chat replies", () => {
+    const job = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "done" } }).reason, "review_ack_result_required");
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "pass" } }).reason, "pass_summary_required");
+    assert.equal(validateCodingRoomReviewAck({ job, ack: { result: "blocker" } }).reason, "blocker_text_required");
+
+    assert.equal(
+      validateCodingRoomReviewAck({
+        job,
+        ack: {
+          result: "pass",
+          summary: "PR body and checks are current.",
+        },
+      }).ok,
+      true,
+    );
+  });
+
+  it("records PASS review ACKs as done review jobs with reviewer proof", () => {
+    const job = createCodingRoomQcJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomReviewAck({
+      job,
+      ack: {
+        result: "PASS",
+        reviewer: "popcorn",
+        summary: "QC passed against current PR body and green checks.",
+        checkedItems: ["PR body current", "checks green"],
+      },
+      now: "2026-05-04T00:03:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "done");
+    assert.equal(result.job.proof.ack, "PASS");
+    assert.equal(result.job.proof.reviewer, "popcorn");
+    assert.equal(result.job.proof.submitted_at, "2026-05-04T00:03:00.000Z");
+  });
+
+  it("records BLOCKER review ACKs as blocked jobs", () => {
+    const job = createCodingRoomSafetyJob({
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomReviewAck({
+      job,
+      ack: {
+        result: "blocker",
+        reviewer: "gatekeeper",
+        blocker: "PR touches a protected migration file.",
+      },
+      now: "2026-05-04T00:03:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "blocked");
+    assert.equal(result.job.proof.ack, "BLOCKER");
+    assert.equal(result.job.proof.blocker, "PR touches a protected migration file.");
+  });
+
+  it("updates ledger review jobs when QC submits PASS", () => {
+    const job = createCodingRoomQcJob({
+      jobId: "coding-room:review:qc",
+      prNumber: 517,
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+
+    const result = submitCodingRoomLedgerReviewAck({
+      ledger: createCodingRoomJobLedger({ jobs: [job] }),
+      jobId: job.job_id,
+      ack: {
+        result: "pass",
+        reviewer: "popcorn",
+        summary: "QC passed.",
+      },
+      now: "2026-05-04T00:05:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ledger.jobs[0].status, "done");
+    assert.equal(result.ledger.jobs[0].proof.reviewer, "popcorn");
   });
 });

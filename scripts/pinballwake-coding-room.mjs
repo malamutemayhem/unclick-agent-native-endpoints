@@ -19,6 +19,7 @@ export const CODING_ROOM_CODE_CAPABILITIES = new Set(["implementation", "test_fi
 export const CODING_ROOM_REVIEW_CAPABILITIES = new Set(["qc_review", "release_safety", "merge_proof"]);
 export const CODING_ROOM_BUILDER_READINESS = new Set(["builder_ready", "scoped_builder"]);
 export const CODING_ROOM_REVIEW_READINESS = new Set(["review_only", "context_only", "builder_ready", "scoped_builder"]);
+export const CODING_ROOM_REVIEW_ACK_RESULTS = new Set(["pass", "blocker"]);
 
 const DEFAULT_LEASE_SECONDS = 1800;
 const DEFAULT_REVIEW_TIMEOUT_SECONDS = 900;
@@ -149,8 +150,57 @@ export function createCodingRoomReviewJob(input = {}) {
     requested_reviewers: uniq((input.requestedReviewers || []).map((reviewer) => compactText(reviewer, 80))),
     fallback_worker: compactText(input.fallbackWorker || "master", 80),
     ack_deadline_at: input.ackDeadlineAt || addSeconds(createdAt, timeoutSeconds),
-    expected_ack: "done/blocker",
+    expected_ack: "PASS/BLOCKER",
+    review_contract: input.reviewContract || input.review_contract || {
+      answer: "PASS/BLOCKER",
+      checklist: [],
+    },
   };
+}
+
+export function createCodingRoomQcJob(input = {}) {
+  return createCodingRoomReviewJob({
+    ...input,
+    worker: input.worker || "popcorn",
+    chip: input.chip || `QC review for PR #${input.prNumber ?? "unknown"}`,
+    reviewKind: "qc_review",
+    requestedReviewers: input.requestedReviewers || ["popcorn"],
+    review_contract: {
+      answer: "PASS/BLOCKER",
+      checklist: [
+        "PR body matches current code and scope",
+        "listed tests/checks are green",
+        "proof is current, not stale comments",
+        "no obvious regression or missing owner proof",
+      ],
+    },
+  });
+}
+
+export function createCodingRoomSafetyJob(input = {}) {
+  return createCodingRoomReviewJob({
+    ...input,
+    worker: input.worker || "gatekeeper",
+    chip: input.chip || `Safety review for PR #${input.prNumber ?? "unknown"}`,
+    reviewKind: "release_safety",
+    requestedReviewers: input.requestedReviewers || ["gatekeeper"],
+    review_contract: {
+      answer: "PASS/BLOCKER",
+      checklist: [
+        "no secrets, raw keys, auth, billing, DNS, or migrations",
+        "no destructive cleanup or force-push behavior",
+        "no draft, HOLD, or DIRTY merge risk",
+        "automation behavior is advisory unless explicitly approved",
+      ],
+    },
+  });
+}
+
+export function createCodingRoomPrReviewJobs(input = {}) {
+  return [
+    createCodingRoomSafetyJob(input),
+    createCodingRoomQcJob(input),
+  ];
 }
 
 export function runnerCanClaimCodingRoomJob({ runner = {}, job, activeJobs = [] }) {
@@ -505,6 +555,84 @@ export function markReviewFallbackReady({ job, now = new Date().toISOString() })
       fallback_worker: fallback.fallback_worker,
       fallback_ready_at: now,
     },
+  };
+}
+
+export function validateCodingRoomReviewAck({ job, ack = {} }) {
+  if (!job || job.job_type !== "review") {
+    return { ok: false, reason: "not_review_job" };
+  }
+
+  const result = String(ack.result || "").trim().toLowerCase();
+  if (!CODING_ROOM_REVIEW_ACK_RESULTS.has(result)) {
+    return { ok: false, reason: "review_ack_result_required" };
+  }
+
+  if (result === "blocker" && !String(ack.blocker || "").trim()) {
+    return { ok: false, reason: "blocker_text_required" };
+  }
+
+  if (result === "pass" && !String(ack.summary || "").trim()) {
+    return { ok: false, reason: "pass_summary_required" };
+  }
+
+  return {
+    ok: true,
+    status: result === "pass" ? "done" : "blocked",
+  };
+}
+
+export function submitCodingRoomReviewAck({ job, ack = {}, now = new Date().toISOString() }) {
+  const validation = validateCodingRoomReviewAck({ job, ack });
+  if (!validation.ok) {
+    return validation;
+  }
+
+  const result = String(ack.result).trim().toLowerCase();
+  return {
+    ok: true,
+    job: {
+      ...job,
+      status: validation.status,
+      proof: {
+        result,
+        ack: result === "pass" ? "PASS" : "BLOCKER",
+        reviewer: compactText(ack.reviewer || job.claimed_by || job.worker || "", 80),
+        summary: compactText(ack.summary || "", 500),
+        blocker: compactText(ack.blocker || "", 500) || null,
+        checked_items: Array.isArray(ack.checkedItems) ? ack.checkedItems.map((item) => compactText(item, 160)) : [],
+        submitted_at: now,
+      },
+    },
+  };
+}
+
+export function submitCodingRoomLedgerReviewAck({ ledger, jobId, ack = {}, now = new Date().toISOString() } = {}) {
+  const next = createCodingRoomJobLedger({
+    jobs: ledger?.jobs || [],
+    updatedAt: now,
+  });
+  const index = next.jobs.findIndex((job) => job.job_id === jobId);
+
+  if (index === -1) {
+    return { ok: false, reason: "missing_job" };
+  }
+
+  const result = submitCodingRoomReviewAck({
+    job: next.jobs[index],
+    ack,
+    now,
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  next.jobs[index] = result.job;
+  return {
+    ok: true,
+    ledger: next,
+    job: result.job,
   };
 }
 
