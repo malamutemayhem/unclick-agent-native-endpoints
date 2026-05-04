@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export const CODING_ROOM_STATUSES = new Set([
   "queued",
@@ -20,6 +22,7 @@ export const CODING_ROOM_REVIEW_READINESS = new Set(["review_only", "context_onl
 
 const DEFAULT_LEASE_SECONDS = 1800;
 const DEFAULT_REVIEW_TIMEOUT_SECONDS = 900;
+const CODING_ROOM_LEDGER_VERSION = 1;
 
 function compactText(value, max = 240) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -47,12 +50,28 @@ function addSeconds(iso, seconds) {
   return new Date(base + seconds * 1000).toISOString();
 }
 
+function isActiveClaimStatus(status) {
+  return ["claimed", "building", "testing"].includes(status);
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export function codingRoomJobId({ source = "manual", prNumber = "none", chip = "", worker = "" }) {
   const digest = createHash("sha256")
     .update([source, prNumber, chip, worker].map((part) => String(part ?? "").trim()).join("|"))
     .digest("hex")
     .slice(0, 16);
   return `coding-room:${prNumber}:${digest}`;
+}
+
+export function codingRoomClaimId({ jobId = "", runnerId = "", now = new Date().toISOString() }) {
+  const digest = createHash("sha256")
+    .update([jobId, runnerId, now].map((part) => String(part ?? "").trim()).join("|"))
+    .digest("hex")
+    .slice(0, 16);
+  return `coding-room-claim:${digest}`;
 }
 
 export function createCodingRoomJob(input = {}) {
@@ -176,7 +195,7 @@ export function runnerCanClaimCodingRoomJob({ runner = {}, job, activeJobs = [] 
   if (job.expected_proof?.requires_non_overlap !== false) {
     const owned = new Set(job.owned_files || []);
     const overlap = activeJobs
-      .filter((active) => ["claimed", "building", "testing"].includes(active.status))
+      .filter((active) => isActiveClaimStatus(active.status) && active.job_id !== job.job_id)
       .flatMap((active) => active.owned_files || [])
       .find((file) => owned.has(file));
 
@@ -204,9 +223,197 @@ export function claimCodingRoomJob({ runner = {}, job, activeJobs = [], now = ne
       ...job,
       status: "claimed",
       claimed_by: String(runner.id || runner.emoji || "").trim(),
+      claim_id: codingRoomClaimId({
+        jobId: job.job_id,
+        runnerId: String(runner.id || runner.emoji || "").trim(),
+        now,
+      }),
+      claimed_at: now,
       lease_expires_at: addSeconds(now, Number.isFinite(leaseSeconds) ? leaseSeconds : DEFAULT_LEASE_SECONDS),
     },
   };
+}
+
+export function createCodingRoomJobLedger(input = {}) {
+  const jobs = Array.isArray(input.jobs) ? input.jobs.map((job) => cloneJson(job)) : [];
+  return {
+    version: CODING_ROOM_LEDGER_VERSION,
+    updated_at: input.updatedAt || new Date().toISOString(),
+    jobs,
+  };
+}
+
+export function listCodingRoomJobs({ ledger, statuses, worker, jobType } = {}) {
+  const statusSet = statuses ? new Set(Array.isArray(statuses) ? statuses : [statuses]) : null;
+  const wantedWorker = worker ? String(worker).trim() : "";
+  const wantedJobType = jobType ? String(jobType).trim() : "";
+
+  return (ledger?.jobs || []).filter((job) => {
+    if (statusSet && !statusSet.has(job.status)) {
+      return false;
+    }
+
+    if (wantedWorker && job.worker !== wantedWorker) {
+      return false;
+    }
+
+    if (wantedJobType && job.job_type !== wantedJobType) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export function upsertCodingRoomJob({ ledger, job, now = new Date().toISOString() }) {
+  if (!job?.job_id) {
+    return { ok: false, reason: "missing_job_id" };
+  }
+
+  const next = createCodingRoomJobLedger({
+    jobs: ledger?.jobs || [],
+    updatedAt: now,
+  });
+  const index = next.jobs.findIndex((existing) => existing.job_id === job.job_id);
+  const stored = cloneJson(job);
+
+  if (index === -1) {
+    next.jobs.push(stored);
+    return { ok: true, action: "inserted", ledger: next, job: stored };
+  }
+
+  next.jobs[index] = {
+    ...next.jobs[index],
+    ...stored,
+    created_at: next.jobs[index].created_at || stored.created_at,
+  };
+  return { ok: true, action: "updated", ledger: next, job: next.jobs[index] };
+}
+
+export function claimCodingRoomLedgerJob({
+  ledger,
+  jobId,
+  runner = {},
+  now = new Date().toISOString(),
+  leaseSeconds,
+} = {}) {
+  const next = createCodingRoomJobLedger({
+    jobs: ledger?.jobs || [],
+    updatedAt: now,
+  });
+  const index = next.jobs.findIndex((job) => job.job_id === jobId);
+
+  if (index === -1) {
+    return { ok: false, reason: "missing_job" };
+  }
+
+  const result = claimCodingRoomJob({
+    runner,
+    job: next.jobs[index],
+    activeJobs: next.jobs,
+    now,
+    leaseSeconds,
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  next.jobs[index] = result.job;
+  return {
+    ok: true,
+    ledger: next,
+    job: result.job,
+    claim: {
+      claim_id: result.job.claim_id,
+      job_id: result.job.job_id,
+      runner_id: result.job.claimed_by,
+      claimed_at: result.job.claimed_at,
+      lease_expires_at: result.job.lease_expires_at,
+      owned_files: result.job.owned_files || [],
+      status: result.job.status,
+    },
+  };
+}
+
+export function reclaimExpiredCodingRoomJobs({ ledger, now = new Date().toISOString() } = {}) {
+  const current = parseIso(now);
+  if (current === null) {
+    return { ok: false, reason: "invalid_now" };
+  }
+
+  let reclaimed = 0;
+  const next = createCodingRoomJobLedger({
+    jobs: (ledger?.jobs || []).map((job) => {
+      if (!isActiveClaimStatus(job.status)) {
+        return job;
+      }
+
+      const expiresAt = parseIso(job.lease_expires_at);
+      if (expiresAt === null || current <= expiresAt) {
+        return job;
+      }
+
+      reclaimed += 1;
+      return {
+        ...job,
+        status: "queued",
+        claimed_by: null,
+        claim_id: null,
+        claimed_at: null,
+        lease_expires_at: null,
+        previous_claims: [
+          ...(job.previous_claims || []),
+          {
+            claim_id: job.claim_id || null,
+            runner_id: job.claimed_by || null,
+            claimed_at: job.claimed_at || null,
+            lease_expires_at: job.lease_expires_at || null,
+            reclaimed_at: now,
+            reason: "lease_expired",
+          },
+        ],
+      };
+    }),
+    updatedAt: now,
+  });
+
+  return { ok: true, reclaimed, ledger: next };
+}
+
+export function serializeCodingRoomJobLedger(ledger) {
+  return `${JSON.stringify(createCodingRoomJobLedger({ jobs: ledger?.jobs || [], updatedAt: ledger?.updated_at }), null, 2)}\n`;
+}
+
+export function parseCodingRoomJobLedger(text) {
+  if (!String(text || "").trim()) {
+    return createCodingRoomJobLedger();
+  }
+
+  const parsed = JSON.parse(text);
+  return createCodingRoomJobLedger({
+    jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+    updatedAt: parsed.updated_at,
+  });
+}
+
+export async function readCodingRoomJobLedger(filePath) {
+  try {
+    return parseCodingRoomJobLedger(await readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return createCodingRoomJobLedger();
+    }
+
+    throw error;
+  }
+}
+
+export async function writeCodingRoomJobLedger(filePath, ledger) {
+  await mkdir(dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, serializeCodingRoomJobLedger(ledger), "utf8");
+  await rename(tempPath, filePath);
 }
 
 export function validateCodingRoomProof({ job, proof = {} }) {

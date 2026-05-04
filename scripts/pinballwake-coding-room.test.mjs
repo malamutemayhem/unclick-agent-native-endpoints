@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  claimCodingRoomLedgerJob,
   claimCodingRoomJob,
+  createCodingRoomJobLedger,
   createCodingRoomJob,
   createCodingRoomReviewJob,
+  listCodingRoomJobs,
   markReviewFallbackReady,
+  parseCodingRoomJobLedger,
+  readCodingRoomJobLedger,
+  reclaimExpiredCodingRoomJobs,
   reviewJobNeedsFallback,
   runnerCanClaimCodingRoomJob,
+  serializeCodingRoomJobLedger,
   submitCodingRoomProof,
+  upsertCodingRoomJob,
   validateCodingRoomProof,
+  writeCodingRoomJobLedger,
 } from "./pinballwake-coding-room.mjs";
 
 const forgeRunner = {
@@ -99,7 +111,180 @@ describe("PinballWake Coding Room skeleton", () => {
     assert.equal(result.ok, true);
     assert.equal(result.job.status, "claimed");
     assert.equal(result.job.claimed_by, "forge");
+    assert.match(result.job.claim_id, /^coding-room-claim:/);
+    assert.equal(result.job.claimed_at, "2026-05-04T00:00:00.000Z");
     assert.equal(result.job.lease_expires_at, "2026-05-04T00:01:00.000Z");
+  });
+
+  it("upserts jobs into a ledger without duplicating the same job id", () => {
+    const first = createCodingRoomJob({
+      jobId: "coding-room:test:one",
+      worker: "forge",
+      chip: "first chip",
+      files: ["scripts/a.mjs"],
+      createdAt: "2026-05-04T00:00:00.000Z",
+    });
+    const second = createCodingRoomJob({
+      jobId: "coding-room:test:one",
+      worker: "forge",
+      chip: "renamed chip",
+      files: ["scripts/a.mjs"],
+      createdAt: "2026-05-04T00:01:00.000Z",
+    });
+
+    const inserted = upsertCodingRoomJob({
+      ledger: createCodingRoomJobLedger({ updatedAt: "2026-05-04T00:00:00.000Z" }),
+      job: first,
+      now: "2026-05-04T00:00:01.000Z",
+    });
+    const updated = upsertCodingRoomJob({
+      ledger: inserted.ledger,
+      job: second,
+      now: "2026-05-04T00:00:02.000Z",
+    });
+
+    assert.equal(inserted.action, "inserted");
+    assert.equal(updated.action, "updated");
+    assert.equal(updated.ledger.jobs.length, 1);
+    assert.equal(updated.ledger.jobs[0].chip, "renamed chip");
+    assert.equal(updated.ledger.jobs[0].created_at, "2026-05-04T00:00:00.000Z");
+  });
+
+  it("claims a ledger job and returns a durable claim contract", () => {
+    const job = createCodingRoomJob({
+      jobId: "coding-room:test:claim",
+      worker: "forge",
+      chip: "claim me",
+      files: ["scripts/pinballwake-coding-room.mjs"],
+    });
+    const ledger = createCodingRoomJobLedger({ jobs: [job] });
+
+    const result = claimCodingRoomLedgerJob({
+      ledger,
+      jobId: job.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 90,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.status, "claimed");
+    assert.equal(result.ledger.jobs[0].claimed_by, "forge");
+    assert.deepEqual(result.claim, {
+      claim_id: result.job.claim_id,
+      job_id: "coding-room:test:claim",
+      runner_id: "forge",
+      claimed_at: "2026-05-04T00:00:00.000Z",
+      lease_expires_at: "2026-05-04T00:01:30.000Z",
+      owned_files: ["scripts/pinballwake-coding-room.mjs"],
+      status: "claimed",
+    });
+  });
+
+  it("does not let two runners claim the same queued job", () => {
+    const job = createCodingRoomJob({
+      jobId: "coding-room:test:duplicate-claim",
+      worker: "forge",
+      chip: "claim once",
+      files: ["scripts/pinballwake-coding-room.mjs"],
+    });
+    const first = claimCodingRoomLedgerJob({
+      ledger: createCodingRoomJobLedger({ jobs: [job] }),
+      jobId: job.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+    });
+    const second = claimCodingRoomLedgerJob({
+      ledger: first.ledger,
+      jobId: job.job_id,
+      runner: { ...forgeRunner, id: "plex-builder" },
+      now: "2026-05-04T00:00:10.000Z",
+    });
+
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, false);
+    assert.equal(second.reason, "job_not_queued");
+  });
+
+  it("blocks ledger claims when another active job owns the same file", () => {
+    const active = createCodingRoomJob({
+      jobId: "coding-room:test:active",
+      status: "building",
+      worker: "forge",
+      chip: "already building",
+      files: ["api/fishbowl-watcher.ts"],
+    });
+    const waiting = createCodingRoomJob({
+      jobId: "coding-room:test:waiting",
+      worker: "plex-builder",
+      chip: "same file",
+      files: ["api/fishbowl-watcher.ts"],
+    });
+
+    const result = claimCodingRoomLedgerJob({
+      ledger: createCodingRoomJobLedger({ jobs: [active, waiting] }),
+      jobId: waiting.job_id,
+      runner: forgeRunner,
+      now: "2026-05-04T00:00:00.000Z",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "owned_file_overlap");
+    assert.equal(result.file, "api/fishbowl-watcher.ts");
+  });
+
+  it("reclaims expired runner leases so jobs can be picked up again", () => {
+    const claimed = claimCodingRoomJob({
+      runner: forgeRunner,
+      job: createCodingRoomJob({
+        jobId: "coding-room:test:expired",
+        worker: "forge",
+        chip: "lease expires",
+        files: ["scripts/pinballwake-coding-room.mjs"],
+      }),
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 60,
+    }).job;
+
+    const result = reclaimExpiredCodingRoomJobs({
+      ledger: createCodingRoomJobLedger({ jobs: [claimed] }),
+      now: "2026-05-04T00:01:01.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reclaimed, 1);
+    assert.equal(result.ledger.jobs[0].status, "queued");
+    assert.equal(result.ledger.jobs[0].claimed_by, null);
+    assert.equal(result.ledger.jobs[0].previous_claims[0].runner_id, "forge");
+    assert.equal(result.ledger.jobs[0].previous_claims[0].reason, "lease_expired");
+  });
+
+  it("round-trips job ledgers through JSON and disk", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coding-room-ledger-"));
+    const filePath = join(dir, "ledger.json");
+    try {
+      const ledger = createCodingRoomJobLedger({
+        jobs: [
+          createCodingRoomJob({
+            jobId: "coding-room:test:round-trip",
+            worker: "forge",
+            chip: "persist me",
+            files: ["scripts/pinballwake-coding-room.mjs"],
+          }),
+        ],
+        updatedAt: "2026-05-04T00:00:00.000Z",
+      });
+
+      const parsed = parseCodingRoomJobLedger(serializeCodingRoomJobLedger(ledger));
+      assert.equal(parsed.jobs[0].job_id, "coding-room:test:round-trip");
+
+      await writeCodingRoomJobLedger(filePath, ledger);
+      const loaded = await readCodingRoomJobLedger(filePath);
+      assert.equal(loaded.jobs[0].chip, "persist me");
+      assert.equal(listCodingRoomJobs({ ledger: loaded, statuses: "queued", worker: "forge" }).length, 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("rejects proof that changes files outside ownership", () => {
