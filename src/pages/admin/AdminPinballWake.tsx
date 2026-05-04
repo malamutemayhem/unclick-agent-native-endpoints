@@ -5,9 +5,12 @@ import {
   Cpu,
   ExternalLink,
   Gauge,
+  LockKeyhole,
   RadioTower,
   Sparkles,
+  UsersRound,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   PINBALLWAKE_CLOCK_ROUTES,
   summarizePinballWakeClockRoutes,
@@ -20,6 +23,19 @@ import {
   type PinballWakeJobRunner,
   type PinballWakeRunnerReadiness,
 } from "./pinballwakeJobRunners";
+import {
+  activeOrchestrator,
+  LAUNCHPAD_ORCHESTRATORS,
+  LAUNCHPAD_ROOM_COVERAGE,
+  LAUNCHPAD_SEATS,
+  LAUNCHPAD_SETUP_STEPS,
+  summarizeLaunchpadSeats,
+  type LaunchpadRoomCoverage,
+  type LaunchpadSeat,
+  type LaunchpadSeatCapacity,
+  type LaunchpadSeatStatus,
+  type LaunchpadSetupStep,
+} from "./pinballwakeLaunchpad";
 
 const STATUS_STYLES: Record<PinballWakeClockStatus, string> = {
   live: "border-[#61C1C4]/40 bg-[#61C1C4]/10 text-[#61C1C4]",
@@ -38,6 +54,33 @@ const RUNNER_STYLES: Record<PinballWakeRunnerReadiness, string> = {
   offline: "border-white/10 bg-white/[0.02] text-white/35",
 };
 
+const SEAT_STATUS_STYLES: Record<LaunchpadSeatStatus, string> = {
+  available: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300",
+  busy: "border-[#E2B93B]/40 bg-[#E2B93B]/10 text-[#E2B93B]",
+  standby: "border-[#61C1C4]/40 bg-[#61C1C4]/10 text-[#61C1C4]",
+  offline: "border-white/10 bg-white/[0.02] text-white/35",
+};
+
+const CAPACITY_STYLES: Record<LaunchpadSeatCapacity, string> = {
+  fresh: "text-emerald-300",
+  normal: "text-[#61C1C4]",
+  low: "text-[#E2B93B]",
+  exhausted: "text-red-300",
+  unknown: "text-white/45",
+};
+
+const ROOM_STYLES: Record<LaunchpadRoomCoverage["status"], string> = {
+  covered: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+  thin: "border-[#E2B93B]/40 bg-[#E2B93B]/10 text-[#E2B93B]",
+  missing: "border-red-400/30 bg-red-400/10 text-red-300",
+};
+
+const SETUP_STYLES: Record<LaunchpadSetupStep["status"], string> = {
+  done: "text-emerald-300",
+  next: "text-[#E2B93B]",
+  watch: "text-[#61C1C4]",
+};
+
 function StatusBadge({ status }: { status: PinballWakeClockStatus }) {
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${STATUS_STYLES[status]}`}>
@@ -50,6 +93,14 @@ function RunnerBadge({ readiness }: { readiness: PinballWakeRunnerReadiness }) {
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${RUNNER_STYLES[readiness]}`}>
       {readiness.replaceAll("_", " ")}
+    </span>
+  );
+}
+
+function SmallBadge({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${className}`}>
+      {children}
     </span>
   );
 }
@@ -154,9 +205,70 @@ function RunnerRow({ runner }: { runner: PinballWakeJobRunner }) {
   );
 }
 
+function SeatRow({ seat }: { seat: LaunchpadSeat }) {
+  return (
+    <article className="rounded-lg border border-white/[0.06] bg-[#111111] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold text-white">{seat.name}</h3>
+            <SmallBadge className={SEAT_STATUS_STYLES[seat.status]}>{seat.status}</SmallBadge>
+          </div>
+          <p className="mt-1 text-xs text-white/50">
+            {seat.provider} · {seat.machine} · {seat.app}
+          </p>
+        </div>
+        <div className="text-right text-xs">
+          <p className={`font-semibold uppercase ${CAPACITY_STYLES[seat.capacity]}`}>{seat.capacity}</p>
+          <p className="mt-1 text-white/40">{seat.currentJobs} active jobs</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 text-xs md:grid-cols-2">
+        <div>
+          <p className="font-medium uppercase text-white/35">Capabilities</p>
+          <p className="mt-1 text-white/65">{seat.capabilities.join(", ")}</p>
+        </div>
+        <div>
+          <p className="font-medium uppercase text-white/35">Delivery</p>
+          <p className="mt-1 text-white/65">{seat.delivery.join(", ")}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RoomCoverageRow({ room }: { room: LaunchpadRoomCoverage }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+      <div>
+        <p className="text-sm font-medium text-white">{room.room}</p>
+        <p className="mt-0.5 text-xs text-white/45">
+          {room.primarySeat ? `Primary: ${room.primarySeat}` : "No primary seat"}
+          {room.backupSeats.length ? ` · Backup: ${room.backupSeats.join(", ")}` : ""}
+        </p>
+      </div>
+      <SmallBadge className={ROOM_STYLES[room.status]}>{room.status}</SmallBadge>
+    </div>
+  );
+}
+
+function SetupStepRow({ step }: { step: LaunchpadSetupStep }) {
+  return (
+    <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-white">{step.label}</p>
+        <span className={`text-xs font-semibold uppercase ${SETUP_STYLES[step.status]}`}>{step.status}</span>
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-white/50">{step.detail}</p>
+    </div>
+  );
+}
+
 export default function AdminPinballWake() {
   const summary = summarizePinballWakeClockRoutes();
   const runnerSummary = summarizePinballWakeJobRunners();
+  const launchpadSummary = summarizeLaunchpadSeats();
+  const orchestrator = activeOrchestrator();
 
   const primaryRoutes = PINBALLWAKE_CLOCK_ROUTES.filter((route) =>
     ["live", "watching", "ready"].includes(route.status),
@@ -194,6 +306,70 @@ export default function AdminPinballWake() {
         <MetricCard icon={Cpu} label="Code Hands" value={runnerSummary.codeHands} />
         <MetricCard icon={Gauge} label="Need Probe" value={runnerSummary.needsProbe} />
       </div>
+
+      <section className="mb-6 border-y border-[#61C1C4]/20 bg-[#061314] py-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <LockKeyhole className="h-4 w-4 text-[#61C1C4]" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">
+                Launchpad Room
+              </h2>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
+              One active orchestrator controls the fleet. Other PCs and chats can stay as standby
+              control surfaces, while ChatGPT and Claude accounts are treated as capacity seats.
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm">
+            <p className="text-xs font-medium uppercase text-white/35">Active Orchestrator</p>
+            <p className="mt-1 font-semibold text-white">{orchestrator?.name ?? "Missing"}</p>
+            <p className="mt-0.5 text-xs text-white/45">{orchestrator?.lease ?? "No active lease"}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard icon={UsersRound} label="Worker Seats" value={launchpadSummary.total} />
+          <MetricCard icon={CheckCircle2} label="Available" value={launchpadSummary.available} />
+          <MetricCard icon={Cpu} label="Code Seats" value={launchpadSummary.codeSeats} />
+          <MetricCard icon={Gauge} label="Standby Orchestrators" value={LAUNCHPAD_ORCHESTRATORS.length - 1} />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/45">
+              Seats
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {LAUNCHPAD_SEATS.map((seat) => (
+                <SeatRow key={seat.id} seat={seat} />
+              ))}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/45">
+                Room Coverage
+              </h3>
+              <div className="space-y-2">
+                {LAUNCHPAD_ROOM_COVERAGE.map((room) => (
+                  <RoomCoverageRow key={room.room} room={room} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/45">
+                Setup Steps
+              </h3>
+              <div className="space-y-2">
+                {LAUNCHPAD_SETUP_STEPS.map((step) => (
+                  <SetupStepRow key={step.id} step={step} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="mb-6 rounded-lg border border-[#E2B93B]/25 bg-[#E2B93B]/[0.06] p-4">
         <div className="flex items-start gap-3">
