@@ -25,6 +25,7 @@ const AUTHORITY_RANK = {
 };
 
 const TRUSTED_REVIEW_AUTHORITIES = new Set(["lane", "room", "master", "system"]);
+const COMMAND_AUTHORITIES = new Set(["master", "system"]);
 
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -96,6 +97,8 @@ function normalizeAuthority(value = "observer") {
 function normalizePayload(payload = {}) {
   return {
     ...payload,
+    action: payload.action ? normalize(payload.action) : undefined,
+    enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
     verdict: payload.verdict ? normalize(payload.verdict).toUpperCase() : undefined,
     reviewer: payload.reviewer ? normalize(payload.reviewer) : undefined,
     summary: payload.summary ? compactText(payload.summary, 900) : undefined,
@@ -140,6 +143,27 @@ function eventTrust(event = {}) {
     }
     if (authority === "lane" && actor.role && actor.role !== reviewer) {
       return { trusted: false, reason: "lane_actor_reviewer_mismatch", authority };
+    }
+  }
+
+  if (event.kind === "approval") {
+    if (!payload.action) {
+      return { trusted: false, reason: "missing_action", authority };
+    }
+    if (!["APPROVED", "DENIED"].includes(payload.verdict)) {
+      return { trusted: false, reason: "invalid_approval_verdict", authority };
+    }
+    if (!COMMAND_AUTHORITIES.has(authority)) {
+      return { trusted: false, reason: "untrusted_command_authority", authority };
+    }
+  }
+
+  if (event.kind === "kill_switch") {
+    if (typeof payload.enabled !== "boolean") {
+      return { trusted: false, reason: "missing_kill_switch_state", authority };
+    }
+    if (!COMMAND_AUTHORITIES.has(authority)) {
+      return { trusted: false, reason: "untrusted_kill_switch_authority", authority };
     }
   }
 
@@ -278,6 +302,79 @@ export function summarizeEventLedgerScope({
   };
 }
 
+function latestTrustedEvent(events = [], predicate = () => true) {
+  return safeList(events)
+    .filter((event) => event.trust?.trusted)
+    .filter(predicate)
+    .reduce((latest, event) => (latest ? latestEvent(latest, event) : event), null);
+}
+
+export function summarizeCommandControlScope({
+  ledger,
+  scope,
+  action = "execute",
+  requireApproval = true,
+} = {}) {
+  const wanted = scopeKey(normalizeScope(scope || {}));
+  const normalizedAction = normalize(action || "execute");
+  const events = safeList(ledger?.events).filter((event) => scopeKey(event.scope) === wanted);
+  const latestKillSwitch = latestTrustedEvent(events, (event) => event.kind === "kill_switch");
+  const latestApproval = latestTrustedEvent(
+    events,
+    (event) => event.kind === "approval" && event.payload?.action === normalizedAction,
+  );
+
+  if (latestKillSwitch?.payload?.enabled === true) {
+    return {
+      ok: false,
+      action: "event_ledger_room",
+      result: "blocked",
+      reason: "kill_switch_enabled",
+      scope: normalizeScope(scope || {}),
+      requested_action: normalizedAction,
+      latest_kill_switch: latestKillSwitch,
+      latest_approval: latestApproval,
+    };
+  }
+
+  if (latestApproval?.payload?.verdict === "DENIED") {
+    return {
+      ok: false,
+      action: "event_ledger_room",
+      result: "blocked",
+      reason: "approval_denied",
+      scope: normalizeScope(scope || {}),
+      requested_action: normalizedAction,
+      latest_kill_switch: latestKillSwitch,
+      latest_approval: latestApproval,
+    };
+  }
+
+  if (requireApproval && latestApproval?.payload?.verdict !== "APPROVED") {
+    return {
+      ok: false,
+      action: "event_ledger_room",
+      result: "blocked",
+      reason: "missing_command_approval",
+      scope: normalizeScope(scope || {}),
+      requested_action: normalizedAction,
+      latest_kill_switch: latestKillSwitch,
+      latest_approval: latestApproval,
+    };
+  }
+
+  return {
+    ok: true,
+    action: "event_ledger_room",
+    result: "ready",
+    reason: "command_control_clear",
+    scope: normalizeScope(scope || {}),
+    requested_action: normalizedAction,
+    latest_kill_switch: latestKillSwitch,
+    latest_approval: latestApproval,
+  };
+}
+
 export function createTrustedReviewAckEvent({
   prNumber,
   reviewer,
@@ -346,7 +443,15 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
           requiredReviewers: input.requiredReviewers,
         })
         : null;
-      return { ok: validation.ok, action: "event_ledger_room", result: validation.result, ledger: withEvents, validation, summary };
+      const command_control = input.commandControl
+        ? summarizeCommandControlScope({
+          ledger: withEvents,
+          scope: input.commandControl.scope || input.scope,
+          action: input.commandControl.action,
+          requireApproval: input.commandControl.requireApproval,
+        })
+        : null;
+      return { ok: validation.ok, action: "event_ledger_room", result: validation.result, ledger: withEvents, validation, summary, command_control };
     })
     .then((result) => {
       console.log(JSON.stringify(result, null, 2));

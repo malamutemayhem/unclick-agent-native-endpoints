@@ -9,6 +9,7 @@ import {
   createEventLedger,
   createTrustedReviewAckEvent,
   readEventLedger,
+  summarizeCommandControlScope,
   summarizeEventLedgerScope,
   validateEventLedger,
   writeEventLedger,
@@ -34,6 +35,43 @@ function reviewAck({ reviewer, verdict = "PASS", at = "2026-05-05T01:00:00.000Z"
       reviewer,
       verdict,
       summary: `${reviewer} ${verdict}`,
+    },
+  };
+}
+
+function commandApproval({
+  action = "merge",
+  verdict = "APPROVED",
+  authority = "master",
+  actorRole = "master",
+  at = "2026-05-05T01:00:00.000Z",
+} = {}) {
+  return {
+    kind: "approval",
+    scope: { type: "pr", id: 532 },
+    actor: { id: actorRole, role: actorRole },
+    authority,
+    occurred_at: at,
+    source: "master_decision",
+    payload: {
+      action,
+      verdict,
+      summary: `${action} ${verdict}`,
+    },
+  };
+}
+
+function killSwitch({ enabled = true, authority = "master", at = "2026-05-05T01:00:00.000Z" } = {}) {
+  return {
+    kind: "kill_switch",
+    scope: { type: "pr", id: 532 },
+    actor: { id: "master", role: "master" },
+    authority,
+    occurred_at: at,
+    source: "master_control",
+    payload: {
+      enabled,
+      summary: enabled ? "Stop this PR." : "Resume this PR.",
     },
   };
 }
@@ -217,5 +255,64 @@ describe("PinballWake Event Ledger Room", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("blocks command-control actions without master approval", () => {
+    const ledger = createEventLedger();
+
+    const summary = summarizeCommandControlScope({
+      ledger,
+      scope: { type: "pr", id: 532 },
+      action: "merge",
+    });
+
+    assert.equal(summary.ok, false);
+    assert.equal(summary.reason, "missing_command_approval");
+  });
+
+  it("allows command-control actions with trusted master approval", () => {
+    let ledger = createEventLedger();
+    ledger = append(ledger, commandApproval({ action: "merge" }));
+
+    const summary = summarizeCommandControlScope({
+      ledger,
+      scope: { type: "pr", id: 532 },
+      action: "merge",
+    });
+
+    assert.equal(summary.ok, true);
+    assert.equal(summary.result, "ready");
+    assert.equal(summary.latest_approval.payload.verdict, "APPROVED");
+  });
+
+  it("does not trust lane approval for command-control actions", () => {
+    let ledger = createEventLedger();
+    ledger = append(ledger, commandApproval({ action: "merge", authority: "lane", actorRole: "forge" }));
+
+    const event = ledger.events[0];
+    const summary = summarizeCommandControlScope({
+      ledger,
+      scope: { type: "pr", id: 532 },
+      action: "merge",
+    });
+
+    assert.equal(event.trust.trusted, false);
+    assert.equal(event.trust.reason, "untrusted_command_authority");
+    assert.equal(summary.reason, "missing_command_approval");
+  });
+
+  it("blocks command-control actions when trusted kill switch is enabled", () => {
+    let ledger = createEventLedger();
+    ledger = append(ledger, commandApproval({ action: "merge" }));
+    ledger = append(ledger, killSwitch({ enabled: true, at: "2026-05-05T01:05:00.000Z" }));
+
+    const summary = summarizeCommandControlScope({
+      ledger,
+      scope: { type: "pr", id: 532 },
+      action: "merge",
+    });
+
+    assert.equal(summary.ok, false);
+    assert.equal(summary.reason, "kill_switch_enabled");
   });
 });
