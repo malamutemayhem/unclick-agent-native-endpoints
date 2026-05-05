@@ -134,6 +134,35 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function isMissingFinalQcText(text) {
+  return (
+    /\b(final qc|qc ack|qc pass|popcorn|reviewer)\b|🍿/.test(text) &&
+    /\b(missing|needed|needs|waiting|awaiting|only missing|no final|no .*visible)\b/.test(text)
+  );
+}
+
+function isQcWaitOnlyHold(text) {
+  if (!/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) return false;
+  if (!isMissingFinalQcText(text)) return false;
+  const exactHoldClause = text.match(/\bexact hold:\s*([^.!?]{0,180})/)?.[1] || "";
+  const exactHoldIsQcOnly =
+    Boolean(exactHoldClause) &&
+    /\b(?:missing|waiting|awaiting|needs?)\b.{0,80}\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b/.test(
+      exactHoldClause,
+    ) &&
+    !/\b(and|but|however|unresolved|remains|concern|issue|blocker|risk|schema|protected|mismatch|overlap|anti-stomp|dirty|failing|failed|red)\b/.test(
+      exactHoldClause,
+    );
+  const explicitQcOnlyWait =
+    /\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b.{0,80}\b(?:only|sole|solely|just)\b/.test(text) ||
+    /\b(?:only|sole|solely|just)\b.{0,80}\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b/.test(text) ||
+    exactHoldIsQcOnly;
+  if (!explicitQcOnlyWait) return false;
+  return !/\b(exact blocker|proof mismatch|body proof|stale proof|stale pr body|overlap|anti-stomp|dirty branch|not clean against main|targeted proof|focused proof|failing|failed|red|secrets|auth|billing|dns|migration|raw key|human decision|chris-only|needs chris)\b/.test(
+    text,
+  );
+}
+
 function sourceUrl(pr) {
   return pr.html_url || `${serverUrl}/${repository}/pull/${pr.number}`;
 }
@@ -216,13 +245,11 @@ export function latestCommentSignals(comments = []) {
     if (lanePass && /\b(popcorn|qc|reviewer)\b|🍿/.test(text)) {
       lastPopcornPass = index;
     }
-    if (/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) {
+    const qcWaitOnlyHold = isQcWaitOnlyHold(text);
+    if (/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text) && !qcWaitOnlyHold) {
       lastHold = index;
     }
-    if (
-      /\b(final qc|qc ack|qc pass|popcorn|reviewer)\b|🍿/.test(text) &&
-      /\b(missing|needed|needs|waiting|awaiting|only missing|no final|no .*visible)\b/.test(text)
-    ) {
+    if (isMissingFinalQcText(text)) {
       lastMissingFinalQcAck = index;
     }
     if (/\b(overlap|anti-stomp|supersede|supersedes|rebase\/close|close one lane|same files)\b/.test(text)) {

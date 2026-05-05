@@ -93,6 +93,64 @@ describe("QueuePush PR classifier", () => {
     assert.equal(result.state, "blocked_chris_only");
   });
 
+  it("treats HOLDs that only wait on Popcorn as missing final QC routing", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body:
+            "Forge HOLD on QueuePush owner-decision packet. Exact HOLD: missing 🍿 Popcorn QC PASS on latest head. No code changes and no merge/lift by Forge.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_final_qc_ack");
+  });
+
+  it("keeps missing Popcorn plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "HOLD: missing Popcorn QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("keeps exact HOLD missing Popcorn plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "Exact HOLD: missing Popcorn QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
   it("keeps overlap blockers ahead of missing final QC routing", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 537, draft: true, title: "docs(autopilot): add context boot packet" }),
