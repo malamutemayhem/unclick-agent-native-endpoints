@@ -166,6 +166,27 @@ describe("QueuePush PR classifier", () => {
     assert.equal(result.state, "blocked_chris_only");
   });
 
+  for (const body of [
+    "BLOCKER: blocker fix did not work; unsafe global clear remains.",
+    "HOLD: blocker fix still clears unrelated Gatekeeper HOLD.",
+    "Gatekeeper BLOCKER: blocker-fix detector is still unsafe.",
+  ]) {
+    it(`keeps explicit active blocker text even when it mentions a fix: ${body}`, () => {
+      const result = classifyPullRequest({
+        pr: pr({ number: 546, draft: false, title: "fix(autopilot): retry stale queue packets" }),
+        files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+        comments: [
+          { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-05T13:59:31Z" },
+          { body, created_at: "2026-05-05T14:21:04Z" },
+        ],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      });
+
+      assert.equal(result.state, "blocked_chris_only");
+    });
+  }
+
   it("treats HOLDs that only wait on Popcorn as missing final QC routing", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),

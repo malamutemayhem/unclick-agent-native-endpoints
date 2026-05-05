@@ -171,7 +171,14 @@ function isAckRequestText(text) {
   );
 }
 
+function isExplicitActiveBlockerText(text) {
+  return /(?:^|\n)\s*(?:[-*]\s*)?(?:(?:gatekeeper|forge|popcorn|reviewer|safety checker|release safety|builder|qc)\s+|[🛡️🛠️🍿]\s*)?(?:blocker|hold)\s*:/.test(
+    text,
+  );
+}
+
 function isBlockerResolutionText(text) {
+  if (isExplicitActiveBlockerText(text)) return false;
   return (
     /\b(?:blocker|hold)\b.{0,80}\b(?:fix|fixed|resolved|cleared|closed)\b/.test(text) ||
     /\b(?:fix|fixed|resolved|cleared|closed)\b.{0,80}\b(?:blocker|hold)\b/.test(text)
