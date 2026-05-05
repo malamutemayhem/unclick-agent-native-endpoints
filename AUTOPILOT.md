@@ -15,6 +15,28 @@ The goal is simple: keep the fleet moving while protecting secrets, security, bi
 - Run `/review` before opening PRs that change code, config, docs policy, or user-facing behavior.
 - Do not start new product lanes while an urgent foundation chip is blocked.
 
+## Command And Control Doctrine
+
+Autopilot can delegate work, but it cannot delegate responsibility to a black box. Any room or worker that can trigger workflows, call tools, change data, modify code, publish, merge, or roll back must leave a control trail clear enough for a human or safety room to answer five questions:
+
+- Who requested the action?
+- Which room or worker approved it?
+- What exact scope was approved?
+- What proof or review allowed it to continue?
+- How can it be stopped if the agent drifts?
+
+Core rules:
+
+- Autonomy without observability is a blocker, not a feature.
+- Status chatter is not authority. A PASS, approval, proof, or blocker must come from a trusted lane, room, master, or system event.
+- High-impact actions need explicit command authority before execution. Examples: merge, publish, rollback, destructive cleanup, secrets, auth, billing, DNS, migrations, or production data changes.
+- Every action that crosses a safety boundary must be reconstructable from an event ledger or audit trail, including actor, authority, scope, timestamp, source, and result.
+- Kill switches must be checked before high-impact execution. If the kill switch state is unclear, choose the safest interpretation and stop.
+- Human-readable prompts are allowed, but the system must convert them into structured scope, ownership, authority, and proof before acting.
+- Continuous Improvement owns repeated resistance. If the same manual nudge, missing ACK, stale proof, or routing confusion recurs, create a front-of-line improvement job instead of normalizing the friction.
+
+In short: agents may move the work, but UnClick must keep the chain of command visible.
+
 ## Autonomy Tiers
 
 | Tier | Meaning | Worker action |
