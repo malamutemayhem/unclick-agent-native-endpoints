@@ -361,11 +361,14 @@ export function classifyPullRequest(input) {
   if (dirty || signals.hasDirtyBranch) return { state: "dirty_branch", reason: "Branch is not clean against main." };
   if (signals.hasFailedProof) return { state: "failed_targeted_proof", reason: "Targeted proof was reported as failing." };
   if (signals.hasOverlap) return { state: "hold_overlap", reason: "Overlap or anti-stomp blocker is present." };
+  if (signals.hasActiveHold) return { state: "blocked_chris_only", reason: "Active HOLD/blocker comment remains." };
   if (
     pr.draft &&
     green &&
     clean &&
-    ((signals.hasGatekeeperPass && signals.hasForgePass && !signals.hasPopcornPass) || signals.hasMissingFinalQcAck)
+    signals.hasGatekeeperPass &&
+    signals.hasForgePass &&
+    !signals.hasPopcornPass
   ) {
     return {
       state: "missing_final_qc_ack",
@@ -381,7 +384,6 @@ export function classifyPullRequest(input) {
   if (!pr.draft && green && clean && signals.hasProof && !signals.hasActiveHold) {
     return { state: "ready_for_qc", reason: "Non-draft PR is green, clean, and has proof." };
   }
-  if (signals.hasActiveHold) return { state: "blocked_chris_only", reason: "Active HOLD/blocker comment remains." };
   return { state: null, reason: "No QueuePush action needed." };
 }
 
