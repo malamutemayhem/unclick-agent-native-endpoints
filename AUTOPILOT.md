@@ -74,6 +74,34 @@ Selection defaults:
 
 The gate may run in advisory mode while Pass-family coverage is still catching up. Enforcement should only turn on after the relevant Pass has a stable runner, clear receipt shape, and enough dogfood proof to avoid noisy false blockers.
 
+## Continuous QC Project
+
+Continuous QC is now a standing Autopilot project, not a one-off cleanup. The goal is to keep running UnClick through its own proof system until the product feels coherent, visible, and trustworthy across public pages, admin pages, worker setup, Autopilot, XPass, Memory, Apps, Passport, Ledger, and Boardroom.
+
+Operating shape:
+
+- XPass Gate runs first in advisory mode and names the checks a change should receive.
+- Missing Passes are recorded as missing or skipped, never treated as PASS.
+- Continuous Improvement owns repeated QC friction and turns it into front-of-line build chips.
+- Dogfood Room owns realistic user journeys, not just isolated component checks.
+- Ledger should receive receipts for meaningful QC outcomes as the receipt surface matures.
+
+Priority order:
+
+1. Finish UXPass enough to support visual/site sweeps, screenshot evidence, console errors, obvious layout problems, navigation confusion, and mobile/desktop checks.
+2. Finish QualityPass enough to catch messy AI-build risks, weak abstractions, brittle tests, and obvious maintainability problems.
+3. Finish CopyPass enough to catch unclear product wording, old names, mixed metaphors, and overcomplicated user-facing copy.
+4. Harden SecurityPass for auth, keys, sessions, redaction, permissions, browser extension, OAuth, API keys, and Password Bridge surfaces.
+5. Add SEOPass and LegalPass when public, pricing, docs, legal, privacy, or compliance surfaces change.
+
+Enforcement path:
+
+- Phase 1: advisory only. XPass says what should run and what is missing.
+- Phase 2: enforce completed Passes only. A missing incomplete Pass is a recorded skip, not a blocker.
+- Phase 3: enforce all relevant completed Passes before merge for Autopilot, admin UI, public pages, tools/connectors, and security-sensitive surfaces.
+
+This project should bias toward fixing real user-visible confusion over inventing new dashboards. When in doubt, dogfood the current product, write down the friction, and ship the smallest improvement that removes it.
+
 ## Autonomy Tiers
 
 | Tier | Meaning | Worker action |
