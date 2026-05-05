@@ -44,8 +44,20 @@ import {
   HeartPulse,
   ShieldCheck,
   ScrollText,
-  Fish,
+  MessagesSquare,
   BellRing,
+  LayoutDashboard,
+  AppWindow,
+  FolderKanban,
+  Plane,
+  ListTodo,
+  ClipboardCheck,
+  ReceiptText,
+  CreditCard,
+  LockKeyhole,
+  Tags,
+  FileStack,
+  SlidersHorizontal,
 } from "lucide-react";
 
 function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
@@ -87,6 +99,7 @@ const ADMIN_SUBMENU = [
   { path: "/admin/pinballwake",   label: "PinballWake",           icon: BellRing    },
   { path: "/admin/moderation",    label: "Marketplace Moderation", icon: ShieldCheck },
   { path: "/admin/audit-log",     label: "Audit Log",             icon: ScrollText  },
+  { path: "/admin/brainmap",      label: "Brainmap",              icon: Sparkles    },
 ] as const;
 
 function AdminSubmenu({ onLinkClick }: { onLinkClick?: () => void }) {
@@ -135,12 +148,13 @@ function AdminSubmenu({ onLinkClick }: { onLinkClick?: () => void }) {
 }
 
 const MEMORY_TABS = [
-  { id: "brain-map", label: "Brain Map", icon: Sparkles   },
-  { id: "facts",     label: "Facts",     icon: FileText   },
-  { id: "sessions",  label: "Sessions",  icon: Clock      },
-  { id: "library",   label: "Library",   icon: BookOpen   },
-  { id: "activity",  label: "Activity",  icon: Activity   },
-  { id: "identity",  label: "Identity",  icon: Fingerprint },
+  { id: "saved-facts",    label: "Saved Facts",    icon: FileText   },
+  { id: "library",        label: "Library",        icon: BookOpen   },
+  { id: "chats",          label: "Chats",          icon: MessagesSquare },
+  { id: "files-notes",    label: "Files & Notes",  icon: FileStack  },
+  { id: "project-briefs", label: "Project Briefs", icon: FolderKanban },
+  { id: "preferences",    label: "Preferences",    icon: SlidersHorizontal },
+  { id: "recall-check",   label: "Recall Check",   icon: Fingerprint },
 ] as const;
 
 function MemoryNavItem({ onClick }: { onClick?: () => void }) {
@@ -243,19 +257,22 @@ export default function AdminShell() {
   function SidebarNav({ onLinkClick }: { onLinkClick?: () => void }) {
     return (
       <>
+        <SurfaceLink path="/admin/dashboard" label="Dashboard"               icon={LayoutDashboard} onClick={onLinkClick} />
         <SurfaceLink path="/admin/you"      label="You"                      icon={User}    onClick={onLinkClick} />
         <MemoryNavItem onClick={onLinkClick} />
-        <SurfaceLink path="/admin/fishbowl" label="Fishbowl"                 icon={Fish}     onClick={onLinkClick} />
-        <SurfaceLink path="/admin/keychain" label="Connections" icon={KeyRound} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/tools"    label="Tools"                    icon={Wrench}   onClick={onLinkClick} />
-        <SurfaceLink path="/admin/activity" label="Activity"                 icon={Activity} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/agents"       label="Agents"        icon={Bot}          onClick={onLinkClick} />
-        <SurfaceLink path="/admin/crews"        label="Crews"         icon={UsersIcon}    onClick={onLinkClick} />
-        <SurfaceLink path="/admin/testpass"     label="TestPass"      icon={FlaskConical} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/copypass"     label="CopyPass"      icon={PenSquare}    onClick={onLinkClick} />
+        <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/projects" label="Projects"                 icon={FolderKanban} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/autopilot" label="Autopilot"               icon={Plane} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/agents"    label="Workers"                 icon={Bot} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/fishbowl"  label="Boardroom"               icon={MessagesSquare} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/todos"     label="To-Do List"              icon={ListTodo} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/checks"    label="XPass / Checks"          icon={ClipboardCheck} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/ledger"    label="Ledger"                  icon={ReceiptText} onClick={onLinkClick} />
         <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
         {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
         <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
+        <SurfaceLink path="/admin/billing"  label="Billing"                  icon={CreditCard} onClick={onLinkClick} />
         {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}
       </>
     );

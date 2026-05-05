@@ -45,6 +45,7 @@ import RequireAuth from "./components/RequireAuth.tsx";
 import RequireAdmin from "./components/RequireAdmin.tsx";
 import BetaBanner from "./components/BetaBanner.tsx";
 import AdminShell from "./pages/admin/AdminShell.tsx";
+import AdminDashboard from "./pages/admin/AdminDashboard.tsx";
 import AdminYou from "./pages/admin/AdminYou.tsx";
 import AdminMemory from "./pages/admin/AdminMemory.tsx";
 import AdminKeychain from "./pages/admin/AdminKeychain.tsx";
@@ -71,6 +72,16 @@ import AdminSystemHealth from "./pages/admin/AdminSystemHealth.tsx";
 import AdminPinballWake from "./pages/admin/AdminPinballWake.tsx";
 import AdminModeration from "./pages/admin/AdminModeration.tsx";
 import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
+import BrainMap from "./pages/admin/BrainMap.tsx";
+import {
+  AdminAutopilot,
+  AdminBilling,
+  AdminChecks,
+  AdminLedger,
+  AdminProjects,
+  AdminTodoList,
+  AdminWorkers,
+} from "./pages/admin/AdminEcosystemPages.tsx";
 import SignalsCatalog from "./pages/admin/signals/SignalsCatalog.tsx";
 import SignalsSettings from "./pages/admin/signals/SignalsSettings.tsx";
 import Fishbowl from "./pages/admin/Fishbowl.tsx";
@@ -141,14 +152,22 @@ const App = () => (
               </RequireAuth>
             }
           >
-            <Route index element={<Navigate to="/admin/you" replace />} />
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="you" element={<AdminYou />} />
             <Route path="memory" element={<AdminMemory />} />
             <Route path="keychain" element={<AdminKeychain />} />
             <Route path="tools" element={<AdminTools />} />
             <Route path="activity" element={<AdminActivity />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="projects" element={<AdminProjects />} />
+            <Route path="autopilot" element={<AdminAutopilot />} />
             <Route path="agents"     element={<AdminAgentsPage />} />
+            <Route path="workers" element={<AdminWorkers />} />
+            <Route path="todos" element={<AdminTodoList />} />
+            <Route path="checks" element={<AdminChecks />} />
+            <Route path="ledger" element={<AdminLedger />} />
+            <Route path="billing" element={<AdminBilling />} />
             <Route path="testpass"              element={<TestPassCatalog />} />
             <Route path="testpass/new"          element={<NewRunWizard />} />
             <Route path="testpass/runs/:id"     element={<RunDetail />} />
@@ -171,9 +190,11 @@ const App = () => (
             <Route path="pinballwake"    element={<RequireAdmin><AdminPinballWake /></RequireAdmin>} />
             <Route path="moderation"     element={<RequireAdmin><AdminModeration /></RequireAdmin>} />
             <Route path="audit-log"      element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
+            <Route path="brainmap"       element={<RequireAdmin><BrainMap /></RequireAdmin>} />
             <Route path="signals"          element={<SignalsCatalog />} />
             <Route path="signals/settings" element={<SignalsSettings />} />
             <Route path="fishbowl"         element={<Fishbowl />} />
+            <Route path="boardroom"        element={<Navigate to="/admin/fishbowl" replace />} />
           </Route>
           {/* Phase 2 auth surface */}
           <Route path="/login" element={<LoginPage />} />

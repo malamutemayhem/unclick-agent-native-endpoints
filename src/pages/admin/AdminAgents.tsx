@@ -258,8 +258,8 @@ export default function AdminAgentsPage() {
 
   return (
     <AdminShell
-      title="Your Agents"
-      subtitle="Create AI agents with specific roles, tools, and personalities. Each agent remembers what you tell it and only uses the tools you allow."
+      title="Workers"
+      subtitle="Create AI workers with clear roles, tools, and memory access. Public names stay simple while the internal automation can keep its stable codenames."
       agentCount={agents.length}
     >
       {!hasApiKey && (
@@ -282,8 +282,8 @@ export default function AdminAgentsPage() {
         <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5 text-sm text-body">
           <p className="font-medium text-heading">You haven't created any agents yet.</p>
           <p className="mt-1 text-xs">
-            UnClick is using default settings. All tools and all memory are available to every AI
-            session. Create an agent to customise what your AI can do.
+            UnClick is using default settings. All apps and all memory are available to every AI
+            session. Create a worker to customise what your AI can do.
           </p>
         </div>
       )}
@@ -300,7 +300,7 @@ export default function AdminAgentsPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+          {agents.length} {agents.length === 1 ? "worker" : "workers"}
         </p>
         <button
           type="button"
@@ -308,12 +308,12 @@ export default function AdminAgentsPage() {
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
-          New Agent
+          New Worker
         </button>
       </div>
 
       {loading && hasApiKey ? (
-        <p className="text-xs text-muted-foreground">Loading agents...</p>
+        <p className="text-xs text-muted-foreground">Loading workers...</p>
       ) : (
         <ul className="space-y-3">
           {agents.map((agent) => {
