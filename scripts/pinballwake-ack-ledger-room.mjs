@@ -42,7 +42,7 @@ function recordText(record = {}) {
     record.worker,
     record.reviewer,
     record.lane,
-    record.author,
+    typeof record.author === "string" ? record.author : record.author?.login,
   ]
     .filter(Boolean)
     .join("\n");
@@ -99,12 +99,6 @@ function reviewerMentioned(text, reviewer) {
   return pattern.test(text);
 }
 
-function isGlobalFullPass(text) {
-  const normalized = normalize(text);
-  if (!/(full ack|full-pass|full pass|pass chain|ack trail|all three)/i.test(normalized)) return false;
-  return Object.keys(REVIEWERS).every((reviewer) => reviewerMentioned(text, reviewer));
-}
-
 function isClearPhrase(text, reviewer) {
   const alias = aliasPattern(reviewer);
   const clearWords = "(?:hold cleared|hold-clear|blocker fixed|blocker is fixed|no [\\w\\s-]{0,50}blocker remains|no remaining blocker|pass stands|ack:\\s*pass|\\bpass\\b)";
@@ -129,7 +123,7 @@ function reviewerVerdict(text, reviewer) {
     return "BLOCKER";
   }
 
-  if (isClearPhrase(text, reviewer) || isGlobalFullPass(text)) {
+  if (isClearPhrase(text, reviewer)) {
     return "PASS";
   }
 
@@ -139,6 +133,39 @@ function reviewerVerdict(text, reviewer) {
 function normalizeReviewer(value = "") {
   const text = normalize(value);
   return Object.keys(REVIEWERS).find((reviewer) => reviewerMentioned(text, reviewer)) || "";
+}
+
+function recordActor(record = {}) {
+  return normalizeReviewer(
+    [
+      record.reviewer,
+      record.worker,
+      record.lane,
+      record.agent_id,
+      record.agentId,
+      typeof record.author === "string" ? record.author : record.author?.login,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+function isMirrorOrStatusText(record = {}, text = "") {
+  const source = normalize(recordSource(record));
+  const value = normalize(text);
+  if (record.trusted_lane_ack === true || record.trustedLaneAck === true) return false;
+  if (/(mirror|summary|status|heartbeat|courier|master|handoff|routed|visible|fishbowl state|full ack trail|pass chain)/.test(value)) {
+    return true;
+  }
+  return ["mirror", "status", "heartbeat", "courier", "master"].some((token) => source.includes(token));
+}
+
+function recordCanClaimReviewer(record = {}, text = "", reviewer = "") {
+  if (record.trusted_lane_ack === true || record.trustedLaneAck === true) return true;
+  const actor = recordActor(record);
+  if (actor && actor === reviewer) return true;
+  if (isMirrorOrStatusText(record, text)) return false;
+  return false;
 }
 
 function explicitRecordVerdict(record = {}) {
@@ -153,12 +180,13 @@ function extractClaims(record = {}, prNumberValue, index = 0) {
   if (!recordMentionsPr(record, prNumberValue)) return [];
 
   const text = recordText(record);
-  const explicitReviewer = normalizeReviewer(record.reviewer || record.worker || record.lane || record.author || "");
+  const explicitReviewer = recordActor(record);
   const explicitVerdict = explicitRecordVerdict(record);
   const reviewers = explicitReviewer ? [explicitReviewer] : Object.keys(REVIEWERS);
   const claims = [];
 
   for (const reviewer of reviewers) {
+    if (!recordCanClaimReviewer(record, text, reviewer)) continue;
     const verdict = explicitVerdict && reviewerMentioned(text || reviewer, reviewer)
       ? explicitVerdict
       : reviewerVerdict(text, reviewer);

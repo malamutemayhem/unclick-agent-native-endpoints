@@ -27,12 +27,12 @@ function pr(input = {}) {
   };
 }
 
-function comment(body, created_at = "2026-05-05T00:00:00.000Z") {
-  return { source: "github_comment", body, created_at };
+function comment(body, created_at = "2026-05-05T00:00:00.000Z", author = "master") {
+  return { source: "github_comment", body, created_at, author };
 }
 
-function fishbowl(message, created_at = "2026-05-05T00:00:00.000Z") {
-  return { source: "fishbowl", message, created_at };
+function fishbowl(message, created_at = "2026-05-05T00:00:00.000Z", author = "master") {
+  return { source: "fishbowl", message, created_at, author };
 }
 
 function proofJob() {
@@ -95,10 +95,10 @@ describe("PinballWake ACK ledger room", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper PASS on #528. No release-safety blocker remains."),
-        comment("ack: PASS\n\n#528 Forge implementation-shape review passes."),
+        comment("Gatekeeper PASS on #528. No release-safety blocker remains.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("ack: PASS\n\n#528 Forge implementation-shape review passes.", "2026-05-05T00:00:00.000Z", "forge"),
       ],
-      fishbowlMessages: [fishbowl("PASS\n🍿\n#528 QC checked latest head.")],
+      fishbowlMessages: [fishbowl("PASS\n🍿\n#528 QC checked latest head.", "2026-05-05T00:00:00.000Z", "popcorn")],
     });
 
     assert.equal(result.ok, true);
@@ -112,9 +112,9 @@ describe("PinballWake ACK ledger room", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper PASS on #528."),
-        comment("Forge PASS on #528."),
-        comment("PASS\n🍿"),
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z", "forge"),
+        comment("PASS\n🍿", "2026-05-05T00:00:00.000Z", "popcorn"),
       ],
     });
 
@@ -126,10 +126,10 @@ describe("PinballWake ACK ledger room", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z"),
-        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z"),
-        comment("Popcorn PASS on #528.", "2026-05-05T00:00:00.000Z"),
-        comment("Popcorn BLOCKER still stands on #528: stale proof.", "2026-05-05T00:10:00.000Z"),
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z", "forge"),
+        comment("Popcorn PASS on #528.", "2026-05-05T00:00:00.000Z", "popcorn"),
+        comment("Popcorn BLOCKER still stands on #528: stale proof.", "2026-05-05T00:10:00.000Z", "popcorn"),
       ],
     });
 
@@ -142,10 +142,10 @@ describe("PinballWake ACK ledger room", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper HOLD on #528: stale proof.", "2026-05-05T00:00:00.000Z"),
-        comment("Gatekeeper HOLD cleared on #528. Safety PASS, no remaining blocker.", "2026-05-05T00:10:00.000Z"),
-        comment("Forge PASS on #528.", "2026-05-05T00:10:00.000Z"),
-        comment("Popcorn PASS on #528.", "2026-05-05T00:10:00.000Z"),
+        comment("Gatekeeper HOLD on #528: stale proof.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Gatekeeper HOLD cleared on #528. Safety PASS, no remaining blocker.", "2026-05-05T00:10:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:10:00.000Z", "forge"),
+        comment("Popcorn PASS on #528.", "2026-05-05T00:10:00.000Z", "popcorn"),
       ],
     });
 
@@ -153,7 +153,7 @@ describe("PinballWake ACK ledger room", () => {
     assert.equal(result.latest_by_reviewer.gatekeeper.verdict, "PASS");
   });
 
-  it("understands grouped Claude/Fishbowl heartbeat language when PR-scoped", () => {
+  it("does not trust grouped Claude/Fishbowl heartbeat language as lane ACK", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr({ number: 530 }),
       fishbowlMessages: [
@@ -163,16 +163,17 @@ describe("PinballWake ACK ledger room", () => {
       ],
     });
 
-    assert.equal(result.result, "full_pass");
-    assert.equal(result.full_ack_set, true);
+    assert.equal(result.result, "missing_ack");
+    assert.equal(result.full_ack_set, false);
+    assert.deepEqual(result.missing_reviewers, ["gatekeeper", "popcorn", "forge"]);
   });
 
   it("does not turn waiting-only language into a fake PASS", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper PASS visible on #528."),
-        comment("Forge PASS visible on #528."),
+        comment("Gatekeeper PASS visible on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS visible on #528.", "2026-05-05T00:00:00.000Z", "forge"),
         comment("#528 is waiting only on Popcorn QC."),
       ],
     });
@@ -185,9 +186,9 @@ describe("PinballWake ACK ledger room", () => {
     const ackLedger = evaluateAckLedgerRoom({
       pr: pr(),
       comments: [
-        comment("Gatekeeper PASS on #528."),
-        comment("Forge PASS on #528."),
-        comment("Popcorn PASS on #528."),
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z", "forge"),
+        comment("Popcorn PASS on #528.", "2026-05-05T00:00:00.000Z", "popcorn"),
       ],
     });
 
@@ -201,5 +202,39 @@ describe("PinballWake ACK ledger room", () => {
     assert.equal(mergeRoom.ok, true);
     assert.equal(mergeRoom.result, "ready_to_lift_and_merge");
     assert.equal(mergeRoom.fallback_used, true);
+  });
+
+  it("does not let a newer mirror summary supersede an older lane blocker", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      comments: [
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge BLOCKER still stands on #528: stale proof mismatch.", "2026-05-05T00:01:00.000Z", "forge"),
+        comment("Popcorn PASS on #528.", "2026-05-05T00:00:00.000Z", "popcorn"),
+      ],
+      fishbowlMessages: [
+        fishbowl(
+          "Status mirror: #528 has Gatekeeper PASS, Popcorn PASS, Forge PASS and is ready.",
+          "2026-05-05T00:10:00.000Z",
+          "courier",
+        ),
+      ],
+    });
+
+    assert.equal(result.result, "blocked");
+    assert.equal(result.blockers[0].reviewer, "forge");
+  });
+
+  it("accepts explicitly trusted structured lane ACK records", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      reviews: [
+        { pr_number: 528, reviewer: "gatekeeper", verdict: "PASS", trusted_lane_ack: true },
+        { pr_number: 528, reviewer: "popcorn", verdict: "PASS", trusted_lane_ack: true },
+        { pr_number: 528, reviewer: "forge", verdict: "PASS", trusted_lane_ack: true },
+      ],
+    });
+
+    assert.equal(result.result, "full_pass");
   });
 });
