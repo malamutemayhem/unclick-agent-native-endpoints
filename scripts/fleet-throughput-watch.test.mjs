@@ -48,6 +48,142 @@ describe("QueuePush PR classifier", () => {
     assert.equal(result.state, "draft_green_needs_owner_lift");
   });
 
+  it("routes draft PRs with Safety and Builder PASS but missing QC to final QC", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Status refreshed. No final review yet.", created_at: "2026-05-03T01:20:00Z" },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_final_qc_ack");
+  });
+
+  it("does not route to final QC from request text alone", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+      comments: [{ body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" }],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("keeps later generic HOLDs ahead of missing final QC routing", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" },
+        { body: "HOLD: proof mismatch remains.", created_at: "2026-05-03T01:30:00Z" },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("treats HOLDs that only wait on Popcorn as missing final QC routing", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body:
+            "Forge HOLD on QueuePush owner-decision packet. Exact HOLD: missing 🍿 Popcorn QC PASS on latest head. No code changes and no merge/lift by Forge.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_final_qc_ack");
+  });
+
+  it("keeps missing Popcorn plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "HOLD: missing Popcorn QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("keeps exact HOLD missing Popcorn plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "Exact HOLD: missing Popcorn QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("keeps overlap blockers ahead of missing final QC routing", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 537, draft: true, title: "docs(autopilot): add context boot packet" }),
+      files: [{ filename: "AUTOPILOT.md" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" },
+        { body: "HOLD: overlap with #535 on AUTOPILOT.md.", created_at: "2026-05-03T01:30:00Z" },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "hold_overlap");
+  });
+
+  it("returns draft owner lift after the final QC PASS is visible", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "PASS\n🍿", created_at: "2026-05-03T01:20:00Z" },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
   it("routes overlap and anti-stomp blockers before generic draft lift", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 508, draft: true }),
@@ -174,6 +310,10 @@ describe("QueuePush routing and packets", () => {
     assert.equal(routeWorkerForPr(pr({ draft: false }), [], "ready_for_qc"), "🍿");
   });
 
+  it("routes missing final QC ACKs to Popcorn", () => {
+    assert.equal(routeWorkerForPr(pr({ draft: true }), [], "missing_final_qc_ack"), "🍿");
+  });
+
   it("does not treat probe-only runners as unattended code hands", () => {
     const runner = {
       emoji: "🦾",
@@ -242,10 +382,29 @@ describe("QueuePush routing and packets", () => {
 
   it("maps process states to job kinds and code requirements", () => {
     assert.equal(jobKindForState("draft_green_needs_owner_lift"), "owner_decision");
+    assert.equal(jobKindForState("missing_final_qc_ack"), "qc_review");
     assert.equal(jobKindForState("ready_for_qc"), "qc_review");
     assert.equal(jobKindForState("failed_targeted_proof"), "implementation");
     assert.equal(stateRequiresCode("failed_targeted_proof"), true);
+    assert.equal(stateRequiresCode("missing_final_qc_ack"), false);
     assert.equal(stateRequiresCode("draft_green_needs_owner_lift"), false);
+  });
+
+  it("builds compact final QC packets with deterministic id", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 535, title: "feat(autopilot): add Event Ledger Room" }),
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+    });
+
+    assert.equal(packet.worker, "🍿");
+    assert.equal(packet.jobKind, "qc_review");
+    assert.equal(packet.requiresCode, false);
+    assert.match(packet.packetId, /^queuepush:v3:pr-535:missing_final_qc_ack:abcdef1:[a-f0-9]{10}$/);
+    assert.match(packet.text, /DIRECT QC PACKET/);
+    assert.match(packet.text, /worker: 🍿/);
+    assert.match(packet.text, /QC latest head only/);
   });
 
   it("builds compact decision packet text with deterministic id", () => {
