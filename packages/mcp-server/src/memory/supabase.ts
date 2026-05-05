@@ -188,6 +188,8 @@ export class SupabaseBackend implements MemoryBackend {
    * extracted_facts has a separate row count limit.
    */
   private async enforceCaps(kind: "fact" | "general"): Promise<void> {
+    if (this.tenancy.mode !== "managed") return;
+
     const shouldEnforceCaps = shouldEnforceManagedMemoryCaps({
       tenancyMode: this.tenancy.mode,
       tier: process.env.UNCLICK_TIER,
