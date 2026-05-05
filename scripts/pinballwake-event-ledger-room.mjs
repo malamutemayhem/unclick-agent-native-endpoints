@@ -250,6 +250,9 @@ export function validateEventLedger(ledger = {}) {
     if (rebuilt.hash !== event.hash) {
       broken.push({ event_id: event.event_id, reason: "event_hash_mismatch" });
     }
+    if (stableJson(rebuilt.trust) !== stableJson(event.trust || null)) {
+      broken.push({ event_id: event.event_id, reason: "event_trust_mismatch" });
+    }
   }
 
   return {
@@ -265,11 +268,26 @@ function reviewKey(event = {}) {
   return `${scopeKey(event.scope)}:review:${normalize(event.payload?.reviewer)}`;
 }
 
+function verifiedTrust(event = {}) {
+  const rebuilt = createLedgerEvent(event, {
+    previousHash: event.previous_hash || null,
+    sequence: event.sequence,
+  });
+  const hashMatches = rebuilt.hash === event.hash;
+  const trustMatches = stableJson(rebuilt.trust) === stableJson(event.trust || null);
+  return {
+    ...rebuilt.trust,
+    trusted: hashMatches && trustMatches && rebuilt.trust.trusted,
+    hash_matches: hashMatches,
+    trust_matches: trustMatches,
+  };
+}
+
 function latestTrustedReviewAcks(events = []) {
   const latest = {};
   for (const event of safeList(events)) {
     if (event.kind !== "review_ack") continue;
-    if (!event.trust?.trusted) continue;
+    if (!verifiedTrust(event).trusted) continue;
     const key = reviewKey(event);
     latest[key] = latest[key] ? latestEvent(latest[key], event) : event;
   }
@@ -294,7 +312,8 @@ export function summarizeEventLedgerScope({
   const missing_reviewers = safeList(requiredReviewers)
     .map(normalize)
     .filter((reviewer) => latest_by_reviewer[reviewer]?.payload?.verdict !== "PASS");
-  const observer_events = events.filter((event) => !event.trust?.trusted);
+  const trustedEvents = events.filter((event) => verifiedTrust(event).trusted);
+  const observer_events = events.filter((event) => !verifiedTrust(event).trusted);
 
   return {
     ok: blockers.length === 0,
@@ -306,7 +325,7 @@ export function summarizeEventLedgerScope({
         : "full_pass",
     scope: normalizeScope(scope || {}),
     event_count: events.length,
-    trusted_event_count: events.filter((event) => event.trust?.trusted).length,
+    trusted_event_count: trustedEvents.length,
     observer_event_count: observer_events.length,
     latest_by_reviewer,
     blockers,
@@ -317,7 +336,7 @@ export function summarizeEventLedgerScope({
 
 function latestTrustedEvent(events = [], predicate = () => true) {
   return safeList(events)
-    .filter((event) => event.trust?.trusted)
+    .filter((event) => verifiedTrust(event).trusted)
     .filter(predicate)
     .reduce((latest, event) => (latest ? latestEvent(latest, event) : event), null);
 }

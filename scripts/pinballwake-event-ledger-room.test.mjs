@@ -275,6 +275,36 @@ describe("PinballWake Event Ledger Room", () => {
     assert.equal(validation.broken[0].reason, "event_hash_mismatch");
   });
 
+  it("detects stored trust tamper and keeps review summaries untrusted", () => {
+    let ledger = createEventLedger();
+    ledger = append(ledger, reviewAck({
+      reviewer: "forge",
+      authority: "observer",
+      actorId: "courier",
+      actorRole: "courier",
+    }));
+
+    const tampered = JSON.parse(JSON.stringify(ledger));
+    tampered.events[0].trust = {
+      trusted: true,
+      authority: "lane",
+      reason: "trusted",
+    };
+
+    const validation = validateEventLedger(tampered);
+    const summary = summarizeEventLedgerScope({
+      ledger: tampered,
+      scope: { type: "pr", id: 532 },
+      requiredReviewers: ["forge"],
+    });
+
+    assert.equal(validation.ok, false);
+    assert.equal(validation.broken[0].reason, "event_trust_mismatch");
+    assert.equal(summary.result, "missing_ack");
+    assert.equal(summary.trusted_event_count, 0);
+    assert.equal(summary.latest_by_reviewer.forge, undefined);
+  });
+
   it("round-trips ledger files atomically", async () => {
     const dir = await mkdtemp(join(tmpdir(), "pinballwake-event-ledger-"));
     const filePath = join(dir, "ledger.json");
@@ -333,6 +363,29 @@ describe("PinballWake Event Ledger Room", () => {
 
     assert.equal(event.trust.trusted, false);
     assert.equal(event.trust.reason, "untrusted_command_authority");
+    assert.equal(summary.reason, "missing_command_approval");
+  });
+
+  it("does not let stored trust tamper authorize command control", () => {
+    let ledger = createEventLedger();
+    ledger = append(ledger, commandApproval({ action: "merge", authority: "lane", actorRole: "forge" }));
+
+    const tampered = JSON.parse(JSON.stringify(ledger));
+    tampered.events[0].trust = {
+      trusted: true,
+      authority: "master",
+      reason: "trusted",
+    };
+
+    const validation = validateEventLedger(tampered);
+    const summary = summarizeCommandControlScope({
+      ledger: tampered,
+      scope: { type: "pr", id: 532 },
+      action: "merge",
+    });
+
+    assert.equal(validation.ok, false);
+    assert.equal(validation.broken[0].reason, "event_trust_mismatch");
     assert.equal(summary.reason, "missing_command_approval");
   });
 
