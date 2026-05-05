@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   buildQueuePacket,
+  buildPacketsFromInputs,
   checksAreGreen,
   chooseQueuePushRunner,
   classifyPullRequest,
@@ -76,6 +77,40 @@ describe("QueuePush PR classifier", () => {
     assert.equal(result.state, "draft_green_needs_owner_lift");
   });
 
+  it("does not treat PASS/BLOCKER review requests as active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Need:\n🛡️ Gatekeeper: reply PASS/BLOCKER.\n🛠️ Forge: reply PASS/BLOCKER.\n🍿 Popcorn: reply PASS/BLOCKER.\n\nack:\nPASS/BLOCKER",
+          created_at: "2026-05-05T13:26:48Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("does not treat PASS or BLOCKER review requests as active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Need: Gatekeeper reply PASS or BLOCKER. Forge reply PASS or BLOCKER. Popcorn reply PASS or BLOCKER.",
+          created_at: "2026-05-05T13:35:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
   it("keeps later generic HOLDs ahead of missing final QC routing", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
@@ -92,6 +127,69 @@ describe("QueuePush PR classifier", () => {
 
     assert.equal(result.state, "blocked_chris_only");
   });
+
+  it("does not treat blocker-fix updates as new active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Blocker fix pushed. Fixed Forge blocker: PASS or BLOCKER review request wording no longer becomes a fake active blocker.",
+          created_at: "2026-05-05T13:38:22Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("does not let unrelated blocker-fix updates clear an earlier safety HOLD", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Gatekeeper HOLD: unsafe path / proof mismatch remains.",
+          created_at: "2026-05-05T13:35:00Z",
+        },
+        {
+          body: "Blocker fix pushed: fixed Forge PASS-or-BLOCKER classifier issue.",
+          created_at: "2026-05-05T13:38:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  for (const body of [
+    "BLOCKER: blocker fix did not work; unsafe global clear remains.",
+    "HOLD: blocker fix still clears unrelated Gatekeeper HOLD.",
+    "Gatekeeper BLOCKER: blocker-fix detector is still unsafe.",
+    "🛠️ Forge BLOCKER on #546 latest head. Finding: blocker-fix detector is still unsafe and needs focused fix.",
+    "🛡️ Gatekeeper HOLD on #546 latest head. Explicit blocker fix wording can still hide active blockers.",
+    "🛠️ Forge BLOCKER: blocker-fix detector is still unsafe.",
+    "🛡️ Gatekeeper HOLD: blocker-fix detector is still unsafe.",
+  ]) {
+    it(`keeps explicit active blocker text even when it mentions a fix: ${body}`, () => {
+      const result = classifyPullRequest({
+        pr: pr({ number: 546, draft: false, title: "fix(autopilot): retry stale queue packets" }),
+        files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+        comments: [
+          { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-05T13:59:31Z" },
+          { body, created_at: "2026-05-05T14:21:04Z" },
+        ],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      });
+
+      assert.equal(result.state, "blocked_chris_only");
+    });
+  }
 
   it("treats HOLDs that only wait on Popcorn as missing final QC routing", () => {
     const result = classifyPullRequest({
@@ -466,6 +564,73 @@ describe("QueuePush routing and packets", () => {
       remaining.map((packet) => packet.packetId),
       [second.packetId],
     );
+  });
+
+  it("retries stale QueuePush packets after the retry window", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 535, title: "feat(autopilot): add Event Ledger Room" }),
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+    });
+    const now = Date.parse("2026-05-05T06:30:00Z");
+    const messages = [
+      {
+        text: `old post ${packet.packetId}`,
+        created_at: "2026-05-05T02:08:00Z",
+      },
+    ];
+
+    const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
+    assert.deepEqual(
+      remaining.map((candidate) => candidate.packetId),
+      [packet.packetId],
+    );
+  });
+
+  it("keeps fresh QueuePush packets deduped before the retry window", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 535, title: "feat(autopilot): add Event Ledger Room" }),
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+    });
+    const now = Date.parse("2026-05-05T06:30:00Z");
+    const messages = [
+      {
+        text: `fresh post ${packet.packetId}`,
+        created_at: "2026-05-05T06:00:00Z",
+      },
+    ];
+
+    const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
+    assert.deepEqual(remaining, []);
+  });
+
+  it("prioritizes missing final QC before routine owner lift", async () => {
+    const packets = await buildPacketsFromInputs([
+      {
+        pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+        files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+        comments: [
+          { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+          { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+          { body: "Status refreshed. No final review yet.", created_at: "2026-05-03T01:20:00Z" },
+        ],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      },
+      {
+        pr: pr({ number: 531, draft: true, title: "feat(autopilot): add personality room" }),
+        files: [{ filename: "scripts/pinballwake-personality-room.mjs" }],
+        comments: [{ body: "Gatekeeper PASS. Scope looks low risk.", created_at: "2026-05-03T01:00:00Z" }],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      },
+    ]);
+
+    assert.equal(packets[0]?.state, "missing_final_qc_ack");
+    assert.equal(packets[0]?.pr, 536);
   });
 });
 

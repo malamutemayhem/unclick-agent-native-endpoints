@@ -11,6 +11,7 @@ const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AU
 const dryRun = parseBooleanFlag(process.env.QUEUEPUSH_DRY_RUN) || process.argv.includes("--dry-run");
 const maxPackets = parseBoundedInt(process.env.QUEUEPUSH_MAX_PACKETS, 10, 1, 12);
 const recentFishbowlLimit = parseBoundedInt(process.env.QUEUEPUSH_FISHBOWL_LIMIT, 100, 20, 100);
+const packetRetryMinutes = parseBoundedInt(process.env.QUEUEPUSH_PACKET_RETRY_MINUTES, 180, 15, 1440);
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -163,6 +164,27 @@ function isQcWaitOnlyHold(text) {
   );
 }
 
+function isAckRequestText(text) {
+  return (
+    /\b(?:need|needs|needed|please|reply|ack)\b.{0,120}\bpass\s*(?:\/|or)\s*blocker\b/.test(text) ||
+    /\back:\s*pass\/blocker\b/.test(text)
+  );
+}
+
+function isExplicitActiveBlockerText(text) {
+  return /(?:^|\n)\s*(?:[-*]\s*)?(?:[^\w\s]+\s*)?(?:(?:gatekeeper|forge|popcorn|reviewer|safety checker|release safety|builder|qc)\s+)?(?:blocker|hold)(?:\s*:|\s+on\b)/.test(
+    text,
+  );
+}
+
+function isBlockerResolutionText(text) {
+  if (isExplicitActiveBlockerText(text)) return false;
+  return (
+    /\b(?:blocker|hold)\b.{0,80}\b(?:fix|fixed|resolved|cleared|closed)\b/.test(text) ||
+    /\b(?:fix|fixed|resolved|cleared|closed)\b.{0,80}\b(?:blocker|hold)\b/.test(text)
+  );
+}
+
 function sourceUrl(pr) {
   return pr.html_url || `${serverUrl}/${repository}/pull/${pr.number}`;
 }
@@ -246,7 +268,12 @@ export function latestCommentSignals(comments = []) {
       lastPopcornPass = index;
     }
     const qcWaitOnlyHold = isQcWaitOnlyHold(text);
-    if (/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text) && !qcWaitOnlyHold) {
+    if (
+      /\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text) &&
+      !qcWaitOnlyHold &&
+      !isAckRequestText(text)
+      && !isBlockerResolutionText(text)
+    ) {
       lastHold = index;
     }
     if (isMissingFinalQcText(text)) {
@@ -514,9 +541,30 @@ export function buildQueuePacket(input) {
   };
 }
 
-export function filterDuplicatePackets(packets, fishbowlMessages = []) {
-  const recentText = fishbowlMessages.map((message) => String(message.text || "")).join("\n");
-  return packets.filter((packet) => !recentText.includes(packet.packetId));
+function messageCreatedAt(message) {
+  const value =
+    message?.created_at ||
+    message?.createdAt ||
+    message?.inserted_at ||
+    message?.timestamp ||
+    message?.created ||
+    "";
+  const time = Date.parse(String(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+export function filterDuplicatePackets(
+  packets,
+  fishbowlMessages = [],
+  { now = Date.now(), retryAfterMinutes = packetRetryMinutes } = {},
+) {
+  const retryMs = retryAfterMinutes * 60 * 1000;
+  return packets.filter((packet) => {
+    const matches = fishbowlMessages.filter((message) => String(message.text || "").includes(packet.packetId));
+    if (matches.length === 0) return true;
+    const newest = Math.max(...matches.map((message) => messageCreatedAt(message) ?? now));
+    return now - newest >= retryMs;
+  });
 }
 
 async function githubJson(path) {
@@ -637,8 +685,9 @@ function prioritizePackets(packets) {
     hold_overlap: 1,
     failed_targeted_proof: 2,
     blocked_chris_only: 3,
-    ready_for_qc: 4,
-    draft_green_needs_owner_lift: 5,
+    missing_final_qc_ack: 4,
+    ready_for_qc: 5,
+    draft_green_needs_owner_lift: 6,
   };
   return [...packets].sort((a, b) => {
     const stateDiff = (priority[a.state] ?? 99) - (priority[b.state] ?? 99);
