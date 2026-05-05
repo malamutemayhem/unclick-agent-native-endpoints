@@ -172,7 +172,7 @@ function isAckRequestText(text) {
 }
 
 function isExplicitActiveBlockerText(text) {
-  return /(?:^|\n)\s*(?:[-*]\s*)?(?:(?:gatekeeper|forge|popcorn|reviewer|safety checker|release safety|builder|qc)\s+|[🛡️🛠️🍿]\s*)?(?:blocker|hold)\s*:/.test(
+  return /(?:^|\n)\s*(?:[-*]\s*)?(?:[^\w\s]+\s*)?(?:(?:gatekeeper|forge|popcorn|reviewer|safety checker|release safety|builder|qc)\s+)?(?:blocker|hold)(?:\s*:|\s+on\b)/.test(
     text,
   );
 }

@@ -170,6 +170,10 @@ describe("QueuePush PR classifier", () => {
     "BLOCKER: blocker fix did not work; unsafe global clear remains.",
     "HOLD: blocker fix still clears unrelated Gatekeeper HOLD.",
     "Gatekeeper BLOCKER: blocker-fix detector is still unsafe.",
+    "🛠️ Forge BLOCKER on #546 latest head. Finding: blocker-fix detector is still unsafe and needs focused fix.",
+    "🛡️ Gatekeeper HOLD on #546 latest head. Explicit blocker fix wording can still hide active blockers.",
+    "🛠️ Forge BLOCKER: blocker-fix detector is still unsafe.",
+    "🛡️ Gatekeeper HOLD: blocker-fix detector is still unsafe.",
   ]) {
     it(`keeps explicit active blocker text even when it mentions a fix: ${body}`, () => {
       const result = classifyPullRequest({
