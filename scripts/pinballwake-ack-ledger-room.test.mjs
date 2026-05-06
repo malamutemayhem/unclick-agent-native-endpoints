@@ -225,6 +225,39 @@ describe("PinballWake ACK ledger room", () => {
     assert.equal(result.blockers[0].reviewer, "forge");
   });
 
+  it("does not trust courier mirror records with lane-looking worker metadata", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      fishbowlMessages: [
+        {
+          source: "fishbowl",
+          author: "courier",
+          worker: "gatekeeper",
+          message: "#528 Gatekeeper PASS visible and routed.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+        {
+          source: "fishbowl",
+          author: "courier",
+          worker: "popcorn",
+          message: "#528 Popcorn PASS visible and routed.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+        {
+          source: "fishbowl",
+          author: "courier",
+          reviewer: "forge",
+          message: "#528 Forge PASS visible and routed.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(result.result, "missing_ack");
+    assert.equal(result.full_ack_set, false);
+    assert.deepEqual(result.missing_reviewers, ["gatekeeper", "popcorn", "forge"]);
+  });
+
   it("accepts explicitly trusted structured lane ACK records", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),

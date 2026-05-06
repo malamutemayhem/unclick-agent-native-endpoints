@@ -138,12 +138,21 @@ function normalizeReviewer(value = "") {
 function recordActor(record = {}) {
   return normalizeReviewer(
     [
-      record.reviewer,
-      record.worker,
-      record.lane,
       record.agent_id,
       record.agentId,
       typeof record.author === "string" ? record.author : record.author?.login,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+function recordStructuredReviewer(record = {}) {
+  return normalizeReviewer(
+    [
+      record.reviewer,
+      record.worker,
+      record.lane,
     ]
       .filter(Boolean)
       .join(" "),
@@ -180,7 +189,10 @@ function extractClaims(record = {}, prNumberValue, index = 0) {
   if (!recordMentionsPr(record, prNumberValue)) return [];
 
   const text = recordText(record);
-  const explicitReviewer = recordActor(record);
+  const explicitReviewer =
+    record.trusted_lane_ack === true || record.trustedLaneAck === true
+      ? recordStructuredReviewer(record) || recordActor(record)
+      : recordActor(record);
   const explicitVerdict = explicitRecordVerdict(record);
   const reviewers = explicitReviewer ? [explicitReviewer] : Object.keys(REVIEWERS);
   const claims = [];
