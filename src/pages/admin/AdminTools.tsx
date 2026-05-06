@@ -5,6 +5,7 @@ import { useSession } from "@/lib/auth";
 import { InfoCard } from "./memory/InfoCard";
 import UnClickTools from "./tools/UnClickTools";
 import ConnectedServices from "./tools/ConnectedServices";
+import { AdminAppsIntro } from "./AdminEcosystemPages";
 
 interface Connector {
   id: string;
@@ -62,31 +63,33 @@ export default function AdminToolsPage() {
             <Wrench className="h-5 w-5 text-[#61C1C4]" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">Tools</h1>
-            <p className="text-sm text-white/50">Everything your agent can use through UnClick</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-white">Apps</h1>
+            <p className="text-sm text-white/50">Everything UnClick can use</p>
           </div>
         </div>
 
+        <AdminAppsIntro />
+
         {/* Section 1 - Your UnClick Tools */}
         <section className="mb-12">
-          <h2 className="mb-4 text-lg font-semibold text-white">Your UnClick Tools</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">Built-In</h2>
           <InfoCard
             id="tools-how"
-            title="How do these tools work?"
-            description="When you connect UnClick to your AI agent, it gets all these tools automatically. Your agent chooses which ones to use based on what you ask."
-            learnMore="Memory tools handle persistent context. Utility tools handle everyday tasks like formatting JSON, generating QR codes, converting timestamps. Your agent discovers and calls them as needed - no configuration required."
+            title="Ready to use"
+            description="These apps are available naturally through UnClick. Your AI can use the recommended built-in option without asking you to connect anything."
+            learnMore="Memory tools handle persistent context. Utility tools handle everyday tasks like formatting JSON, generating QR codes, converting timestamps. Your AI discovers and calls them as needed."
           />
           <UnClickTools metering={metering} />
         </section>
 
         {/* Section 2 - Connections */}
         <section className="mb-12">
-          <h2 className="mb-4 text-lg font-semibold text-white">Connections</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">Connected</h2>
           <InfoCard
             id="tools-services"
-            title="What are Connections?"
+            title="Apps you approved"
             description="Third-party platforms you have linked for your agents, like GitHub, Stripe, or Cloudflare."
-            learnMore="Connections keeps setup state, health, and encrypted secrets in one place so your agents can use approved services without you pasting keys into every run."
+            learnMore="Connected apps keep setup state, health, and encrypted secrets in Passport so your agents can use approved services without you pasting keys into every run."
           />
           <ConnectedServices connectors={connectors} loading={loading} />
         </section>
@@ -103,11 +106,11 @@ export default function AdminToolsPage() {
                 <PenSquare className="h-4 w-4 text-fuchsia-300" />
                 <h3 className="text-sm font-semibold text-white">CopyPass</h3>
                 <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-fuchsia-500/10 text-fuchsia-300">
-                  Pass family
+                  XPass / Checks
                 </span>
               </div>
               <p className="mt-2 text-xs text-white/50">
-                Scaffold-only MCP and admin surface for AI-generated copy review. Deterministic checks land in a later chunk.
+                Writing, messaging, and copy review checks.
               </p>
               <p className="mt-3 text-[11px] font-medium text-fuchsia-300">
                 Open CopyPass →
@@ -117,7 +120,7 @@ export default function AdminToolsPage() {
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-8 text-center">
               <Rocket className="mx-auto h-8 w-8 text-white/20 mb-3" />
               <p className="text-sm text-white/50">
-                Community tools and custom integrations - coming soon.
+                More apps, workers, templates, XPass checks, and private tools - coming soon.
               </p>
               <p className="mt-1 text-xs text-white/30">
                 Build your own MCP tools or install from the UnClick marketplace.

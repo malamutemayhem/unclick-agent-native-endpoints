@@ -55,6 +55,7 @@ import {
   type SystemCredentialProvider,
   type SystemCredentialRisk,
 } from "./systemCredentialInventory";
+import { AdminPassportIntro } from "./AdminEcosystemPages";
 
 // ─── Platform catalog ─────────────────────────────────────────────
 
@@ -666,9 +667,9 @@ export default function AdminKeychain() {
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Connections</h1>
+          <h1 className="text-2xl font-semibold text-white">Passport</h1>
           <p className="mt-1 text-sm text-[#888]">
-            Connect services your agents can use. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
+            Permissions, keys, logins, and connection health. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
           </p>
         </div>
         <div className="flex gap-2">
@@ -676,7 +677,7 @@ export default function AdminKeychain() {
             onClick={() => { setExportOpen(true); setExportPassword(""); setExportConfirm(""); setExportError(null); }}
             className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] transition-colors hover:border-[#E2B93B]/20 hover:text-[#E2B93B]"
           >
-            Export connections
+            Export Passport
           </button>
           <button
             onClick={openAudit}
@@ -694,6 +695,8 @@ export default function AdminKeychain() {
           </button>
         </div>
       </div>
+
+      <AdminPassportIntro />
 
       {/* Encryption notice */}
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#E2B93B]/20 bg-[#E2B93B]/5 px-4 py-3">

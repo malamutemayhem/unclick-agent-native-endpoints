@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wrench, Brain, Calendar, Users, Trophy, HelpCircle } from "lucide-react";
+import { AppWindow, Brain, BadgeCheck, Plane, Trophy, HelpCircle } from "lucide-react";
 import { useSession } from "@/lib/auth";
 
 const Navbar = () => {
@@ -13,10 +13,10 @@ const Navbar = () => {
   const isLoggedIn = Boolean(session);
 
   const navLinks = [
-    { label: "Tools", href: "/tools", icon: Wrench },
+    { label: "Apps", href: "/tools", icon: AppWindow },
     { label: "Memory", href: "/memory", icon: Brain },
-    { label: "Organiser", href: "/organiser", icon: Calendar },
-    { label: "Crews", href: "/crews", icon: Users },
+    { label: "Autopilot", href: "/build", icon: Plane },
+    { label: "XPass", href: "/admin/checks", icon: BadgeCheck },
     { label: "Arena", href: "/arena", icon: Trophy },
     { label: "Pricing", href: "/pricing" },
     { label: "Docs", href: "/docs" },

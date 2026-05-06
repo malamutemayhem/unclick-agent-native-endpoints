@@ -27,6 +27,7 @@ import type {
   CodeInput,
   LibraryDocInput,
 } from "./types.js";
+import { shouldEnforceManagedMemoryCaps } from "./quota-policy.js";
 
 function pgError(context: string, err: unknown): Error {
   if (err instanceof Error) return err;
@@ -188,8 +189,14 @@ export class SupabaseBackend implements MemoryBackend {
    */
   private async enforceCaps(kind: "fact" | "general"): Promise<void> {
     if (this.tenancy.mode !== "managed") return;
-    const tier = (process.env.UNCLICK_TIER || "free").toLowerCase();
-    if (tier !== "free") return;
+
+    const shouldEnforceCaps = shouldEnforceManagedMemoryCaps({
+      tenancyMode: this.tenancy.mode,
+      tier: process.env.UNCLICK_TIER,
+      accountEmail: process.env.UNCLICK_ACCOUNT_EMAIL,
+      quotaExempt: process.env.UNCLICK_MEMORY_QUOTA_EXEMPT === "true",
+    });
+    if (!shouldEnforceCaps) return;
 
     if (kind === "fact") {
       const { data, error } = await this.client.rpc("mc_get_fact_count", {

@@ -1,13 +1,13 @@
 import { Link } from "react-router-dom";
 import FadeIn from "@/components/FadeIn";
-import { Wrench, Brain, Key, Users, BadgeCheck, Store, ArrowRight } from "lucide-react";
+import { AppWindow, Brain, Key, Plane, BadgeCheck, Store, ArrowRight } from "lucide-react";
 
 const PRODUCTS = [
   {
-    title: "Tools",
-    description: "450+ callable endpoints to act",
+    title: "Apps",
+    description: "Built-in tools and connected services",
     href: "/tools",
-    icon: Wrench,
+    icon: AppWindow,
     color: "bg-blue-500/10 text-blue-500",
   },
   {
@@ -18,24 +18,24 @@ const PRODUCTS = [
     color: "bg-purple-500/10 text-purple-500",
   },
   {
-    title: "Connections",
-    description: "Secure credentials for services",
+    title: "Passport",
+    description: "OAuth, keys, logins, and permissions",
     href: "/admin/keychain",
     icon: Key,
     color: "bg-amber-500/10 text-amber-500",
   },
   {
-    title: "Pass family",
-    description: "QA, UX, security, SEO, legal, and slop checks",
-    href: "/admin/testpass",
+    title: "XPass / Checks",
+    description: "Test, UX, security, SEO, legal, and quality proof",
+    href: "/admin/checks",
     icon: BadgeCheck,
     color: "bg-red-500/10 text-red-500",
   },
   {
-    title: "Crews",
-    description: "Multi-agent orchestration",
-    href: "/crews",
-    icon: Users,
+    title: "Autopilot",
+    description: "The visible assembly line for AI work",
+    href: "/build",
+    icon: Plane,
     color: "bg-green-500/10 text-green-500",
   },
   {
@@ -73,8 +73,8 @@ const Hero = () => {
 
           <FadeIn delay={0.1}>
             <p className="mt-6 text-lg text-body max-w-2xl mx-auto leading-relaxed">
-              Tools to act. Memory to remember. Connections to authenticate. Crews to deliberate.
-              Pass family checks to prove it works before you ship.
+              Apps to act. Memory to remember. Passport to authenticate. Autopilot to coordinate.
+              XPass checks to prove it works before you ship.
             </p>
           </FadeIn>
 
@@ -113,7 +113,7 @@ const Hero = () => {
               The rails your agent plugs into
             </h2>
             <p className="mt-3 text-center text-body max-w-2xl mx-auto">
-              UnClick sits behind Claude, ChatGPT, Cursor, and every MCP client as the shared layer for action, memory, credentials, crews, and Pass family verification.
+              UnClick sits behind Claude, ChatGPT, Cursor, and every MCP client as the shared layer for action, memory, permissions, Autopilot, and XPass verification.
             </p>
           </FadeIn>
 

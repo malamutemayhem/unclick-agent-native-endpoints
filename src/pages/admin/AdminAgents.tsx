@@ -19,6 +19,9 @@ import {
   Search,
   X,
   Check,
+  Cpu,
+  Gauge,
+  AlertTriangle,
 } from "lucide-react";
 import {
   AGENT_TEMPLATES,
@@ -83,6 +86,60 @@ const ROLE_ICON_MAP = new Map(
   AGENT_TEMPLATES.map((t) => [t.role, t.icon] as const),
 );
 
+const WORKER_ROLES = [
+  { name: "Coordinator", emoji: "🧭", summary: "Routes work and keeps the plan moving.", required: true },
+  { name: "Builder", emoji: "🛠️", summary: "Makes scoped changes and opens proof-backed work.", required: true },
+  { name: "Tester", emoji: "🧪", summary: "Runs checks and proves the work behaves.", required: true },
+  { name: "Reviewer", emoji: "🔍", summary: "Checks the finished work before it moves forward.", required: true },
+  { name: "Safety Checker", emoji: "🛡️", summary: "Stops risky work, secret leaks, and unsafe merges.", required: true },
+  { name: "Researcher", emoji: "🔬", summary: "Gathers context before work starts.", required: false },
+  { name: "Planner", emoji: "📋", summary: "Turns goals into small ordered jobs.", required: false },
+  { name: "Messenger", emoji: "📣", summary: "Posts clean handoffs and status packets.", required: false },
+  { name: "Watcher", emoji: "👁️", summary: "Keeps an eye on stale queues and missed signals.", required: false },
+  { name: "Publisher", emoji: "🚀", summary: "Handles publish proof after work lands.", required: false },
+  { name: "Repairer", emoji: "🩹", summary: "Fixes small blockers found by checks.", required: false },
+  { name: "Improver", emoji: "♻️", summary: "Turns repeated friction into new build work.", required: false },
+] as const;
+
+const AI_SEATS = [
+  {
+    name: "ChatGPT Seat 1",
+    provider: "ChatGPT",
+    status: "Hot",
+    state: "Working",
+    load: 40,
+    assigned: "Coordinator, Builder",
+    issue: "",
+  },
+  {
+    name: "Claude Seat 1",
+    provider: "Claude",
+    status: "Warm",
+    state: "Available",
+    load: 40,
+    assigned: "Reviewer",
+    issue: "Usage limit getting close",
+  },
+  {
+    name: "Codex Seat 1",
+    provider: "Codex",
+    status: "Hot",
+    state: "Working",
+    load: 20,
+    assigned: "Builder",
+    issue: "",
+  },
+  {
+    name: "AI Seat 4",
+    provider: "Unknown",
+    status: "Cold",
+    state: "Needs login",
+    load: 0,
+    assigned: "Not assigned",
+    issue: "Needs login",
+  },
+] as const;
+
 function getApiKey(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem("unclick_api_key") ?? "";
@@ -111,6 +168,8 @@ export default function AdminAgentsPage() {
   const [editing, setEditing] = useState<AgentDetail | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
+  const [activeView, setActiveView] = useState<"workers" | "seats">("workers");
+  const [autoBalance, setAutoBalance] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -137,7 +196,13 @@ export default function AdminAgentsPage() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) void refresh();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   const defaultAgent = useMemo(() => agents.find((a) => a.is_default), [agents]);
@@ -258,13 +323,60 @@ export default function AdminAgentsPage() {
 
   return (
     <AdminShell
-      title="Your Agents"
-      subtitle="Create AI agents with specific roles, tools, and personalities. Each agent remembers what you tell it and only uses the tools you allow."
+      title="Workers"
+      subtitle="UnClick Workers are the roles. AI Seats are the connected AI capacity behind them."
       agentCount={agents.length}
     >
+      <div className="mb-6 rounded-xl border border-border/40 bg-card/20 p-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("workers")}
+            className={`rounded-lg border p-4 text-left transition-colors ${
+              activeView === "workers"
+                ? "border-primary/40 bg-primary/10"
+                : "border-border/40 bg-card/30 hover:border-border/70"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-heading">UnClick Workers</span>
+            </div>
+            <p className="mt-1 text-xs text-body">
+              The roles UnClick can assign work to, like Coordinator, Builder, Reviewer, and Safety Checker.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("seats")}
+            className={`rounded-lg border p-4 text-left transition-colors ${
+              activeView === "seats"
+                ? "border-primary/40 bg-primary/10"
+                : "border-border/40 bg-card/30 hover:border-border/70"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-heading">AI Seats</span>
+            </div>
+            <p className="mt-1 text-xs text-body">
+              The connected AI accounts UnClick can use as capacity. Auto-balance is recommended.
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {activeView === "seats" && (
+        <AISeatsPanel autoBalance={autoBalance} setAutoBalance={setAutoBalance} />
+      )}
+
+      {activeView === "workers" && (
+        <>
+          <WorkerRolesPanel />
+
       {!hasApiKey && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">Sign in to manage agents</p>
+          <p className="font-medium text-heading">Sign in to manage workers</p>
           <p className="mt-1 text-xs">
             Drop your UnClick API key in localStorage as <code>unclick_api_key</code> to load this
             page.
@@ -280,19 +392,19 @@ export default function AdminAgentsPage() {
 
       {hasApiKey && agents.length === 0 && !loading && (
         <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">You haven't created any agents yet.</p>
+          <p className="font-medium text-heading">You haven't created any custom workers yet.</p>
           <p className="mt-1 text-xs">
-            UnClick is using default settings. All tools and all memory are available to every AI
-            session. Create an agent to customise what your AI can do.
+            UnClick is using default settings. All apps and all memory are available to every AI
+            session. Create a worker to customise what your AI can do.
           </p>
         </div>
       )}
 
       {noDefaultWarning && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">No default agent selected.</p>
+          <p className="font-medium text-heading">No default worker selected.</p>
           <p className="mt-1 text-xs">
-            Pick one of your agents as the default so it loads automatically when you start a new
+            Pick one of your workers as the default so it loads automatically when you start a new
             AI session.
           </p>
         </div>
@@ -300,7 +412,7 @@ export default function AdminAgentsPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+          {agents.length} custom {agents.length === 1 ? "worker" : "workers"}
         </p>
         <button
           type="button"
@@ -308,12 +420,12 @@ export default function AdminAgentsPage() {
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
-          New Agent
+          New Worker
         </button>
       </div>
 
       {loading && hasApiKey ? (
-        <p className="text-xs text-muted-foreground">Loading agents...</p>
+        <p className="text-xs text-muted-foreground">Loading workers...</p>
       ) : (
         <ul className="space-y-3">
           {agents.map((agent) => {
@@ -436,7 +548,169 @@ export default function AdminAgentsPage() {
           onDelete={() => editing && handleDelete(editing.agent.id)}
         />
       )}
+        </>
+      )}
     </AdminShell>
+  );
+}
+
+function WorkerRolesPanel() {
+  return (
+    <section className="mb-6 rounded-xl border border-border/40 bg-card/20 p-5">
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-heading">Built-in roles</h2>
+        <p className="mt-1 text-xs text-body">
+          These are the jobs inside UnClick. They are separate from the AI accounts that power them.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {WORKER_ROLES.map((role) => (
+          <div key={role.name} className="rounded-lg border border-border/40 bg-card/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true">{role.emoji}</span>
+                <span className="text-xs font-semibold text-heading">{role.name}</span>
+              </div>
+              <span className="rounded-full border border-border/40 bg-card/50 px-2 py-0.5 text-[10px] text-muted-foreground">
+                {role.required ? "Required" : "Optional"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-body">{role.summary}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AISeatsPanel({
+  autoBalance,
+  setAutoBalance,
+}: {
+  autoBalance: boolean;
+  setAutoBalance: (value: boolean) => void;
+}) {
+  const issues = AI_SEATS.filter((seat) => seat.issue);
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-xl border border-border/40 bg-card/20 p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-heading">Connected capacity</h2>
+            <p className="mt-1 max-w-2xl text-xs text-body">
+              AI Seats are the connected AI accounts UnClick can use to power workers. UnClick still decides the work; seats provide available capacity.
+            </p>
+          </div>
+          <label className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-heading">
+            <span className="font-semibold">Auto-balance</span>
+            <button
+              type="button"
+              onClick={() => setAutoBalance(!autoBalance)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${
+                autoBalance ? "bg-primary" : "bg-muted"
+              }`}
+              aria-pressed={autoBalance}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform ${
+                  autoBalance ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border/40 bg-card/30 p-4">
+          <div className="flex items-start gap-3">
+            <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p className="text-xs text-body">
+              When Auto-balance is on, UnClick chooses the best available seat for each job using availability, current workload, role fit, reliability, and usage limits. Manual load sliders stay visible but locked.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border/40 bg-card/20">
+        <div className="grid grid-cols-[minmax(170px,1.4fr)_90px_110px_minmax(180px,1.2fr)_minmax(140px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span>Seat</span>
+          <span>Status</span>
+          <span>Load</span>
+          <span>Assigned work</span>
+          <span>Controls</span>
+        </div>
+        <div className="divide-y divide-border/30">
+          {AI_SEATS.map((seat) => (
+            <div
+              key={seat.name}
+              className="grid grid-cols-[minmax(170px,1.4fr)_90px_110px_minmax(180px,1.2fr)_minmax(140px,1fr)] items-center gap-3 px-4 py-3 text-xs"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-heading">{seat.name}</p>
+                <p className="text-[10px] text-muted-foreground">{seat.provider}</p>
+              </div>
+              <div>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    seat.status === "Hot"
+                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                      : seat.status === "Warm"
+                        ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                        : "border-border/40 bg-card/40 text-muted-foreground"
+                  }`}
+                >
+                  {seat.status}
+                </span>
+                <p className="mt-1 text-[10px] text-muted-foreground">{seat.state}</p>
+              </div>
+              <div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={seat.load}
+                  disabled={autoBalance}
+                  readOnly
+                  className="w-full accent-primary disabled:opacity-40"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">{seat.load}%</p>
+              </div>
+              <p className="text-body">{seat.assigned}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  title="Rename seat"
+                  className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {seat.issue ? (
+                  <span className="text-[10px] text-amber-300">{seat.issue}</span>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">Healthy</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {issues.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-300" />
+            <h3 className="text-sm font-semibold text-heading">Needs attention</h3>
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-body">
+            {issues.map((seat) => (
+              <li key={seat.name}>
+                <span className="font-medium text-heading">{seat.name}:</span> {seat.issue}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -225,6 +225,42 @@ describe("PinballWake ACK ledger room", () => {
     assert.equal(result.blockers[0].reviewer, "forge");
   });
 
+  it("does not let courier mirror records claim reviewer authority via worker metadata", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      comments: [
+        comment("Gatekeeper HOLD on #528: ACK provenance still unsafe.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+      ],
+      fishbowlMessages: [
+        {
+          source: "fishbowl",
+          author: "courier",
+          worker: "gatekeeper",
+          message: "#528 Gatekeeper PASS visible; routed for Master lift.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+        {
+          source: "fishbowl",
+          author: "courier",
+          worker: "popcorn",
+          message: "#528 Popcorn PASS visible; routed for Master lift.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+        {
+          source: "fishbowl",
+          author: "courier",
+          worker: "forge",
+          message: "#528 Forge PASS visible; routed for Master lift.",
+          created_at: "2026-05-05T00:10:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(result.result, "blocked");
+    assert.equal(result.full_ack_set, false);
+    assert.equal(result.blockers[0].reviewer, "gatekeeper");
+  });
+
   it("accepts explicitly trusted structured lane ACK records", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),

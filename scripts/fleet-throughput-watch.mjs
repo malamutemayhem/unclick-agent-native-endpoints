@@ -11,6 +11,7 @@ const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AU
 const dryRun = parseBooleanFlag(process.env.QUEUEPUSH_DRY_RUN) || process.argv.includes("--dry-run");
 const maxPackets = parseBoundedInt(process.env.QUEUEPUSH_MAX_PACKETS, 10, 1, 12);
 const recentFishbowlLimit = parseBoundedInt(process.env.QUEUEPUSH_FISHBOWL_LIMIT, 100, 20, 100);
+const packetRetryMinutes = parseBoundedInt(process.env.QUEUEPUSH_PACKET_RETRY_MINUTES, 180, 15, 1440);
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -59,6 +60,7 @@ const queuepushRunnerRoster = resolveQueuePushRunnerRoster(process.env.QUEUEPUSH
 
 const STATES = new Set([
   "draft_green_needs_owner_lift",
+  "missing_final_qc_ack",
   "hold_overlap",
   "dirty_branch",
   "failed_targeted_proof",
@@ -133,6 +135,56 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function isMissingFinalQcText(text) {
+  return (
+    /\b(final qc|qc ack|qc pass|popcorn|reviewer)\b|🍿/.test(text) &&
+    /\b(missing|needed|needs|waiting|awaiting|only missing|no final|no .*visible)\b/.test(text)
+  );
+}
+
+function isQcWaitOnlyHold(text) {
+  if (!/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) return false;
+  if (!isMissingFinalQcText(text)) return false;
+  const exactHoldClause = text.match(/\bexact hold:\s*([^.!?]{0,180})/)?.[1] || "";
+  const exactHoldIsQcOnly =
+    Boolean(exactHoldClause) &&
+    /\b(?:missing|waiting|awaiting|needs?)\b.{0,80}\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b/.test(
+      exactHoldClause,
+    ) &&
+    !/\b(and|but|however|unresolved|remains|concern|issue|blocker|risk|schema|protected|mismatch|overlap|anti-stomp|dirty|failing|failed|red)\b/.test(
+      exactHoldClause,
+    );
+  const explicitQcOnlyWait =
+    /\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b.{0,80}\b(?:only|sole|solely|just)\b/.test(text) ||
+    /\b(?:only|sole|solely|just)\b.{0,80}\b(?:final qc|qc ack|qc pass|popcorn|reviewer)\b/.test(text) ||
+    exactHoldIsQcOnly;
+  if (!explicitQcOnlyWait) return false;
+  return !/\b(exact blocker|proof mismatch|body proof|stale proof|stale pr body|overlap|anti-stomp|dirty branch|not clean against main|targeted proof|focused proof|failing|failed|red|secrets|auth|billing|dns|migration|raw key|human decision|chris-only|needs chris)\b/.test(
+    text,
+  );
+}
+
+function isAckRequestText(text) {
+  return (
+    /\b(?:need|needs|needed|please|reply|ack)\b.{0,120}\bpass\s*(?:\/|or)\s*blocker\b/.test(text) ||
+    /\back:\s*pass\/blocker\b/.test(text)
+  );
+}
+
+function isExplicitActiveBlockerText(text) {
+  return /(?:^|\n)\s*(?:[-*]\s*)?(?:[^\w\s]+\s*)?(?:(?:gatekeeper|forge|popcorn|reviewer|safety checker|release safety|builder|qc)\s+)?(?:blocker|hold)(?:\s*:|\s+on\b)/.test(
+    text,
+  );
+}
+
+function isBlockerResolutionText(text) {
+  if (isExplicitActiveBlockerText(text)) return false;
+  return (
+    /\b(?:blocker|hold)\b.{0,80}\b(?:fix|fixed|resolved|cleared|closed)\b/.test(text) ||
+    /\b(?:fix|fixed|resolved|cleared|closed)\b.{0,80}\b(?:blocker|hold)\b/.test(text)
+  );
+}
+
 function sourceUrl(pr) {
   return pr.html_url || `${serverUrl}/${repository}/pull/${pr.number}`;
 }
@@ -180,14 +232,25 @@ export function latestCommentSignals(comments = []) {
   let lastOverlap = -1;
   let lastFailedProof = -1;
   let lastDirtyBranch = -1;
+  let lastGatekeeperPass = -1;
+  let lastForgePass = -1;
+  let lastPopcornPass = -1;
+  let lastMissingFinalQcAck = -1;
   let hasChrisOnly = false;
   let hasProof = false;
 
   sorted.forEach((comment, index) => {
     const text = normalizeText(comment.body);
     const authorLogin = normalizeText(comment.user?.login || comment.author?.login);
-    const clearPass =
+    const requestForPass = /\b(need|needs|needed|waiting|awaiting|missing|no final|no .*visible|please)\b.{0,80}\bpass\b/.test(
+      text,
+    );
+    const lanePass =
       !["github-actions", "vercel"].includes(authorLogin) &&
+      /\b(pass|merge-ok|qc pass)\b/.test(text) &&
+      !requestForPass &&
+      !/\b(please keep draft|stay draft|do not merge|do not lift)\b/.test(text);
+    const clearPass =
       (/^(?:\W+\s*)?(pass|merge-ok|qc pass)\b/.test(text) ||
         /\b(safe next action|safe to merge)\b/.test(text)) &&
       !/\b(please keep draft|stay draft|do not merge|do not lift)\b/.test(text);
@@ -195,8 +258,26 @@ export function latestCommentSignals(comments = []) {
       lastPass = index;
       hasProof = true;
     }
-    if (/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) {
+    if (lanePass && /\b(gatekeeper|release safety|safety checker)\b|🛡️/.test(text)) {
+      lastGatekeeperPass = index;
+    }
+    if (lanePass && /\b(forge|builder|implementation-shape)\b|🛠️/.test(text)) {
+      lastForgePass = index;
+    }
+    if (lanePass && /\b(popcorn|qc|reviewer)\b|🍿/.test(text)) {
+      lastPopcornPass = index;
+    }
+    const qcWaitOnlyHold = isQcWaitOnlyHold(text);
+    if (
+      /\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text) &&
+      !qcWaitOnlyHold &&
+      !isAckRequestText(text)
+      && !isBlockerResolutionText(text)
+    ) {
       lastHold = index;
+    }
+    if (isMissingFinalQcText(text)) {
+      lastMissingFinalQcAck = index;
     }
     if (/\b(overlap|anti-stomp|supersede|supersedes|rebase\/close|close one lane|same files)\b/.test(text)) {
       lastOverlap = index;
@@ -221,6 +302,10 @@ export function latestCommentSignals(comments = []) {
     hasOverlap: lastOverlap > lastPass,
     hasFailedProof: lastFailedProof > lastPass,
     hasDirtyBranch: lastDirtyBranch > lastPass,
+    hasGatekeeperPass: lastGatekeeperPass >= 0 && lastGatekeeperPass > lastHold,
+    hasForgePass: lastForgePass >= 0 && lastForgePass > lastHold,
+    hasPopcornPass: lastPopcornPass >= 0 && lastPopcornPass > lastHold,
+    hasMissingFinalQcAck: lastMissingFinalQcAck > lastPopcornPass,
     hasChrisOnly,
     hasProof,
   };
@@ -249,6 +334,7 @@ export function jobKindForState(state) {
     case "dirty_branch":
     case "failed_targeted_proof":
       return "implementation";
+    case "missing_final_qc_ack":
     case "ready_for_qc":
       return "qc_review";
     case "blocked_chris_only":
@@ -329,6 +415,20 @@ export function classifyPullRequest(input) {
   if (dirty || signals.hasDirtyBranch) return { state: "dirty_branch", reason: "Branch is not clean against main." };
   if (signals.hasFailedProof) return { state: "failed_targeted_proof", reason: "Targeted proof was reported as failing." };
   if (signals.hasOverlap) return { state: "hold_overlap", reason: "Overlap or anti-stomp blocker is present." };
+  if (signals.hasActiveHold) return { state: "blocked_chris_only", reason: "Active HOLD/blocker comment remains." };
+  if (
+    pr.draft &&
+    green &&
+    clean &&
+    signals.hasGatekeeperPass &&
+    signals.hasForgePass &&
+    !signals.hasPopcornPass
+  ) {
+    return {
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+    };
+  }
   if (pr.draft && green && clean) {
     return {
       state: "draft_green_needs_owner_lift",
@@ -338,7 +438,6 @@ export function classifyPullRequest(input) {
   if (!pr.draft && green && clean && signals.hasProof && !signals.hasActiveHold) {
     return { state: "ready_for_qc", reason: "Non-draft PR is green, clean, and has proof." };
   }
-  if (signals.hasActiveHold) return { state: "blocked_chris_only", reason: "Active HOLD/blocker comment remains." };
   return { state: null, reason: "No QueuePush action needed." };
 }
 
@@ -346,6 +445,8 @@ export function expectedProofForState(state, pr) {
   switch (state) {
     case "draft_green_needs_owner_lift":
       return "Update PR body with owner/non-overlap/status/tests, then lift draft or state exact HOLD.";
+    case "missing_final_qc_ack":
+      return "QC latest head only; reply PASS/BLOCKER, then hand back to Master for lift/merge.";
     case "hold_overlap":
       return "Decide supersede/rebase/close one overlapping lane; post exact non-overlap proof.";
     case "dirty_branch":
@@ -365,6 +466,8 @@ export function directActionForState(state) {
   switch (state) {
     case "draft_green_needs_owner_lift":
       return "Claim it, refresh proof, then lift draft or reply with the exact HOLD.";
+    case "missing_final_qc_ack":
+      return "Claim final QC, second-read latest head, then PASS/BLOCKER with exact evidence.";
     case "hold_overlap":
       return "Claim it, decide which lane survives, then rebase/supersede/close one lane.";
     case "dirty_branch":
@@ -438,9 +541,30 @@ export function buildQueuePacket(input) {
   };
 }
 
-export function filterDuplicatePackets(packets, fishbowlMessages = []) {
-  const recentText = fishbowlMessages.map((message) => String(message.text || "")).join("\n");
-  return packets.filter((packet) => !recentText.includes(packet.packetId));
+function messageCreatedAt(message) {
+  const value =
+    message?.created_at ||
+    message?.createdAt ||
+    message?.inserted_at ||
+    message?.timestamp ||
+    message?.created ||
+    "";
+  const time = Date.parse(String(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+export function filterDuplicatePackets(
+  packets,
+  fishbowlMessages = [],
+  { now = Date.now(), retryAfterMinutes = packetRetryMinutes } = {},
+) {
+  const retryMs = retryAfterMinutes * 60 * 1000;
+  return packets.filter((packet) => {
+    const matches = fishbowlMessages.filter((message) => String(message.text || "").includes(packet.packetId));
+    if (matches.length === 0) return true;
+    const newest = Math.max(...matches.map((message) => messageCreatedAt(message) ?? now));
+    return now - newest >= retryMs;
+  });
 }
 
 async function githubJson(path) {
@@ -561,8 +685,9 @@ function prioritizePackets(packets) {
     hold_overlap: 1,
     failed_targeted_proof: 2,
     blocked_chris_only: 3,
-    ready_for_qc: 4,
-    draft_green_needs_owner_lift: 5,
+    missing_final_qc_ack: 4,
+    ready_for_qc: 5,
+    draft_green_needs_owner_lift: 6,
   };
   return [...packets].sort((a, b) => {
     const stateDiff = (priority[a.state] ?? 99) - (priority[b.state] ?? 99);

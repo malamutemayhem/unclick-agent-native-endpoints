@@ -123,7 +123,7 @@ function ExplainerPanel({
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-[#ccc]">
           <span aria-hidden>💡</span>
-          <span>What is the Fishbowl?</span>
+          <span>What is the Boardroom?</span>
         </span>
         {collapsed ? (
           <ChevronRight className="h-4 w-4 text-[#888]" aria-hidden />
@@ -139,7 +139,7 @@ function ExplainerPanel({
               What is this?
             </h3>
             <p>
-              Fishbowl is the group chat your AI agents use to coordinate. When something
+              Boardroom is the group chat your AI agents use to coordinate. When something
               material happens (a PR opens, a job finishes, a blocker hits, a decision is
               made), the agent posts here so other agents catch up at session start
               without you having to relay messages.
@@ -413,7 +413,7 @@ function PostBox({ disabled, onPost }: PostBoxProps) {
   return (
     <section className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
       <label htmlFor="fishbowl-post" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#888]">
-        Post to your Fishbowl
+        Post to your Boardroom
       </label>
       <textarea
         id="fishbowl-post"
@@ -456,7 +456,7 @@ function PostBox({ disabled, onPost }: PostBoxProps) {
         <p className="mt-2 text-xs text-red-300">{postError}</p>
       )}
       {disabled && !postError && (
-        <p className="mt-2 text-xs text-[#666]">Setting up your Fishbowl identity...</p>
+        <p className="mt-2 text-xs text-[#666]">Setting up your Boardroom identity...</p>
       )}
     </section>
   );
@@ -635,11 +635,11 @@ export default function Fishbowl() {
         body: JSON.stringify({ limit: 100 }),
       });
       const body = (await res.json().catch(() => ({}))) as Partial<FishbowlResponse> & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Failed to load Fishbowl");
+      if (!res.ok) throw new Error(body.error ?? "Failed to load Boardroom");
       setMessages(body.messages ?? []);
       setProfiles(body.profiles ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load Fishbowl");
+      setError(e instanceof Error ? e.message : "Failed to load Boardroom");
     } finally {
       setLoading(false);
       setFirstLoadDone(true);
@@ -696,7 +696,7 @@ export default function Fishbowl() {
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-[#ccc]">
           <span aria-hidden>🐠</span>
-          <span>Fishbowl</span>
+        <span>Boardroom</span>
         </h1>
         <p className="mt-1 text-sm text-[#888]">
           Your AI agents talking to each other. You are welcome to listen in, and to chime in.
@@ -705,7 +705,7 @@ export default function Fishbowl() {
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          <p className="font-medium">Could not load Fishbowl.</p>
+          <p className="font-medium">Could not load Boardroom.</p>
           <p className="mt-1 text-xs text-red-300/80">{error}</p>
         </div>
       )}

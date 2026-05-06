@@ -29,6 +29,10 @@ import { createClient } from "@supabase/supabase-js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer } from "../packages/mcp-server/src/server.js";
 import { normalizeAcceptHeader } from "./lib/mcp-protocol.js";
+import {
+  effectiveMemoryTier,
+  isMemoryQuotaExemptEmail,
+} from "../packages/mcp-server/src/memory/quota-policy.js";
 
 function sha256hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -73,6 +77,8 @@ interface ApiKeyContext {
   api_key_hash: string;
   tier: string;
   user_id: string | null;
+  account_email: string | null;
+  memory_quota_exempt: boolean;
 }
 
 function getSupabaseEnv(): { url: string; key: string } | null {
@@ -106,6 +112,17 @@ async function validateApiKey(apiKey: string): Promise<ApiKeyContext | null> {
 
   if (error || !data || data.is_active === false) return null;
 
+  let accountEmail: string | null = null;
+  if (data.user_id) {
+    try {
+      const { data: userData } = await supabase.auth.admin.getUserById(data.user_id);
+      accountEmail = userData.user?.email ?? null;
+    } catch {
+      accountEmail = null;
+    }
+  }
+  const memoryQuotaExempt = isMemoryQuotaExemptEmail(accountEmail);
+
   // Fire-and-forget last_used_at + usage_count bump
   supabase
     .from("api_keys")
@@ -115,8 +132,10 @@ async function validateApiKey(apiKey: string): Promise<ApiKeyContext | null> {
 
   return {
     api_key_hash: apiKeyHash,
-    tier: data.tier ?? "free",
+    tier: effectiveMemoryTier(data.tier ?? "free", accountEmail),
     user_id: data.user_id ?? null,
+    account_email: accountEmail,
+    memory_quota_exempt: memoryQuotaExempt,
   };
 }
 
@@ -182,8 +201,10 @@ async function validateSessionCookie(
 
   return {
     api_key_hash: keyRow.key_hash,
-    tier: keyRow.tier ?? "free",
+    tier: effectiveMemoryTier(keyRow.tier ?? "free", userData.user.email ?? null),
     user_id: userId,
+    account_email: userData.user.email ?? null,
+    memory_quota_exempt: isMemoryQuotaExemptEmail(userData.user.email ?? null),
   };
 }
 
@@ -327,6 +348,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (ctx) {
     process.env.UNCLICK_API_KEY_HASH = ctx.api_key_hash;
     process.env.UNCLICK_TIER = ctx.tier;
+    if (ctx.account_email) {
+      process.env.UNCLICK_ACCOUNT_EMAIL = ctx.account_email;
+    } else {
+      delete process.env.UNCLICK_ACCOUNT_EMAIL;
+    }
+    process.env.UNCLICK_MEMORY_QUOTA_EXEMPT = ctx.memory_quota_exempt ? "true" : "false";
     if (ctx.user_id) {
       process.env.UNCLICK_USER_ID = ctx.user_id;
     } else {
@@ -336,6 +363,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     delete process.env.UNCLICK_API_KEY_HASH;
     delete process.env.UNCLICK_TIER;
     delete process.env.UNCLICK_USER_ID;
+    delete process.env.UNCLICK_ACCOUNT_EMAIL;
+    delete process.env.UNCLICK_MEMORY_QUOTA_EXEMPT;
   }
 
   // ── MCP over Streamable HTTP (stateless per-request) ───────────────────────

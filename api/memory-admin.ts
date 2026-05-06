@@ -121,6 +121,10 @@ import {
   decideStaleLease,
 } from "../packages/mcp-server/src/reliability.js";
 import { emitSignal } from "../packages/mcp-server/src/signals/emit.js";
+import {
+  effectiveMemoryTier,
+  isMemoryQuotaExemptEmail,
+} from "../packages/mcp-server/src/memory/quota-policy.js";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -529,7 +533,7 @@ async function resolveSessionTenant(
       userId: user.id,
       email: user.email,
       apiKeyHash: newRow.key_hash,
-      tier: newRow.tier ?? "free",
+      tier: effectiveMemoryTier(newRow.tier ?? "free", user.email),
     };
   }
 
@@ -548,7 +552,7 @@ async function resolveSessionTenant(
         userId: user.id,
         email: user.email,
         apiKeyHash: sha256hex(oldRow.api_key),
-        tier: "free",
+        tier: effectiveMemoryTier("free", user.email),
       };
     }
   } catch {
@@ -3587,6 +3591,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // `generated_api_key`, so the frontend can surface it behind
         // the reveal UI. Subsequent calls only return the prefix.
         let generatedApiKey: string | null = null;
+        const provisionTier = effectiveMemoryTier("free", user.email);
         if (!keyRow) {
           const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
           const keyHash = sha256hex(rawKey);
@@ -3598,7 +3603,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               key_hash:  keyHash,
               key_prefix: keyPrefix,
               label:     "auto-provisioned",
-              tier:      "free",
+              tier:      provisionTier,
               is_active: true,
               usage_count: 0,
             })
@@ -3625,7 +3630,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               id: keyRow.id,
               prefix: keyRow.key_prefix ?? "",
               label:  keyRow.label ?? "",
-              tier:   keyRow.tier ?? "free",
+              tier:   effectiveMemoryTier(keyRow.tier ?? "free", user.email),
               is_active: Boolean(keyRow.is_active),
               usage_count: Number(keyRow.usage_count ?? 0),
               last_used_at: keyRow.last_used_at ?? null,
@@ -3649,11 +3654,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           user_id: user.id,
           email:   user.email,
-          tier:    apiKey ? apiKey.tier : "free",
+          tier:    apiKey ? apiKey.tier : effectiveMemoryTier("free", user.email),
           needs_key: !apiKey,
           api_key: apiKey,
           generated_api_key: generatedApiKey,
           is_admin: isAdmin,
+          memory_quota_exempt: isMemoryQuotaExemptEmail(user.email),
         });
       }
 
@@ -3676,7 +3682,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({
             api_key: null,
             prefix:  existing.key_prefix ?? "",
-            tier:    existing.tier ?? "free",
+            tier:    effectiveMemoryTier(existing.tier ?? "free", user.email),
             already_provisioned: true,
           });
         }
@@ -3687,7 +3693,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           key_hash:  sha256hex(rawKey),
           key_prefix: rawKey.slice(0, 8),
           label:     "default",
-          tier:      "free",
+          tier:      effectiveMemoryTier("free", user.email),
           is_active: true,
           usage_count: 0,
         });
@@ -3696,7 +3702,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           api_key: rawKey,
           prefix:  rawKey.slice(0, 8),
-          tier:    "free",
+          tier:    effectiveMemoryTier("free", user.email),
           already_provisioned: false,
         });
       }
@@ -3747,7 +3753,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           api_key: rawKey,
           prefix:  rawKey.slice(0, 8),
-          tier:    existing.tier ?? "free",
+          tier:    effectiveMemoryTier(existing.tier ?? "free", user.email),
         });
       }
 
