@@ -1,0 +1,43 @@
+{
+  "kind": "uxpass_site_sweep_receipt",
+  "generated_at": "2026-05-06T17:54:19.483Z",
+  "status": "blocked",
+  "target_sha": "b801f498bf2b1162b6e2ffbda7fae226a001ff24",
+  "min_score": 80,
+  "allowed_origins": [
+    "https://unclick.world",
+    "https://www.unclick.world"
+  ],
+  "targets": [
+    {
+      "url": "https://unclick.world/",
+      "status": "blocked",
+      "run_id": null,
+      "ux_score": null,
+      "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      "proof": null
+    },
+    {
+      "url": "https://unclick.world/dashboard",
+      "status": "blocked",
+      "run_id": null,
+      "ux_score": null,
+      "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      "proof": null
+    },
+    {
+      "url": "https://unclick.world/admin/you",
+      "status": "blocked",
+      "run_id": null,
+      "ux_score": null,
+      "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+      "proof": null
+    }
+  ],
+  "action_needed": [
+    "https://unclick.world/: Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+    "https://unclick.world/dashboard: Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
+    "https://unclick.world/admin/you: Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET."
+  ],
+  "summary": "UXPass site sweep could not run because no token was available."
+}
