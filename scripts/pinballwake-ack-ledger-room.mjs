@@ -135,9 +135,17 @@ function normalizeReviewer(value = "") {
   return Object.keys(REVIEWERS).find((reviewer) => reviewerMentioned(text, reviewer)) || "";
 }
 
-function recordActor(record = {}) {
+function trustedLaneAck(record = {}) {
+  return record.trusted_lane_ack === true || record.trustedLaneAck === true;
+}
+
+function recordAuthorActor(record = {}) {
   return normalizeReviewer(
     [
+      record.author_agent_id,
+      record.authorAgentId,
+      record.author_name,
+      record.authorName,
       record.agent_id,
       record.agentId,
       typeof record.author === "string" ? record.author : record.author?.login,
@@ -147,22 +155,14 @@ function recordActor(record = {}) {
   );
 }
 
-function recordStructuredReviewer(record = {}) {
-  return normalizeReviewer(
-    [
-      record.reviewer,
-      record.worker,
-      record.lane,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
+function recordMetadataActor(record = {}) {
+  return normalizeReviewer([record.reviewer, record.worker, record.lane].filter(Boolean).join(" "));
 }
 
 function isMirrorOrStatusText(record = {}, text = "") {
   const source = normalize(recordSource(record));
   const value = normalize(text);
-  if (record.trusted_lane_ack === true || record.trustedLaneAck === true) return false;
+  if (trustedLaneAck(record)) return false;
   if (/(mirror|summary|status|heartbeat|courier|master|handoff|routed|visible|fishbowl state|full ack trail|pass chain)/.test(value)) {
     return true;
   }
@@ -170,11 +170,16 @@ function isMirrorOrStatusText(record = {}, text = "") {
 }
 
 function recordCanClaimReviewer(record = {}, text = "", reviewer = "") {
-  if (record.trusted_lane_ack === true || record.trustedLaneAck === true) return true;
-  const actor = recordActor(record);
+  if (trustedLaneAck(record)) return true;
+  const actor = recordAuthorActor(record);
   if (actor && actor === reviewer) return true;
   if (isMirrorOrStatusText(record, text)) return false;
   return false;
+}
+
+function claimableRecordReviewer(record = {}, text = "") {
+  if (trustedLaneAck(record)) return recordMetadataActor(record) || recordAuthorActor(record);
+  return recordAuthorActor(record);
 }
 
 function explicitRecordVerdict(record = {}) {
@@ -189,10 +194,7 @@ function extractClaims(record = {}, prNumberValue, index = 0) {
   if (!recordMentionsPr(record, prNumberValue)) return [];
 
   const text = recordText(record);
-  const explicitReviewer =
-    record.trusted_lane_ack === true || record.trustedLaneAck === true
-      ? recordStructuredReviewer(record) || recordActor(record)
-      : recordActor(record);
+  const explicitReviewer = claimableRecordReviewer(record, text);
   const explicitVerdict = explicitRecordVerdict(record);
   const reviewers = explicitReviewer ? [explicitReviewer] : Object.keys(REVIEWERS);
   const claims = [];
