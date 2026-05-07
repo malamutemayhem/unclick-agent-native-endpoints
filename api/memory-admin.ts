@@ -98,6 +98,11 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
 import {
+  createDispatchThroughputMetrics,
+  decorateThroughputDispatch,
+  shouldIncludeThroughputMetrics,
+} from "./lib/throughput-observability.js";
+import {
   buildFishbowlMessageHandoffDispatchRow,
   planFishbowlMessageHandoffs,
 } from "./lib/fishbowl-message-handoff.js";
@@ -4772,6 +4777,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const limit = getClampedLimit(req.query.limit ?? req.body?.limit, 50, 200);
             const status = String(req.query.status ?? req.body?.status ?? "").trim();
             const source = String(req.query.source ?? req.body?.source ?? "").trim();
+            const includeMetrics = shouldIncludeThroughputMetrics(
+              req.query.include_metrics ?? req.body?.include_metrics,
+            );
             const targetAgentIdFilter = parseOptionalFilterToken(
               req.query.target_agent_id ?? req.body?.target_agent_id,
               "target_agent_id",
@@ -4807,7 +4815,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const { data, error } = await query;
             if (error) throw error;
-            return res.status(200).json({ dispatches: data ?? [] });
+            const dispatchRows = (data ?? []) as ReliabilityDispatchRow[];
+            return res.status(200).json({
+              dispatches: includeMetrics
+                ? dispatchRows.map((row) => decorateThroughputDispatch(row))
+                : dispatchRows,
+              ...(includeMetrics
+                ? { throughput: createDispatchThroughputMetrics(dispatchRows) }
+                : {}),
+            });
           }
 
           case "get": {
