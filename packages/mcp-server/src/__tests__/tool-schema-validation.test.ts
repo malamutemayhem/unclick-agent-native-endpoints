@@ -7,6 +7,7 @@ describe("runtime tool schema validation", () => {
     { name: "load_memory", args: { num_sessions: 1, bogus_field: "should reject" } },
     { name: "search_memory", args: { query: "strict schema probe", bogus_field: "should reject" } },
     { name: "check_signals", args: { agent_id: "strict-probe", bogus_field: "should reject" } },
+    { name: "heartbeat_protocol", args: { bogus_field: "should reject" } },
     {
       name: "ack_handoff",
       args: {
@@ -63,6 +64,7 @@ describe("runtime tool schema validation", () => {
     expect(validateToolArgumentsForRuntime("check_signals", {
       agent_id: "strict-probe",
     })).toBeNull();
+    expect(validateToolArgumentsForRuntime("heartbeat_protocol", {})).toBeNull();
     expect(validateToolArgumentsForRuntime("ack_handoff", {
       agent_id: "strict-probe",
       thread_id: "11111111-1111-4111-8111-111111111111",

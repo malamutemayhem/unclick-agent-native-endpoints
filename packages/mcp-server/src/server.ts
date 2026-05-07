@@ -13,6 +13,7 @@ import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
 import { markContextLoaded, recordToolCall, sessionState } from "./memory/session-state.js";
 import { emitSignal } from "./signals/emit.js";
+import { getHeartbeatProtocol } from "./heartbeat-protocol.js";
 import { createHash } from "node:crypto";
 
 // ─── Umami tool-usage tracking ──────────────────────────────────────────────
@@ -430,6 +431,18 @@ const VISIBLE_TOOLS = [
           description: "Stable Boardroom agent_id for read attribution, e.g. chatgpt-codex-worker2.",
         },
       },
+    },
+  },
+  {
+    name: "heartbeat_protocol",
+    title: "Heartbeat protocol",
+    description:
+      "Returns the canonical UnClick AI Seat heartbeat playbook. " +
+      "Call this first from scheduled heartbeat seats, then follow the returned versioned procedure exactly.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {},
     },
   },
   {
@@ -1482,6 +1495,13 @@ export function createServer(): Server {
     trackToolCall(name);
 
     try {
+      // ── Heartbeat protocol: static, read-only AI Seat tether contract ──
+      if (name === "heartbeat_protocol") {
+        return {
+          content: [{ type: "text", text: JSON.stringify(getHeartbeatProtocol(), null, 2) }],
+        };
+      }
+
       // ── Signals: catch up on unread signals at session start ─────
       if (name === "check_signals") {
         const apiKey = process.env.UNCLICK_API_KEY;

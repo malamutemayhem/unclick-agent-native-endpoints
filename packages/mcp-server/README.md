@@ -56,6 +56,10 @@ Memory works out of the box. No setup needed — data is stored as JSON files in
 
 Memory tools exposed at session level: `load_memory`, `save_session`, `save_fact`, `search_memory`, `save_identity`. Full 17 operations available via `unclick_call` with `endpoint_id: "memory.*"`. The prior names (`get_startup_context`, `write_session_summary`, `add_fact`, `set_business_context`) still work as backward-compatible aliases.
 
+## AI Seat Heartbeats
+
+Scheduled AI Seats can call `heartbeat_protocol` with no arguments to fetch the canonical UnClick heartbeat playbook. The response is versioned and includes the current procedure, alert format, throttle rules, and `watch_state_key`, so seat prompts can shrink to: "Call heartbeat_protocol on UnClick. Follow what it returns."
+
 ## Configuration
 
 | Environment Variable | Default | Description |
