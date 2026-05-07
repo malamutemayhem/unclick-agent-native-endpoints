@@ -48,7 +48,7 @@ export function deriveConnectorStatus(
       dot: "bg-amber-400",
       pillClass: "bg-amber-400/10 text-amber-200",
       pill: "Needs reconnection",
-      note: `Reconnect or retest this service in Connections. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+      note: `Reconnect or retest this service in Connections. Last test timestamp: ${formatLastTested(credential.last_tested_at)}.`,
     };
   }
 
@@ -68,7 +68,7 @@ export function deriveConnectorStatus(
       dot: "bg-sky-400",
       pillClass: "bg-sky-400/10 text-sky-200",
       pill: "Untested",
-      note: `No server-gated probe is available for this connector, so it remains untested. Last metadata activity: ${formatLastTested(credential.last_tested_at)}.`,
+      note: `No server-gated probe is available for this connector, so it remains untested. Last metadata timestamp: ${formatLastTested(credential.last_tested_at)}.`,
     };
   }
 
@@ -78,7 +78,7 @@ export function deriveConnectorStatus(
       dot: "bg-sky-400",
       pillClass: "bg-sky-400/10 text-sky-200",
       pill: "Check unknown",
-      note: `Credential metadata is present, but test time is unknown. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+      note: `Credential metadata is present, but test time is unknown. Last test timestamp: ${formatLastTested(credential.last_tested_at)}.`,
     };
   }
 
@@ -87,7 +87,7 @@ export function deriveConnectorStatus(
       dot: "bg-yellow-400",
       pillClass: "bg-yellow-400/10 text-yellow-200",
       pill: "Check stale",
-      note: `Credential exists, but test evidence is stale. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+      note: `Credential exists, but test evidence is stale. Last test timestamp: ${formatLastTested(credential.last_tested_at)}.`,
     };
   }
 
@@ -95,7 +95,7 @@ export function deriveConnectorStatus(
     dot: "bg-green-500",
     pillClass: "bg-green-500/10 text-green-200",
     pill: "Check recent",
-    note: `Recent test evidence exists, but this is not a live secret check. Last checked: ${formatLastTested(credential.last_tested_at)}.`,
+    note: `Recent test evidence exists, but this is not a live secret check. Last test timestamp: ${formatLastTested(credential.last_tested_at)}.`,
   };
 }
 
