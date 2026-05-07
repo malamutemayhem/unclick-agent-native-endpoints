@@ -24,6 +24,16 @@ import {
   type PinballWakeRunnerReadiness,
 } from "./pinballwakeJobRunners";
 import {
+  COMPLEXITY_LABELS,
+  DEFAULT_PERSONALITY_PROFILE,
+  EMOJI_LEVEL_LABELS,
+  PERSONALITY_STYLE_PRESETS,
+  RESPONSE_LENGTH_LABELS,
+  selectedPersonalityPreset,
+  summarizePersonalityProfile,
+  type PersonalityStylePreset,
+} from "./pinballwakePersonality";
+import {
   activeOrchestrator,
   LAUNCHPAD_ORCHESTRATORS,
   LAUNCHPAD_ROOM_COVERAGE,
@@ -264,11 +274,44 @@ function SetupStepRow({ step }: { step: LaunchpadSetupStep }) {
   );
 }
 
+function PersonalityPresetCard({ preset, selected }: { preset: PersonalityStylePreset; selected: boolean }) {
+  return (
+    <article
+      className={`rounded-lg border p-3 ${
+        selected
+          ? "border-[#61C1C4]/35 bg-[#61C1C4]/10"
+          : "border-white/[0.06] bg-white/[0.025]"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white">{preset.label}</h3>
+          <p className="mt-1 text-xs text-white/45">{preset.tone}</p>
+        </div>
+        {selected ? <SmallBadge className="border-[#61C1C4]/40 bg-[#61C1C4]/10 text-[#61C1C4]">active</SmallBadge> : null}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-white/60">{preset.description}</p>
+      <p className="mt-2 text-xs text-white/35">{preset.bestFor}</p>
+    </article>
+  );
+}
+
+function PersonalityControlRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+      <p className="text-xs font-medium uppercase text-white/35">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
 export default function AdminPinballWake() {
   const summary = summarizePinballWakeClockRoutes();
   const runnerSummary = summarizePinballWakeJobRunners();
   const launchpadSummary = summarizeLaunchpadSeats();
   const orchestrator = activeOrchestrator();
+  const personalitySummary = summarizePersonalityProfile();
+  const activePersonalityPreset = selectedPersonalityPreset();
 
   const primaryRoutes = PINBALLWAKE_CLOCK_ROUTES.filter((route) =>
     ["live", "watching", "ready"].includes(route.status),
@@ -306,6 +349,68 @@ export default function AdminPinballWake() {
         <MetricCard icon={Cpu} label="Code Hands" value={runnerSummary.codeHands} />
         <MetricCard icon={Gauge} label="Need Probe" value={runnerSummary.needsProbe} />
       </div>
+
+      <section className="mb-6 border-y border-white/[0.08] bg-[#101213] py-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#E2B93B]" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">
+                Personality Room
+              </h2>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
+              Admin-editable identity, memory notes, writing style, complexity, response length,
+              and emoji/status preferences that can be applied before Launchpad routes work.
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm">
+            <p className="text-xs font-medium uppercase text-white/35">Current Style</p>
+            <p className="mt-1 font-semibold text-white">{personalitySummary.preset}</p>
+            <p className="mt-0.5 text-xs text-white/45">{personalitySummary.memoryNotes} memory notes</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <PersonalityControlRow label="Length" value={RESPONSE_LENGTH_LABELS[DEFAULT_PERSONALITY_PROFILE.responseLength]} />
+          <PersonalityControlRow label="Complexity" value={COMPLEXITY_LABELS[DEFAULT_PERSONALITY_PROFILE.complexity]} />
+          <PersonalityControlRow label="Emoji Level" value={EMOJI_LEVEL_LABELS[DEFAULT_PERSONALITY_PROFILE.emojiLevel]} />
+          <PersonalityControlRow label="Audience" value="Founder/operator" />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="rounded-lg border border-white/[0.06] bg-[#111111] p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/45">
+              Identity
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">{DEFAULT_PERSONALITY_PROFILE.identity}</p>
+            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-white/45">
+              Memory Notes
+            </h3>
+            <div className="mt-2 space-y-2">
+              {DEFAULT_PERSONALITY_PROFILE.memoryNotes.map((note) => (
+                <div key={note} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-xs text-white/60">
+                  {note}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/45">
+              Writing Style Presets
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {PERSONALITY_STYLE_PRESETS.map((preset) => (
+                <PersonalityPresetCard
+                  key={preset.id}
+                  preset={preset}
+                  selected={preset.id === activePersonalityPreset.id}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="mb-6 border-y border-[#61C1C4]/20 bg-[#061314] py-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
