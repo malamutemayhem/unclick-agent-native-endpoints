@@ -67,6 +67,26 @@ const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
 export const CHECKIN_ACK_LEASE_SECONDS = 600;
 const STALE_DISPATCH_RECLAIM_LIMIT = 50;
+export const WAKEPASS_REROUTE_LEASE_SECONDS = 600;
+
+interface WakepassRerouteTarget {
+  agentId: string;
+  recipient: string;
+  role: "coordinator";
+  reason: string;
+}
+
+export interface WakepassReroutePlan {
+  dispatch: AgentDispatch;
+  target: WakepassRerouteTarget;
+  messageText: string;
+  signal: {
+    action: "handoff_ack_rerouted";
+    severity: "info";
+    summary: string;
+    payload: Record<string, unknown>;
+  };
+}
 
 export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
   if (!profile.next_checkin_at) return false;
@@ -135,6 +155,176 @@ function dispatchToDbRow(dispatch: AgentDispatch) {
   };
 }
 
+function normalizeToken(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function compactText(value: unknown, max = 240): string {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function newestFirst(a: ProfileRow, b: ProfileRow): number {
+  const aMs = Date.parse(String(a.last_seen_at ?? ""));
+  const bMs = Date.parse(String(b.last_seen_at ?? ""));
+  return (Number.isFinite(bMs) ? bMs : 0) - (Number.isFinite(aMs) ? aMs : 0);
+}
+
+export function isWakepassAutoRerouteEligible(row: DispatchRow): boolean {
+  const payload = row.payload ?? {};
+  const kind = normalizeToken(payload.kind);
+  const wakeReason = normalizeToken(payload.wake_reason);
+  if (kind === "wakepass_auto_reroute") return false;
+  if (wakeReason === "missed_next_checkin") return false;
+
+  if (kind === "todo_assignment") return true;
+  if (kind === "message_handoff") {
+    const tags = Array.isArray(payload.tags) ? payload.tags.map(normalizeToken) : [];
+    const summary = normalizeToken(payload.summary);
+    return (
+      tags.includes("needs-doing") ||
+      tags.includes("queuepush") ||
+      summary.includes("queuepush") ||
+      /\bpr\s*#?\d+\b/.test(summary)
+    );
+  }
+
+  const text = normalizeToken(
+    [
+      row.task_ref,
+      payload.title,
+      payload.summary,
+      payload.chip,
+      payload.task_ref,
+    ].join(" "),
+  );
+  return (
+    text.includes("queuepush") ||
+    text.includes("owner decision") ||
+    text.includes("owner-lift") ||
+    text.includes("owner lift") ||
+    /\bpr\s*#?\d+\b/.test(text)
+  );
+}
+
+export function resolveWakepassRerouteTarget(profiles: ProfileRow[] = []): WakepassRerouteTarget {
+  const coordinatorCandidates = profiles
+    .filter((profile) => {
+      const agentId = normalizeToken(profile.agent_id);
+      const emoji = String(profile.emoji ?? "").trim();
+      const name = normalizeToken(profile.display_name);
+      return (
+        agentId === "master" ||
+        agentId.includes("coordinator") ||
+        name.includes("coordinator") ||
+        emoji === "🧭"
+      );
+    })
+    .sort((a, b) => {
+      const aIsMaster = normalizeToken(a.agent_id) === "master" ? 1 : 0;
+      const bIsMaster = normalizeToken(b.agent_id) === "master" ? 1 : 0;
+      if (aIsMaster !== bIsMaster) return bIsMaster - aIsMaster;
+      return newestFirst(a, b);
+    });
+
+  const selected = coordinatorCandidates[0];
+  if (selected) {
+    return {
+      agentId: selected.agent_id,
+      recipient: selected.emoji || selected.agent_id,
+      role: "coordinator",
+      reason: "worker_registry_coordinator",
+    };
+  }
+
+  return {
+    agentId: "master",
+    recipient: "🧭",
+    role: "coordinator",
+    reason: "default_coordinator",
+  };
+}
+
+export function buildWakepassAutoReroutePlan({
+  row,
+  signal,
+  profiles = [],
+  nowMs,
+}: {
+  row: DispatchRow;
+  signal: NonNullable<ReturnType<typeof buildDispatchReclaimSignal>>;
+  profiles?: ProfileRow[];
+  nowMs: number;
+}): WakepassReroutePlan | null {
+  if (signal.action !== "handoff_ack_missing") return null;
+  if (!isWakepassAutoRerouteEligible(row)) return null;
+
+  const now = new Date(nowMs);
+  const target = resolveWakepassRerouteTarget(profiles);
+  const originalPayload = row.payload ?? {};
+  const title = compactText(originalPayload.title || originalPayload.summary || row.task_ref || row.dispatch_id, 160);
+  const dispatch = createQueuedDispatch({
+    apiKeyHash: row.api_key_hash,
+    source: "wakepass",
+    targetAgentId: target.agentId,
+    taskRef: `wakepass-reroute:${row.dispatch_id}`,
+    timeBucket: createTimeBucket(now, WAKEPASS_REROUTE_LEASE_SECONDS),
+    payload: {
+      kind: "wakepass_auto_reroute",
+      ack_required: true,
+      route_attempted: "wakepass-auto-reroute",
+      reroute_reason: "missed_ack",
+      reroute_target_role: target.role,
+      reroute_target_agent_id: target.agentId,
+      reroute_target_reason: target.reason,
+      original_dispatch_id: row.dispatch_id,
+      original_source: row.source,
+      original_target_agent_id: row.target_agent_id,
+      original_task_ref: row.task_ref,
+      original_payload_kind: originalPayload.kind ?? null,
+      title,
+      summary: compactText(signal.summary, 220),
+      next_action: "Coordinator should reroute to a live worker or reply PASS/BLOCKER/HOLD.",
+      stale_seconds: signal.payload.stale_seconds ?? null,
+    },
+    createdAt: now,
+  });
+
+  const leasedDispatch: AgentDispatch = {
+    ...dispatch,
+    status: "leased",
+    leaseOwner: target.agentId,
+    leaseExpiresAt: new Date(nowMs + WAKEPASS_REROUTE_LEASE_SECONDS * 1000).toISOString(),
+  };
+
+  const messageText = [
+    "WakePass auto-reroute",
+    `Original target: ${row.target_agent_id}`,
+    `Reason: missed ACK for ${title}`,
+    "Coordinator action: reroute to a live worker or reply PASS/BLOCKER/HOLD.",
+    `Source dispatch: ${row.dispatch_id}`,
+  ].join("\n");
+
+  return {
+    dispatch: leasedDispatch,
+    target,
+    messageText,
+    signal: {
+      action: "handoff_ack_rerouted",
+      severity: "info",
+      summary: `WakePass auto-rerouted missed ACK from ${row.target_agent_id} to ${target.agentId}`,
+      payload: {
+        ...signal.payload,
+        rerouted: true,
+        reroute_dispatch_id: leasedDispatch.dispatchId,
+        reroute_target_agent_id: target.agentId,
+        reroute_target_role: target.role,
+        reroute_target_reason: target.reason,
+      },
+    },
+  };
+}
+
 export function isReclaimableDispatchCandidate(row: DispatchRow, nowMs: number): boolean {
   return decideStaleLease(
     {
@@ -176,6 +366,74 @@ export function shouldMarkDispatchStaleAfterReclaimSignalInsert(
   return !signalErr;
 }
 
+async function listProfilesForTenant(
+  supabase: ReturnType<typeof createClient>,
+  apiKeyHash: string,
+): Promise<ProfileRow[]> {
+  const { data, error } = await supabase
+    .from("mc_fishbowl_profiles")
+    .select("api_key_hash, agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
+    .eq("api_key_hash", apiKeyHash);
+  if (error) {
+    console.error("[fishbowl-watcher] profile lookup for reroute failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as ProfileRow[];
+}
+
+async function ensureDefaultBoardroomRoomId(
+  supabase: ReturnType<typeof createClient>,
+  apiKeyHash: string,
+): Promise<string | null> {
+  const { data: existingRoom, error: existingErr } = await supabase
+    .from("mc_fishbowl_rooms")
+    .select("id")
+    .eq("api_key_hash", apiKeyHash)
+    .eq("slug", "default")
+    .maybeSingle();
+  if (existingErr) {
+    console.error("[fishbowl-watcher] default room lookup for reroute failed:", existingErr.message);
+    return null;
+  }
+  if (existingRoom?.id) return existingRoom.id as string;
+
+  const { data: newRoom, error: roomErr } = await supabase
+    .from("mc_fishbowl_rooms")
+    .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Boardroom" })
+    .select("id")
+    .single();
+  if (roomErr) {
+    console.error("[fishbowl-watcher] default room create for reroute failed:", roomErr.message);
+    return null;
+  }
+  return (newRoom?.id as string | undefined) ?? null;
+}
+
+async function postWakepassRerouteMessage(
+  supabase: ReturnType<typeof createClient>,
+  row: DispatchRow,
+  plan: WakepassReroutePlan,
+  nowIso: string,
+): Promise<void> {
+  const roomId = await ensureDefaultBoardroomRoomId(supabase, row.api_key_hash);
+  if (!roomId) return;
+
+  const { error } = await supabase.from("mc_fishbowl_messages").insert({
+    api_key_hash: row.api_key_hash,
+    room_id: roomId,
+    author_emoji: "🧭",
+    author_name: "WakePass",
+    author_agent_id: "wakepass-auto-reroute",
+    recipients: [plan.target.recipient],
+    text: plan.messageText,
+    tags: ["needs-doing", "wakepass", "reroute"],
+    created_at: nowIso,
+  });
+  if (error) {
+    console.error("[fishbowl-watcher] reroute message insert failed:", error.message);
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization ?? "";
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
@@ -196,6 +454,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let checkinSignalsEmitted = 0;
   let checkinDispatchesEmitted = 0;
   let staleDispatchesReclaimed = 0;
+  let staleDispatchesRerouted = 0;
+  let staleDispatchRerouteFailures = 0;
   let digestSignalsEmitted = 0;
   let staleStatusesCleared = 0;
 
@@ -292,19 +552,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: staleDispatchErr.message });
   }
 
+  const profileCache = new Map<string, ProfileRow[]>();
+
   for (const row of (staleDispatchRows ?? []) as DispatchRow[]) {
     if (!isReclaimableDispatchCandidate(row, nowMs)) continue;
     const signal = buildDispatchReclaimSignal(row, nowMs);
     if (!signal) continue;
 
-    const { error: signalErr } = await supabase.from("mc_signals").insert({
-      api_key_hash: row.api_key_hash,
-      tool: "wakepass",
+    let signalToInsert: {
+      action: string;
+      severity: "action_needed" | "info";
+      summary: string;
+      payload: Record<string, unknown>;
+    } = {
       action: signal.action,
       severity: signal.action === "handoff_ack_missing" ? "action_needed" : "info",
       summary: signal.summary,
-      deep_link: "/admin/boardroom",
       payload: signal.payload,
+    };
+
+    if (signal.action === "handoff_ack_missing") {
+      let profiles = profileCache.get(row.api_key_hash);
+      if (!profiles) {
+        profiles = await listProfilesForTenant(supabase, row.api_key_hash);
+        profileCache.set(row.api_key_hash, profiles);
+      }
+
+      const reroutePlan = buildWakepassAutoReroutePlan({
+        row,
+        signal,
+        profiles,
+        nowMs,
+      });
+
+      if (reroutePlan) {
+        const { error: rerouteErr } = await supabase
+          .from("mc_agent_dispatches")
+          .upsert(dispatchToDbRow(reroutePlan.dispatch), {
+            onConflict: "api_key_hash,dispatch_id",
+          });
+
+        if (rerouteErr) {
+          staleDispatchRerouteFailures++;
+          console.error(
+            "[fishbowl-watcher] missed ACK reroute dispatch upsert error:",
+            rerouteErr.message,
+          );
+        } else {
+          await postWakepassRerouteMessage(supabase, row, reroutePlan, nowIso);
+          staleDispatchesRerouted++;
+          signalToInsert = reroutePlan.signal;
+        }
+      }
+    }
+
+    const { error: signalErr } = await supabase.from("mc_signals").insert({
+      api_key_hash: row.api_key_hash,
+      tool: "wakepass",
+      action: signalToInsert.action,
+      severity: signalToInsert.severity,
+      summary: signalToInsert.summary,
+      deep_link: "/admin/boardroom",
+      payload: signalToInsert.payload,
     });
     if (!shouldMarkDispatchStaleAfterReclaimSignalInsert(signalErr)) {
       console.error(
@@ -437,6 +746,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     checkin_signals_emitted: checkinSignalsEmitted,
     checkin_dispatches_emitted: checkinDispatchesEmitted,
     stale_dispatches_reclaimed: staleDispatchesReclaimed,
+    stale_dispatches_rerouted: staleDispatchesRerouted,
+    stale_dispatch_reroute_failures: staleDispatchRerouteFailures,
     digest_signals_emitted: digestSignalsEmitted,
     stale_statuses_cleared: staleStatusesCleared,
     overdue_candidates: candidates.length,

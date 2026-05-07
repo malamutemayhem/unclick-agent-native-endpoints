@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { createHeartbeat, createReclaimSignal } from "../packages/mcp-server/src/reliability.js";
 import {
   CHECKIN_ACK_LEASE_SECONDS,
+  WAKEPASS_REROUTE_LEASE_SECONDS,
   buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
+  buildWakepassAutoReroutePlan,
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
+  isWakepassAutoRerouteEligible,
+  resolveWakepassRerouteTarget,
   shouldMarkDispatchStaleAfterReclaimSignalInsert,
   type DispatchRow,
   type ProfileRow,
@@ -171,5 +175,98 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
     ).toBe(false);
 
     expect(shouldMarkDispatchStaleAfterReclaimSignalInsert(null)).toBe(true);
+  });
+
+  it("plans a Coordinator reroute for missed QueuePush todo ACKs", () => {
+    const nowMs = Date.parse("2026-05-01T01:22:00.000Z");
+    const todoDispatch: DispatchRow = {
+      ...baseDispatch,
+      dispatch_id: "dispatch_builder_ack",
+      target_agent_id: "chatgpt-codex-desktop",
+      task_ref: "702a7edd-7464-4879-801b-c4ee0dcbe539",
+      payload: {
+        kind: "todo_assignment",
+        ack_required: true,
+        title: "Builder ACK needed: PR #554 owner lift decision",
+        summary: "QueuePush owner decision is waiting on Builder ACK.",
+      },
+    };
+    const signal = buildDispatchReclaimSignal(todoDispatch, nowMs);
+    expect(signal?.action).toBe("handoff_ack_missing");
+
+    const plan = buildWakepassAutoReroutePlan({
+      row: todoDispatch,
+      signal: signal!,
+      profiles: [
+        {
+          ...baseProfile,
+          agent_id: "master",
+          emoji: "🧭",
+          display_name: "Coordinator",
+          last_seen_at: "2026-05-01T01:20:00.000Z",
+        },
+      ],
+      nowMs,
+    });
+
+    expect(plan).not.toBeNull();
+    expect(plan?.dispatch).toMatchObject({
+      source: "wakepass",
+      targetAgentId: "master",
+      status: "leased",
+      leaseOwner: "master",
+      taskRef: "wakepass-reroute:dispatch_builder_ack",
+      leaseExpiresAt: new Date(
+        nowMs + WAKEPASS_REROUTE_LEASE_SECONDS * 1000,
+      ).toISOString(),
+      payload: {
+        kind: "wakepass_auto_reroute",
+        ack_required: true,
+        original_dispatch_id: "dispatch_builder_ack",
+        original_target_agent_id: "chatgpt-codex-desktop",
+        reroute_target_role: "coordinator",
+      },
+    });
+    expect(plan?.messageText).toContain("Coordinator action");
+    expect(plan?.signal).toMatchObject({
+      action: "handoff_ack_rerouted",
+      severity: "info",
+      payload: {
+        rerouted: true,
+        reroute_target_agent_id: "master",
+      },
+    });
+  });
+
+  it("does not auto-reroute stale check-in noise", () => {
+    const nowMs = Date.parse("2026-05-01T01:22:00.000Z");
+    const staleCheckinDispatch = {
+      ...baseDispatch,
+      task_ref: "fishbowl-checkin:worker-1:2026-05-01T01:10:00.000Z",
+      payload: {
+        ack_required: true,
+        wake_reason: "missed_next_checkin",
+      },
+    };
+    const signal = buildDispatchReclaimSignal(staleCheckinDispatch, nowMs);
+
+    expect(isWakepassAutoRerouteEligible(staleCheckinDispatch)).toBe(false);
+    expect(
+      buildWakepassAutoReroutePlan({
+        row: staleCheckinDispatch,
+        signal: signal!,
+        profiles: [],
+        nowMs,
+      }),
+    ).toBeNull();
+  });
+
+  it("falls back to the default Coordinator when registry profiles are missing", () => {
+    expect(resolveWakepassRerouteTarget([])).toEqual({
+      agentId: "master",
+      recipient: "🧭",
+      role: "coordinator",
+      reason: "default_coordinator",
+    });
   });
 });
