@@ -44,7 +44,17 @@ function contentHash(text: string): string {
   return createHash("sha256").update(text.toLowerCase().trim(), "utf8").digest("hex");
 }
 
+function isAtomicFactExtractionEnabled(): boolean {
+  const raw =
+    process.env.MEMORY_OPENAI_FACT_EXTRACTION_ENABLED ??
+    process.env.MEMORY_AI_FACT_EXTRACTION_ENABLED ??
+    "";
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
 async function extractAtomicFacts(text: string): Promise<string[]> {
+  if (!isAtomicFactExtractionEnabled()) return [text];
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [text];
   try {

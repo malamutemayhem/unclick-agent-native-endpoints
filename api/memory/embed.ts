@@ -30,6 +30,27 @@ interface OpenAIEmbeddingResponse {
   data: Array<{ embedding: number[] }>;
 }
 
+function shouldSkipMemoryEmbedding(text: string): boolean {
+  const value = text.trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (lower.length < 24) return true;
+  if (lower.startsWith("heartbeat_last_state:")) return true;
+  if (lower.includes("<heartbeat") || lower.includes("</heartbeat>")) return true;
+
+  return [
+    "dont_notify",
+    "unclick healthy",
+    "no new signals",
+    "user is caught up",
+    "memory self-echo",
+    "fact saved: heartbeat_last_state",
+    "only memory self-echo signals",
+    "top queue unchanged",
+  ].some((needle) => lower.includes(needle));
+}
+
 async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -89,6 +110,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (!ALLOWED_TABLES.has(table)) {
     return res.status(400).json({ error: `table must be one of: ${[...ALLOWED_TABLES].join(", ")}` });
+  }
+  if (shouldSkipMemoryEmbedding(text)) {
+    return res.status(200).json({ ok: true, skipped: true, reason: "low_value_memory" });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey, {

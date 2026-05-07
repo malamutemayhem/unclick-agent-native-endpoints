@@ -11,6 +11,8 @@
  *                         (default: http://localhost:3000)
  *   ADMIN_EMBED_SECRET  - the x-embed-secret header value
  *   PAGE_SIZE           - rows per page (default: 50)
+ *   MAX_BACKFILL_ROWS   - max rows per table per run (default: 100, 0 disables cap)
+ *   DRY_RUN=1           - count eligible rows without calling OpenAI or writing embeddings
  *   MC_API_KEY_HASH     - if set, only backfill rows for this tenant (managed mode)
  *   BACKFILL_UNPREFIXED_TABLES=1
  *                       - explicitly target BYOD unprefixed tables
@@ -26,6 +28,8 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
 const EMBED_API_URL = (process.env.EMBED_API_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const ADMIN_EMBED_SECRET = process.env.ADMIN_EMBED_SECRET ?? "";
 const PAGE_SIZE = parseInt(process.env.PAGE_SIZE ?? "50", 10);
+const MAX_BACKFILL_ROWS = parseInt(process.env.MAX_BACKFILL_ROWS ?? "100", 10);
+const DRY_RUN = process.env.DRY_RUN === "1";
 const MC_API_KEY_HASH = process.env.MC_API_KEY_HASH ?? "";
 const BACKFILL_UNPREFIXED_TABLES = process.env.BACKFILL_UNPREFIXED_TABLES === "1";
 
@@ -36,7 +40,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
   process.exit(1);
 }
-if (!OPENAI_API_KEY) {
+if (!OPENAI_API_KEY && !DRY_RUN) {
   console.error("OPENAI_API_KEY is required");
   process.exit(1);
 }
@@ -60,6 +64,27 @@ interface Row {
 interface TableConfig {
   table: string;
   textCol: string;
+}
+
+function shouldSkipMemoryEmbedding(text: string): boolean {
+  const value = text.trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (lower.length < 24) return true;
+  if (lower.startsWith("heartbeat_last_state:")) return true;
+  if (lower.includes("<heartbeat") || lower.includes("</heartbeat>")) return true;
+
+  return [
+    "dont_notify",
+    "unclick healthy",
+    "no new signals",
+    "user is caught up",
+    "memory self-echo",
+    "fact saved: heartbeat_last_state",
+    "only memory self-echo signals",
+    "top queue unchanged",
+  ].some((needle) => lower.includes(needle));
 }
 
 // Determine which tables to backfill based on managed vs explicitly requested BYOD mode
@@ -113,7 +138,6 @@ async function backfillTable(config: TableConfig): Promise<void> {
   let totalSkipped = 0;
   let totalFailed = 0;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     let query = supabase
       .from(table)
@@ -144,9 +168,19 @@ async function backfillTable(config: TableConfig): Promise<void> {
         totalSkipped++;
         continue;
       }
+      if (shouldSkipMemoryEmbedding(text)) {
+        totalSkipped++;
+        continue;
+      }
+      if (MAX_BACKFILL_ROWS > 0 && totalProcessed >= MAX_BACKFILL_ROWS) {
+        console.log(`\n[${table}] row cap reached (${MAX_BACKFILL_ROWS}); stop this table for now.`);
+        break;
+      }
 
       try {
-        if (ADMIN_EMBED_SECRET) {
+        if (DRY_RUN) {
+          // Count rows that would be embedded without spending API credit.
+        } else if (ADMIN_EMBED_SECRET) {
           await embedViaApi(row.id, table, text);
         } else {
           // Direct DB write when no API server is running
@@ -174,6 +208,7 @@ async function backfillTable(config: TableConfig): Promise<void> {
       await new Promise((r) => setTimeout(r, 20));
     }
 
+    if (MAX_BACKFILL_ROWS > 0 && totalProcessed >= MAX_BACKFILL_ROWS) break;
     if (rows.length < PAGE_SIZE) break;
     page++;
   }
@@ -190,6 +225,8 @@ async function main() {
   );
   console.log(`  embed: ${ADMIN_EMBED_SECRET ? "via API endpoint" : "direct OpenAI + DB write"}`);
   console.log(`  page size: ${PAGE_SIZE}`);
+  console.log(`  per-table cap: ${MAX_BACKFILL_ROWS > 0 ? MAX_BACKFILL_ROWS : "off"}`);
+  console.log(`  dry run: ${DRY_RUN ? "yes" : "no"}`);
 
   for (const config of TABLES) {
     await backfillTable(config);

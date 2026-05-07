@@ -237,10 +237,31 @@ function getRequestBaseUrl(req: VercelRequest): string | null {
   return `${proto}://${host}`;
 }
 
+function shouldSkipMemoryEmbedding(text: string): boolean {
+  const value = text.trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (lower.length < 24) return true;
+  if (lower.startsWith("heartbeat_last_state:")) return true;
+  if (lower.includes("<heartbeat") || lower.includes("</heartbeat>")) return true;
+
+  return [
+    "dont_notify",
+    "unclick healthy",
+    "no new signals",
+    "user is caught up",
+    "memory self-echo",
+    "fact saved: heartbeat_last_state",
+    "only memory self-echo signals",
+    "top queue unchanged",
+  ].some((needle) => lower.includes(needle));
+}
+
 function queueMemoryEmbedding(req: VercelRequest, table: string, id: string, text: string): void {
   const secret = process.env.ADMIN_EMBED_SECRET;
   const baseUrl = getRequestBaseUrl(req);
-  if (!secret || !baseUrl || text.trim().length === 0) return;
+  if (!secret || !baseUrl || shouldSkipMemoryEmbedding(text)) return;
 
   void fetch(`${baseUrl}/api/memory/embed`, {
     method: "POST",
