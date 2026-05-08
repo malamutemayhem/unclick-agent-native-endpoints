@@ -53,13 +53,13 @@ jobs:
           CODING_ROOM_LEASE_SECONDS: ${{ vars.CODING_ROOM_LEASE_SECONDS || '1800' }}
           AUTONOMOUS_RUNNER_QUEUE_SOURCE: ${{ vars.AUTONOMOUS_RUNNER_QUEUE_SOURCE || 'unclick' }}
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
-          AUTONOMOUS_RUNNER_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.AUTONOMOUS_RUNNER_MODE || 'dry-run' }}
+          AUTONOMOUS_RUNNER_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.AUTONOMOUS_RUNNER_MODE || 'claim' }}
           AUTONOMOUS_RUNNER_DISABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.kill_switch == 'true' && 'true' || vars.AUTONOMOUS_RUNNER_DISABLED || 'false' }}
           AUTONOMOUS_RUNNER_ALLOW_EXECUTE: "false"
           AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES: "false"
           AUTONOMOUS_RUNNER_MAX_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_cycles || vars.AUTONOMOUS_RUNNER_MAX_CYCLES || '1' }}
           UNCLICK_MCP_URL: ${{ vars.UNCLICK_MCP_URL || 'https://unclick.world/api/mcp' }}
-          UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY }}
+          UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY || secrets.FISHBOWL_AUTOCLOSE_TOKEN || secrets.FISHBOWL_WAKE_TOKEN }}
         run: node scripts/pinballwake-autonomous-runner.mjs
 
       - name: Upload runner ledger
