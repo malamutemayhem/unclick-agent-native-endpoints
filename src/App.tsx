@@ -73,13 +73,13 @@ import AdminPinballWake from "./pages/admin/AdminPinballWake.tsx";
 import AdminModeration from "./pages/admin/AdminModeration.tsx";
 import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
 import BrainMap from "./pages/admin/BrainMap.tsx";
+import AdminJobs from "./pages/admin/AdminJobs.tsx";
 import {
   AdminAutopilot,
   AdminBilling,
   AdminChecks,
   AdminLedger,
   AdminProjects,
-  AdminTodoList,
   AdminWorkers,
 } from "./pages/admin/AdminEcosystemPages.tsx";
 import SignalsCatalog from "./pages/admin/signals/SignalsCatalog.tsx";
@@ -164,7 +164,8 @@ const App = () => (
             <Route path="autopilot" element={<AdminAutopilot />} />
             <Route path="agents"     element={<AdminAgentsPage />} />
             <Route path="workers" element={<AdminWorkers />} />
-            <Route path="todos" element={<AdminTodoList />} />
+            <Route path="jobs" element={<AdminJobs />} />
+            <Route path="todos" element={<Navigate to="/admin/jobs" replace />} />
             <Route path="checks" element={<AdminChecks />} />
             <Route path="ledger" element={<AdminLedger />} />
             <Route path="billing" element={<AdminBilling />} />
