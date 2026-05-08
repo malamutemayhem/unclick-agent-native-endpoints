@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  extractBoardroomTodoIdFromCodingRoomJob,
   fetchUnClickActionableTodos,
   inspectAutonomousRunnerJobSafety,
   markUnsafeJobsBlockedForAutonomousRunner,
@@ -205,6 +206,207 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.ok, true);
     assert.equal(result.todos.length, 1);
     assert.equal(result.todos[0].id, "todo-1");
+  });
+
+  it("extracts Boardroom todo ids only from imported UnClick jobs", () => {
+    const job = createCodingRoomJobFromBoardroomTodo({
+      id: "todo-claim-1",
+      title: "Auto-flip todo open to in_progress on start_code_task fire",
+    });
+
+    assert.equal(extractBoardroomTodoIdFromCodingRoomJob(job), "todo-claim-1");
+    assert.equal(extractBoardroomTodoIdFromCodingRoomJob(safeJob()), "");
+  });
+
+  it("syncs claimed UnClick todos back to in_progress in claim mode", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const calls = [];
+      const fetchImpl = async (url, init = {}) => {
+        calls.push({ url, init, body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-claim-1",
+                            title: "Auto-flip todo open to in_progress on start_code_task fire",
+                            status: "open",
+                            priority: "high",
+                            assigned_to_agent_id: null,
+                            created_at: "2026-05-08T05:00:00.000Z",
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-claim-1",
+                          status: "in_progress",
+                          assigned_to_agent_id: "runner-plex-1",
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "comment_on") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ comment: { id: "comment-1" } }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-08T05:30:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "claimed");
+      assert.equal(result.persisted, true);
+      assert.deepEqual(calls.map((call) => call.body.params.name), [
+        "list_actionable_todos",
+        "update_todo",
+        "comment_on",
+      ]);
+      assert.deepEqual(calls[1].body.params.arguments, {
+        agent_id: "runner-plex-1",
+        todo_id: "todo-claim-1",
+        status: "in_progress",
+        assigned_to_agent_id: "runner-plex-1",
+      });
+      assert.equal(calls[2].body.params.arguments.target_id, "todo-claim-1");
+      assert.match(calls[2].body.params.arguments.text, /dispatch=coding-room-claim:/);
+      assert.equal(result.todo_claim_sync.ok, true);
+      assert.equal(result.todo_claim_sync.todo_id, "todo-claim-1");
+
+      const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
+      assert.equal(persisted.jobs[0].status, "claimed");
+      assert.equal(persisted.jobs[0].claimed_by, "runner-plex-1");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks and avoids persisting when UnClick todo claim sync fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const fetchImpl = async (_url, init = {}) => {
+        const body = JSON.parse(init.body);
+        if (body.params.name === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-claim-2",
+                            title: "Safe docs chip",
+                            status: "open",
+                            priority: "high",
+                            assigned_to_agent_id: null,
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        return {
+          ok: false,
+          status: 503,
+          async json() {
+            return {};
+          },
+        };
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-08T05:30:00.000Z",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "blocked");
+      assert.equal(result.reason, "todo_claim_sync_failed");
+      assert.equal(result.persisted, false);
+      assert.equal(result.todo_claim_sync.reason, "update_todo_failed");
+
+      const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
+      assert.equal(persisted.jobs.length, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("marks sensitive Boardroom todos unsafe before autonomous claim", () => {
