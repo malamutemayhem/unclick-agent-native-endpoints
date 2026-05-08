@@ -103,7 +103,7 @@ const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
 const TITLE_MAX_CHARS = 90;
 
 const JOB_ROW_GRID =
-  "md:grid md:grid-cols-[46px_minmax(360px,1.25fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(200px,0.55fr)_30px_18px] md:items-center md:gap-1.5";
+  "md:grid md:grid-cols-[48px_minmax(360px,1.25fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(200px,0.55fr)_30px_18px] md:items-center md:gap-1.5";
 
 function compactTitle(title: string): string {
   const cleaned = title.replace(/\s+/g, " ").trim();
@@ -486,7 +486,7 @@ function JobRow({
       }}
     >
       <div className={`px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.03] ${JOB_ROW_GRID}`}>
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-0.5">
           <button
             type="button"
             draggable
@@ -495,13 +495,13 @@ function JobRow({
               onDragStart(todo.id);
             }}
             onDragEnd={onDragEnd}
-            className="shrink-0 cursor-grab rounded-[4px] p-0.5 text-white/20 hover:bg-white/[0.04] hover:text-white/45 active:cursor-grabbing"
+            className="shrink-0 cursor-grab rounded-[4px] p-px text-white/20 hover:bg-white/[0.04] hover:text-white/45 active:cursor-grabbing"
             title="Drag to reshuffle"
           >
-            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+            <GripVertical className="h-3.5 w-2.5" aria-hidden="true" />
           </button>
           <span
-            className="w-5 shrink-0 rounded-[4px] border border-white/[0.06] bg-white/[0.025] px-1 py-0.5 text-center text-[10px] font-semibold tabular-nums text-white/35"
+            className="w-4 shrink-0 rounded-[4px] border border-white/[0.06] bg-white/[0.025] px-0.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-white/35"
             title="Queue priority rank"
           >
             {queueRank}
@@ -509,19 +509,29 @@ function JobRow({
           <button
             type="button"
             onClick={onToggle}
-            className="shrink-0 rounded-[4px] p-0.5 text-white/40 hover:bg-white/[0.04] hover:text-white/70"
+            className="shrink-0 rounded-[4px] p-px text-white/45 hover:bg-white/[0.04] hover:text-white/75"
             aria-expanded={expanded}
             title={expanded ? "Collapse job" : "Expand job"}
           >
             {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
             )}
           </button>
         </div>
         <p
-          className={`min-w-0 select-text truncate text-[10px] font-semibold leading-4 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded}
+          onClick={onToggle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onToggle();
+            }
+          }}
+          className={`min-w-0 cursor-pointer select-text truncate rounded-[3px] text-[10px] font-semibold leading-4 outline-none hover:text-white focus-visible:ring-1 focus-visible:ring-[#61C1C4]/50 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
           title={todo.title}
         >
           {visibleTitle}
