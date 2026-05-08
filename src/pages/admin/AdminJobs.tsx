@@ -100,9 +100,16 @@ const ACTION_BUTTONS = {
 } as const;
 
 const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
+const TITLE_MAX_CHARS = 90;
 
 const JOB_ROW_GRID =
-  "md:grid md:grid-cols-[56px_minmax(440px,1.25fr)_58px_64px_minmax(112px,0.45fr)_48px_236px_34px_68px_20px] md:items-center md:gap-1.5";
+  "md:grid md:grid-cols-[46px_minmax(360px,1.25fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(200px,0.55fr)_30px_18px] md:items-center md:gap-1.5";
+
+function compactTitle(title: string): string {
+  const cleaned = title.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= TITLE_MAX_CHARS) return cleaned;
+  return `${cleaned.slice(0, TITLE_MAX_CHARS - 3).trimEnd()}...`;
+}
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -165,7 +172,7 @@ function StageStrip({ todo }: { todo: JobTodo }) {
   const active = activeStageCount(todo);
   const progress = progressFor(todo);
   return (
-    <div className="flex min-w-[220px] items-center gap-1.5" aria-label="Assembly line progress">
+    <div className="flex min-w-[200px] items-center gap-1" aria-label="Assembly line progress">
       <span className="w-7 shrink-0 text-right text-[10px] font-semibold text-white/55">
         {progress}%
       </span>
@@ -174,7 +181,7 @@ function StageStrip({ todo }: { todo: JobTodo }) {
           <span
             key={stage}
             title={stage}
-            className={`flex h-4 items-center justify-center text-[8px] font-semibold uppercase ${
+            className={`flex h-4 min-w-0 items-center justify-center text-[7px] font-semibold uppercase ${
               index < active
                 ? todo.status === "done"
                   ? "bg-green-400/85 text-black/70"
@@ -464,6 +471,7 @@ function JobRow({
   const rawOwner = todo.assigned_to_agent_id?.trim() || "unassigned";
   const alert = attention ? attentionCopy(todo) : null;
   const emoji = ownerEmoji(todo);
+  const visibleTitle = compactTitle(todo.title);
 
   return (
     <li
@@ -513,20 +521,20 @@ function JobRow({
           </button>
         </div>
         <p
-          className={`min-w-0 select-text truncate text-[13px] font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+          className={`min-w-0 select-text truncate text-[10px] font-semibold leading-4 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
           title={todo.title}
         >
-          {todo.title}
+          {visibleTitle}
         </p>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
           <span
-            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase ${STATUS_STYLE[todo.status]}`}
+            className={`inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-[4px] border px-1 py-px text-[9px] font-semibold uppercase ${STATUS_STYLE[todo.status]}`}
           >
             {statusLabel(todo.status)}
           </span>
           <span
-            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase ${PRIORITY_STYLE[todo.priority]}`}
+            className={`inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-[4px] border px-1 py-px text-[9px] font-semibold uppercase ${PRIORITY_STYLE[todo.priority]}`}
           >
             {todo.priority}
           </span>
@@ -551,10 +559,9 @@ function JobRow({
             <MessageSquare className="h-3 w-3" />
             {todo.comment_count ?? 0}
           </span>
-          <span className="truncate text-[10px] text-white/35">{relativeTime(todo.updated_at)}</span>
           {alert ? (
             <span
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-[11px] font-bold text-red-200"
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-[10px] font-bold text-red-200"
               title={`${alert.message} Fallback: ${alert.actions.join(", ")}`}
             >
               !
@@ -733,7 +740,7 @@ function JobSection({
         <p className="px-3 py-4 text-sm italic text-white/30">Empty</p>
       ) : (
         <ul>
-          <li className={`hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/30 ${JOB_ROW_GRID}`}>
+          <li className={`hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase text-white/30 ${JOB_ROW_GRID}`}>
             <SortHeader label="#" value="queue" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="Job" value="title" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="State" value="status" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
@@ -742,7 +749,6 @@ function JobSection({
             <SortHeader label="Live" value="live" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="Progress" value="progress" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="Notes" value="notes" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
-            <SortHeader label="Updated" value="updated" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <span className="text-right">!</span>
           </li>
           {visibleJobs.map((todo) => (
