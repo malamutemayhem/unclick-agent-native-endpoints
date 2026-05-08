@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AdminShell from "@/components/admin/AdminShell";
 import {
   Bot,
   Plus,
@@ -22,6 +21,7 @@ import {
   Cpu,
   Gauge,
   AlertTriangle,
+  Save,
 } from "lucide-react";
 import {
   AGENT_TEMPLATES,
@@ -101,44 +101,95 @@ const WORKER_ROLES = [
   { name: "Improver", emoji: "♻️", summary: "Turns repeated friction into new build work.", required: false },
 ] as const;
 
-const AI_SEATS = [
+interface AISeat {
+  id: string;
+  name: string;
+  emoji: string;
+  provider: string;
+  device: string;
+  status: "Ready" | "Standby" | "Needs login";
+  state: string;
+  load: number;
+  assigned: string;
+  issue: string;
+  isVirtual?: boolean;
+}
+
+const AI_SEAT_STORAGE_KEY = "unclick_ai_seat_manual_slots_v1";
+
+const AI_SEATS: AISeat[] = [
   {
-    name: "ChatGPT Seat 1",
-    provider: "ChatGPT",
-    status: "Hot",
-    state: "Working",
-    load: 40,
-    assigned: "Coordinator, Builder",
+    id: "seat-1",
+    name: "AI Seat 1",
+    emoji: "🤖",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
     issue: "",
   },
   {
-    name: "Claude Seat 1",
-    provider: "Claude",
-    status: "Warm",
-    state: "Available",
-    load: 40,
-    assigned: "Reviewer",
-    issue: "Usage limit getting close",
-  },
-  {
-    name: "Codex Seat 1",
-    provider: "Codex",
-    status: "Hot",
-    state: "Working",
-    load: 20,
-    assigned: "Builder",
+    id: "seat-2",
+    name: "AI Seat 2",
+    emoji: "🤖",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
     issue: "",
   },
   {
+    id: "seat-3",
+    name: "AI Seat 3",
+    emoji: "🤖",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
+  },
+  {
+    id: "seat-4",
     name: "AI Seat 4",
-    provider: "Unknown",
-    status: "Cold",
-    state: "Needs login",
-    load: 0,
-    assigned: "Not assigned",
-    issue: "Needs login",
+    emoji: "🤖",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
   },
-] as const;
+  {
+    id: "virtual-review",
+    name: "Virtual review seat",
+    emoji: "🧪",
+    provider: "Virtual support",
+    device: "Spawned when physical capacity is unavailable",
+    status: "Standby",
+    state: "Fallback only",
+    load: 0,
+    assigned: "Review / fallback",
+    issue: "",
+    isVirtual: true,
+  },
+];
+
+function loadSeatOverrides(): AISeat[] {
+  if (typeof window === "undefined") return AI_SEATS;
+  try {
+    const overrides = JSON.parse(window.localStorage.getItem(AI_SEAT_STORAGE_KEY) ?? "{}") as Record<string, Partial<AISeat>>;
+    return AI_SEATS.map((seat) => ({ ...seat, ...(overrides[seat.id] ?? {}) }));
+  } catch {
+    return AI_SEATS;
+  }
+}
 
 function getApiKey(): string {
   if (typeof window === "undefined") return "";
@@ -169,7 +220,7 @@ export default function AdminAgentsPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
   const [activeView, setActiveView] = useState<"workers" | "seats">("workers");
-  const [autoBalance, setAutoBalance] = useState(true);
+  const [autoBalance, setAutoBalance] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -322,11 +373,14 @@ export default function AdminAgentsPage() {
   };
 
   return (
-    <AdminShell
-      title="Workers"
-      subtitle="UnClick Workers are the roles. AI Seats are the connected AI capacity behind them."
-      agentCount={agents.length}
-    >
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-heading">Workers</h1>
+        <p className="mt-1 text-sm text-body">
+          UnClick Workers are the roles. AI Seats are the connected AI capacity behind them.
+        </p>
+      </header>
+
       <div className="mb-6 rounded-xl border border-border/40 bg-card/20 p-4">
         <div className="grid gap-3 md:grid-cols-2">
           <button
@@ -360,7 +414,7 @@ export default function AdminAgentsPage() {
               <span className="text-sm font-semibold text-heading">AI Seats</span>
             </div>
             <p className="mt-1 text-xs text-body">
-              The connected AI accounts UnClick can use as capacity. Auto-balance is recommended.
+              The connected AI accounts UnClick can use as capacity. Manual distribution is active for now.
             </p>
           </button>
         </div>
@@ -550,7 +604,7 @@ export default function AdminAgentsPage() {
       )}
         </>
       )}
-    </AdminShell>
+    </div>
   );
 }
 
@@ -590,7 +644,46 @@ function AISeatsPanel({
   autoBalance: boolean;
   setAutoBalance: (value: boolean) => void;
 }) {
-  const issues = AI_SEATS.filter((seat) => seat.issue);
+  const [seats, setSeats] = useState<AISeat[]>(() => loadSeatOverrides());
+  const [editingSeatId, setEditingSeatId] = useState<string | null>(null);
+  const issues = seats.filter((seat) => seat.issue);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const overrides = Object.fromEntries(
+      seats.map((seat) => [
+        seat.id,
+        {
+          name: seat.name,
+          emoji: seat.emoji,
+          provider: seat.provider,
+          device: seat.device,
+          load: seat.load,
+          assigned: seat.assigned,
+        },
+      ]),
+    );
+    window.localStorage.setItem(AI_SEAT_STORAGE_KEY, JSON.stringify(overrides));
+  }, [seats]);
+
+  const updateSeat = (seatId: string, patch: Partial<AISeat>) => {
+    setSeats((current) => current.map((seat) => (seat.id === seatId ? { ...seat, ...patch } : seat)));
+  };
+
+  const spreadEvenly = () => {
+    const physical = seats.filter((seat) => !seat.isVirtual);
+    const share = physical.length > 0 ? Math.floor(100 / physical.length) : 0;
+    const remainder = physical.length > 0 ? 100 - share * physical.length : 0;
+    let physicalIndex = 0;
+    setSeats((current) =>
+      current.map((seat) => {
+        if (seat.isVirtual) return { ...seat, load: 0 };
+        const load = share + (physicalIndex < remainder ? 1 : 0);
+        physicalIndex += 1;
+        return { ...seat, load };
+      }),
+    );
+  };
 
   return (
     <section className="space-y-5">
@@ -599,100 +692,161 @@ function AISeatsPanel({
           <div>
             <h2 className="text-sm font-semibold text-heading">Connected capacity</h2>
             <p className="mt-1 max-w-2xl text-xs text-body">
-              AI Seats are the connected AI accounts UnClick can use to power workers. UnClick still decides the work; seats provide available capacity.
+              AI Seats are capacity slots behind the workers. Live platform/device detection is not wired here yet, so unknown seats stay generic until UnClick has real metadata.
             </p>
           </div>
-          <label className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-heading">
-            <span className="font-semibold">Auto-balance</span>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setAutoBalance(!autoBalance)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
-                autoBalance ? "bg-primary" : "bg-muted"
-              }`}
-              aria-pressed={autoBalance}
+              onClick={spreadEvenly}
+              className="rounded-lg border border-border/40 bg-card/40 px-3 py-2 text-xs font-semibold text-heading transition-colors hover:border-primary/40"
             >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform ${
-                  autoBalance ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
+              Even split
             </button>
-          </label>
+            <label className="flex items-center gap-3 rounded-lg border border-border/40 bg-card/40 px-3 py-2 text-xs text-heading">
+              <span className="font-semibold">Auto paused</span>
+              <button
+                type="button"
+                onClick={() => setAutoBalance(false)}
+                className={`relative h-5 w-9 rounded-full transition-colors ${
+                  autoBalance ? "bg-primary" : "bg-muted"
+                }`}
+                aria-pressed={autoBalance}
+                title="Auto-balance plumbing is kept, but manual distribution is active for now."
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform ${
+                    autoBalance ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </label>
+          </div>
         </div>
 
         <div className="mt-4 rounded-lg border border-border/40 bg-card/30 p-4">
           <div className="flex items-start gap-3">
             <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <p className="text-xs text-body">
-              When Auto-balance is on, UnClick chooses the best available seat for each job using availability, current workload, role fit, reliability, and usage limits. Manual load sliders stay visible but locked.
+              Manual mode is the default. If only one physical seat is available, keep space for virtual review/fallback support. With multiple physical seats, start even and adjust by hand.
             </p>
           </div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border/40 bg-card/20">
-        <div className="grid grid-cols-[minmax(170px,1.4fr)_90px_110px_minmax(180px,1.2fr)_minmax(140px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Seat</span>
           <span>Status</span>
-          <span>Load</span>
+          <span>Manual load</span>
           <span>Assigned work</span>
           <span>Controls</span>
         </div>
         <div className="divide-y divide-border/30">
-          {AI_SEATS.map((seat) => (
-            <div
-              key={seat.name}
-              className="grid grid-cols-[minmax(170px,1.4fr)_90px_110px_minmax(180px,1.2fr)_minmax(140px,1fr)] items-center gap-3 px-4 py-3 text-xs"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-heading">{seat.name}</p>
-                <p className="text-[10px] text-muted-foreground">{seat.provider}</p>
-              </div>
-              <div>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                    seat.status === "Hot"
-                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                      : seat.status === "Warm"
-                        ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                        : "border-border/40 bg-card/40 text-muted-foreground"
-                  }`}
-                >
-                  {seat.status}
-                </span>
-                <p className="mt-1 text-[10px] text-muted-foreground">{seat.state}</p>
-              </div>
-              <div>
+          {seats.map((seat) => {
+            const editing = editingSeatId === seat.id;
+            return (
+              <div
+                key={seat.id}
+                className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(180px,1.2fr)_minmax(190px,1fr)] items-center gap-3 px-4 py-3 text-xs"
+              >
+                <div className="min-w-0">
+                  {editing ? (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-[44px_1fr] gap-1">
+                        <input
+                          value={seat.emoji}
+                          onChange={(event) => updateSeat(seat.id, { emoji: event.target.value.slice(0, 4) })}
+                          className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-xs text-heading outline-none focus:border-primary/40"
+                          aria-label="Seat emoji"
+                        />
+                        <input
+                          value={seat.name}
+                          onChange={(event) => updateSeat(seat.id, { name: event.target.value })}
+                          className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-xs text-heading outline-none focus:border-primary/40"
+                          aria-label="Seat name"
+                        />
+                      </div>
+                      <input
+                        value={seat.provider}
+                        onChange={(event) => updateSeat(seat.id, { provider: event.target.value })}
+                        className="w-full rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] text-body outline-none focus:border-primary/40"
+                        aria-label="Seat provider"
+                      />
+                      <input
+                        value={seat.device}
+                        onChange={(event) => updateSeat(seat.id, { device: event.target.value })}
+                        className="w-full rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] text-body outline-none focus:border-primary/40"
+                        aria-label="Seat device"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="truncate font-semibold text-heading">
+                        <span className="mr-1.5" aria-hidden="true">{seat.emoji}</span>
+                        {seat.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{seat.provider}</p>
+                      <p className="text-[10px] text-muted-foreground">{seat.device}</p>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                      seat.status === "Ready"
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                        : seat.status === "Standby"
+                          ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                          : "border-border/40 bg-card/40 text-muted-foreground"
+                    }`}
+                  >
+                    {seat.status}
+                  </span>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{seat.state}</p>
+                </div>
+                <div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={seat.load}
+                    onChange={(event) => updateSeat(seat.id, { load: Number(event.target.value) })}
+                    className="w-full accent-primary"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">{seat.load}%</p>
+                </div>
                 <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={seat.load}
-                  disabled={autoBalance}
-                  readOnly
-                  className="w-full accent-primary disabled:opacity-40"
+                  value={seat.assigned}
+                  onChange={(event) => updateSeat(seat.id, { assigned: event.target.value })}
+                  className="w-full rounded-md border border-transparent bg-transparent px-0 py-1 text-body outline-none transition-colors focus:border-border/40 focus:bg-card/40 focus:px-2"
+                  aria-label={`${seat.name} assigned work`}
                 />
-                <p className="mt-1 text-[10px] text-muted-foreground">{seat.load}%</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    title={editing ? "Save seat edits" : "Edit seat"}
+                    onClick={() => setEditingSeatId(editing ? null : seat.id)}
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    {editing ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                  </button>
+                  {seat.issue ? (
+                    <span className="text-[10px] text-amber-300">{seat.issue}</span>
+                  ) : seat.isVirtual ? (
+                    <span className="text-[10px] text-amber-300">Fallback</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Manual</span>
+                  )}
+                </div>
               </div>
-              <p className="text-body">{seat.assigned}</p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="Rename seat"
-                  className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                {seat.issue ? (
-                  <span className="text-[10px] text-amber-300">{seat.issue}</span>
-                ) : (
-                  <span className="text-[10px] text-muted-foreground">Healthy</span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-[#61C1C4]/25 bg-[#61C1C4]/5 p-4 text-xs text-body">
+        This page is currently a manual capacity planner. When UnClick has trusted live seat metadata, provider/device names can be filled automatically. Until then, generic AI Seat labels avoid guessing.
       </div>
 
       {issues.length > 0 && (
@@ -703,7 +857,7 @@ function AISeatsPanel({
           </div>
           <ul className="mt-2 space-y-1 text-xs text-body">
             {issues.map((seat) => (
-              <li key={seat.name}>
+              <li key={seat.id}>
                 <span className="font-medium text-heading">{seat.name}:</span> {seat.issue}
               </li>
             ))}
