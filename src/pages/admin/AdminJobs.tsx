@@ -97,7 +97,7 @@ const STATUS_STYLE: Record<JobTodo["status"], string> = {
 };
 
 const ACTION_BUTTONS = {
-  stale: ["Push workers", "Talk to AI agent", "Escalate"],
+  stale: ["Push workers", "(talk to owning AI seat)", "Escalate"],
   unowned: ["Claim / assign", "Push workers", "Drop priority"],
 } as const;
 
@@ -162,26 +162,27 @@ function activeStageCount(todo: JobTodo): number {
 
 function StageStrip({ todo }: { todo: JobTodo }) {
   const active = activeStageCount(todo);
+  const progress = progressFor(todo);
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-5 gap-px" aria-label="Assembly line progress">
+    <div className="flex min-w-[230px] items-center gap-2" aria-label="Assembly line progress">
+      <span className="w-8 shrink-0 text-right text-[10px] font-semibold text-white/55">
+        {progress}%
+      </span>
+      <div className="grid flex-1 grid-cols-5 gap-px overflow-hidden rounded-[3px]">
         {STAGES.map((stage, index) => (
           <span
             key={stage}
             title={stage}
-            className={`h-1.5 rounded-[2px] ${
+            className={`flex h-4 items-center justify-center text-[8px] font-semibold uppercase tracking-wide ${
               index < active
                 ? todo.status === "done"
-                  ? "bg-green-400"
-                  : "bg-[#61C1C4]"
-                : "bg-white/[0.08]"
+                  ? "bg-green-400/85 text-black/70"
+                  : "bg-[#61C1C4]/90 text-black/70"
+                : "bg-white/[0.08] text-white/30"
             }`}
-          />
-        ))}
-      </div>
-      <div className="grid grid-cols-5 gap-px text-[9px] uppercase tracking-wide text-white/30">
-        {STAGES.map((stage) => (
-          <span key={stage}>{stage}</span>
+          >
+            {stage}
+          </span>
         ))}
       </div>
     </div>
@@ -380,7 +381,6 @@ function JobRow({
   onDrop: (id: string) => void;
 }) {
   const attention = needsAttention(todo);
-  const progress = progressFor(todo);
   const description = todo.description?.trim();
   const [showDetails, setShowDetails] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -391,12 +391,6 @@ function JobRow({
   return (
     <li
       className="border-b border-white/[0.05] last:border-b-0"
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        onDragStart(todo.id);
-      }}
-      onDragEnd={onDragEnd}
       onDragOver={(event) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
@@ -406,40 +400,50 @@ function JobRow({
         onDrop(todo.id);
       }}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full space-y-2 px-3 py-2.5 text-left text-xs transition-colors hover:bg-white/[0.03]"
-        aria-expanded={expanded}
-      >
-        <div className="flex min-w-0 items-start gap-2">
-          <GripVertical
-            className="mt-1 h-3.5 w-3.5 shrink-0 cursor-grab text-white/25 hover:text-white/45"
-            aria-hidden="true"
-          />
-          {expanded ? (
-            <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/40" />
-          ) : (
-            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/40" />
-          )}
-          <div className="min-w-0">
-            <p
-              className={`text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
-              title={todo.title}
-            >
-              {todo.title}
-            </p>
-          </div>
+      <div className="px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.03]">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "move";
+              onDragStart(todo.id);
+            }}
+            onDragEnd={onDragEnd}
+            className="shrink-0 cursor-grab rounded-[4px] p-0.5 text-white/20 hover:bg-white/[0.04] hover:text-white/45 active:cursor-grabbing"
+            title="Drag to reshuffle"
+          >
+            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="shrink-0 rounded-[4px] p-0.5 text-white/40 hover:bg-white/[0.04] hover:text-white/70"
+            aria-expanded={expanded}
+            title={expanded ? "Collapse job" : "Expand job"}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <p
+            className={`min-w-0 flex-1 select-text text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+            title={todo.title}
+          >
+            {todo.title}
+          </p>
         </div>
 
-        <div className="ml-9 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="ml-9 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
           <span
-            className={`inline-flex items-center rounded-[6px] border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
+            className={`inline-flex items-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
           >
             {statusLabel(todo.status)}
           </span>
           <span
-            className={`inline-flex items-center rounded-[6px] border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
+            className={`inline-flex items-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
           >
             {todo.priority}
           </span>
@@ -457,8 +461,7 @@ function JobRow({
             />
             {todo.status === "done" ? "shipped" : isStaleActive(todo) ? "stale" : "live"}
           </span>
-          <span className="min-w-[190px] space-y-1 text-[11px] font-medium text-white/55">
-            <span>{progress}%</span>
+          <span className="text-[11px] font-medium text-white/55">
             <StageStrip todo={todo} />
           </span>
           <span className="flex items-center gap-1 text-[11px] text-white/45">
@@ -467,28 +470,28 @@ function JobRow({
           </span>
           <span className="text-[11px] text-white/35">Updated {relativeTime(todo.updated_at)}</span>
         </div>
-      </button>
+      </div>
 
       {alert && (
-        <div className="mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-md border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+        <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-200">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="mr-2">{alert.message}</span>
+          <span className="text-[11px] text-red-100/55">Fallback:</span>
           {alert.actions.map((action) => (
-            <button
+            <span
               key={action}
-              type="button"
-              className="inline-flex items-center gap-1 rounded-[5px] border border-red-300/20 bg-black/20 px-2 py-1 text-[11px] text-red-100 transition-colors hover:bg-red-400/10"
-              title="Fallback action placeholder. Autopilot should normally resolve this without a manual click."
+              className="inline-flex items-center gap-1 rounded-[4px] border border-red-300/15 bg-black/15 px-2 py-0.5 text-[11px] text-red-100/80"
+              title="Guidance only. Autopilot should normally resolve this without a manual click."
             >
-              {action === "Talk to AI agent" ? <MessageCircle className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+              {action.includes("talk") ? <MessageCircle className="h-3 w-3" /> : <Send className="h-3 w-3" />}
               {action}
-            </button>
+            </span>
           ))}
         </div>
       )}
 
       {expanded && (
-        <div className="mx-3 mb-3 space-y-3 rounded-md border border-white/[0.06] bg-black/20 p-3">
+        <div className="mx-3 mb-2 space-y-2 rounded-md border border-white/[0.06] bg-black/20 p-2.5">
           <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-4">
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Created</span>
@@ -510,7 +513,7 @@ function JobRow({
             </div>
           </div>
 
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-3">
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-medium text-white/75">
                 <FileText className="h-3.5 w-3.5 text-[#61C1C4]" />
@@ -533,7 +536,7 @@ function JobRow({
             )}
           </div>
 
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-3">
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-medium text-white/75">
                 <BookOpen className="h-3.5 w-3.5 text-[#E2B93B]" />
@@ -604,26 +607,33 @@ function JobSection({
   const displayCount = isCollapsible ? Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length) : cappedJobs.length;
   const visibleJobs = cappedJobs.slice(0, displayCount);
   const canShowMore = isCollapsible && displayCount < cappedJobs.length;
+  const sectionAccent: Record<JobSectionKey, string> = {
+    active: "bg-[#E2B93B]",
+    next: "bg-red-300",
+    inline: "bg-[#61C1C4]",
+    done: "bg-green-400",
+  };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#111]">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
+    <section className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#101010]">
+      <div className={`h-0.5 ${sectionAccent[sectionKey]}`} />
+      <div className="flex items-center justify-between border-b border-white/[0.08] bg-white/[0.045] px-3 py-2">
         {isCollapsible ? (
           <button
             type="button"
             onClick={onToggleSection}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/45 hover:text-white/70"
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/70 hover:text-white/90"
             aria-expanded={open}
           >
             {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             {SECTION_LABELS[sectionKey]}
           </button>
         ) : (
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/45">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/70">
             {SECTION_LABELS[sectionKey]}
           </h2>
         )}
-        <span className="text-xs text-white/35">
+        <span className="rounded-[4px] border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] font-semibold text-white/50">
           {isCollapsible && open ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}` : jobs.length}
         </span>
       </div>
@@ -882,7 +892,7 @@ export default function AdminJobs() {
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Filter jobs, e.g. eco brain, ec bra, urgent, builder"
+            placeholder="Filter jobs"
             className="w-full rounded-md border border-white/[0.06] bg-black/20 py-2 pl-8 pr-8 text-sm text-white/80 outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/35"
           />
           {searchQuery && (
