@@ -118,7 +118,7 @@ const TREE: Node[] = [
     ],
   },
   { label: "Boardroom", note: "build worker discussion" },
-  { label: "To-Do List", note: "dedicated tasks separated from Boardroom chatter" },
+  { label: "Jobs", note: "dedicated work list separated from Boardroom chatter" },
   {
     label: "XPass / Checks",
     note: "proof and quality checks",

@@ -164,7 +164,8 @@ const App = () => (
             <Route path="autopilot" element={<AdminAutopilot />} />
             <Route path="agents"     element={<AdminAgentsPage />} />
             <Route path="workers" element={<AdminWorkers />} />
-            <Route path="todos" element={<AdminTodoList />} />
+            <Route path="jobs" element={<AdminTodoList />} />
+            <Route path="todos" element={<Navigate to="/admin/jobs" replace />} />
             <Route path="checks" element={<AdminChecks />} />
             <Route path="ledger" element={<AdminLedger />} />
             <Route path="billing" element={<AdminBilling />} />

@@ -20,6 +20,7 @@ interface Todo {
 interface TodosProps {
   authHeader: Record<string, string>;
   humanAgentId: string | null;
+  variant?: "boardroom" | "page";
 }
 
 const STORAGE_KEY = "unclick.fishbowl.todos.collapsed";
@@ -45,6 +46,38 @@ function priorityPill(p: Todo["priority"]) {
       {p}
     </span>
   );
+}
+
+const STATUS_STYLE: Record<Todo["status"], string> = {
+  open: "bg-white/[0.05] text-[#aaa]",
+  in_progress: "bg-[#E2B93B]/15 text-[#E2B93B]",
+  done: "bg-green-500/15 text-green-300",
+  dropped: "bg-red-500/15 text-red-300",
+};
+
+function statusPill(status: Todo["status"]) {
+  const label = status === "in_progress" ? "active" : status;
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[status]}`}>
+      {label}
+    </span>
+  );
+}
+
+function progressFor(todo: Todo) {
+  if (todo.status === "done") return 100;
+  if (todo.status === "in_progress") return 45;
+  if (todo.priority === "urgent") return 15;
+  if (todo.priority === "high") return 10;
+  return 5;
+}
+
+function attentionText(todo: Todo) {
+  if (todo.status === "done") return "receipt";
+  if (todo.status === "in_progress") return todo.assigned_to_agent_id ? "moving" : "needs owner";
+  if (todo.priority === "urgent") return "next";
+  if (todo.priority === "high") return "in line";
+  return "waiting";
 }
 
 function AddTodoForm({
@@ -378,8 +411,10 @@ function TodoCard({
   );
 }
 
-export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) {
+export default function FishbowlTodos({ authHeader, humanAgentId, variant = "boardroom" }: TodosProps) {
+  const pageMode = variant === "page";
   const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (pageMode) return false;
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(STORAGE_KEY) !== "0";
   });
@@ -450,6 +485,14 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
     return map;
   }, [todos]);
 
+  const pageGroups = useMemo(() => {
+    const active = todos.filter((t) => t.status === "in_progress");
+    const next = todos.filter((t) => t.status === "open" && (t.priority === "urgent" || t.priority === "high"));
+    const inLine = todos.filter((t) => t.status === "open" && t.priority !== "urgent" && t.priority !== "high");
+    const done = todos.filter((t) => t.status === "done");
+    return { active, next, inLine, done };
+  }, [todos]);
+
   const toggleCard = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -460,6 +503,124 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
   };
 
   const totalActive = grouped.open.length + grouped.in_progress.length;
+
+  if (pageMode) {
+    const renderPageSection = (label: string, items: Todo[], helper: string) => (
+      <section className="rounded-lg border border-white/[0.06] bg-black/20">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#888]">{label}</h2>
+            <p className="mt-0.5 text-[11px] text-[#555]">{helper}</p>
+          </div>
+          <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-[#888]">{items.length}</span>
+        </div>
+        {items.length === 0 ? (
+          <p className="px-3 py-3 text-xs italic text-[#555]">empty</p>
+        ) : (
+          <div className="divide-y divide-white/[0.06]">
+            {items.slice(0, 100).map((t) => {
+              const progress = progressFor(t);
+              const expandedRow = expanded.has(t.id);
+              return (
+                <div key={t.id} className={t.status === "done" ? "opacity-70" : ""}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCard(t.id)}
+                    className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-3 py-2 text-left md:grid-cols-[minmax(0,1fr)_90px_110px_110px_80px_auto]"
+                    aria-expanded={expandedRow}
+                  >
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-medium ${t.status === "done" ? "text-[#666] line-through" : "text-[#ddd]"}`}>
+                        {t.status === "done" && <span className="mr-1 text-green-400">✓</span>}
+                        {t.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-[#666]">
+                        {t.assigned_to_agent_id ? `owner ${t.assigned_to_agent_id}` : "unassigned"}
+                        {(t.comment_count ?? 0) > 0 ? ` · ${t.comment_count} comments` : ""}
+                      </p>
+                    </div>
+                    <div className="hidden md:block">{statusPill(t.status)}</div>
+                    <div className="hidden md:block">{priorityPill(t.priority)}</div>
+                    <div className="hidden text-xs text-[#888] md:block">{attentionText(t)}</div>
+                    <div className="hidden md:block">
+                      <div className="h-1.5 rounded-full bg-white/[0.06]">
+                        <div className="h-1.5 rounded-full bg-[#61C1C4]" style={{ width: `${progress}%` }} />
+                      </div>
+                      <p className="mt-0.5 text-[10px] text-[#666]">{progress}%</p>
+                    </div>
+                    {expandedRow ? (
+                      <ChevronDown className="h-4 w-4 text-[#888]" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-[#888]" />
+                    )}
+                  </button>
+                  {expandedRow && (
+                    <div className="space-y-3 border-t border-white/[0.06] bg-black/20 px-3 py-3">
+                      {t.description && <p className="whitespace-pre-wrap text-xs leading-5 text-[#bbb]">{t.description}</p>}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {t.status !== "done" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void fetch(`/api/memory-admin?action=fishbowl_complete_todo`, {
+                                method: "POST",
+                                headers: { ...authHeader, "Content-Type": "application/json" },
+                                body: JSON.stringify({ agent_id: humanAgentId, todo_id: t.id }),
+                              }).then(onMutated);
+                            }}
+                            disabled={!humanAgentId}
+                            className="rounded-md border border-green-400/40 bg-green-400/10 px-2 py-1 text-xs font-medium text-green-300 disabled:opacity-40"
+                          >
+                            Complete
+                          </button>
+                        )}
+                        <span className="text-xs text-[#666]">Created {new Date(t.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <Comments
+                        authHeader={authHeader}
+                        humanAgentId={humanAgentId}
+                        targetKind="todo"
+                        targetId={t.id}
+                        pollSeq={pollSeq}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {items.length > 100 && (
+              <p className="px-3 py-2 text-xs text-[#666]">Showing first 100. Narrow the queue by completing or dropping older jobs.</p>
+            )}
+          </div>
+        )}
+      </section>
+    );
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-[#666]">
+            Single source of truth from Boardroom todos. One job per line.
+          </div>
+          <div className="flex items-center gap-2">
+            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#888]" />}
+            <AddTodoForm authHeader={authHeader} humanAgentId={humanAgentId} onCreated={onMutated} />
+          </div>
+        </div>
+
+        {error && (
+          <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            {error}
+          </p>
+        )}
+
+        {renderPageSection("Active now", pageGroups.active, "Work already claimed or moving.")}
+        {renderPageSection("Next", pageGroups.next, "Urgent and high-priority jobs waiting for owner, proof, or decision.")}
+        {renderPageSection("In line", pageGroups.inLine, "Normal and low-priority jobs kept visible without drowning the page.")}
+        {renderPageSection("Done", pageGroups.done, "Completed jobs with receipts and comments kept expandable.")}
+      </div>
+    );
+  }
 
   return (
     <section className="rounded-xl border border-white/[0.06] bg-white/[0.02]">

@@ -1,4 +1,7 @@
 import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSession } from "@/lib/auth";
+import FishbowlTodos from "./fishbowl/Todos";
 import {
   AppWindow,
   Archive,
@@ -14,7 +17,6 @@ import {
   FolderKanban,
   Hammer,
   KeyRound,
-  ListTodo,
   MessagesSquare,
   Microscope,
   Plane,
@@ -166,19 +168,44 @@ export function AdminWorkers() {
 }
 
 export function AdminTodoList() {
+  const { session } = useSession();
+  const token = session?.access_token;
+  const authHeader = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token],
+  );
+  const [humanAgentId, setHumanAgentId] = useState<string | null>(null);
+
+  const claimHumanProfile = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/memory-admin?action=fishbowl_admin_claim", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        profile?: { agent_id?: string };
+      };
+      if (res.ok && body.profile?.agent_id) {
+        setHumanAgentId(body.profile.agent_id);
+      }
+    } catch {
+      // Non-fatal: the Jobs page can still render, but add/edit controls stay disabled.
+    }
+  }, [authHeader, token]);
+
+  useEffect(() => {
+    void claimHumanProfile();
+  }, [claimHumanProfile]);
+
   return (
     <PageShell
       kicker="Tasks, separated from chatter"
-      title="To-Do List"
-      subtitle="Dedicated tasks belong here so the Boardroom can stay readable. Boardroom is for discussion; this is for work items."
+      title="Jobs"
+      subtitle="A single-column source of truth for active, next, in-line, and completed work. Boardroom stays for discussion; Jobs is the work list."
     >
-      <TileGrid
-        items={[
-          { title: "Open tasks", body: "Jobs waiting for a worker, owner, proof, or decision.", icon: ListTodo },
-          { title: "Blocked tasks", body: "Items that need user input, missing credentials, or a safety decision.", icon: ShieldCheck },
-          { title: "Done", body: "Completed tasks with receipts linked in the Ledger.", icon: CheckCircle2 },
-        ]}
-      />
+      <FishbowlTodos authHeader={authHeader} humanAgentId={humanAgentId} variant="page" />
     </PageShell>
   );
 }
