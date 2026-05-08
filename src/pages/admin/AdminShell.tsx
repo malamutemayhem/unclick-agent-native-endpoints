@@ -266,7 +266,7 @@ export default function AdminShell() {
         <SurfaceLink path="/admin/autopilot" label="Autopilot"               icon={Plane} onClick={onLinkClick} />
         <SurfaceLink path="/admin/agents"    label="Workers"                 icon={Bot} onClick={onLinkClick} />
         <SurfaceLink path="/admin/boardroom" label="Boardroom"               icon={MessagesSquare} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/todos"     label="To-Do List"              icon={ListTodo} onClick={onLinkClick} />
+        <SurfaceLink path="/admin/jobs"      label="Jobs"                    icon={ListTodo} onClick={onLinkClick} />
         <SurfaceLink path="/admin/checks"    label="XPass / Checks"          icon={ClipboardCheck} onClick={onLinkClick} />
         <SurfaceLink path="/admin/ledger"    label="Ledger"                  icon={ReceiptText} onClick={onLinkClick} />
         <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />

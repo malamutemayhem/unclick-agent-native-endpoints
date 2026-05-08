@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Send } from "lucide-react";
 import { useSession } from "@/lib/auth";
-import FishbowlTodos from "./fishbowl/Todos";
 import FishbowlIdeas from "./fishbowl/Ideas";
 import FishbowlSettings from "./fishbowl/Settings";
 import { clusterProfiles, type ProfileCluster } from "./fishbowl/clusterProfiles";
@@ -715,8 +714,6 @@ export default function Fishbowl() {
       <NowPlayingStrip profiles={profiles} clusters={profileClusters} />
 
       <FishbowlSettings profiles={profiles} />
-
-      <FishbowlTodos authHeader={authHeader} humanAgentId={humanAgentId} />
 
       <FishbowlIdeas authHeader={authHeader} humanAgentId={humanAgentId} />
 
