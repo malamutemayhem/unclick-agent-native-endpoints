@@ -213,6 +213,105 @@ export async function fetchUnClickActionableTodos({
   };
 }
 
+export function extractBoardroomTodoIdFromCodingRoomJob(job = {}) {
+  const jobId = String(job?.job_id || "").trim();
+  const source = String(job?.source || "").trim();
+  if (source !== "unclick-boardroom-actionable-todo" && !jobId.startsWith("boardroom-todo:")) {
+    return "";
+  }
+
+  const todoId = jobId.startsWith("boardroom-todo:")
+    ? jobId.slice("boardroom-todo:".length).trim()
+    : "";
+  return todoId && todoId !== "unknown" ? todoId : "";
+}
+
+function boardroomClaimAgentId(runner = {}) {
+  const safeRunner = createAutonomousRunner(runner);
+  return safeRunner.agent_id || safeRunner.id || DEFAULT_AUTONOMOUS_RUNNER.id;
+}
+
+export async function syncClaimedBoardroomTodoToUnClick({
+  job,
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const todoId = extractBoardroomTodoIdFromCodingRoomJob(job);
+  if (!todoId) {
+    return { ok: true, skipped: true, reason: "not_boardroom_todo_claim" };
+  }
+
+  const agentId = boardroomClaimAgentId(runner);
+  const update = await callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "update_todo",
+    arguments: {
+      agent_id: agentId,
+      todo_id: todoId,
+      status: "in_progress",
+      assigned_to_agent_id: agentId,
+    },
+  });
+
+  if (!update.ok) {
+    return {
+      ok: false,
+      reason: "update_todo_failed",
+      todo_id: todoId,
+      detail: update.reason || update.error || null,
+      status: update.status ?? null,
+    };
+  }
+
+  const comment = await callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "comment_on",
+    arguments: {
+      agent_id: agentId,
+      target_kind: "todo",
+      target_id: todoId,
+      text: compact(
+        [
+          "Autonomous Runner claim synced: status open -> in_progress.",
+          `owner=${agentId}.`,
+          `dispatch=${job?.claim_id || "none"}.`,
+          `source=${job?.source || "unknown"}.`,
+          `job=${job?.job_id || "unknown"}.`,
+        ].join(" "),
+        600,
+      ),
+    },
+  });
+
+  if (!comment.ok) {
+    return {
+      ok: true,
+      reason: "claim_synced_comment_failed",
+      todo_id: todoId,
+      assigned_to_agent_id: agentId,
+      status: "in_progress",
+      comment_ok: false,
+      comment_detail: comment.reason || comment.error || null,
+      comment_status: comment.status ?? null,
+    };
+  }
+
+  return {
+    ok: true,
+    todo_id: todoId,
+    assigned_to_agent_id: agentId,
+    status: "in_progress",
+    comment_ok: true,
+    comment_id: comment.data?.comment?.id || null,
+  };
+}
+
 export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date().toISOString() } = {}) {
   const id = String(todo.id || todo.todo_id || "").trim();
   const title = compact(todo.title || "Untitled Boardroom todo", 180);
@@ -575,14 +674,48 @@ export async function runAutonomousRunnerFile({
 
   const executeBlocked = safeMode === "execute" && !safePolicy.allowExecute;
   const shouldPersist = safeMode !== "dry-run" && !safePolicy.disabled && !executeBlocked;
+  const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
+  let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
+
+  if (
+    shouldPersist &&
+    queueSourceResult.source === "unclick" &&
+    last.action === "claimed" &&
+    last.job
+  ) {
+    todoClaimSync = await syncClaimedBoardroomTodoToUnClick({
+      job: last.job,
+      runner,
+      apiKey: unclickApiKey,
+      mcpUrl: unclickMcpUrl,
+      fetchImpl,
+    });
+
+    if (!todoClaimSync.ok) {
+      return {
+        ...last,
+        ok: false,
+        action: "blocked",
+        reason: "todo_claim_sync_failed",
+        mode: safeMode,
+        dry_run: safeMode === "dry-run",
+        persisted: false,
+        cycles: results,
+        ledger,
+        ledger_path: ledgerPath,
+        queue_source: queueSourceResult,
+        todo_claim_sync: todoClaimSync,
+      };
+    }
+  }
+
   if (shouldPersist) {
     await writeCodingRoomJobLedger(ledgerPath, ledger);
   }
 
-  const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
   return {
     ...last,
-    ok: results.every((result) => result.ok),
+    ok: results.every((result) => result.ok) && todoClaimSync.ok,
     action: last.action,
     mode: safeMode,
     dry_run: safeMode === "dry-run",
@@ -591,6 +724,7 @@ export async function runAutonomousRunnerFile({
     ledger,
     ledger_path: ledgerPath,
     queue_source: queueSourceResult,
+    todo_claim_sync: todoClaimSync,
   };
 }
 
