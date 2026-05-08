@@ -72,6 +72,18 @@ function normalizeWorkerToken(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function hasExecutableBuildPatch(job = {}) {
+  return String(job?.build?.patch ?? "").trim().length > 0;
+}
+
+function isUnscopedBoardroomTodoJob(job = {}) {
+  return (
+    String(job?.source || "").trim() === "unclick-boardroom-actionable-todo" &&
+    job?.job_type !== "review" &&
+    ((job?.owned_files || []).length === 0 || !hasExecutableBuildPatch(job))
+  );
+}
+
 export function codingRoomJobId({ source = "manual", prNumber = "none", chip = "", worker = "" }) {
   const digest = createHash("sha256")
     .update([source, prNumber, chip, worker].map((part) => String(part ?? "").trim()).join("|"))
@@ -324,6 +336,10 @@ export function runnerCanClaimCodingRoomJob({ runner = {}, job, activeJobs = [] 
     }
 
     return { ok: true, reason: "claimable_review" };
+  }
+
+  if (isUnscopedBoardroomTodoJob(job)) {
+    return { ok: false, reason: "boardroom_todo_missing_scopepack" };
   }
 
   const readiness = String(runner.readiness || "").trim();

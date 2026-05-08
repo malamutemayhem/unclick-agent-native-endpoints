@@ -7984,6 +7984,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             completed_at: t.completed_at,
             comment_count: countMap[t.id as string] ?? 0,
             actionable_rank: index + 1,
+            scope_pack:
+              t.scope_pack ??
+              t.scopePack ??
+              t.runner_scope ??
+              t.runnerScope ??
+              t.autonomous_scope ??
+              t.autonomousScope ??
+              t.coding_room_scope ??
+              t.codingRoomScope ??
+              null,
           }));
           return res.status(200).json({
             todos: decorated,

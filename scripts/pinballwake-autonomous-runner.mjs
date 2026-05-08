@@ -100,6 +100,11 @@ function compact(value, max = 240) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function compactMultiline(value, max = 12000) {
+  const text = String(value ?? "").trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
 function stableTodoJobId(todo = {}) {
   return `boardroom-todo:${String(todo.id || todo.todo_id || "unknown").trim()}`;
 }
@@ -125,6 +130,91 @@ function extractMcpTextJson(payload) {
   }
 
   return payload;
+}
+
+function parseJsonObject(value) {
+  if (!value) return null;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function firstPresentObject(...values) {
+  for (const value of values) {
+    const parsed = parseJsonObject(value);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function listFromUnknown(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizePath(item)).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => normalizePath(item))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function extractBoardroomTodoScopePack(todo = {}) {
+  const scope = firstPresentObject(
+    todo.scope_pack,
+    todo.scopePack,
+    todo.runner_scope,
+    todo.runnerScope,
+    todo.autonomous_scope,
+    todo.autonomousScope,
+    todo.coding_room_scope,
+    todo.codingRoomScope,
+  );
+
+  if (!scope) {
+    return {
+      hasScopePack: false,
+      files: [],
+      patch: "",
+      tests: [],
+      jobType: "code",
+    };
+  }
+
+  const build = parseJsonObject(scope.build) || {};
+  const expectedProof = parseJsonObject(scope.expected_proof) || parseJsonObject(scope.expectedProof) || {};
+  const files = listFromUnknown(
+    scope.owned_files ??
+      scope.ownedFiles ??
+      scope.files ??
+      scope.paths,
+  );
+  const patch = compactMultiline(
+    scope.patch ??
+      scope.diff ??
+      build.patch ??
+      "",
+  );
+  const tests = listFromUnknown(
+    scope.tests ??
+      expectedProof.tests,
+  );
+
+  return {
+    hasScopePack: true,
+    files,
+    patch,
+    tests,
+    jobType: String(scope.job_type || scope.jobType || "code").trim() || "code",
+  };
 }
 
 export function parseMcpEventStreamPayload(text = "") {
@@ -359,11 +449,13 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
   const title = compact(todo.title || "Untitled Boardroom todo", 180);
   const priority = String(todo.priority || "normal").trim().toLowerCase();
   const assignee = String(todo.assigned_to_agent_id || "").trim();
+  const scopePack = extractBoardroomTodoScopePack(todo);
   const contextParts = [
     id ? `Boardroom todo ${id}` : "Boardroom todo",
     priority ? `priority=${priority}` : "",
     assignee ? `assigned=${assignee}` : "unassigned",
     todo.status ? `status=${todo.status}` : "",
+    scopePack.hasScopePack ? "scopepack=present" : "scopepack=missing",
   ].filter(Boolean);
 
   return createCodingRoomJob({
@@ -371,14 +463,18 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
     source: "unclick-boardroom-actionable-todo",
     worker: assignee || "builder",
     chip: title,
-    context: `${contextParts.join("; ")}. Imported for autonomous claim/routing; do not build unless a ScopePack names owned files.`,
-    files: [`boardroom-todos/${id || "unknown"}.md`],
+    context: `${contextParts.join("; ")}. Imported for autonomous claim/routing; claim only when a ScopePack names owned files and an executable patch.`,
+    jobType: scopePack.jobType,
+    files: scopePack.files,
     expectedProof: {
       requiresPr: false,
-      requiresChangedFiles: false,
+      requiresChangedFiles: scopePack.hasScopePack,
       requiresNonOverlap: true,
-      requiresTests: false,
-      tests: [],
+      requiresTests: scopePack.tests.length > 0,
+      tests: scopePack.tests,
+    },
+    build: {
+      patch: scopePack.patch,
     },
     createdAt: todo.created_at || now,
   });
