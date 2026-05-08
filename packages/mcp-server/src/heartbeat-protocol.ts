@@ -23,7 +23,7 @@ export type HeartbeatProtocol = {
 };
 
 export const HEARTBEAT_PROTOCOL_DATE = "2026-05-07";
-export const HEARTBEAT_PROTOCOL_REVISION = 1;
+export const HEARTBEAT_PROTOCOL_REVISION = 2;
 
 export function formatHeartbeatProtocolVersion(revision: number): string {
   return `${HEARTBEAT_PROTOCOL_DATE}.v${revision}`;
@@ -33,9 +33,9 @@ const HEARTBEAT_PROTOCOL: HeartbeatProtocol = {
   version: formatHeartbeatProtocolVersion(HEARTBEAT_PROTOCOL_REVISION),
   procedure: [
     "Call UnClick check_signals first. If unavailable, fall back to list_actionable_todos and read_messages. Cap to the most recent items UnClick returns.",
-    "Compare against prior tether state saved under heartbeat_last_state via search_memory. The diff is the only thing worth surfacing.",
+    "Compare against prior tether state from local automation state first, then heartbeat_last_state search_memory only if no transient state is available. The diff is the only thing worth surfacing.",
     'If no change, send nothing or exactly: "UnClick healthy." If UnClick surfaces action_needed, blocker, failed check, stale ACK, or approval-required items, send only the alert format.',
-    "Save the new tether state via save_fact with heartbeat_last_state, timestamp, and a small fingerprint under 2KB.",
+    "Keep healthy heartbeat state transient. Do not save recurring healthy or no-change heartbeats as Memory facts; use save_fact only for actionable diffs, tether errors, or explicit user-relevant state changes.",
     "Do not retry, escalate, route, build, merge, edit code, or perform actions outside this heartbeat procedure.",
   ],
   alert_format: {

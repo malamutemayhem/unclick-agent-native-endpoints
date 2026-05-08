@@ -52,9 +52,9 @@ describe("heartbeat_protocol payload", () => {
       procedure: [...protocol.procedure, "new instruction"],
     };
 
-    expect(formatHeartbeatProtocolVersion(2)).toBe("2026-05-07.v2");
-    expect(protocol.version).toBe("2026-05-07.v1");
-    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("2c8cce6cbde3c0f4");
+    expect(formatHeartbeatProtocolVersion(3)).toBe("2026-05-07.v3");
+    expect(protocol.version).toBe("2026-05-07.v2");
+    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("2004d11c449534bc");
     expect(heartbeatProtocolContentFingerprint(changed)).not.toBe(
       heartbeatProtocolContentFingerprint(protocol),
     );
