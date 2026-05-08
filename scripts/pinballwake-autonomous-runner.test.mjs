@@ -143,12 +143,15 @@ describe("PinballWake autonomous Runner seat", () => {
       });
 
       assert.equal(result.ok, true);
-      assert.equal(result.action, "claimed");
+      assert.equal(result.action, "idle");
       assert.equal(result.persisted, false);
       assert.equal(result.queue_source.source, "unclick");
       assert.equal(result.queue_source.seen, 1);
       assert.equal(result.queue_source.imported, 1);
-      assert.equal(result.job.job_id, "boardroom-todo:b744462e-8e50-4cad-babb-5468adc2a3d9");
+      assert.equal(result.ledger.jobs[0].job_id, "boardroom-todo:b744462e-8e50-4cad-babb-5468adc2a3d9");
+      assert.deepEqual(result.ledger.jobs[0].owned_files, []);
+      assert.equal(result.ledger.jobs[0].build.patch, "");
+      assert.equal(result.skipped[0].reason, "boardroom_todo_missing_scopepack");
       assert.equal(calls.length, 1);
       assert.equal(calls[0].url, "https://unclick.test/api/mcp");
       assert.equal(calls[0].init.headers.authorization, "Bearer uc_test");
@@ -287,6 +290,11 @@ describe("PinballWake autonomous Runner seat", () => {
                             priority: "high",
                             assigned_to_agent_id: null,
                             created_at: "2026-05-08T05:00:00.000Z",
+                            scope_pack: {
+                              owned_files: ["docs/runner-scope.md"],
+                              patch: "diff --git a/docs/runner-scope.md b/docs/runner-scope.md\n--- a/docs/runner-scope.md\n+++ b/docs/runner-scope.md\n@@ -1 +1 @@\n-old\n+new\n",
+                              tests: [],
+                            },
                           },
                         ],
                       }),
@@ -406,6 +414,10 @@ describe("PinballWake autonomous Runner seat", () => {
                             status: "open",
                             priority: "high",
                             assigned_to_agent_id: null,
+                            scope_pack: {
+                              owned_files: ["docs/safe-chip.md"],
+                              patch: "diff --git a/docs/safe-chip.md b/docs/safe-chip.md\n--- a/docs/safe-chip.md\n+++ b/docs/safe-chip.md\n@@ -1 +1 @@\n-old\n+new\n",
+                            },
                           },
                         ],
                       }),
