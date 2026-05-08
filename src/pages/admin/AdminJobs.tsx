@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -688,6 +689,7 @@ function JobSection({
   visibleCount,
   onToggleSection,
   onShowMore,
+  loading,
 }: {
   sectionKey: JobSectionKey;
   jobs: JobTodo[];
@@ -701,6 +703,7 @@ function JobSection({
   visibleCount?: number;
   onToggleSection?: () => void;
   onShowMore?: () => void;
+  loading?: boolean;
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("queue");
@@ -719,6 +722,7 @@ function JobSection({
   const displayCount = Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length);
   const visibleJobs = sortedJobs.slice(0, displayCount);
   const canShowMore = displayCount < cappedJobs.length;
+  const showLoading = loading === true && jobs.length === 0;
   const sectionAccent: Record<JobSectionKey, string> = {
     active: "bg-[#E2B93B]",
     next: "bg-red-300",
@@ -747,10 +751,19 @@ function JobSection({
           {SECTION_LABELS[sectionKey]}
         </button>
         <span className="rounded-[4px] border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] font-semibold text-white/50">
-          {open ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}` : jobs.length}
+          {showLoading
+            ? "..."
+            : open
+              ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}`
+              : jobs.length}
         </span>
       </div>
-      {!open ? null : jobs.length === 0 ? (
+      {!open ? null : showLoading ? (
+        <div className="flex items-center gap-2 px-3 py-4 text-sm text-white/35">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#61C1C4]" />
+          Loading jobs
+        </div>
+      ) : jobs.length === 0 ? (
         <p className="px-3 py-4 text-sm italic text-white/30">Empty</p>
       ) : (
         <ul>
@@ -922,6 +935,7 @@ export default function AdminJobs() {
   const activeCount = grouped.active.length;
   const queueCount = grouped.next.length + grouped.inline.length;
   const alertCount = filteredTodos.filter(needsAttention).length;
+  const initialLoading = !firstLoadDone && loading;
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
@@ -987,15 +1001,21 @@ export default function AdminJobs() {
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
             <p className="text-xs text-white/35">Active</p>
-            <p className="mt-1 text-lg font-semibold text-[#E2B93B]">{activeCount}</p>
+            <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-[#E2B93B]">
+              {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : activeCount}
+            </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
             <p className="text-xs text-white/35">Queued</p>
-            <p className="mt-1 text-lg font-semibold text-white/80">{queueCount}</p>
+            <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-white/80">
+              {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : queueCount}
+            </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
             <p className="text-xs text-white/35">Alerts</p>
-            <p className="mt-1 text-lg font-semibold text-red-200">{alertCount}</p>
+            <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-red-200">
+              {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : alertCount}
+            </p>
           </div>
         </div>
       </header>
@@ -1030,7 +1050,8 @@ export default function AdminJobs() {
       </div>
 
       <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-xs text-white/35">
-        <span>
+        <span className="inline-flex items-center gap-1.5">
+          {initialLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#61C1C4]" />}
           {firstLoadDone
             ? searchQuery.trim()
               ? `${filteredTodos.length} of ${todos.length} jobs match`
@@ -1057,6 +1078,7 @@ export default function AdminJobs() {
           visibleCount={sectionPrefs.visible.active}
           onToggleSection={() => toggleSection("active")}
           onShowMore={() => showMore("active")}
+          loading={initialLoading}
         />
         <JobSection
           sectionKey="next"
@@ -1071,6 +1093,7 @@ export default function AdminJobs() {
           visibleCount={sectionPrefs.visible.next}
           onToggleSection={() => toggleSection("next")}
           onShowMore={() => showMore("next")}
+          loading={initialLoading}
         />
         <JobSection
           sectionKey="inline"
@@ -1085,6 +1108,7 @@ export default function AdminJobs() {
           visibleCount={sectionPrefs.visible.inline}
           onToggleSection={() => toggleSection("inline")}
           onShowMore={() => showMore("inline")}
+          loading={initialLoading}
         />
         <JobSection
           sectionKey="done"
@@ -1099,6 +1123,7 @@ export default function AdminJobs() {
           visibleCount={sectionPrefs.visible.done}
           onToggleSection={() => toggleSection("done")}
           onShowMore={() => showMore("done")}
+          loading={initialLoading}
         />
       </div>
 
