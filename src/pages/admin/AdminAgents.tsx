@@ -19,7 +19,6 @@ import {
   X,
   Check,
   Cpu,
-  Gauge,
   AlertTriangle,
   Save,
 } from "lucide-react";
@@ -118,43 +117,35 @@ interface AISeat {
 const AI_SEAT_STORAGE_KEY = "unclick_ai_seat_manual_slots_v1";
 
 const AI_SEAT_EMOJI_OPTIONS = [
-  { emoji: "🤖", label: "Robot" },
-  { emoji: "🧠", label: "Brain" },
-  { emoji: "🛰️", label: "Relay" },
-  { emoji: "🧭", label: "Navigator" },
-  { emoji: "⚡", label: "Fast" },
-  { emoji: "💡", label: "Ideas" },
-  { emoji: "🔍", label: "Reviewer" },
-  { emoji: "🛠️", label: "Builder" },
-  { emoji: "🧪", label: "Tester" },
-  { emoji: "🛡️", label: "Safety" },
-  { emoji: "📣", label: "Courier" },
-  { emoji: "👁️", label: "Watcher" },
-  { emoji: "🚀", label: "Publisher" },
-  { emoji: "♻️", label: "Improver" },
-  { emoji: "🧰", label: "Toolkit" },
-  { emoji: "📡", label: "Signal" },
-  { emoji: "🧬", label: "System" },
-  { emoji: "🗂️", label: "Organizer" },
-  { emoji: "📋", label: "Planner" },
-  { emoji: "🔬", label: "Research" },
-  { emoji: "💻", label: "Desktop" },
+  { emoji: "💻", label: "Laptop / default" },
+  { emoji: "🖥️", label: "Desktop" },
+  { emoji: "📱", label: "Mobile" },
+  { emoji: "🔳", label: "Tablet" },
+  { emoji: "🔲", label: "Virtual slot" },
+  { emoji: "🖱️", label: "Mouse" },
   { emoji: "⌨️", label: "Keyboard" },
-  { emoji: "🧑‍💻", label: "Coder" },
-  { emoji: "🕹️", label: "Control" },
-  { emoji: "🎛️", label: "Console" },
-  { emoji: "🧱", label: "Stack" },
-  { emoji: "🔐", label: "Secure" },
-  { emoji: "✅", label: "Checker" },
-  { emoji: "🌐", label: "Web" },
-  { emoji: "✨", label: "Creative" },
+  { emoji: "🎛️", label: "Control panel" },
+  { emoji: "🕹️", label: "Controller" },
+  { emoji: "📺", label: "Display" },
+  { emoji: "🔌", label: "Plugged in" },
+  { emoji: "🔋", label: "Battery" },
+  { emoji: "🪫", label: "Low battery" },
+  { emoji: "📶", label: "Signal bars" },
+  { emoji: "🛜", label: "Wi-Fi" },
+  { emoji: "🌐", label: "Web seat" },
+  { emoji: "💾", label: "Local disk" },
+  { emoji: "💽", label: "Archive disk" },
+  { emoji: "🧮", label: "Compute" },
+  { emoji: "📟", label: "Terminal" },
+  { emoji: "🖨️", label: "Printer" },
+  { emoji: "📠", label: "Legacy line" },
 ] as const;
 
 const AI_SEATS: AISeat[] = [
   {
     id: "seat-1",
     name: "AI Seat 1",
-    emoji: "🤖",
+    emoji: "💻",
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
@@ -166,7 +157,7 @@ const AI_SEATS: AISeat[] = [
   {
     id: "seat-2",
     name: "AI Seat 2",
-    emoji: "🤖",
+    emoji: "💻",
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
@@ -178,7 +169,7 @@ const AI_SEATS: AISeat[] = [
   {
     id: "seat-3",
     name: "AI Seat 3",
-    emoji: "🤖",
+    emoji: "💻",
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
@@ -190,7 +181,7 @@ const AI_SEATS: AISeat[] = [
   {
     id: "seat-4",
     name: "AI Seat 4",
-    emoji: "🤖",
+    emoji: "💻",
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
@@ -202,7 +193,7 @@ const AI_SEATS: AISeat[] = [
   {
     id: "virtual-review",
     name: "Virtual review seat",
-    emoji: "🧪",
+    emoji: "🔲",
     provider: "Virtual support",
     device: "Spawned when physical capacity is unavailable",
     status: "Standby",
@@ -218,7 +209,11 @@ function loadSeatOverrides(): AISeat[] {
   if (typeof window === "undefined") return AI_SEATS;
   try {
     const overrides = JSON.parse(window.localStorage.getItem(AI_SEAT_STORAGE_KEY) ?? "{}") as Record<string, Partial<AISeat>>;
-    return AI_SEATS.map((seat) => ({ ...seat, ...(overrides[seat.id] ?? {}) }));
+    return AI_SEATS.map((seat) => {
+      const override = overrides[seat.id] ?? {};
+      const wasOldDefaultEmoji = (!seat.isVirtual && override.emoji === "🤖") || (seat.isVirtual && override.emoji === "🧪");
+      return { ...seat, ...override, emoji: wasOldDefaultEmoji ? seat.emoji : override.emoji ?? seat.emoji };
+    });
   } catch {
     return AI_SEATS;
   }
@@ -253,7 +248,6 @@ export default function AdminAgentsPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
   const [activeView, setActiveView] = useState<"workers" | "seats">("workers");
-  const [autoBalance, setAutoBalance] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -453,9 +447,7 @@ export default function AdminAgentsPage() {
         </div>
       </div>
 
-      {activeView === "seats" && (
-        <AISeatsPanel autoBalance={autoBalance} setAutoBalance={setAutoBalance} />
-      )}
+      {activeView === "seats" && <AISeatsPanel />}
 
       {activeView === "workers" && (
         <>
@@ -670,13 +662,7 @@ function WorkerRolesPanel() {
   );
 }
 
-function AISeatsPanel({
-  autoBalance,
-  setAutoBalance,
-}: {
-  autoBalance: boolean;
-  setAutoBalance: (value: boolean) => void;
-}) {
+function AISeatsPanel() {
   const [seats, setSeats] = useState<AISeat[]>(() => loadSeatOverrides());
   const [editingSeatId, setEditingSeatId] = useState<string | null>(null);
   const issues = seats.filter((seat) => seat.issue);
@@ -719,59 +705,32 @@ function AISeatsPanel({
   };
 
   return (
-    <section className="space-y-5">
-      <div className="rounded-xl border border-border/40 bg-card/20 p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-heading">Connected capacity</h2>
-            <p className="mt-1 max-w-2xl text-xs text-body">
-              AI Seats are capacity slots behind the workers. Live platform/device detection is not wired here yet, so unknown seats stay generic until UnClick has real metadata.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={spreadEvenly}
-              className="rounded-lg border border-border/40 bg-card/40 px-3 py-2 text-xs font-semibold text-heading transition-colors hover:border-primary/40"
-            >
-              Even split
-            </button>
-            <label className="flex items-center gap-3 rounded-lg border border-border/40 bg-card/40 px-3 py-2 text-xs text-heading">
-              <span className="font-semibold">Auto paused</span>
-              <button
-                type="button"
-                onClick={() => setAutoBalance(false)}
-                className={`relative h-5 w-9 rounded-full transition-colors ${
-                  autoBalance ? "bg-primary" : "bg-muted"
-                }`}
-                aria-pressed={autoBalance}
-                title="Auto-balance plumbing is kept, but manual distribution is active for now."
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform ${
-                    autoBalance ? "translate-x-4" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border/40 bg-card/30 p-4">
-          <div className="flex items-start gap-3">
-            <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <p className="text-xs text-body">
-              Manual mode is the default. If only one physical seat is available, keep space for virtual review/fallback support. With multiple physical seats, start even and adjust by hand.
-            </p>
-          </div>
-        </div>
-      </div>
-
+    <section className="space-y-4">
       <div className="overflow-hidden rounded-xl border border-border/40 bg-card/20">
+        <div className="flex flex-col gap-2 border-b border-border/40 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-heading">AI Seats</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Manual capacity slots. Unknown platform/device details stay generic until UnClick has real metadata.
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Manual mode
+          </span>
+        </div>
         <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Seat</span>
           <span>Status</span>
-          <span>Manual load</span>
+          <span className="flex items-center justify-between gap-2">
+            <span>Manual load</span>
+            <button
+              type="button"
+              onClick={spreadEvenly}
+              className="rounded border border-border/40 bg-card/40 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-heading transition-colors hover:border-primary/40"
+            >
+              Even split
+            </button>
+          </span>
           <span>Assigned work</span>
           <span>Controls</span>
         </div>
@@ -885,10 +844,6 @@ function AISeatsPanel({
             );
           })}
         </div>
-      </div>
-
-      <div className="rounded-xl border border-[#61C1C4]/25 bg-[#61C1C4]/5 p-4 text-xs text-body">
-        This page is currently a manual capacity planner. When UnClick has trusted live seat metadata, provider/device names can be filled automatically. Until then, generic AI Seat labels avoid guessing.
       </div>
 
       {issues.length > 0 && (
