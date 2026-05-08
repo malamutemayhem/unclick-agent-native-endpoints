@@ -18,6 +18,8 @@ import {
   parseCodingRoomJobLedger,
   readCodingRoomJobLedger,
   reclaimExpiredCodingRoomJobs,
+  refreshCodingRoomJobLease,
+  refreshCodingRoomLedgerJobLease,
   reviewJobNeedsFallback,
   runnerCanClaimCodingRoomJob,
   serializeCodingRoomJobLedger,
@@ -186,6 +188,142 @@ describe("PinballWake Coding Room skeleton", () => {
       owned_files: ["scripts/pinballwake-coding-room.mjs"],
       status: "claimed",
     });
+  });
+
+  it("refreshes a claimed job lease only with the matching owner and claim token", () => {
+    const claimed = claimCodingRoomJob({
+      runner: forgeRunner,
+      job: createCodingRoomJob({
+        jobId: "coding-room:test:refresh-lease",
+        worker: "forge",
+        chip: "refresh lease",
+        files: ["scripts/pinballwake-coding-room.mjs"],
+      }),
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 120,
+    }).job;
+
+    const result = refreshCodingRoomJobLease({
+      job: claimed,
+      runner: forgeRunner,
+      claimId: claimed.claim_id,
+      now: "2026-05-04T00:01:00.000Z",
+      leaseSeconds: 300,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.job.lease_refreshed_at, "2026-05-04T00:01:00.000Z");
+    assert.equal(result.job.lease_expires_at, "2026-05-04T00:06:00.000Z");
+    assert.deepEqual(result.lease, {
+      claim_id: claimed.claim_id,
+      job_id: "coding-room:test:refresh-lease",
+      runner_id: "forge",
+      lease_expires_at: "2026-05-04T00:06:00.000Z",
+      lease_refreshed_at: "2026-05-04T00:01:00.000Z",
+      status: "claimed",
+    });
+
+    assert.equal(
+      refreshCodingRoomJobLease({
+        job: claimed,
+        runner: { ...forgeRunner, id: "plex-builder" },
+        claimId: claimed.claim_id,
+        now: "2026-05-04T00:01:00.000Z",
+      }).reason,
+      "claim_owner_mismatch",
+    );
+
+    assert.equal(
+      refreshCodingRoomJobLease({
+        job: claimed,
+        runner: forgeRunner,
+        claimId: "coding-room-claim:stale",
+        now: "2026-05-04T00:01:00.000Z",
+      }).reason,
+      "claim_token_mismatch",
+    );
+  });
+
+  it("does not refresh expired leases or let a stale token overwrite a new claim", () => {
+    const firstClaim = claimCodingRoomJob({
+      runner: forgeRunner,
+      job: createCodingRoomJob({
+        jobId: "coding-room:test:refresh-expired",
+        worker: "forge",
+        chip: "expire then reclaim",
+        files: ["scripts/pinballwake-coding-room.mjs"],
+      }),
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 60,
+    }).job;
+
+    const expired = refreshCodingRoomJobLease({
+      job: firstClaim,
+      runner: forgeRunner,
+      claimId: firstClaim.claim_id,
+      now: "2026-05-04T00:01:01.000Z",
+    });
+    assert.equal(expired.ok, false);
+    assert.equal(expired.reason, "lease_expired");
+
+    const reclaimed = reclaimExpiredCodingRoomJobs({
+      ledger: createCodingRoomJobLedger({ jobs: [firstClaim] }),
+      now: "2026-05-04T00:01:01.000Z",
+    });
+    const secondClaim = claimCodingRoomLedgerJob({
+      ledger: reclaimed.ledger,
+      jobId: firstClaim.job_id,
+      runner: { ...forgeRunner, id: "plex-builder" },
+      now: "2026-05-04T00:01:02.000Z",
+    });
+
+    const staleRefresh = refreshCodingRoomLedgerJobLease({
+      ledger: secondClaim.ledger,
+      jobId: firstClaim.job_id,
+      runner: forgeRunner,
+      claimId: firstClaim.claim_id,
+      now: "2026-05-04T00:01:03.000Z",
+    });
+
+    assert.equal(staleRefresh.ok, false);
+    assert.equal(staleRefresh.reason, "claim_owner_mismatch");
+    assert.equal(secondClaim.ledger.jobs[0].claimed_by, "plex-builder");
+    assert.notEqual(secondClaim.ledger.jobs[0].claim_id, firstClaim.claim_id);
+  });
+
+  it("refreshes ledger leases without changing unrelated jobs", () => {
+    const claimed = claimCodingRoomJob({
+      runner: forgeRunner,
+      job: createCodingRoomJob({
+        jobId: "coding-room:test:ledger-refresh",
+        worker: "forge",
+        chip: "refresh from ledger",
+        files: ["scripts/pinballwake-coding-room.mjs"],
+      }),
+      now: "2026-05-04T00:00:00.000Z",
+      leaseSeconds: 90,
+    }).job;
+    const other = createCodingRoomJob({
+      jobId: "coding-room:test:other",
+      worker: "forge",
+      chip: "leave me queued",
+      files: ["scripts/other.mjs"],
+    });
+
+    const result = refreshCodingRoomLedgerJobLease({
+      ledger: createCodingRoomJobLedger({ jobs: [claimed, other], updatedAt: "2026-05-04T00:00:00.000Z" }),
+      jobId: claimed.job_id,
+      runner: forgeRunner,
+      claimId: claimed.claim_id,
+      now: "2026-05-04T00:01:00.000Z",
+      leaseSeconds: 120,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ledger.updated_at, "2026-05-04T00:01:00.000Z");
+    assert.equal(result.ledger.jobs[0].lease_expires_at, "2026-05-04T00:03:00.000Z");
+    assert.equal(result.ledger.jobs[1].status, "queued");
+    assert.equal(result.ledger.jobs[1].claim_id, undefined);
   });
 
   it("does not let two runners claim the same queued job", () => {
