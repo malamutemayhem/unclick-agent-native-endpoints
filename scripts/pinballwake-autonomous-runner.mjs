@@ -127,6 +127,48 @@ function extractMcpTextJson(payload) {
   return payload;
 }
 
+export function parseMcpEventStreamPayload(text = "") {
+  const messages = String(text)
+    .split(/\r?\n\r?\n/)
+    .map((block) =>
+      block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trimStart())
+        .join("\n")
+        .trim(),
+    )
+    .filter((data) => data && data !== "[DONE]");
+
+  const payloads = [];
+  for (const message of messages) {
+    try {
+      payloads.push(JSON.parse(message));
+    } catch {
+      // Ignore non-JSON stream chatter and keep looking for the JSON-RPC payload.
+    }
+  }
+
+  return payloads.find((payload) => payload?.result || payload?.error) || payloads.at(-1) || null;
+}
+
+async function readMcpJsonRpcPayload(response) {
+  if (typeof response?.text !== "function") {
+    if (typeof response?.json === "function") return response.json();
+    throw new Error("unclick_mcp_response_unreadable");
+  }
+
+  const text = await response.text();
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("event:") || trimmed.startsWith("data:")) {
+    const payload = parseMcpEventStreamPayload(text);
+    if (!payload) throw new Error("empty_unclick_mcp_event_stream");
+    return payload;
+  }
+
+  return JSON.parse(text);
+}
+
 async function callUnClickMcpTool({
   mcpUrl = DEFAULT_UNCLICK_MCP_URL,
   apiKey,
@@ -170,7 +212,7 @@ async function callUnClickMcpTool({
     };
   }
 
-  const payload = await response.json();
+  const payload = await readMcpJsonRpcPayload(response);
   if (payload?.error) {
     return {
       ok: false,
