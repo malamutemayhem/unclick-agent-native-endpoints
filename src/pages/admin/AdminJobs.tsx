@@ -46,17 +46,16 @@ type SortKey = "queue" | "title" | "status" | "priority" | "worker" | "live" | "
 type SortDirection = "asc" | "desc";
 
 const SECTION_LABELS: Record<JobSectionKey, string> = {
-  active: "Actioning now",
+  active: "Active",
   next: "Next up",
   inline: "In line",
   done: "Completed",
 };
 
 type ManualOrder = Record<JobSectionKey, string[]>;
-type CollapsibleSectionKey = Exclude<JobSectionKey, "active">;
 type SectionPreferences = {
-  expanded: Record<CollapsibleSectionKey, boolean>;
-  visible: Record<CollapsibleSectionKey, number>;
+  expanded: Record<JobSectionKey, boolean>;
+  visible: Record<JobSectionKey, number>;
 };
 
 const ORDER_STORAGE_KEY = "unclick_jobs_manual_order_v1";
@@ -70,8 +69,8 @@ const EMPTY_MANUAL_ORDER: ManualOrder = {
   done: [],
 };
 const DEFAULT_SECTION_PREFS: SectionPreferences = {
-  expanded: { next: true, inline: true, done: true },
-  visible: { next: SECTION_PAGE_SIZE, inline: SECTION_PAGE_SIZE, done: SECTION_PAGE_SIZE },
+  expanded: { active: true, next: true, inline: true, done: true },
+  visible: { active: SECTION_PAGE_SIZE, next: SECTION_PAGE_SIZE, inline: SECTION_PAGE_SIZE, done: SECTION_PAGE_SIZE },
 };
 
 const PRIORITY_RANK: Record<JobTodo["priority"], number> = {
@@ -103,7 +102,7 @@ const ACTION_BUTTONS = {
 const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
 
 const JOB_ROW_GRID =
-  "md:grid md:grid-cols-[56px_minmax(260px,1fr)_64px_70px_minmax(120px,0.6fr)_52px_250px_42px_78px_24px] md:items-center md:gap-2";
+  "md:grid md:grid-cols-[56px_minmax(440px,1.25fr)_58px_64px_minmax(112px,0.45fr)_48px_236px_34px_68px_20px] md:items-center md:gap-1.5";
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -166,8 +165,8 @@ function StageStrip({ todo }: { todo: JobTodo }) {
   const active = activeStageCount(todo);
   const progress = progressFor(todo);
   return (
-    <div className="flex min-w-[230px] items-center gap-2" aria-label="Assembly line progress">
-      <span className="w-8 shrink-0 text-right text-[10px] font-semibold text-white/55">
+    <div className="flex min-w-[220px] items-center gap-1.5" aria-label="Assembly line progress">
+      <span className="w-7 shrink-0 text-right text-[10px] font-semibold text-white/55">
         {progress}%
       </span>
       <div className="grid flex-1 grid-cols-5 gap-px overflow-hidden rounded-[3px]">
@@ -175,7 +174,7 @@ function StageStrip({ todo }: { todo: JobTodo }) {
           <span
             key={stage}
             title={stage}
-            className={`flex h-4 items-center justify-center text-[8px] font-semibold uppercase tracking-wide ${
+            className={`flex h-4 items-center justify-center text-[8px] font-semibold uppercase ${
               index < active
                 ? todo.status === "done"
                   ? "bg-green-400/85 text-black/70"
@@ -408,11 +407,13 @@ function loadSectionPreferences(): SectionPreferences {
     const parsed = JSON.parse(window.localStorage.getItem(SECTION_PREF_STORAGE_KEY) ?? "{}") as Partial<SectionPreferences>;
     return {
       expanded: {
+        active: typeof parsed.expanded?.active === "boolean" ? parsed.expanded.active : true,
         next: typeof parsed.expanded?.next === "boolean" ? parsed.expanded.next : true,
         inline: typeof parsed.expanded?.inline === "boolean" ? parsed.expanded.inline : true,
         done: typeof parsed.expanded?.done === "boolean" ? parsed.expanded.done : true,
       },
       visible: {
+        active: Number.isFinite(parsed.visible?.active) ? Number(parsed.visible?.active) : SECTION_PAGE_SIZE,
         next: Number.isFinite(parsed.visible?.next) ? Number(parsed.visible?.next) : SECTION_PAGE_SIZE,
         inline: Number.isFinite(parsed.visible?.inline) ? Number(parsed.visible?.inline) : SECTION_PAGE_SIZE,
         done: Number.isFinite(parsed.visible?.done) ? Math.min(Number(parsed.visible?.done), COMPLETED_MAX_VISIBLE) : SECTION_PAGE_SIZE,
@@ -512,7 +513,7 @@ function JobRow({
           </button>
         </div>
         <p
-          className={`min-w-0 select-text truncate text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+          className={`min-w-0 select-text truncate text-[13px] font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
           title={todo.title}
         >
           {todo.title}
@@ -520,24 +521,24 @@ function JobRow({
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
           <span
-            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
+            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase ${STATUS_STYLE[todo.status]}`}
           >
             {statusLabel(todo.status)}
           </span>
           <span
-            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
+            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase ${PRIORITY_STYLE[todo.priority]}`}
           >
             {todo.priority}
           </span>
-          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/45">
+          <span className="flex min-w-0 items-center gap-1 text-[11px] text-white/45">
             <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.04] text-[11px]">
               {emoji ?? "AI"}
             </span>
-            <span className="max-w-[180px] truncate" title={ownerLabel(todo)}>
+            <span className="max-w-[130px] truncate" title={ownerLabel(todo)}>
               {ownerLabel(todo)}
             </span>
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-white/45">
+          <span className="flex items-center gap-1 text-[11px] text-white/45">
             <span
               className={`h-1.5 w-1.5 rounded-full ${isStaleActive(todo) ? "bg-red-300" : todo.status === "done" ? "bg-green-300" : "bg-green-400"}`}
             />
@@ -546,11 +547,11 @@ function JobRow({
           <span className="text-[11px] font-medium text-white/55">
             <StageStrip todo={todo} />
           </span>
-          <span className="flex items-center gap-1 text-[11px] text-white/45">
+          <span className="flex items-center gap-0.5 text-[11px] text-white/45">
             <MessageSquare className="h-3 w-3" />
             {todo.comment_count ?? 0}
           </span>
-          <span className="text-[11px] text-white/35">{relativeTime(todo.updated_at)}</span>
+          <span className="truncate text-[10px] text-white/35">{relativeTime(todo.updated_at)}</span>
           {alert ? (
             <span
               className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-[11px] font-bold text-red-200"
@@ -683,8 +684,7 @@ function JobSection({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("queue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const isCollapsible = sectionKey !== "active";
-  const open = !isCollapsible || sectionExpanded !== false;
+  const open = sectionExpanded !== false;
   const maxVisible = sectionKey === "done" ? COMPLETED_MAX_VISIBLE : jobs.length;
   const cappedJobs = sectionKey === "done" ? jobs.slice(0, COMPLETED_MAX_VISIBLE) : jobs;
   const rankById = useMemo(
@@ -695,9 +695,9 @@ function JobSection({
     () => [...cappedJobs].sort((a, b) => compareSortedJobs(a, b, sortKey, sortDirection, rankById)),
     [cappedJobs, rankById, sortDirection, sortKey],
   );
-  const displayCount = isCollapsible ? Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length) : cappedJobs.length;
+  const displayCount = Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length);
   const visibleJobs = sortedJobs.slice(0, displayCount);
-  const canShowMore = isCollapsible && displayCount < cappedJobs.length;
+  const canShowMore = displayCount < cappedJobs.length;
   const sectionAccent: Record<JobSectionKey, string> = {
     active: "bg-[#E2B93B]",
     next: "bg-red-300",
@@ -716,23 +716,17 @@ function JobSection({
     <section className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#101010]">
       <div className={`h-0.5 ${sectionAccent[sectionKey]}`} />
       <div className="flex items-center justify-between border-b border-white/[0.08] bg-white/[0.045] px-3 py-2">
-        {isCollapsible ? (
-          <button
-            type="button"
-            onClick={onToggleSection}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/70 hover:text-white/90"
-            aria-expanded={open}
-          >
-            {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {SECTION_LABELS[sectionKey]}
-          </button>
-        ) : (
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-white/70">
-            {SECTION_LABELS[sectionKey]}
-          </h2>
-        )}
+        <button
+          type="button"
+          onClick={onToggleSection}
+          className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/70 hover:text-white/90"
+          aria-expanded={open}
+        >
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {SECTION_LABELS[sectionKey]}
+        </button>
         <span className="rounded-[4px] border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] font-semibold text-white/50">
-          {isCollapsible && open ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}` : jobs.length}
+          {open ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}` : jobs.length}
         </span>
       </div>
       {!open ? null : jobs.length === 0 ? (
@@ -936,7 +930,7 @@ export default function AdminJobs() {
     });
   };
 
-  const toggleSection = (sectionKey: CollapsibleSectionKey) => {
+  const toggleSection = (sectionKey: JobSectionKey) => {
     setSectionPrefs((prev) => ({
       ...prev,
       expanded: {
@@ -946,7 +940,7 @@ export default function AdminJobs() {
     }));
   };
 
-  const showMore = (sectionKey: CollapsibleSectionKey) => {
+  const showMore = (sectionKey: JobSectionKey) => {
     setSectionPrefs((prev) => ({
       ...prev,
       visible: {
@@ -1039,6 +1033,10 @@ export default function AdminJobs() {
           humanAgentId={humanAgentId}
           pollSeq={pollSeq}
           onMoveJob={moveJob}
+          sectionExpanded={sectionPrefs.expanded.active}
+          visibleCount={sectionPrefs.visible.active}
+          onToggleSection={() => toggleSection("active")}
+          onShowMore={() => showMore("active")}
         />
         <JobSection
           sectionKey="next"
