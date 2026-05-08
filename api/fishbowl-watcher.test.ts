@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createHeartbeat, createReclaimSignal } from "../packages/mcp-server/src/reliability.js";
 import {
   CHECKIN_ACK_LEASE_SECONDS,
+  CHECKIN_ACTIVE_GRACE_MS,
+  CHECKIN_DORMANT_SUPPRESS_MS,
   WAKEPASS_REROUTE_LEASE_SECONDS,
   buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
@@ -20,9 +22,9 @@ const baseProfile: ProfileRow = {
   agent_id: "worker-1",
   emoji: "🦾",
   display_name: "Worker One",
-  last_seen_at: "2026-05-01T01:00:00.000Z",
+  last_seen_at: "2026-05-01T00:30:00.000Z",
   current_status: "working",
-  current_status_updated_at: "2026-05-01T01:00:00.000Z",
+  current_status_updated_at: "2026-05-01T00:30:00.000Z",
   next_checkin_at: "2026-05-01T01:10:00.000Z",
 };
 
@@ -93,6 +95,36 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
           next_checkin_at: null,
         },
         Date.parse("2026-05-01T01:22:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("suppresses missed check-ins for agents seen within the active grace window", () => {
+    const nowMs = Date.parse("2026-05-01T01:22:00.000Z");
+
+    expect(
+      isMissedCheckinCandidate(
+        {
+          ...baseProfile,
+          last_seen_at: new Date(nowMs - CHECKIN_ACTIVE_GRACE_MS + 1_000).toISOString(),
+          next_checkin_at: "2026-05-01T01:21:00.000Z",
+        },
+        nowMs,
+      ),
+    ).toBe(false);
+  });
+
+  it("suppresses missed check-ins for long-dormant agents", () => {
+    const nowMs = Date.parse("2026-05-08T01:22:00.000Z");
+
+    expect(
+      isMissedCheckinCandidate(
+        {
+          ...baseProfile,
+          last_seen_at: new Date(nowMs - CHECKIN_DORMANT_SUPPRESS_MS - 1_000).toISOString(),
+          next_checkin_at: "2026-05-08T01:10:00.000Z",
+        },
+        nowMs,
       ),
     ).toBe(false);
   });

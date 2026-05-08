@@ -65,6 +65,8 @@ const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
+export const CHECKIN_ACTIVE_GRACE_MS = 30 * 60 * 1000;
+export const CHECKIN_DORMANT_SUPPRESS_MS = 7 * 24 * 60 * 60 * 1000;
 export const CHECKIN_ACK_LEASE_SECONDS = 600;
 const STALE_DISPATCH_RECLAIM_LIMIT = 50;
 export const WAKEPASS_REROUTE_LEASE_SECONDS = 600;
@@ -94,6 +96,9 @@ export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): bo
   if (Number.isNaN(dueMs)) return false;
   if (dueMs >= nowMs) return false;
   const seenMs = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0;
+  if (Number.isNaN(seenMs)) return false;
+  if (seenMs > 0 && nowMs - seenMs <= CHECKIN_ACTIVE_GRACE_MS) return false;
+  if (seenMs > 0 && nowMs - seenMs >= CHECKIN_DORMANT_SUPPRESS_MS) return false;
   return seenMs < dueMs;
 }
 
