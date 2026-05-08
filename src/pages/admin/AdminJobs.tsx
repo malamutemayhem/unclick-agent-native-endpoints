@@ -2,16 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   FileText,
   GripVertical,
   Loader2,
-  MessageCircle,
   MessageSquare,
   Search,
-  Send,
   X,
 } from "lucide-react";
 import { useSession } from "@/lib/auth";
@@ -45,6 +42,8 @@ interface JobTodo {
 }
 
 type JobSectionKey = "active" | "next" | "inline" | "done";
+type SortKey = "queue" | "title" | "status" | "priority" | "worker" | "live" | "progress" | "notes" | "updated";
+type SortDirection = "asc" | "desc";
 
 const SECTION_LABELS: Record<JobSectionKey, string> = {
   active: "Actioning now",
@@ -102,6 +101,9 @@ const ACTION_BUTTONS = {
 } as const;
 
 const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
+
+const JOB_ROW_GRID =
+  "md:grid md:grid-cols-[56px_minmax(260px,1fr)_64px_70px_minmax(120px,0.6fr)_52px_250px_42px_78px_24px] md:items-center md:gap-2";
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -302,6 +304,78 @@ function sortJobs(a: JobTodo, b: JobTodo): number {
   return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
 }
 
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
+function compareSortedJobs(
+  a: JobTodo,
+  b: JobTodo,
+  sortKey: SortKey,
+  direction: SortDirection,
+  rankById: Map<string, number>,
+): number {
+  const directionMultiplier = direction === "asc" ? 1 : -1;
+  let result = 0;
+  switch (sortKey) {
+    case "queue":
+      result = (rankById.get(a.id) ?? 0) - (rankById.get(b.id) ?? 0);
+      break;
+    case "title":
+      result = compareText(a.title, b.title);
+      break;
+    case "status":
+      result = compareText(statusLabel(a.status), statusLabel(b.status));
+      break;
+    case "priority":
+      result = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      break;
+    case "worker":
+      result = compareText(ownerLabel(a), ownerLabel(b));
+      break;
+    case "live":
+      result = Number(isStaleActive(a)) - Number(isStaleActive(b));
+      break;
+    case "progress":
+      result = progressFor(a) - progressFor(b);
+      break;
+    case "notes":
+      result = (a.comment_count ?? 0) - (b.comment_count ?? 0);
+      break;
+    case "updated":
+      result = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      break;
+  }
+  if (result === 0) result = (rankById.get(a.id) ?? 0) - (rankById.get(b.id) ?? 0);
+  return result * directionMultiplier;
+}
+
+function SortHeader({
+  label,
+  value,
+  sortKey,
+  sortDirection,
+  onSort,
+}: {
+  label: string;
+  value: SortKey;
+  sortKey: SortKey;
+  sortDirection: SortDirection;
+  onSort: (value: SortKey) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(value)}
+      className={`truncate text-left hover:text-white/65 ${sortKey === value ? "text-white/60" : ""}`}
+      title={`Sort by ${label}`}
+    >
+      {label}
+      {sortKey === value && <span className="ml-1 text-[9px]">{sortDirection === "asc" ? "↑" : "↓"}</span>}
+    </button>
+  );
+}
+
 function groupJobs(todos: JobTodo[]): Record<JobSectionKey, JobTodo[]> {
   const active = todos.filter((todo) => todo.status === "in_progress").sort(sortJobs);
   const open = todos.filter((todo) => todo.status === "open").sort(sortJobs);
@@ -361,6 +435,7 @@ function applyManualOrder(jobs: JobTodo[], order: string[]): JobTodo[] {
 
 function JobRow({
   todo,
+  queueRank,
   expanded,
   onToggle,
   authHeader,
@@ -371,6 +446,7 @@ function JobRow({
   onDrop,
 }: {
   todo: JobTodo;
+  queueRank: number;
   expanded: boolean;
   onToggle: () => void;
   authHeader: Record<string, string>;
@@ -400,8 +476,8 @@ function JobRow({
         onDrop(todo.id);
       }}
     >
-      <div className="px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.03]">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className={`px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.03] ${JOB_ROW_GRID}`}>
+        <div className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
             draggable
@@ -415,6 +491,12 @@ function JobRow({
           >
             <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
+          <span
+            className="w-5 shrink-0 rounded-[4px] border border-white/[0.06] bg-white/[0.025] px-1 py-0.5 text-center text-[10px] font-semibold tabular-nums text-white/35"
+            title="Queue priority rank"
+          >
+            {queueRank}
+          </span>
           <button
             type="button"
             onClick={onToggle}
@@ -428,22 +510,22 @@ function JobRow({
               <ChevronRight className="h-3.5 w-3.5" />
             )}
           </button>
-          <p
-            className={`min-w-0 flex-1 select-text text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
-            title={todo.title}
-          >
-            {todo.title}
-          </p>
         </div>
+        <p
+          className={`min-w-0 select-text truncate text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+          title={todo.title}
+        >
+          {todo.title}
+        </p>
 
-        <div className="ml-9 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
           <span
-            className={`inline-flex items-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
+            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
           >
             {statusLabel(todo.status)}
           </span>
           <span
-            className={`inline-flex items-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
+            className={`inline-flex items-center justify-center rounded-[4px] border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
           >
             {todo.priority}
           </span>
@@ -459,7 +541,7 @@ function JobRow({
             <span
               className={`h-1.5 w-1.5 rounded-full ${isStaleActive(todo) ? "bg-red-300" : todo.status === "done" ? "bg-green-300" : "bg-green-400"}`}
             />
-            {todo.status === "done" ? "shipped" : isStaleActive(todo) ? "stale" : "live"}
+            {todo.status === "done" ? "ship" : isStaleActive(todo) ? "stale" : "live"}
           </span>
           <span className="text-[11px] font-medium text-white/55">
             <StageStrip todo={todo} />
@@ -468,30 +550,29 @@ function JobRow({
             <MessageSquare className="h-3 w-3" />
             {todo.comment_count ?? 0}
           </span>
-          <span className="text-[11px] text-white/35">Updated {relativeTime(todo.updated_at)}</span>
+          <span className="text-[11px] text-white/35">{relativeTime(todo.updated_at)}</span>
+          {alert ? (
+            <span
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-[11px] font-bold text-red-200"
+              title={`${alert.message} Fallback: ${alert.actions.join(", ")}`}
+            >
+              !
+            </span>
+          ) : (
+            <span aria-hidden="true" className="hidden md:block" />
+          )}
         </div>
       </div>
 
-      {alert && (
-        <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-200">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span className="mr-2">{alert.message}</span>
-          <span className="text-[11px] text-red-100/55">Fallback:</span>
-          {alert.actions.map((action) => (
-            <span
-              key={action}
-              className="inline-flex items-center gap-1 rounded-[4px] border border-red-300/15 bg-black/15 px-2 py-0.5 text-[11px] text-red-100/80"
-              title="Guidance only. Autopilot should normally resolve this without a manual click."
-            >
-              {action.includes("talk") ? <MessageCircle className="h-3 w-3" /> : <Send className="h-3 w-3" />}
-              {action}
-            </span>
-          ))}
-        </div>
-      )}
-
       {expanded && (
         <div className="mx-3 mb-2 space-y-2 rounded-md border border-white/[0.06] bg-black/20 p-2.5">
+          {alert && (
+            <div className="flex flex-wrap items-center gap-2 rounded-[5px] border border-red-300/15 bg-red-500/[0.06] px-2 py-1 text-[11px] text-red-100/75">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>{alert.message}</span>
+              <span className="text-red-100/45">Fallback: {alert.actions.join(" / ")}</span>
+            </div>
+          )}
           <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-4">
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Created</span>
@@ -600,18 +681,35 @@ function JobSection({
   onShowMore?: () => void;
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("queue");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const isCollapsible = sectionKey !== "active";
   const open = !isCollapsible || sectionExpanded !== false;
   const maxVisible = sectionKey === "done" ? COMPLETED_MAX_VISIBLE : jobs.length;
   const cappedJobs = sectionKey === "done" ? jobs.slice(0, COMPLETED_MAX_VISIBLE) : jobs;
+  const rankById = useMemo(
+    () => new Map(cappedJobs.map((job, index) => [job.id, index + 1])),
+    [cappedJobs],
+  );
+  const sortedJobs = useMemo(
+    () => [...cappedJobs].sort((a, b) => compareSortedJobs(a, b, sortKey, sortDirection, rankById)),
+    [cappedJobs, rankById, sortDirection, sortKey],
+  );
   const displayCount = isCollapsible ? Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length) : cappedJobs.length;
-  const visibleJobs = cappedJobs.slice(0, displayCount);
+  const visibleJobs = sortedJobs.slice(0, displayCount);
   const canShowMore = isCollapsible && displayCount < cappedJobs.length;
   const sectionAccent: Record<JobSectionKey, string> = {
     active: "bg-[#E2B93B]",
     next: "bg-red-300",
     inline: "bg-[#61C1C4]",
     done: "bg-green-400",
+  };
+  const setSort = (nextKey: SortKey) => {
+    setSortDirection((currentDirection) => {
+      if (sortKey !== nextKey) return nextKey === "updated" || nextKey === "priority" || nextKey === "progress" || nextKey === "notes" ? "desc" : "asc";
+      return currentDirection === "asc" ? "desc" : "asc";
+    });
+    setSortKey(nextKey);
   };
 
   return (
@@ -641,14 +739,23 @@ function JobSection({
         <p className="px-3 py-4 text-sm italic text-white/30">Empty</p>
       ) : (
         <ul>
-          <li className="hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/30 md:grid md:grid-cols-[minmax(280px,1fr)_minmax(520px,1.2fr)]">
-            <span>Job</span>
-            <span>Markers, progress, notes</span>
+          <li className={`hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/30 ${JOB_ROW_GRID}`}>
+            <SortHeader label="#" value="queue" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Job" value="title" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="State" value="status" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Priority" value="priority" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Worker" value="worker" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Live" value="live" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Progress" value="progress" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Notes" value="notes" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <SortHeader label="Updated" value="updated" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <span className="text-right">!</span>
           </li>
           {visibleJobs.map((todo) => (
             <JobRow
               key={todo.id}
               todo={todo}
+              queueRank={rankById.get(todo.id) ?? 0}
               expanded={expanded.has(todo.id)}
               onToggle={() => onToggle(todo.id)}
               authHeader={authHeader}
