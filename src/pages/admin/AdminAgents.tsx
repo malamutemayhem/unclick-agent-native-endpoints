@@ -117,6 +117,39 @@ interface AISeat {
 
 const AI_SEAT_STORAGE_KEY = "unclick_ai_seat_manual_slots_v1";
 
+const AI_SEAT_EMOJI_OPTIONS = [
+  { emoji: "🤖", label: "Robot" },
+  { emoji: "🧠", label: "Brain" },
+  { emoji: "🛰️", label: "Relay" },
+  { emoji: "🧭", label: "Navigator" },
+  { emoji: "⚡", label: "Fast" },
+  { emoji: "💡", label: "Ideas" },
+  { emoji: "🔍", label: "Reviewer" },
+  { emoji: "🛠️", label: "Builder" },
+  { emoji: "🧪", label: "Tester" },
+  { emoji: "🛡️", label: "Safety" },
+  { emoji: "📣", label: "Courier" },
+  { emoji: "👁️", label: "Watcher" },
+  { emoji: "🚀", label: "Publisher" },
+  { emoji: "♻️", label: "Improver" },
+  { emoji: "🧰", label: "Toolkit" },
+  { emoji: "📡", label: "Signal" },
+  { emoji: "🧬", label: "System" },
+  { emoji: "🗂️", label: "Organizer" },
+  { emoji: "📋", label: "Planner" },
+  { emoji: "🔬", label: "Research" },
+  { emoji: "💻", label: "Desktop" },
+  { emoji: "⌨️", label: "Keyboard" },
+  { emoji: "🧑‍💻", label: "Coder" },
+  { emoji: "🕹️", label: "Control" },
+  { emoji: "🎛️", label: "Console" },
+  { emoji: "🧱", label: "Stack" },
+  { emoji: "🔐", label: "Secure" },
+  { emoji: "✅", label: "Checker" },
+  { emoji: "🌐", label: "Web" },
+  { emoji: "✨", label: "Creative" },
+] as const;
+
 const AI_SEATS: AISeat[] = [
   {
     id: "seat-1",
@@ -745,6 +778,9 @@ function AISeatsPanel({
         <div className="divide-y divide-border/30">
           {seats.map((seat) => {
             const editing = editingSeatId === seat.id;
+            const emojiOptions = AI_SEAT_EMOJI_OPTIONS.some((option) => option.emoji === seat.emoji)
+              ? AI_SEAT_EMOJI_OPTIONS
+              : [{ emoji: seat.emoji, label: "Custom" }, ...AI_SEAT_EMOJI_OPTIONS];
             return (
               <div
                 key={seat.id}
@@ -753,13 +789,19 @@ function AISeatsPanel({
                 <div className="min-w-0">
                   {editing ? (
                     <div className="space-y-1">
-                      <div className="grid grid-cols-[44px_1fr] gap-1">
-                        <input
+                      <div className="grid grid-cols-[92px_1fr] gap-1">
+                        <select
                           value={seat.emoji}
-                          onChange={(event) => updateSeat(seat.id, { emoji: event.target.value.slice(0, 4) })}
+                          onChange={(event) => updateSeat(seat.id, { emoji: event.target.value })}
                           className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-xs text-heading outline-none focus:border-primary/40"
                           aria-label="Seat emoji"
-                        />
+                        >
+                          {emojiOptions.map((option) => (
+                            <option key={`${seat.id}-${option.emoji}`} value={option.emoji}>
+                              {option.emoji} {option.label}
+                            </option>
+                          ))}
+                        </select>
                         <input
                           value={seat.name}
                           onChange={(event) => updateSeat(seat.id, { name: event.target.value })}
