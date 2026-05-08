@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Clock3,
+  FileText,
   Loader2,
   MessageSquare,
   UserRound,
@@ -69,6 +70,8 @@ const STATUS_STYLE: Record<JobTodo["status"], string> = {
   dropped: "border-white/[0.06] bg-white/[0.02] text-white/35",
 };
 
+const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
+
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "never";
   const then = new Date(iso).getTime();
@@ -86,7 +89,25 @@ function relativeTime(iso: string | null | undefined): string {
 }
 
 function ownerLabel(todo: JobTodo): string {
-  return todo.assigned_to_agent_id?.trim() || "unassigned";
+  const raw = todo.assigned_to_agent_id?.trim();
+  if (!raw) return "Unassigned";
+  const known: Record<string, string> = {
+    master: "Coordinator",
+    "chatgpt-codex-worker2": "Codex Worker 2",
+    "chatgpt-codex-runner-fix": "Runner Fix",
+    "codex-tether-seat": "Codex Tether",
+    "claude-cowork-pc": "Claude Cowork",
+    tester: "Tester",
+    watcher: "Watcher",
+  };
+  if (known[raw]) return known[raw];
+  return raw
+    .replace(/^chatgpt[-_]/, "")
+    .replace(/^codex[-_]/, "")
+    .replace(/^claude[-_]/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .replace(/\bAi\b/g, "AI");
 }
 
 function statusLabel(status: JobTodo["status"]): string {
@@ -99,6 +120,45 @@ function progressFor(todo: JobTodo): number {
   if (todo.status === "in_progress") return 55;
   if (todo.assigned_to_agent_id) return 25;
   return 10;
+}
+
+function activeStageCount(todo: JobTodo): number {
+  if (todo.status === "done") return STAGES.length;
+  if (todo.status === "in_progress") return 2;
+  if (todo.assigned_to_agent_id) return 1;
+  return 1;
+}
+
+function StageStrip({ todo }: { todo: JobTodo }) {
+  const active = activeStageCount(todo);
+  return (
+    <div className="space-y-1">
+      <div className="grid grid-cols-5 gap-0.5" aria-label="Assembly line progress">
+        {STAGES.map((stage, index) => (
+          <span
+            key={stage}
+            title={stage}
+            className={`h-1.5 rounded-full ${
+              index < active
+                ? todo.status === "done"
+                  ? "bg-green-400"
+                  : "bg-[#61C1C4]"
+                : "bg-white/[0.08]"
+            }`}
+          />
+        ))}
+      </div>
+      <div className="hidden grid-cols-5 gap-0.5 text-[9px] uppercase tracking-wide text-white/30 lg:grid">
+        {STAGES.map((stage) => (
+          <span key={stage} className="truncate">{stage}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sourceLabel(todo: JobTodo): string {
+  return todo.source_idea_id ? "Idea" : "Todo";
 }
 
 function isStaleActive(todo: JobTodo): boolean {
@@ -149,57 +209,65 @@ function JobRow({
   const attention = needsAttention(todo);
   const progress = progressFor(todo);
   const description = todo.description?.trim();
+  const [showDetails, setShowDetails] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const rawOwner = todo.assigned_to_agent_id?.trim() || "unassigned";
 
   return (
     <li className="border-b border-white/[0.05] last:border-b-0">
       <button
         type="button"
         onClick={onToggle}
-        className="grid w-full gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[0.03] md:grid-cols-[minmax(0,1.8fr)_96px_92px_minmax(110px,0.8fr)_96px_64px_40px]"
+        className="grid w-full gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.03] md:grid-cols-[minmax(280px,2fr)_76px_76px_minmax(120px,0.8fr)_86px_132px_44px]"
         aria-expanded={expanded}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-start gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-white/40" />
+            <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/40" />
           ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-white/40" />
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/40" />
           )}
           <div className="min-w-0">
             <p
-              className={`truncate text-sm font-medium ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+              className={`text-sm font-medium leading-5 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
               title={todo.title}
             >
               {todo.title}
             </p>
-            <p className="mt-0.5 truncate text-xs text-white/35">
+            <p className="mt-0.5 text-[11px] text-white/35">
               Updated {relativeTime(todo.updated_at)}
             </p>
           </div>
         </div>
 
         <span
-          className={`w-fit rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
+          className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[todo.status]}`}
         >
           {statusLabel(todo.status)}
         </span>
         <span
-          className={`w-fit rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
+          className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${PRIORITY_STYLE[todo.priority]}`}
         >
           {todo.priority}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
-          <UserRound className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/45">
+          <UserRound className="h-3 w-3 shrink-0" />
           <span className="truncate" title={ownerLabel(todo)}>
             {ownerLabel(todo)}
           </span>
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-white/45">
-          <Clock3 className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex items-center gap-1.5 text-[11px] text-white/45">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${isStaleActive(todo) ? "bg-red-300" : todo.status === "done" ? "bg-green-300" : "bg-green-400"}`}
+          />
           {todo.status === "done" ? "shipped" : isStaleActive(todo) ? "stale" : "live"}
         </span>
-        <span className="text-xs font-medium text-white/55">{progress}%</span>
-        <span className="flex items-center justify-end gap-1 text-xs text-white/45">
-          <MessageSquare className="h-3.5 w-3.5" />
+        <span className="space-y-1 text-[11px] font-medium text-white/55">
+          <span>{progress}%</span>
+          <StageStrip todo={todo} />
+        </span>
+        <span className="flex items-center justify-end gap-1 text-[11px] text-white/45">
+          <MessageSquare className="h-3 w-3" />
           {todo.comment_count ?? 0}
         </span>
       </button>
@@ -212,35 +280,84 @@ function JobRow({
       )}
 
       {expanded && (
-        <div className="mx-3 mb-3 space-y-4 rounded-md border border-white/[0.06] bg-black/20 p-4">
-          <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-3">
+        <div className="mx-3 mb-3 space-y-3 rounded-md border border-white/[0.06] bg-black/20 p-3">
+          <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-4">
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Created</span>
               <span>{relativeTime(todo.created_at)}</span>
             </div>
             <div>
-              <span className="block text-[10px] uppercase tracking-wide text-white/30">Owner</span>
-              <span className="break-all">{ownerLabel(todo)}</span>
+              <span className="block text-[10px] uppercase tracking-wide text-white/30">Worker</span>
+              <span title={rawOwner}>{ownerLabel(todo)}</span>
             </div>
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Source</span>
-              <span>{todo.source_idea_id ? "idea" : "todo"}</span>
+              <span title="Where the job came from. Todo means it started as a direct work item. Idea means it was promoted from an idea.">
+                {sourceLabel(todo)}
+              </span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase tracking-wide text-white/30">Pipeline</span>
+              <StageStrip todo={todo} />
             </div>
           </div>
 
-          {description ? (
-            <p className="whitespace-pre-wrap text-sm leading-6 text-white/65">{description}</p>
-          ) : (
-            <p className="text-sm italic text-white/35">No description yet.</p>
-          )}
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-white/75">
+                <FileText className="h-3.5 w-3.5 text-[#61C1C4]" />
+                Job brief
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDetails((value) => !value)}
+                className="rounded-md border border-white/[0.08] px-2 py-1 text-[11px] text-white/55 hover:bg-white/[0.05]"
+              >
+                {showDetails ? "Hide full brief" : "Read full brief"}
+              </button>
+            </div>
+            {description ? (
+              <p className={`mt-2 whitespace-pre-wrap text-xs leading-5 text-white/60 ${showDetails ? "" : "max-h-20 overflow-hidden"}`}>
+                {description}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs italic text-white/35">No description yet.</p>
+            )}
+            {!showDetails && description && description.length > 260 && (
+              <div className="mt-1 text-[11px] text-white/30">Brief clipped for scanning. Open it when you need the heavy detail.</div>
+            )}
+          </div>
 
-          <Comments
-            authHeader={authHeader}
-            humanAgentId={humanAgentId}
-            targetKind="todo"
-            targetId={todo.id}
-            pollSeq={pollSeq}
-          />
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-white/75">
+                <BookOpen className="h-3.5 w-3.5 text-[#E2B93B]" />
+                Proof and comments ({todo.comment_count ?? 0})
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowComments((value) => !value)}
+                className="rounded-md border border-white/[0.08] px-2 py-1 text-[11px] text-white/55 hover:bg-white/[0.05]"
+              >
+                {showComments ? "Hide comments" : "Show comments"}
+              </button>
+            </div>
+            {showComments ? (
+              <div className="mt-3">
+                <Comments
+                  authHeader={authHeader}
+                  humanAgentId={humanAgentId}
+                  targetKind="todo"
+                  targetId={todo.id}
+                  pollSeq={pollSeq}
+                />
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-white/35">
+                Worker receipts stay folded here so the page remains scannable.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </li>
@@ -276,6 +393,15 @@ function JobSection({
         <p className="px-3 py-4 text-sm italic text-white/30">Empty</p>
       ) : (
         <ul>
+          <li className="hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/30 md:grid md:grid-cols-[minmax(280px,2fr)_76px_76px_minmax(120px,0.8fr)_86px_132px_44px]">
+            <span>Job</span>
+            <span>State</span>
+            <span>Priority</span>
+            <span>Worker</span>
+            <span>Live</span>
+            <span>Progress</span>
+            <span className="text-right">Notes</span>
+          </li>
           {jobs.map((todo) => (
             <JobRow
               key={todo.id}
