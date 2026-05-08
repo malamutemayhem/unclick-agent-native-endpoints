@@ -17,6 +17,7 @@ import {
   inspectAutonomousRunnerJobSafety,
   markUnsafeJobsBlockedForAutonomousRunner,
   normalizeAutonomousRunnerMode,
+  parseMcpEventStreamPayload,
   runAutonomousRunnerCycle,
   runAutonomousRunnerFile,
 } from "./pinballwake-autonomous-runner.mjs";
@@ -206,6 +207,46 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.ok, true);
     assert.equal(result.todos.length, 1);
     assert.equal(result.todos[0].id, "todo-1");
+  });
+
+  it("parses streamed UnClick MCP actionable todo responses", async () => {
+    const streamedPayload = {
+      jsonrpc: "2.0",
+      id: "test",
+      result: {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              todos: [{ id: "todo-sse", title: "Claim from streamed MCP" }],
+            }),
+          },
+        ],
+      },
+    };
+    const streamText = [
+      "event: message",
+      `data: ${JSON.stringify(streamedPayload)}`,
+      "",
+    ].join("\n");
+
+    assert.equal(parseMcpEventStreamPayload(streamText)?.id, "test");
+
+    const result = await fetchUnClickActionableTodos({
+      agentId: "runner-test",
+      apiKey: "uc_test",
+      mcpUrl: "https://unclick.test/api/mcp",
+      fetchImpl: async () => ({
+        ok: true,
+        async text() {
+          return streamText;
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.todos.length, 1);
+    assert.equal(result.todos[0].id, "todo-sse");
   });
 
   it("extracts Boardroom todo ids only from imported UnClick jobs", () => {
@@ -543,14 +584,14 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.ledger.jobs[0].status, "blocked");
   });
 
-  it("wires the scheduled workflow to dry-run by default with execute locked off", async () => {
+  it("wires the scheduled workflow to claim by default with execute locked off", async () => {
     const workflow = await readFile(".github/workflows/autonomous-runner.yml", "utf8");
 
     assert.match(workflow, /cron:\s*"3,13,23,33,43,53 \* \* \* \*"/);
     assert.match(workflow, /node scripts\/pinballwake-autonomous-runner\.mjs/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_QUEUE_SOURCE:.*'unclick'/);
-    assert.match(workflow, /UNCLICK_API_KEY:\s*\$\{\{ secrets\.UNCLICK_API_KEY \}\}/);
-    assert.match(workflow, /AUTONOMOUS_RUNNER_MODE:.*'dry-run'/);
+    assert.match(workflow, /UNCLICK_API_KEY:.*secrets\.UNCLICK_API_KEY.*secrets\.FISHBOWL_AUTOCLOSE_TOKEN.*secrets\.FISHBOWL_WAKE_TOKEN/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_MODE:.*'claim'/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOW_EXECUTE:\s*"false"/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES:\s*"false"/);
     assert.match(workflow, /kill_switch:/);
