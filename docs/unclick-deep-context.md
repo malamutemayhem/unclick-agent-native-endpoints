@@ -2,6 +2,8 @@
 
 This note is for workers who need the older UnClick story, not just the current GitHub queue.
 
+For current product taxonomy, read `docs/unclick-context-boot-packet.md` first. If this older context says "Pass products" or lists Pass-era names beside Autopilot, treat that as historical wording. Current wording is XPass products, and UnClick Autopilot sits higher as the development assembly line.
+
 Recent Fishbowl and PR state explains what is moving now. This file explains why the work is shaped this way.
 
 This is not a roadmap promise. Some items are locked decisions, some are shipped foundations, and some are parked strategic options.

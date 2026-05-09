@@ -4,6 +4,8 @@ This file defines what workers may do without waiting for Chris, what needs one 
 
 Read `FLEET_SYNC.md` first. It is the current cross-PC fleet alignment layer and defines source-of-truth order, worker lanes, no-stomp rules, and continuity expectations. This file only defines autonomy tiers.
 
+Read `docs/unclick-context-boot-packet.md` before routing or summarizing product context. It defines the current hierarchy: UnClick is the platform, UnClick Autopilot is the top-level development assembly line, Launchpad is the control hub, Rooms are the stages, and XPass is the product line beneath or alongside the broader platform.
+
 The goal is simple: keep the fleet moving while protecting secrets, security, billing, migrations, and public claims.
 
 ## Operating Principles
@@ -138,7 +140,7 @@ Workers should ask once before turning these into standing behavior:
 - Dependency auto-merge policy for patch and minor updates.
 - Public dogfood reports and public status pages.
 - New recurring scheduled jobs.
-- Pass-family documentation generation.
+- XPass documentation generation.
 - Memory public-release checklist changes.
 - Any rule that changes who owns a class of work.
 
@@ -273,6 +275,6 @@ Before merging:
 
 ## Current Priority Rule
 
-Autopilot foundation work comes before new Pass-family expansion. Pass dogfood work may continue when it supports autopilot, but new Pass product lanes should wait until the autopilot rails are landed.
+Autopilot foundation work comes before new XPass expansion. XPass dogfood work may continue when it supports Autopilot, but new XPass product lanes should wait until the Autopilot rails are landed.
 
 <!-- build-d probe 4920fa -->
