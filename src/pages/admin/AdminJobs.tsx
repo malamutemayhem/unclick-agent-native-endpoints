@@ -110,10 +110,85 @@ const TITLE_MAX_CHARS = 90;
 const JOB_ROW_GRID =
   "md:grid md:grid-cols-[48px_minmax(360px,1.25fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(200px,0.55fr)_30px_18px] md:items-center md:gap-1.5";
 
+interface JobDisplayCopy {
+  title: string;
+  summary: string;
+}
+
 function compactTitle(title: string): string {
   const cleaned = title.replace(/\s+/g, " ").trim();
   if (cleaned.length <= TITLE_MAX_CHARS) return cleaned;
   return `${cleaned.slice(0, TITLE_MAX_CHARS - 3).trimEnd()}...`;
+}
+
+function trimSentence(value: string, maxChars: number): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  const cut = cleaned.slice(0, maxChars - 3);
+  const boundary = Math.max(cut.lastIndexOf("."), cut.lastIndexOf(","), cut.lastIndexOf(";"), cut.lastIndexOf(" "));
+  return `${cut.slice(0, boundary > 40 ? boundary : maxChars - 3).trimEnd()}...`;
+}
+
+function stripNoisyLead(value: string): string {
+  return value
+    .replace(/^\s*(urgent|bug|fix|feat|chore|docs|test|refactor|experiment|blocked|blocker)\s*[:\-]\s*/i, "")
+    .replace(/^\s*(fix|feat|chore|docs|test|refactor)\([^)]+\)\s*:\s*/i, "")
+    .replace(/^\s*(pr|pull request)\s*#?\d+\s*[:\-]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function simplifyJobTitle(title: string): string {
+  const cleaned = stripNoisyLead(title)
+    .replace(/\bgreen-but-idle\b/gi, "idle")
+    .replace(/\bauto[- ]close\b/gi, "auto-close")
+    .replace(/\bunclick\b/gi, "UnClick")
+    .replace(/\bai\b/gi, "AI")
+    .replace(/\bmcp\b/gi, "MCP")
+    .replace(/\bpr\s*#\s*(\d+)/gi, "PR #$1")
+    .trim();
+
+  const dependencyMatch = cleaned.match(/^bump\s+(.+?)\s+from\s+.+?\s+to\s+(.+)$/i);
+  if (dependencyMatch) {
+    return compactTitle(`Update ${dependencyMatch[1]} to ${dependencyMatch[2]}`);
+  }
+
+  const schemaMatch = cleaned.match(/(.+?)\s+breaks\s+(.+)$/i);
+  if (schemaMatch) {
+    return compactTitle(`Fix ${schemaMatch[1]}`);
+  }
+
+  return compactTitle(cleaned || title);
+}
+
+function simplifyJobSummary(todo: JobTodo): string {
+  const rawDescription = todo.description?.trim();
+  const source = rawDescription && rawDescription.length > 0 ? rawDescription : todo.title;
+  const firstUsefulLine =
+    source
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*#>\s]+/, "").trim())
+      .find((line) => line.length > 0 && !/^https?:\/\//i.test(line)) ?? source;
+
+  const cleaned = stripNoisyLead(firstUsefulLine)
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\[[^\]]+\]\([^)]+\)/g, "")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "linked item")
+    .replace(/\b(api|mcp|ai|pr|ci)\b/gi, (match) => match.toUpperCase())
+    .replace(/\bunclick\b/gi, "UnClick")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return trimSentence(cleaned || simplifyJobTitle(todo.title), 130);
+}
+
+function displayCopyFor(todo: JobTodo): JobDisplayCopy {
+  return {
+    title: simplifyJobTitle(todo.title),
+    summary: simplifyJobSummary(todo),
+  };
 }
 
 function relativeTime(iso: string | null | undefined): string {
@@ -481,7 +556,7 @@ function JobRow({
   const rawOwner = todo.assigned_to_agent_id?.trim() || "unassigned";
   const alert = attention ? attentionCopy(todo) : null;
   const emoji = ownerEmoji(todo);
-  const visibleTitle = compactTitle(todo.title);
+  const displayCopy = displayCopyFor(todo);
 
   return (
     <li
@@ -530,7 +605,7 @@ function JobRow({
             )}
           </button>
         </div>
-        <p
+        <div
           role="button"
           tabIndex={0}
           aria-expanded={expanded}
@@ -541,11 +616,16 @@ function JobRow({
               onToggle();
             }
           }}
-          className={`min-w-0 cursor-pointer select-text truncate rounded-[3px] text-[10px] font-semibold leading-4 outline-none hover:text-white focus-visible:ring-1 focus-visible:ring-[#61C1C4]/50 ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+          className="min-w-0 cursor-pointer select-text rounded-[3px] outline-none focus-visible:ring-1 focus-visible:ring-[#61C1C4]/50"
           title={todo.title}
         >
-          {visibleTitle}
-        </p>
+          <p className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}>
+            {displayCopy.title}
+          </p>
+          <p className="truncate text-[10px] leading-4 text-white/35">
+            {displayCopy.summary}
+          </p>
+        </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
           <span
@@ -630,22 +710,32 @@ function JobRow({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-medium text-white/75">
                 <FileText className="h-3.5 w-3.5 text-[#61C1C4]" />
-                Job brief
+                Job context
               </div>
               <button
                 type="button"
                 onClick={() => setShowDetails((value) => !value)}
                 className="text-[11px] text-[#61C1C4]/80 hover:text-[#61C1C4]"
               >
-                {showDetails ? "See less" : "... See more"}
+                {showDetails ? "Hide original" : "Show original"}
               </button>
             </div>
-            {description ? (
-              <p className={`mt-2 whitespace-pre-wrap text-xs leading-5 text-white/60 ${showDetails ? "" : "max-h-20 overflow-hidden"}`}>
-                {description}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs italic text-white/35">No description yet.</p>
+            <div className="mt-2 space-y-1.5">
+              <p className="text-xs font-medium text-white/70">{displayCopy.title}</p>
+              <p className="text-xs leading-5 text-white/50">{displayCopy.summary}</p>
+            </div>
+            {showDetails && (
+              <div className="mt-3 rounded-[5px] border border-white/[0.05] bg-black/20 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-white/25">Original source</p>
+                <p className="mt-1 text-xs font-medium leading-5 text-white/60">{todo.title}</p>
+                {description ? (
+                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-white/45">
+                    {description}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs italic text-white/30">No original description.</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -698,6 +788,8 @@ function JobSection({
   visibleCount,
   onToggleSection,
   onShowMore,
+  hasMoreRemote,
+  showMoreLoading,
   loading,
 }: {
   sectionKey: JobSectionKey;
@@ -712,6 +804,8 @@ function JobSection({
   visibleCount?: number;
   onToggleSection?: () => void;
   onShowMore?: () => void;
+  hasMoreRemote?: boolean;
+  showMoreLoading?: boolean;
   loading?: boolean;
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -730,7 +824,7 @@ function JobSection({
   );
   const displayCount = Math.min(visibleCount ?? SECTION_PAGE_SIZE, cappedJobs.length);
   const visibleJobs = sortedJobs.slice(0, displayCount);
-  const canShowMore = displayCount < cappedJobs.length;
+  const canShowMore = displayCount < cappedJobs.length || hasMoreRemote === true;
   const showLoading = loading === true && jobs.length === 0;
   const sectionAccent: Record<JobSectionKey, string> = {
     active: "bg-[#E2B93B]",
@@ -773,7 +867,20 @@ function JobSection({
           Loading jobs
         </div>
       ) : jobs.length === 0 ? (
-        <p className="px-3 py-4 text-sm italic text-white/30">Empty</p>
+        <div className="px-3 py-4">
+          <p className="text-sm italic text-white/30">Empty</p>
+          {canShowMore && (
+            <button
+              type="button"
+              onClick={onShowMore}
+              disabled={showMoreLoading}
+              className="mt-3 inline-flex items-center gap-2 text-xs text-[#61C1C4]/80 hover:text-[#61C1C4] disabled:cursor-wait disabled:text-white/30"
+            >
+              {showMoreLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+              Show completed history
+            </button>
+          )}
+        </div>
       ) : (
         <ul>
           <li className={`hidden border-b border-white/[0.05] bg-black/20 px-3 py-1.5 text-[10px] font-semibold uppercase text-white/30 ${JOB_ROW_GRID}`}>
@@ -812,9 +919,11 @@ function JobSection({
               <button
                 type="button"
                 onClick={onShowMore}
-                className="text-xs text-[#61C1C4]/80 hover:text-[#61C1C4]"
+                disabled={showMoreLoading}
+                className="inline-flex items-center gap-2 text-xs text-[#61C1C4]/80 hover:text-[#61C1C4] disabled:cursor-wait disabled:text-white/30"
               >
-                Show more
+                {showMoreLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                {sectionKey === "done" && hasMoreRemote ? "Show completed history" : "Show more"}
               </button>
             </li>
           )}
@@ -834,6 +943,9 @@ export default function AdminJobs() {
 
   const [humanAgentId, setHumanAgentId] = useState<string | null>(null);
   const [todos, setTodos] = useState<JobTodo[]>([]);
+  const [completedHistory, setCompletedHistory] = useState<JobTodo[]>([]);
+  const [completedHistoryLoaded, setCompletedHistoryLoaded] = useState(false);
+  const [completedHistoryLoading, setCompletedHistoryLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
@@ -928,8 +1040,13 @@ export default function AdminJobs() {
   }, [sectionPrefs]);
 
   const filteredTodos = useMemo(
-    () => todos.filter((todo) => matchesJobSearch(todo, searchQuery)),
-    [searchQuery, todos],
+    () => {
+      const byId = new Map<string, JobTodo>();
+      for (const todo of todos) byId.set(todo.id, todo);
+      for (const todo of completedHistory) byId.set(todo.id, todo);
+      return Array.from(byId.values()).filter((todo) => matchesJobSearch(todo, searchQuery));
+    },
+    [completedHistory, searchQuery, todos],
   );
   const grouped = useMemo(() => groupJobs(filteredTodos), [filteredTodos]);
   const orderedGrouped = useMemo(
@@ -945,6 +1062,7 @@ export default function AdminJobs() {
   const queueCount = grouped.next.length + grouped.inline.length;
   const alertCount = filteredTodos.filter(needsAttention).length;
   const initialLoading = !firstLoadDone && loading;
+  const visibleJobCount = todos.length + completedHistory.filter((historyJob) => !todos.some((todo) => todo.id === historyJob.id)).length;
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
@@ -993,6 +1111,41 @@ export default function AdminJobs() {
           : prev.visible[sectionKey] + SECTION_PAGE_SIZE,
       },
     }));
+  };
+
+  const loadCompletedHistory = async () => {
+    if (!humanAgentId || completedHistoryLoading) return;
+    if (completedHistoryLoaded) {
+      showMore("done");
+      return;
+    }
+
+    setCompletedHistoryLoading(true);
+    try {
+      const res = await fetch("/api/memory-admin?action=fishbowl_list_todos", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent_id: humanAgentId,
+          include_description: true,
+          status: "done",
+          limit: 200,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        todos?: JobTodo[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? "Failed to load completed jobs");
+      setCompletedHistory((body.todos ?? []).filter((todo) => todo.status === "done"));
+      setCompletedHistoryLoaded(true);
+      showMore("done");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load completed jobs");
+    } finally {
+      setCompletedHistoryLoading(false);
+    }
   };
 
   return (
@@ -1063,8 +1216,8 @@ export default function AdminJobs() {
           {initialLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#61C1C4]" />}
           {firstLoadDone
             ? searchQuery.trim()
-              ? `${filteredTodos.length} of ${todos.length} jobs match`
-              : `${todos.length} visible jobs`
+              ? `${filteredTodos.length} of ${visibleJobCount} jobs match`
+              : `${visibleJobCount} visible jobs`
             : "Loading jobs"}
         </span>
         <span className="inline-flex items-center gap-1.5">
@@ -1131,7 +1284,9 @@ export default function AdminJobs() {
           sectionExpanded={sectionPrefs.expanded.done}
           visibleCount={sectionPrefs.visible.done}
           onToggleSection={() => toggleSection("done")}
-          onShowMore={() => showMore("done")}
+          onShowMore={loadCompletedHistory}
+          hasMoreRemote={!completedHistoryLoaded}
+          showMoreLoading={completedHistoryLoading}
           loading={initialLoading}
         />
       </div>

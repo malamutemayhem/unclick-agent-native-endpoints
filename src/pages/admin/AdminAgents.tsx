@@ -61,6 +61,18 @@ interface AgentDetail {
   memory_scope: Array<{ memory_layer: string; is_enabled: boolean }>;
 }
 
+interface FishbowlProfile {
+  agent_id: string;
+  emoji: string | null;
+  display_name: string | null;
+  user_agent_hint: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  current_status: string | null;
+  current_status_updated_at: string | null;
+  next_checkin_at: string | null;
+}
+
 const ROLE_OPTIONS = [
   { value: "researcher", label: "Researcher" },
   { value: "developer", label: "Developer" },
@@ -222,6 +234,21 @@ function loadSeatOverrides(): AISeat[] {
 function getApiKey(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem("unclick_api_key") ?? "";
+}
+
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "No check-in yet";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "Unknown";
+  const diffSec = Math.max(1, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 14) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 async function api<T>(action: string, opts: RequestInit = {}): Promise<T> {
@@ -662,10 +689,55 @@ function WorkerRolesPanel() {
   );
 }
 
+function profileDisplayName(profile: FishbowlProfile): string {
+  const name = profile.display_name?.trim();
+  if (name) return name;
+  return profile.agent_id
+    .replace(/^chatgpt[-_]/, "")
+    .replace(/^codex[-_]/, "")
+    .replace(/^claude[-_]/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .replace(/\bAi\b/g, "AI");
+}
+
+function profileMatchesSeat(profile: FishbowlProfile, seat: AISeat): boolean {
+  const haystack = `${profile.agent_id} ${profile.display_name ?? ""} ${profile.user_agent_hint ?? ""}`.toLowerCase();
+  const needles = [seat.id, seat.name, seat.provider, seat.device]
+    .map((value) => value.toLowerCase().trim())
+    .filter((value) => value.length > 2 && !["unknown ai", "unknown device", "manual slot"].includes(value));
+  return needles.some((needle) => haystack.includes(needle));
+}
+
 function AISeatsPanel() {
   const [seats, setSeats] = useState<AISeat[]>(() => loadSeatOverrides());
+  const [profiles, setProfiles] = useState<FishbowlProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
   const [editingSeatId, setEditingSeatId] = useState<string | null>(null);
   const issues = seats.filter((seat) => seat.issue);
+
+  const loadProfiles = useCallback(async () => {
+    if (!getApiKey()) return;
+    setProfilesLoading(true);
+    try {
+      const res = await api<{ profiles?: FishbowlProfile[] }>("fishbowl_read", {
+        method: "POST",
+        body: JSON.stringify({
+          agent_id: "admin-agents-page",
+          limit: 1,
+        }),
+      });
+      setProfiles(
+        (res.profiles ?? [])
+          .filter((profile) => profile.user_agent_hint !== "admin-ui")
+          .sort((a, b) => new Date(b.last_seen_at ?? b.created_at).getTime() - new Date(a.last_seen_at ?? a.created_at).getTime()),
+      );
+    } catch {
+      setProfiles([]);
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -684,6 +756,12 @@ function AISeatsPanel() {
     );
     window.localStorage.setItem(AI_SEAT_STORAGE_KEY, JSON.stringify(overrides));
   }, [seats]);
+
+  useEffect(() => {
+    void loadProfiles();
+    const id = window.setInterval(() => void loadProfiles(), 30_000);
+    return () => window.clearInterval(id);
+  }, [loadProfiles]);
 
   const updateSeat = (seatId: string, patch: Partial<AISeat>) => {
     setSeats((current) => current.map((seat) => (seat.id === seatId ? { ...seat, ...patch } : seat)));
@@ -718,7 +796,7 @@ function AISeatsPanel() {
             Manual mode
           </span>
         </div>
-        <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(150px,0.8fr)_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Seat</span>
           <span>Status</span>
           <span className="flex items-center justify-between gap-2">
@@ -731,19 +809,21 @@ function AISeatsPanel() {
               Even split
             </button>
           </span>
+          <span>Last seen</span>
           <span>Assigned work</span>
           <span>Controls</span>
         </div>
         <div className="divide-y divide-border/30">
           {seats.map((seat) => {
             const editing = editingSeatId === seat.id;
+            const matchedProfile = profiles.find((profile) => profileMatchesSeat(profile, seat));
             const emojiOptions = AI_SEAT_EMOJI_OPTIONS.some((option) => option.emoji === seat.emoji)
               ? AI_SEAT_EMOJI_OPTIONS
               : [{ emoji: seat.emoji, label: "Custom" }, ...AI_SEAT_EMOJI_OPTIONS];
             return (
               <div
                 key={seat.id}
-                className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(180px,1.2fr)_minmax(190px,1fr)] items-center gap-3 px-4 py-3 text-xs"
+                className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(150px,0.8fr)_minmax(180px,1.2fr)_minmax(190px,1fr)] items-center gap-3 px-4 py-3 text-xs"
               >
                 <div className="min-w-0">
                   {editing ? (
@@ -817,6 +897,23 @@ function AISeatsPanel() {
                   />
                   <p className="mt-1 text-[10px] text-muted-foreground">{seat.load}%</p>
                 </div>
+                <div className="min-w-0">
+                  {matchedProfile ? (
+                    <>
+                      <p className="truncate text-xs font-medium text-heading" title={matchedProfile.agent_id}>
+                        {relativeTime(matchedProfile.last_seen_at)}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {profileDisplayName(matchedProfile)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">No match</p>
+                      <p className="text-[10px] text-muted-foreground/70">Use recent check-ins below</p>
+                    </>
+                  )}
+                </div>
                 <input
                   value={seat.assigned}
                   onChange={(event) => updateSeat(seat.id, { assigned: event.target.value })}
@@ -844,6 +941,51 @@ function AISeatsPanel() {
             );
           })}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border/40 bg-card/20 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-heading">Recent check-ins</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Live seats that have touched UnClick recently.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadProfiles()}
+            className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-heading"
+          >
+            {profilesLoading ? "Checking..." : "Refresh"}
+          </button>
+        </div>
+        {profiles.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No live seat check-ins found yet.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {profiles.slice(0, 8).map((profile) => (
+              <div key={profile.agent_id} className="rounded-lg border border-border/35 bg-card/30 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-heading">
+                      <span className="mr-1.5" aria-hidden="true">{profile.emoji ?? "AI"}</span>
+                      {profileDisplayName(profile)}
+                    </p>
+                    <p className="truncate text-[10px] text-muted-foreground" title={profile.agent_id}>
+                      {profile.agent_id}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                    {relativeTime(profile.last_seen_at)}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-[11px] text-body">
+                  {profile.current_status || profile.user_agent_hint || "No status text"}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {issues.length > 0 && (
