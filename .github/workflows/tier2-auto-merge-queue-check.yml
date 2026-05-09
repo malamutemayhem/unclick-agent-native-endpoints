@@ -1,0 +1,26 @@
+name: Tier-2 Auto-Merge Queue Check
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+jobs:
+  queue-check:
+    name: Scheduled tier-2 merge no-op check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check live open PR queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TIER2_AUTOMERGE_PR_LIMIT: "30"
+        run: node scripts/tier2-auto-merge-queue-check.mjs
