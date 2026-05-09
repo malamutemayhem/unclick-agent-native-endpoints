@@ -721,6 +721,10 @@ const VISIBLE_TOOLS = [
       properties: {
         agent_id: { type: "string" },
         limit: { type: "number", minimum: 1, maximum: 50, default: 10 },
+        include_description: {
+          type: "boolean",
+          description: "Include compact job descriptions so runners can keep the source brief while routing.",
+        },
       },
       required: ["agent_id"],
     },
