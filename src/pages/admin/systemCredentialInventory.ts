@@ -483,7 +483,7 @@ function healthEvidenceLabelFor(entry: SystemCredentialInventoryEntry): string {
   if (workload.includes("analytics")) return "Use analytics receipt evidence.";
   if (workload.includes("payment")) return "Use approved payment webhook proof.";
   if (workload.includes("email")) return "Use delivery metadata evidence.";
-  return "No live probe is claimed; use manual metadata review.";
+  return "No live probe is claimed; status stays untested until a server-gated probe exists.";
 }
 
 function rotationImpactSummaryFor(entry: SystemCredentialInventoryEntry): string {

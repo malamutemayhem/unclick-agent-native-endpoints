@@ -132,6 +132,13 @@ describe("system credential inventory", () => {
     }
   });
 
+  it("keeps no-probe fallback copy explicitly untested and server-gated", () => {
+    const row = listSystemCredentialHealthRows().find((entry) => entry.name === "ADMIN_NOTIFICATION_EMAIL");
+    expect(row?.healthEvidenceLabel).toBe(
+      "No live probe is claimed; status stays untested until a server-gated probe exists.",
+    );
+  });
+
   it("requires human review notes for critical system credentials", () => {
     const criticalRows = listSystemCredentialHealthRows().filter((entry) => entry.risk === "critical");
 
