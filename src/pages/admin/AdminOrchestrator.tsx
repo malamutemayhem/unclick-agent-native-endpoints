@@ -142,7 +142,7 @@ export default function AdminOrchestratorPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-white">Orchestrator</h1>
           <p className="text-sm text-white/50">
-            Your AI command center. Chat, connect Claude Code, track build tasks.
+            Your AI command center. Chat, sync context, connect seats, and hand off work.
           </p>
         </div>
       </div>

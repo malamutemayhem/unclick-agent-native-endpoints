@@ -16,7 +16,31 @@ interface OpenAIEmbeddingResponse {
   data: Array<{ embedding: number[] }>;
 }
 
+function shouldSkipEmbedding(text: string): boolean {
+  const value = text.trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (lower.length < 24) return true;
+  if (lower.startsWith("heartbeat_last_state:")) return true;
+  if (lower.includes("<heartbeat") || lower.includes("</heartbeat>")) return true;
+
+  return [
+    "dont_notify",
+    "unclick healthy",
+    "no new signals",
+    "user is caught up",
+    "memory self-echo",
+    "fact saved: heartbeat_last_state",
+    "only memory self-echo signals",
+    "top queue unchanged",
+  ].some((needle) => lower.includes(needle));
+}
+
 export async function embedText(text: string): Promise<number[] | null> {
+  if (process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED === "false") return null;
+  if (shouldSkipEmbedding(text)) return null;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 

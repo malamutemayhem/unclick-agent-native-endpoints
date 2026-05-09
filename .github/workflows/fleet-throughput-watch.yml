@@ -1,0 +1,35 @@
+name: Fleet Throughput Watch
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print QueuePush packets without posting to Fishbowl.
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: read
+  statuses: read
+
+jobs:
+  queuepush:
+    name: Route stalled PR queue packets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan PR queue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FISHBOWL_WAKE_TOKEN: ${{ secrets.FISHBOWL_WAKE_TOKEN }}
+          FISHBOWL_AUTOCLOSE_TOKEN: ${{ secrets.FISHBOWL_AUTOCLOSE_TOKEN }}
+          QUEUEPUSH_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          QUEUEPUSH_MAX_PACKETS: "10"
+        run: node scripts/fleet-throughput-watch.mjs

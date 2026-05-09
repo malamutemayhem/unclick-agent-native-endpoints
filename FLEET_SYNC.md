@@ -4,6 +4,8 @@ This is the current operating agreement for UnClick workers across Lenovo, Plex,
 
 Read this first when a worker starts, resumes, or is spawned into an existing lane. Older courier notes are historical references. This file is the live alignment layer.
 
+Read `docs/unclick-context-boot-packet.md` before making product-map claims. It defines the current wording: UnClick is the platform, UnClick Autopilot is the development assembly line, Launchpad is the control hub, Rooms are the stages, and XPass is the product line.
+
 ## Source Of Truth Order
 
 When instructions conflict, use this order:
@@ -132,7 +134,7 @@ Current common worker lanes:
 | Navigator | Navigator | Scout, review, and next-chip recommendation |
 | Relay | Relay | Simple status, cross-worker summaries, handoff clarity |
 | Forge | Forge | Focused implementation lane |
-| XPass Assistant | XPass assistant | Pass-family proof, TestPass, UXPass, SecurityPass, and dogfood lanes |
+| XPass Assistant | XPass assistant | XPass proof, TestPass, UXPass, SecurityPass, and dogfood lanes |
 | Scheduled automations | Cron workers | Repeated health checks, triage, safe build lanes, and continuity audits |
 
 Names may vary between chats. The lane and live Fishbowl status matter more than the display name.
@@ -149,7 +151,7 @@ Every worker should do this before acting:
 
 1. Pull or inspect latest `main`.
 2. Read this file, then `AUTOPILOT.md`.
-3. Read `docs/unclick-deep-context.md` when making product, strategy, summary, or roadmap judgments.
+3. Read `docs/unclick-context-boot-packet.md` before product taxonomy claims, then `docs/unclick-deep-context.md` when making broader product, strategy, summary, or roadmap judgments.
 4. Check open PRs and recent merged PRs.
 5. Check Fishbowl direct mentions, assigned todos, and current worker statuses.
 6. Check whether the intended files are already owned by another active worker.
@@ -177,7 +179,7 @@ Autopilot workers may:
 - Review clean green PRs.
 - Ship tiny docs alignment PRs.
 - Ship tiny reliability, wake, or board-hygiene chips.
-- Continue approved Connectors, RotatePass, Pass proof, and PinballWake lanes within stated safety limits.
+- Continue approved Connectors, RotatePass, XPass proof, and PinballWake lanes within stated safety limits.
 - Post clear handoffs when blocked.
 
 Autopilot workers must not:
@@ -280,9 +282,9 @@ Do not build:
 
 Browser or local extension ideas remain Phase 0 until explicitly promoted.
 
-## Pass And Dogfood Lanes
+## XPass And Dogfood Lanes
 
-Pass work should prove UnClick is using itself.
+XPass work should prove UnClick is using itself.
 
 Priority order:
 
@@ -290,7 +292,7 @@ Priority order:
 2. UXPass stuck or failed run clarity.
 3. SecurityPass dogfood receipt clarity.
 4. Public dogfood report accuracy.
-5. New Pass product expansion only after foundation lanes are stable.
+5. New XPass product expansion only after foundation lanes are stable.
 
 Do not weaken fail-closed checks to make CI green. Fix the blocker or report it.
 

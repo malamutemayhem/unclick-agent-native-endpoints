@@ -19,7 +19,7 @@ describe("deriveConnectorStatus", () => {
 
     expect(status.pill).toBe("Untested");
     expect(status.note.toLowerCase()).toContain("untested");
-    expect(status.note.toLowerCase()).toContain("metadata activity");
+    expect(status.note.toLowerCase()).toContain("metadata timestamp");
     expect(status.note.toLowerCase()).toContain("no server-gated probe");
   });
 
@@ -60,6 +60,7 @@ describe("deriveConnectorStatus", () => {
 
     expect(status.pill).toBe("Check stale");
     expect(status.note.toLowerCase()).toContain("stale");
+    expect(status.note.toLowerCase()).toContain("test timestamp");
   });
 
   it("uses cautious wording for recent test evidence", () => {
@@ -73,5 +74,6 @@ describe("deriveConnectorStatus", () => {
 
     expect(status.pill).toBe("Check recent");
     expect(status.note.toLowerCase()).toContain("not a live secret check");
+    expect(status.note.toLowerCase()).toContain("test timestamp");
   });
 });

@@ -9,7 +9,7 @@ For the operator-facing validation runbook (curl + per-step assertions), see `do
 - **Dispatch.** A unit of work directed at a target agent. It carries `source` (which tool created it), `target_agent_id`, optional `task_ref`, and a free-form `payload`. A dispatch lives in `mc_agent_dispatches` with a deterministic `dispatch_id` so two callers with the same input idempotently create the same row.
 - **Heartbeat.** A periodic note from the working agent that records `state` (`idle | received | accepted | working | blocked | completed`), the current task, next action, ETA, and any blocker. Heartbeats land in `mc_agent_heartbeats` and double as the dispatch's `last_real_action_at` timestamp.
 - **Lease.** When an agent claims a dispatch it becomes the `lease_owner` until `lease_expires_at`. Only the lease owner can publish heartbeats against the dispatch or release it. Leases default to 900s and clamp to 86400s.
-- **Stale reclaim.** A janitor sweeps leases whose `lease_expires_at` is in the past, flips the dispatch to `status=stale`, clears the owner, and emits a WakePass signal so a human or watchdog can pick it back up.
+- **Stale reclaim.** A janitor sweeps leases whose `lease_expires_at` is in the past and emits a WakePass signal so a human or watchdog can pick the work back up. The reclaim must be atomic or retry-safe: a missed-ACK dispatch must not be marked handled before its `handoff_ack_missing` signal is durably created. If signal creation fails, the dispatch should remain eligible for the next reclaim sweep.
 
 ## Action map
 
@@ -87,7 +87,7 @@ Request:
 ```json
 { "limit": 25, "dry_run": false }
 ```
-Response: `{ "reclaimed_count": N, "reclaimed": [...], "dry_run": false }`. Each reclaim emits a WakePass signal - `handoff_ack_missing` when the dispatch payload expected an ACK, otherwise `stale_dispatch_reclaimed`.
+Response: `{ "reclaimed_count": N, "reclaimed": [...], "dry_run": false }`. Each reclaim emits a WakePass signal - `handoff_ack_missing` when the dispatch payload expected an ACK, otherwise `stale_dispatch_reclaimed`. Reclaim implementations should preserve retryability: insert or otherwise guarantee the signal before clearing the lease, or leave the row leased so a later sweep can retry after a signal-write failure.
 
 ## Curl examples
 

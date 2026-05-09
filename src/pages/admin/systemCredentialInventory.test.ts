@@ -92,7 +92,7 @@ describe("system credential inventory", () => {
     }
   });
 
-  it("derives metadata-only health rows with owner, status, and manual check state", () => {
+  it("derives untested health rows with owner, status, and manual check state", () => {
     const rows = listSystemCredentialHealthRows();
     const testpass = rows.find((entry) => entry.name === "TESTPASS_TOKEN");
 
@@ -163,12 +163,22 @@ describe("system credential inventory", () => {
     expect(hasSecretValueField({ name: "TESTPASS_TOKEN", encrypted_value: "ciphertext" })).toBe(true);
     expect(hasSecretValueField({ name: "TESTPASS_TOKEN", vsmValue: "opaque" })).toBe(true);
     expect(hasSecretValueField({ name: "TESTPASS_TOKEN", legacyValue: "old" })).toBe(true);
+    expect(hasSecretValueField({ name: "TESTPASS_TOKEN", Value: "never-print-me" })).toBe(true);
+    expect(hasSecretValueField({ name: "TESTPASS_TOKEN", "encrypted-value": "ciphertext" })).toBe(true);
+    expect(hasSecretValueField({ name: "TESTPASS_TOKEN", Secret: "hidden" })).toBe(true);
 
     expect(sanitizeInventoryRecord({
       provider: "vercel",
       source: "vercel_env",
       name: "TESTPASS_TOKEN",
       value: "never-print-me",
+    })).toBeNull();
+
+    expect(sanitizeInventoryRecord({
+      provider: "vercel",
+      source: "vercel_env",
+      name: "TESTPASS_TOKEN",
+      Value: "never-print-me",
     })).toBeNull();
   });
 

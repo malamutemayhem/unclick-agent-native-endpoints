@@ -1,14 +1,17 @@
 name: Auto-close Fishbowl todo on PR merge
 
-# When a PR merges, scan its body for "Closes Fishbowl todo: <uuid>" markers
-# and POST to the existing memory-admin fishbowl_complete_todo action for
-# each match. Manual dispatch accepts explicit merged PR numbers for bounded
-# reconciliation. A Fishbowl outage must NOT block merge cleanup, so the job
-# always exits 0 even if the API call fails.
+# When a PR merges, scan its body and commit messages for
+# "Closes UnClick todo: <uuid>" markers, with the older "Closes Fishbowl todo"
+# marker still accepted for compatibility. POST each match to the existing
+# memory-admin fishbowl_complete_todo action. Manual dispatch accepts explicit
+# merged PR numbers for bounded reconciliation. A Fishbowl outage must NOT
+# block merge cleanup, so the job always exits 0 even if the API call fails.
 
 on:
   pull_request:
     types: [closed]
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       pr_numbers:
@@ -22,18 +25,18 @@ permissions:
 
 jobs:
   close-todos:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     name: Close linked Fishbowl todos
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Extract todo ids and call memory-admin
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          MANUAL_PR_NUMBERS: ${{ github.event.inputs.pr_numbers || '' }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_SHA: ${{ github.sha }}
           UNCLICK_API_KEY: ${{ secrets.FISHBOWL_AUTOCLOSE_TOKEN }}
           API_URL: https://unclick.world/api/memory-admin
           AGENT_ID: github-action-autoclose
@@ -47,6 +50,11 @@ jobs:
             exit 0
           fi
 
+          MANUAL_PR_NUMBERS=$(jq -r '.inputs.pr_numbers // ""' "${GITHUB_EVENT_PATH}")
+          PR_BODY=$(jq -r '.pull_request.body // ""' "${GITHUB_EVENT_PATH}")
+          PR_NUMBER=$(jq -r '.pull_request.number // ""' "${GITHUB_EVENT_PATH}")
+          PR_MERGED=$(jq -r '.pull_request.merged // false' "${GITHUB_EVENT_PATH}")
+
           PR_NUMBERS=()
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             mapfile -t PR_NUMBERS < <(printf '%s\n' "${MANUAL_PR_NUMBERS:-}" \
@@ -58,8 +66,29 @@ jobs:
               echo "::warning::No PR numbers supplied for manual reconciliation."
               exit 0
             fi
-          else
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            mapfile -t PR_NUMBERS < <(gh api \
+              -H "Accept: application/vnd.github.groot-preview+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[] | select(.merged_at != null) | .number' \
+              2>/tmp/gh-pr-lookup.err | sort -n -u) || {
+                echo "::warning::Could not resolve merged PR for ${GITHUB_SHA}: $(cat /tmp/gh-pr-lookup.err)"
+                PR_NUMBERS=()
+              }
+
+            if [ "${#PR_NUMBERS[@]}" -eq 0 ]; then
+              echo "No merged PR associated with push ${GITHUB_SHA} - nothing to close."
+              exit 0
+            fi
+          elif [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            if [ "${PR_MERGED}" != "true" ]; then
+              echo "Pull request was closed without merge - nothing to close."
+              exit 0
+            fi
             PR_NUMBERS=("${PR_NUMBER}")
+          else
+            echo "Unsupported event ${GITHUB_EVENT_NAME} - nothing to close."
+            exit 0
           fi
 
           if [ "${#PR_NUMBERS[@]}" -eq 0 ]; then
@@ -67,37 +96,47 @@ jobs:
             exit 0
           fi
 
-          # Match "Closes Fishbowl todo: <uuid>" or "closes-fishbowl-todo: <uuid>",
-          # case-insensitive, allowing - or space between the words.
+          # Match the canonical "Closes UnClick todo: <uuid>" marker and the
+          # older "Closes Fishbowl todo: <uuid>" marker, case-insensitive,
+          # allowing - or space between the words.
           UUID_RE='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
           fail_count=0
           close_count=0
 
           for pr_number in "${PR_NUMBERS[@]}"; do
-            pr_body="${PR_BODY:-}"
+            pr_text="${PR_BODY:-}"
             if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-              pr_body=$(gh pr view "${pr_number}" \
+              pr_text=$(gh pr view "${pr_number}" \
                 --repo "${GITHUB_REPOSITORY}" \
-                --json body,mergedAt \
-                --jq 'if .mergedAt == null then "" else (.body // "") end' 2>/tmp/gh-pr-view.err) || {
+                --json body,commits,mergedAt \
+                --jq 'if .mergedAt == null then "" else [(.body // ""), (.commits[]?.messageHeadline // ""), (.commits[]?.messageBody // "")] | join("\n") end' 2>/tmp/gh-pr-view.err) || {
                   echo "::warning::Could not read PR #${pr_number}: $(cat /tmp/gh-pr-view.err)"
                   fail_count=$((fail_count + 1))
                   continue
                 }
+            else
+              pr_commits=$(gh pr view "${pr_number}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --json commits \
+                --jq '[.commits[]?.messageHeadline // "", .commits[]?.messageBody // ""] | join("\n")' 2>/tmp/gh-pr-view.err) || {
+                  echo "::warning::Could not read commit messages for PR #${pr_number}: $(cat /tmp/gh-pr-view.err)"
+                  pr_commits=""
+                }
+              pr_text="${pr_text}"$'\n'"${pr_commits}"
             fi
 
-            if [ -z "${pr_body:-}" ]; then
-              echo "PR #${pr_number} body empty or PR is not merged - nothing to close."
+            if [ -z "${pr_text:-}" ]; then
+              echo "PR #${pr_number} body/commit text empty or PR is not merged - nothing to close."
               continue
             fi
 
-            mapfile -t IDS < <(printf '%s\n' "$pr_body" \
-              | grep -Eio "closes[- ]fishbowl[- ]todo[: ][[:space:]]*${UUID_RE}" \
+            mapfile -t IDS < <(printf '%s\n' "$pr_text" \
+              | grep -Eio "closes[ -]+(unclick|fishbowl)[ -]+todo[[:space:]]*:[[:space:]]*${UUID_RE}" \
               | grep -Eio "${UUID_RE}" \
               | sort -u)
 
             if [ "${#IDS[@]}" -eq 0 ]; then
-              echo "No Fishbowl todo ids found in PR #${pr_number} body."
+              echo "No UnClick/Fishbowl todo ids found in PR #${pr_number} body or commits."
               continue
             fi
 

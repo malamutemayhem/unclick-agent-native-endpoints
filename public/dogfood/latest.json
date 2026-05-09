@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-05-02T17:08:49.615Z",
-  "lastRunAt": "2026-05-02T17:08:49.615Z",
+  "generatedAt": "2026-05-08T17:45:52.190Z",
+  "lastRunAt": "2026-05-08T17:45:52.190Z",
   "status": "blocked",
   "source": "nightly dogfood workflow",
   "headline": "We dogfood UnClick on UnClick.",
@@ -84,13 +84,13 @@
       "name": "TestPass",
       "status": "passing",
       "summary": "Scheduled TestPass completed with 17 checks and 0 failures.",
-      "evidence": "Run 8333c510-f9e1-4c37-91d5-f9f73d2c9b87 checked https://unclick.world/api/mcp.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
-      "runId": "8333c510-f9e1-4c37-91d5-f9f73d2c9b87",
+      "evidence": "Run 3c92b457-1365-4675-8d1f-e29bcc514768 checked https://unclick.world/api/mcp.",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
+      "runId": "3c92b457-1365-4675-8d1f-e29bcc514768",
       "targetUrl": "https://unclick.world/api/mcp",
       "proof": {
         "kind": "testpass_run",
-        "runId": "8333c510-f9e1-4c37-91d5-f9f73d2c9b87",
+        "runId": "3c92b457-1365-4675-8d1f-e29bcc514768",
         "targetUrl": "https://unclick.world/api/mcp"
       }
     },
@@ -100,7 +100,7 @@
       "status": "blocked",
       "summary": "Scheduled UXPass could not run because DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET is missing.",
       "evidence": "Set one workflow secret so the nightly dogfood workflow can create a fresh uxpass_runs row.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "blockedReason": "Missing DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
       "reasonCode": "missing_credential",
       "nextProof": "Set one UXPass workflow secret, then rerun the dogfood report workflow."
@@ -111,7 +111,7 @@
       "status": "blocked",
       "summary": "SecurityPass is blocked until the recurring runner proof is ready.",
       "evidence": "SecurityPass remains scope-gated; the public dogfood receipt does not run security probes yet.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "blockedReason": "SecurityPass is intentionally deny-all/scope-gated until a safe recurring runner proof lands.",
       "reasonCode": "scope_gate",
       "nextProof": "Land a safe recurring SecurityPass runner receipt before marking this passing."
@@ -122,7 +122,7 @@
       "status": "pending",
       "summary": "Queued for recurring search and metadata review.",
       "evidence": "SEOPass is still scaffold-only for public dogfood receipts.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "reasonCode": "planned_runner",
       "nextProof": "Add a recurring SEOPass receipt before moving this out of pending."
     },
@@ -132,7 +132,7 @@
       "status": "pending",
       "summary": "Queued for recurring copy quality review.",
       "evidence": "CopyPass recurring public receipts will land after the runner surface is available.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "reasonCode": "planned_runner",
       "nextProof": "Add a recurring CopyPass receipt before moving this out of pending."
     },
@@ -142,7 +142,7 @@
       "status": "pending",
       "summary": "Queued for recurring policy and claims review.",
       "evidence": "LegalPass recurring public receipts will land after the runner surface is available.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "reasonCode": "planned_runner",
       "nextProof": "Add a recurring LegalPass receipt before moving this out of pending."
     },
@@ -152,7 +152,7 @@
       "status": "pending",
       "summary": "Seed enterprise-readiness report is published; automated evidence checks are not live yet.",
       "evidence": "See /enterprise/latest.json for the readiness-report boundary and pending category map.",
-      "checkedAt": "2026-05-02T17:08:49.615Z",
+      "checkedAt": "2026-05-08T17:45:52.190Z",
       "reasonCode": "planned_runner",
       "proof": {
         "kind": "planned",
@@ -163,7 +163,7 @@
   ],
   "trend": [
     {
-      "date": "2026-05-02",
+      "date": "2026-05-08",
       "passing": 1,
       "failing": 0,
       "blocked": 2,

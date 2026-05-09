@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { Brain } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import StorageBar from "./memory/StorageBar";
-import BrainMap from "./BrainMap";
 import ContextTab from "./memory/ContextTab";
 import FactsTab from "./memory/FactsTab";
 import SessionsTab from "./memory/SessionsTab";
@@ -11,22 +10,26 @@ import LibraryTab from "./memory/LibraryTab";
 import MemoryActivityTab from "./memory/MemoryActivityTab";
 
 const TABS = [
-  { id: "brain-map", label: "Brain Map" },
-  { id: "facts",     label: "Facts"     },
-  { id: "sessions",  label: "Sessions"  },
-  { id: "library",   label: "Library"   },
-  { id: "activity",  label: "Activity"  },
-  { id: "identity",  label: "Identity"  },
+  { id: "saved-facts",    label: "Saved Facts"    },
+  { id: "library",        label: "Library"        },
+  { id: "chats",          label: "Chats"          },
+  { id: "files-notes",    label: "Files & Notes"  },
+  { id: "project-briefs", label: "Project Briefs" },
+  { id: "preferences",    label: "Preferences"    },
+  { id: "recall-check",   label: "Recall Check"   },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 // Back-compat for existing deep links that used ?tab=context
 function resolveTab(param: string | null): TabId {
-  if (param === "context") return "identity";
-  const valid: TabId[] = ["brain-map", "facts", "sessions", "library", "activity", "identity"];
+  if (param === "context" || param === "identity") return "preferences";
+  if (param === "facts") return "saved-facts";
+  if (param === "sessions") return "chats";
+  if (param === "activity" || param === "brain-map") return "recall-check";
+  const valid: TabId[] = ["saved-facts", "library", "chats", "files-notes", "project-briefs", "preferences", "recall-check"];
   if (valid.includes(param as TabId)) return param as TabId;
-  return "brain-map";
+  return "saved-facts";
 }
 
 export default function AdminMemoryPage() {
@@ -160,7 +163,7 @@ export default function AdminMemoryPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-white">Memory</h1>
-            <p className="text-sm text-white/50">Everything UnClick remembers about you</p>
+            <p className="text-sm text-white/50">What UnClick remembers</p>
           </div>
         </div>
 
@@ -188,21 +191,20 @@ export default function AdminMemoryPage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === "brain-map" && <BrainMap />}
-        {activeTab === "facts" && (
+        {activeTab === "saved-facts" && (
           <div>
             <p className="mb-4 text-sm text-white/60">
-              What UnClick remembers about you. Preferences, decisions, contacts, technical details.
-              These appear here automatically as you use UnClick. You can also add them manually.
+              Quick remembered facts. These appear automatically as you use UnClick,
+              and can be promoted into the Library when they become long-term reference material.
             </p>
             <FactsTab apiKey={accessToken} />
           </div>
         )}
-        {activeTab === "sessions" && (
+        {activeTab === "chats" && (
           <div>
             <p className="mb-4 text-sm text-white/60">
-              What happened in past conversations. Summaries, decisions made, open loops.
-              New sessions read the most recent ones so your agent picks up where you left off.
+              Conversation history and useful chat context. New sessions can read the recent
+              summaries so your AI picks up where you left off.
             </p>
             <SessionsTab apiKey={accessToken} />
           </div>
@@ -210,30 +212,47 @@ export default function AdminMemoryPage() {
         {activeTab === "library" && (
           <div>
             <p className="mb-4 text-sm text-white/60">
-              Knowledge documents stored by your agent. Reference material, guides, and notes
-              that get loaded on demand via search.
+              Curated memories with categories and tags. One memory can have many tags,
+              so UnClick can find it without duplicating it.
             </p>
             <LibraryTab apiKey={accessToken} />
           </div>
         )}
-        {activeTab === "activity" && (
+        {activeTab === "files-notes" && (
           <div>
             <p className="mb-4 text-sm text-white/60">
-              Memory activity over time. Fact growth, storage breakdown, decay signals,
-              and most-accessed items.
+              Uploaded files, notes, docs, and references. This currently uses the Library
+              storage path until the dedicated files view is split out.
             </p>
-            <MemoryActivityTab apiKey={accessToken} />
+            <LibraryTab apiKey={accessToken} />
           </div>
         )}
-        {activeTab === "identity" && (
+        {activeTab === "project-briefs" && (
+          <div>
+            <p className="mb-4 text-sm text-white/60">
+              Project-specific summaries. These are memory items tagged to projects,
+              while Memory itself stays global across UnClick.
+            </p>
+            <ContextTab apiKey={accessToken} />
+          </div>
+        )}
+        {activeTab === "preferences" && (
           <div>
             <div className="mb-4 rounded-lg border border-[#61C1C4]/30 bg-[#61C1C4]/[0.06] p-4">
               <p className="text-sm text-[#61C1C4]/90">
-                Everything here loads at the start of every AI session.
-                Think of it as your AI's permanent instructions.
+                Preferences mirror the canonical controls in You / AI Style, with project overrides later.
               </p>
             </div>
             <ContextTab apiKey={accessToken} />
+          </div>
+        )}
+        {activeTab === "recall-check" && (
+          <div>
+            <p className="mb-4 text-sm text-white/60">
+              Recall Check is an action, not a memory category. It helps test whether UnClick
+              is loading and using the right memory at the right time.
+            </p>
+            <MemoryActivityTab apiKey={accessToken} />
           </div>
         )}
     </>

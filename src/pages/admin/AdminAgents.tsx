@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AdminShell from "@/components/admin/AdminShell";
 import {
   Bot,
   Plus,
@@ -19,6 +18,9 @@ import {
   Search,
   X,
   Check,
+  Cpu,
+  AlertTriangle,
+  Save,
 } from "lucide-react";
 import {
   AGENT_TEMPLATES,
@@ -59,6 +61,18 @@ interface AgentDetail {
   memory_scope: Array<{ memory_layer: string; is_enabled: boolean }>;
 }
 
+interface FishbowlProfile {
+  agent_id: string;
+  emoji: string | null;
+  display_name: string | null;
+  user_agent_hint: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  current_status: string | null;
+  current_status_updated_at: string | null;
+  next_checkin_at: string | null;
+}
+
 const ROLE_OPTIONS = [
   { value: "researcher", label: "Researcher" },
   { value: "developer", label: "Developer" },
@@ -83,9 +97,158 @@ const ROLE_ICON_MAP = new Map(
   AGENT_TEMPLATES.map((t) => [t.role, t.icon] as const),
 );
 
+const WORKER_ROLES = [
+  { name: "Coordinator", emoji: "🧭", summary: "Routes work and keeps the plan moving.", required: true },
+  { name: "Builder", emoji: "🛠️", summary: "Makes scoped changes and opens proof-backed work.", required: true },
+  { name: "Tester", emoji: "🧪", summary: "Runs checks and proves the work behaves.", required: true },
+  { name: "Reviewer", emoji: "🔍", summary: "Checks the finished work before it moves forward.", required: true },
+  { name: "Safety Checker", emoji: "🛡️", summary: "Stops risky work, secret leaks, and unsafe merges.", required: true },
+  { name: "Researcher", emoji: "🔬", summary: "Gathers context before work starts.", required: false },
+  { name: "Planner", emoji: "📋", summary: "Turns goals into small ordered jobs.", required: false },
+  { name: "Messenger", emoji: "📣", summary: "Posts clean handoffs and status packets.", required: false },
+  { name: "Watcher", emoji: "👁️", summary: "Keeps an eye on stale queues and missed signals.", required: false },
+  { name: "Publisher", emoji: "🚀", summary: "Handles publish proof after work lands.", required: false },
+  { name: "Repairer", emoji: "🩹", summary: "Fixes small blockers found by checks.", required: false },
+  { name: "Improver", emoji: "♻️", summary: "Turns repeated friction into new build work.", required: false },
+] as const;
+
+interface AISeat {
+  id: string;
+  name: string;
+  emoji: string;
+  provider: string;
+  device: string;
+  status: "Ready" | "Standby" | "Needs login";
+  state: string;
+  load: number;
+  assigned: string;
+  issue: string;
+  isVirtual?: boolean;
+}
+
+const AI_SEAT_STORAGE_KEY = "unclick_ai_seat_manual_slots_v1";
+
+const AI_SEAT_EMOJI_OPTIONS = [
+  { emoji: "💻", label: "Laptop / default" },
+  { emoji: "🖥️", label: "Desktop" },
+  { emoji: "📱", label: "Mobile" },
+  { emoji: "🔳", label: "Tablet" },
+  { emoji: "🔲", label: "Virtual slot" },
+  { emoji: "🖱️", label: "Mouse" },
+  { emoji: "⌨️", label: "Keyboard" },
+  { emoji: "🎛️", label: "Control panel" },
+  { emoji: "🕹️", label: "Controller" },
+  { emoji: "📺", label: "Display" },
+  { emoji: "🔌", label: "Plugged in" },
+  { emoji: "🔋", label: "Battery" },
+  { emoji: "🪫", label: "Low battery" },
+  { emoji: "📶", label: "Signal bars" },
+  { emoji: "🛜", label: "Wi-Fi" },
+  { emoji: "🌐", label: "Web seat" },
+  { emoji: "💾", label: "Local disk" },
+  { emoji: "💽", label: "Archive disk" },
+  { emoji: "🧮", label: "Compute" },
+  { emoji: "📟", label: "Terminal" },
+  { emoji: "🖨️", label: "Printer" },
+  { emoji: "📠", label: "Legacy line" },
+] as const;
+
+const AI_SEATS: AISeat[] = [
+  {
+    id: "seat-1",
+    name: "AI Seat 1",
+    emoji: "💻",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
+  },
+  {
+    id: "seat-2",
+    name: "AI Seat 2",
+    emoji: "💻",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
+  },
+  {
+    id: "seat-3",
+    name: "AI Seat 3",
+    emoji: "💻",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
+  },
+  {
+    id: "seat-4",
+    name: "AI Seat 4",
+    emoji: "💻",
+    provider: "Unknown AI",
+    device: "Unknown device",
+    status: "Ready",
+    state: "Manual slot",
+    load: 25,
+    assigned: "General capacity",
+    issue: "",
+  },
+  {
+    id: "virtual-review",
+    name: "Virtual review seat",
+    emoji: "🔲",
+    provider: "Virtual support",
+    device: "Spawned when physical capacity is unavailable",
+    status: "Standby",
+    state: "Fallback only",
+    load: 0,
+    assigned: "Review / fallback",
+    issue: "",
+    isVirtual: true,
+  },
+];
+
+function loadSeatOverrides(): AISeat[] {
+  if (typeof window === "undefined") return AI_SEATS;
+  try {
+    const overrides = JSON.parse(window.localStorage.getItem(AI_SEAT_STORAGE_KEY) ?? "{}") as Record<string, Partial<AISeat>>;
+    return AI_SEATS.map((seat) => {
+      const override = overrides[seat.id] ?? {};
+      const wasOldDefaultEmoji = (!seat.isVirtual && override.emoji === "🤖") || (seat.isVirtual && override.emoji === "🧪");
+      return { ...seat, ...override, emoji: wasOldDefaultEmoji ? seat.emoji : override.emoji ?? seat.emoji };
+    });
+  } catch {
+    return AI_SEATS;
+  }
+}
+
 function getApiKey(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem("unclick_api_key") ?? "";
+}
+
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "No check-in yet";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "Unknown";
+  const diffSec = Math.max(1, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 14) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 async function api<T>(action: string, opts: RequestInit = {}): Promise<T> {
@@ -111,6 +274,7 @@ export default function AdminAgentsPage() {
   const [editing, setEditing] = useState<AgentDetail | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
+  const [activeView, setActiveView] = useState<"workers" | "seats">("workers");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -137,7 +301,13 @@ export default function AdminAgentsPage() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) void refresh();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   const defaultAgent = useMemo(() => agents.find((a) => a.is_default), [agents]);
@@ -257,14 +427,62 @@ export default function AdminAgentsPage() {
   };
 
   return (
-    <AdminShell
-      title="Your Agents"
-      subtitle="Create AI agents with specific roles, tools, and personalities. Each agent remembers what you tell it and only uses the tools you allow."
-      agentCount={agents.length}
-    >
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-heading">Workers</h1>
+        <p className="mt-1 text-sm text-body">
+          UnClick Workers are the roles. AI Seats are the connected AI capacity behind them.
+        </p>
+      </header>
+
+      <div className="mb-6 rounded-xl border border-border/40 bg-card/20 p-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("workers")}
+            className={`rounded-lg border p-4 text-left transition-colors ${
+              activeView === "workers"
+                ? "border-primary/40 bg-primary/10"
+                : "border-border/40 bg-card/30 hover:border-border/70"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-heading">UnClick Workers</span>
+            </div>
+            <p className="mt-1 text-xs text-body">
+              The roles UnClick can assign work to, like Coordinator, Builder, Reviewer, and Safety Checker.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("seats")}
+            className={`rounded-lg border p-4 text-left transition-colors ${
+              activeView === "seats"
+                ? "border-primary/40 bg-primary/10"
+                : "border-border/40 bg-card/30 hover:border-border/70"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-heading">AI Seats</span>
+            </div>
+            <p className="mt-1 text-xs text-body">
+              The connected AI accounts UnClick can use as capacity. Manual distribution is active for now.
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {activeView === "seats" && <AISeatsPanel />}
+
+      {activeView === "workers" && (
+        <>
+          <WorkerRolesPanel />
+
       {!hasApiKey && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">Sign in to manage agents</p>
+          <p className="font-medium text-heading">Sign in to manage workers</p>
           <p className="mt-1 text-xs">
             Drop your UnClick API key in localStorage as <code>unclick_api_key</code> to load this
             page.
@@ -280,19 +498,19 @@ export default function AdminAgentsPage() {
 
       {hasApiKey && agents.length === 0 && !loading && (
         <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">You haven't created any agents yet.</p>
+          <p className="font-medium text-heading">You haven't created any custom workers yet.</p>
           <p className="mt-1 text-xs">
-            UnClick is using default settings. All tools and all memory are available to every AI
-            session. Create an agent to customise what your AI can do.
+            UnClick is using default settings. All apps and all memory are available to every AI
+            session. Create a worker to customise what your AI can do.
           </p>
         </div>
       )}
 
       {noDefaultWarning && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-body">
-          <p className="font-medium text-heading">No default agent selected.</p>
+          <p className="font-medium text-heading">No default worker selected.</p>
           <p className="mt-1 text-xs">
-            Pick one of your agents as the default so it loads automatically when you start a new
+            Pick one of your workers as the default so it loads automatically when you start a new
             AI session.
           </p>
         </div>
@@ -300,7 +518,7 @@ export default function AdminAgentsPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+          {agents.length} custom {agents.length === 1 ? "worker" : "workers"}
         </p>
         <button
           type="button"
@@ -308,12 +526,12 @@ export default function AdminAgentsPage() {
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
-          New Agent
+          New Worker
         </button>
       </div>
 
       {loading && hasApiKey ? (
-        <p className="text-xs text-muted-foreground">Loading agents...</p>
+        <p className="text-xs text-muted-foreground">Loading workers...</p>
       ) : (
         <ul className="space-y-3">
           {agents.map((agent) => {
@@ -436,7 +654,356 @@ export default function AdminAgentsPage() {
           onDelete={() => editing && handleDelete(editing.agent.id)}
         />
       )}
-    </AdminShell>
+        </>
+      )}
+    </div>
+  );
+}
+
+function WorkerRolesPanel() {
+  return (
+    <section className="mb-6 rounded-xl border border-border/40 bg-card/20 p-5">
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-heading">Built-in roles</h2>
+        <p className="mt-1 text-xs text-body">
+          These are the jobs inside UnClick. They are separate from the AI accounts that power them.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {WORKER_ROLES.map((role) => (
+          <div key={role.name} className="rounded-lg border border-border/40 bg-card/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true">{role.emoji}</span>
+                <span className="text-xs font-semibold text-heading">{role.name}</span>
+              </div>
+              <span className="rounded-full border border-border/40 bg-card/50 px-2 py-0.5 text-[10px] text-muted-foreground">
+                {role.required ? "Required" : "Optional"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-body">{role.summary}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function profileDisplayName(profile: FishbowlProfile): string {
+  const name = profile.display_name?.trim();
+  if (name) return name;
+  return profile.agent_id
+    .replace(/^chatgpt[-_]/, "")
+    .replace(/^codex[-_]/, "")
+    .replace(/^claude[-_]/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .replace(/\bAi\b/g, "AI");
+}
+
+function profileMatchesSeat(profile: FishbowlProfile, seat: AISeat): boolean {
+  const haystack = `${profile.agent_id} ${profile.display_name ?? ""} ${profile.user_agent_hint ?? ""}`.toLowerCase();
+  const needles = [seat.id, seat.name, seat.provider, seat.device]
+    .map((value) => value.toLowerCase().trim())
+    .filter((value) => value.length > 2 && !["unknown ai", "unknown device", "manual slot"].includes(value));
+  return needles.some((needle) => haystack.includes(needle));
+}
+
+function AISeatsPanel() {
+  const [seats, setSeats] = useState<AISeat[]>(() => loadSeatOverrides());
+  const [profiles, setProfiles] = useState<FishbowlProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [editingSeatId, setEditingSeatId] = useState<string | null>(null);
+  const issues = seats.filter((seat) => seat.issue);
+
+  const loadProfiles = useCallback(async () => {
+    if (!getApiKey()) return;
+    setProfilesLoading(true);
+    try {
+      const res = await api<{ profiles?: FishbowlProfile[] }>("fishbowl_read", {
+        method: "POST",
+        body: JSON.stringify({
+          agent_id: "admin-agents-page",
+          limit: 1,
+        }),
+      });
+      setProfiles(
+        (res.profiles ?? [])
+          .filter((profile) => profile.user_agent_hint !== "admin-ui")
+          .sort((a, b) => new Date(b.last_seen_at ?? b.created_at).getTime() - new Date(a.last_seen_at ?? a.created_at).getTime()),
+      );
+    } catch {
+      setProfiles([]);
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const overrides = Object.fromEntries(
+      seats.map((seat) => [
+        seat.id,
+        {
+          name: seat.name,
+          emoji: seat.emoji,
+          provider: seat.provider,
+          device: seat.device,
+          load: seat.load,
+          assigned: seat.assigned,
+        },
+      ]),
+    );
+    window.localStorage.setItem(AI_SEAT_STORAGE_KEY, JSON.stringify(overrides));
+  }, [seats]);
+
+  useEffect(() => {
+    void loadProfiles();
+    const id = window.setInterval(() => void loadProfiles(), 30_000);
+    return () => window.clearInterval(id);
+  }, [loadProfiles]);
+
+  const updateSeat = (seatId: string, patch: Partial<AISeat>) => {
+    setSeats((current) => current.map((seat) => (seat.id === seatId ? { ...seat, ...patch } : seat)));
+  };
+
+  const spreadEvenly = () => {
+    const physical = seats.filter((seat) => !seat.isVirtual);
+    const share = physical.length > 0 ? Math.floor(100 / physical.length) : 0;
+    const remainder = physical.length > 0 ? 100 - share * physical.length : 0;
+    let physicalIndex = 0;
+    setSeats((current) =>
+      current.map((seat) => {
+        if (seat.isVirtual) return { ...seat, load: 0 };
+        const load = share + (physicalIndex < remainder ? 1 : 0);
+        physicalIndex += 1;
+        return { ...seat, load };
+      }),
+    );
+  };
+
+  return (
+    <section className="space-y-4">
+      <div className="overflow-hidden rounded-xl border border-border/40 bg-card/20">
+        <div className="flex flex-col gap-2 border-b border-border/40 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-heading">AI Seats</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Manual capacity slots. Unknown platform/device details stay generic until UnClick has real metadata.
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Manual mode
+          </span>
+        </div>
+        <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(150px,0.8fr)_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span>Seat</span>
+          <span>Status</span>
+          <span className="flex items-center justify-between gap-2">
+            <span>Manual load</span>
+            <button
+              type="button"
+              onClick={spreadEvenly}
+              className="rounded border border-border/40 bg-card/40 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-heading transition-colors hover:border-primary/40"
+            >
+              Even split
+            </button>
+          </span>
+          <span>Last seen</span>
+          <span>Assigned work</span>
+          <span>Controls</span>
+        </div>
+        <div className="divide-y divide-border/30">
+          {seats.map((seat) => {
+            const editing = editingSeatId === seat.id;
+            const matchedProfile = profiles.find((profile) => profileMatchesSeat(profile, seat));
+            const emojiOptions = AI_SEAT_EMOJI_OPTIONS.some((option) => option.emoji === seat.emoji)
+              ? AI_SEAT_EMOJI_OPTIONS
+              : [{ emoji: seat.emoji, label: "Custom" }, ...AI_SEAT_EMOJI_OPTIONS];
+            return (
+              <div
+                key={seat.id}
+                className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(150px,0.8fr)_minmax(180px,1.2fr)_minmax(190px,1fr)] items-center gap-3 px-4 py-3 text-xs"
+              >
+                <div className="min-w-0">
+                  {editing ? (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-[92px_1fr] gap-1">
+                        <select
+                          value={seat.emoji}
+                          onChange={(event) => updateSeat(seat.id, { emoji: event.target.value })}
+                          className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-xs text-heading outline-none focus:border-primary/40"
+                          aria-label="Seat emoji"
+                        >
+                          {emojiOptions.map((option) => (
+                            <option key={`${seat.id}-${option.emoji}`} value={option.emoji}>
+                              {option.emoji} {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={seat.name}
+                          onChange={(event) => updateSeat(seat.id, { name: event.target.value })}
+                          className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-xs text-heading outline-none focus:border-primary/40"
+                          aria-label="Seat name"
+                        />
+                      </div>
+                      <input
+                        value={seat.provider}
+                        onChange={(event) => updateSeat(seat.id, { provider: event.target.value })}
+                        className="w-full rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] text-body outline-none focus:border-primary/40"
+                        aria-label="Seat provider"
+                      />
+                      <input
+                        value={seat.device}
+                        onChange={(event) => updateSeat(seat.id, { device: event.target.value })}
+                        className="w-full rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] text-body outline-none focus:border-primary/40"
+                        aria-label="Seat device"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="truncate font-semibold text-heading">
+                        <span className="mr-1.5" aria-hidden="true">{seat.emoji}</span>
+                        {seat.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{seat.provider}</p>
+                      <p className="text-[10px] text-muted-foreground">{seat.device}</p>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                      seat.status === "Ready"
+                        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                        : seat.status === "Standby"
+                          ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                          : "border-border/40 bg-card/40 text-muted-foreground"
+                    }`}
+                  >
+                    {seat.status}
+                  </span>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{seat.state}</p>
+                </div>
+                <div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={seat.load}
+                    onChange={(event) => updateSeat(seat.id, { load: Number(event.target.value) })}
+                    className="w-full accent-primary"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">{seat.load}%</p>
+                </div>
+                <div className="min-w-0">
+                  {matchedProfile ? (
+                    <>
+                      <p className="truncate text-xs font-medium text-heading" title={matchedProfile.agent_id}>
+                        {relativeTime(matchedProfile.last_seen_at)}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {profileDisplayName(matchedProfile)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">No match</p>
+                      <p className="text-[10px] text-muted-foreground/70">Use recent check-ins below</p>
+                    </>
+                  )}
+                </div>
+                <input
+                  value={seat.assigned}
+                  onChange={(event) => updateSeat(seat.id, { assigned: event.target.value })}
+                  className="w-full rounded-md border border-transparent bg-transparent px-0 py-1 text-body outline-none transition-colors focus:border-border/40 focus:bg-card/40 focus:px-2"
+                  aria-label={`${seat.name} assigned work`}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    title={editing ? "Save seat edits" : "Edit seat"}
+                    onClick={() => setEditingSeatId(editing ? null : seat.id)}
+                    className="rounded-md border border-border/40 bg-card/40 p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                  >
+                    {editing ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                  </button>
+                  {seat.issue ? (
+                    <span className="text-[10px] text-amber-300">{seat.issue}</span>
+                  ) : seat.isVirtual ? (
+                    <span className="text-[10px] text-amber-300">Fallback</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Manual</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border/40 bg-card/20 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-heading">Recent check-ins</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Live seats that have touched UnClick recently.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadProfiles()}
+            className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-heading"
+          >
+            {profilesLoading ? "Checking..." : "Refresh"}
+          </button>
+        </div>
+        {profiles.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No live seat check-ins found yet.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {profiles.slice(0, 8).map((profile) => (
+              <div key={profile.agent_id} className="rounded-lg border border-border/35 bg-card/30 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-heading">
+                      <span className="mr-1.5" aria-hidden="true">{profile.emoji ?? "AI"}</span>
+                      {profileDisplayName(profile)}
+                    </p>
+                    <p className="truncate text-[10px] text-muted-foreground" title={profile.agent_id}>
+                      {profile.agent_id}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                    {relativeTime(profile.last_seen_at)}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-[11px] text-body">
+                  {profile.current_status || profile.user_agent_hint || "No status text"}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {issues.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-300" />
+            <h3 className="text-sm font-semibold text-heading">Needs attention</h3>
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-body">
+            {issues.map((seat) => (
+              <li key={seat.id}>
+                <span className="font-medium text-heading">{seat.name}:</span> {seat.issue}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

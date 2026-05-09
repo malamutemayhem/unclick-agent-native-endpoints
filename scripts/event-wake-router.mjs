@@ -24,6 +24,17 @@ const ackFailSeconds = parseBoundedSeconds(process.env.WAKE_ACK_FAIL_SECONDS, 60
 const receivedAt = new Date().toISOString();
 const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || "";
+const DEFAULT_WAKE_OWNER = "🧭";
+const CURRENT_WAKE_OWNERS = new Set(["🧭", "🛠️", "🧪", "🔍", "🛡️", "📣", "👁️", "🩹", "🚀", "all"]);
+const LEGACY_WAKE_OWNER_ALIASES = new Map([
+  ["🤖", "🧭"],
+  ["🐺", "🧭"],
+  ["master", "🧭"],
+  ["🍿", "🔍"],
+  ["popcorn", "🔍"],
+  ["🦾", "🛠️"],
+  ["forge", "🛠️"],
+]);
 
 function parseBoundedSeconds(value, fallback, min, max) {
   const raw = String(value ?? "").trim();
@@ -47,9 +58,20 @@ export function deriveAckThresholds(failAfterSeconds) {
 }
 
 function readEvent() {
-  if (!eventPath) return {};
+  if (!eventPath) {
+    if (eventName !== "manual") {
+      return {
+        read_error: "GITHUB_EVENT_PATH is required for non-manual wake router events.",
+      };
+    }
+    return {};
+  }
   try {
-    return JSON.parse(readFileSync(eventPath, "utf8"));
+    const parsed = JSON.parse(readFileSync(eventPath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { read_error: "GitHub event payload must be a JSON object." };
+    }
+    return parsed;
   } catch (err) {
     return { read_error: err instanceof Error ? err.message : String(err) };
   }
@@ -111,7 +133,15 @@ export function normalizeDispatchOwner(owner) {
   const normalized = String(owner ?? "")
     .trim()
     .toLowerCase();
-  return normalized === "all" ? "🤖" : owner;
+  if (normalized === "all") return DEFAULT_WAKE_OWNER;
+  return LEGACY_WAKE_OWNER_ALIASES.get(normalized) ?? String(owner ?? "").trim();
+}
+
+function safeWakeOwner(owner, fallback = DEFAULT_WAKE_OWNER) {
+  const normalized = normalizeDispatchOwner(owner);
+  if (CURRENT_WAKE_OWNERS.has(normalized)) return normalized;
+  const normalizedFallback = normalizeDispatchOwner(fallback);
+  return CURRENT_WAKE_OWNERS.has(normalizedFallback) ? normalizedFallback : DEFAULT_WAKE_OWNER;
 }
 
 export function normalizeHandoffMessageId(messageId) {
@@ -133,7 +163,7 @@ function baseDecision(event) {
     ) {
       return {
         wake: true,
-        owner: "🤖",
+        owner: "🧪",
         urgency: "urgent",
         reason: `Scheduled TestPass smoke ${run.conclusion}`,
         eventCreatedAt: run.updated_at || run.created_at,
@@ -149,7 +179,7 @@ function baseDecision(event) {
     ) {
       return {
         wake: true,
-        owner: "🦾",
+        owner: "🛠️",
         urgency: "urgent",
         reason: `Dogfood Report workflow ${run.conclusion}`,
         eventCreatedAt: run.updated_at || run.created_at,
@@ -174,7 +204,7 @@ function baseDecision(event) {
     if (["ready_for_review", "review_requested", "reopened"].includes(action)) {
       return {
         wake: true,
-        owner: "🍿",
+        owner: "🔍",
         urgency: "high",
         reason: `PR #${pr.number || event.number} is ${action.replaceAll("_", " ")}`,
         eventCreatedAt: pr.updated_at || pr.created_at,
@@ -187,7 +217,7 @@ function baseDecision(event) {
     const issue = event.issue || {};
     return {
       wake: true,
-      owner: "🤖",
+      owner: "🧭",
       urgency: "normal",
       reason: `Issue #${issue.number} was ${action}`,
       eventCreatedAt: issue.updated_at || issue.created_at,
@@ -201,7 +231,7 @@ function baseDecision(event) {
     if (body.includes("/wake") || body.includes("wake worker") || body.trim().startsWith("wake:")) {
       return {
         wake: true,
-        owner: "🤖",
+        owner: "🧭",
         urgency: "high",
         reason: `Manual wake command on issue/PR #${event.issue?.number}`,
         eventCreatedAt: comment.created_at,
@@ -262,7 +292,7 @@ async function cheapTriage(brief, decision) {
   const prompt = [
     "Return only compact JSON.",
     "Decide whether this event should wake a worker.",
-    "Allowed owners: 🤖, 🍿, 🦾, 🐺, all.",
+    "Allowed owners: 🧭, 🛠️, 🧪, 🔍, 🛡️, 📣, 👁️, 🩹, 🚀, all.",
     "Use wake=false for noise.",
     JSON.stringify(brief),
   ].join("\n");
@@ -282,7 +312,7 @@ async function cheapTriage(brief, decision) {
           {
             role: "system",
             content:
-              'You are a cheap event triage router. Return JSON like {"wake":true,"owner":"🤖","urgency":"high","reason":"short reason"}.',
+              'You are a cheap event triage router. Return JSON like {"wake":true,"owner":"🧭","urgency":"high","reason":"short reason"}.',
           },
           { role: "user", content: prompt },
         ],
@@ -299,12 +329,12 @@ async function cheapTriage(brief, decision) {
     return {
       used: true,
       model,
-      usage: json?.usage ?? null,
-      decision: {
-        wake: Boolean(parsed.wake),
-        owner: ["🤖", "🍿", "🦾", "🐺", "all"].includes(parsed.owner) ? parsed.owner : decision.owner,
-        urgency: ["low", "normal", "high", "urgent"].includes(parsed.urgency) ? parsed.urgency : decision.urgency,
-        reason: compactText(parsed.reason || decision.reason, 240),
+        usage: json?.usage ?? null,
+        decision: {
+          wake: Boolean(parsed.wake),
+          owner: safeWakeOwner(parsed.owner, decision.owner),
+          urgency: ["low", "normal", "high", "urgent"].includes(parsed.urgency) ? parsed.urgency : decision.urgency,
+          reason: compactText(parsed.reason || decision.reason, 240),
         eventCreatedAt: decision.eventCreatedAt,
       },
     };
@@ -356,7 +386,7 @@ async function postWake(decision, triage, eventId, event) {
     body: JSON.stringify(payload),
   });
   const body = await response.text();
-  console.log(`Fishbowl wake post HTTP ${response.status}`);
+  console.log(`Boardroom wake post HTTP ${response.status}`);
   console.log(body);
   let messageId = null;
   try {
@@ -376,10 +406,11 @@ export function buildReliabilityDispatchRequest({
   ackSeconds = 600,
 }) {
   const handoffMessageId = normalizeHandoffMessageId(result?.message_id);
+  const targetAgentId = normalizeDispatchOwner(decision.owner);
   return {
     dispatch_id: wakeDispatchId(eventId),
     source: "wakepass",
-    target_agent_id: normalizeDispatchOwner(decision.owner),
+    target_agent_id: targetAgentId,
     task_ref: eventId,
     time_bucket_seconds: ackSeconds,
     payload: {
@@ -389,7 +420,7 @@ export function buildReliabilityDispatchRequest({
       wake_event_id: eventId,
       wake_reason: decision.reason,
       wake_urgency: decision.urgency,
-      wake_owner: decision.owner,
+      wake_owner: targetAgentId,
       source_url: sourceUrl(event),
       github_event_name: eventName,
       github_event_action: event.action || null,
@@ -638,7 +669,7 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, ha
     `- Route: \`${decision.owner}\``,
     `- Source: ${sourceUrl(event)}`,
     `- Event-to-router: ${eventSeconds === null ? "unknown" : `${eventSeconds}s`}`,
-    `- Fishbowl posted: ${result?.posted ? "yes" : result?.dry_run ? "dry run" : "no"}`,
+    `- Boardroom posted: ${result?.posted ? "yes" : result?.dry_run ? "dry run" : "no"}`,
     `- Reliability dispatch: ${reliability?.registered ? reliability.dispatch_id : reliability?.dry_run ? "dry run" : "not registered"}`,
     `- Cheap triage: ${triage.used ? triage.error ? `error (${triage.error})` : "used" : "skipped"}`,
     "",
@@ -705,7 +736,7 @@ async function main() {
     event,
   });
   if (!reliability?.registered && !reliability?.dry_run) {
-    console.error("Reliability dispatch registration failed, skipping Fishbowl wake post.");
+    console.error("Reliability dispatch registration failed, skipping Boardroom wake post.");
     writeLedger({
       eventId,
       event,
@@ -723,9 +754,9 @@ async function main() {
   if (shouldFailMissingHandoffMessageId(result)) {
     const reliabilityWithError = {
       ...(reliability || {}),
-      error: compactText("Fishbowl wake post succeeded but returned no message_id for ACK handoff sync.", 500),
+      error: compactText("Boardroom wake post succeeded but returned no message_id for ACK handoff sync.", 500),
     };
-    console.error("Fishbowl wake post succeeded but returned no message_id. Failing closed.");
+    console.error("Boardroom wake post succeeded but returned no message_id. Failing closed.");
     writeLedger({
       eventId,
       event,

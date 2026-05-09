@@ -14,10 +14,10 @@ import VantaWavesBackground from "@/components/VantaWavesBackground";
 const Index = () => {
   useCanonical("/");
   useMetaTags({
-    title: "UnClick - Agent rails for tools, memory, and QC",
-    description: "One npm install gives your AI agent callable tools, persistent memory, secure connections, and Pass family QA checks.",
-    ogTitle: "UnClick - Agent rails for tools, memory, and QC",
-    ogDescription: "Tools, memory, connections, crews, and Pass family checks for AI agents.",
+    title: "UnClick - Agent rails for apps, memory, and proof",
+    description: "One connection gives your AI agent apps, memory, Passport permissions, Autopilot orchestration, and XPass proof.",
+    ogTitle: "UnClick - Agent rails for apps, memory, and proof",
+    ogDescription: "Apps, memory, Passport, Autopilot, and XPass checks for AI agents.",
     ogUrl: "https://unclick.world/",
   });
 

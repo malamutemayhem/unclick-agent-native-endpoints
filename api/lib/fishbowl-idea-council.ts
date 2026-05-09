@@ -108,7 +108,7 @@ export function planFishbowlIdeaCouncilHandoffs(
         idea_id: input.ideaId,
         title: input.title,
         summary,
-        deep_link: `/admin/fishbowl#idea-${input.ideaId}`,
+        deep_link: `/admin/boardroom#idea-${input.ideaId}`,
         created_by_agent_id: input.createdByAgentId,
         requested_action: "comment_or_vote",
         ack_required: true,

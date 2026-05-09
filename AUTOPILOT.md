@@ -4,6 +4,8 @@ This file defines what workers may do without waiting for Chris, what needs one 
 
 Read `FLEET_SYNC.md` first. It is the current cross-PC fleet alignment layer and defines source-of-truth order, worker lanes, no-stomp rules, and continuity expectations. This file only defines autonomy tiers.
 
+Read `docs/unclick-context-boot-packet.md` before routing or summarizing product context. It defines the current hierarchy: UnClick is the platform, UnClick Autopilot is the top-level development assembly line, Launchpad is the control hub, Rooms are the stages, and XPass is the product line beneath or alongside the broader platform.
+
 The goal is simple: keep the fleet moving while protecting secrets, security, billing, migrations, and public claims.
 
 ## Operating Principles
@@ -14,6 +16,93 @@ The goal is simple: keep the fleet moving while protecting secrets, security, bi
 - Use Ideas for speculative work. Use Todos for work that is ready to execute.
 - Run `/review` before opening PRs that change code, config, docs policy, or user-facing behavior.
 - Do not start new product lanes while an urgent foundation chip is blocked.
+
+## Command And Control Doctrine
+
+Autopilot can delegate work, but it cannot delegate responsibility to a black box. Any room or worker that can trigger workflows, call tools, change data, modify code, publish, merge, or roll back must leave a control trail clear enough for a human or safety room to answer five questions:
+
+- Who requested the action?
+- Which room or worker approved it?
+- What exact scope was approved?
+- What proof or review allowed it to continue?
+- How can it be stopped if the agent drifts?
+
+Core rules:
+
+- Autonomy without observability is a blocker, not a feature.
+- Status chatter is not authority. A PASS, approval, proof, or blocker must come from a trusted lane, room, master, or system event.
+- High-impact actions need explicit command authority before execution. Examples: merge, publish, rollback, destructive cleanup, secrets, auth, billing, DNS, migrations, or production data changes.
+- Every action that crosses a safety boundary must be reconstructable from an event ledger or audit trail, including actor, authority, scope, timestamp, source, and result.
+- Kill switches must be checked before high-impact execution. If the kill switch state is unclear, choose the safest interpretation and stop.
+- Human-readable prompts are allowed, but the system must convert them into structured scope, ownership, authority, and proof before acting.
+- Continuous Improvement owns repeated resistance. If the same manual nudge, missing ACK, stale proof, or routing confusion recurs, create a front-of-line improvement job instead of normalizing the friction.
+
+In short: agents may move the work, but UnClick must keep the chain of command visible.
+
+## Worker Name Transition
+
+Use simple public worker names in UI, user-facing docs, and onboarding. Keep the existing internal lane names, emoji routing, and Fishbowl/Boardroom IDs as aliases until the automation substrate is explicitly migrated. Public names are labels; internal names are delivery addresses.
+
+| Public worker name | Emoji | Internal lane / alias | Plain role |
+| --- | --- | --- | --- |
+| Coordinator | 🧭 | Master / creativelead | Chooses priority, merge order, and owner decisions |
+| Builder | 🛠️ | Forge | Implements focused chips and opens PRs |
+| Tester | 🧪 | Proof Executor / TestPass lanes | Runs proof, tests, and test receipts |
+| Reviewer | 🔍 | Popcorn / QC | Checks user experience, scope, and final QC |
+| Safety Checker | 🛡️ | Gatekeeper | Blocks unsafe, dirty, overlapping, or risky releases |
+| Researcher | 🔬 | Research Room | Explores feasibility, options, risks, and outside ideas |
+| Planner | 📋 | Planning Room | Turns research or intent into buildable ScopePacks |
+| Messenger | 📣 | Courier | Delivers targeted handoffs without making product decisions |
+| Watcher | 👁️ | Relay / Navigator / watchers | Watches status, stale work, and proof drift |
+| Publisher | 🚀 | Publish Room | Handles publish readiness and post-publish proof |
+| Repairer | 🩹 | Repair Room | Routes failed checks or broken builds to a focused fix |
+| Improver | ♻️ | Continuous Improvement / Loop | Turns repeated friction into front-of-line improvements |
+
+Do not structurally rename database tables, MCP tools, GitHub labels, or worker agent IDs just to match public names. Rename the surface first, then migrate plumbing only with tests that prove old aliases still route correctly.
+
+## XPass Gate
+
+Autopilot should dogfood UnClick with UnClick. XPass is the conductor for that proof: it chooses the relevant Pass-family checks for a target and returns one combined receipt. It should not blindly run every Pass on every change.
+
+Selection defaults:
+
+- UI, dashboard, navigation, and admin changes select UXPass, plus visual evidence where available.
+- Tool, connector, MCP, and native endpoint changes select TestPass.
+- Auth, keys, tokens, redaction, and security-sensitive changes select SecurityPass.
+- Public wording, docs, and claims select CopyPass.
+- Public pages, metadata, sitemap, and discoverability changes select SEOPass.
+- Legal, pricing, billing copy, privacy, terms, and compliance-sensitive wording select LegalPass.
+- Code changes select QualityPass when a quality/smell receipt is useful.
+
+The gate may run in advisory mode while Pass-family coverage is still catching up. Enforcement should only turn on after the relevant Pass has a stable runner, clear receipt shape, and enough dogfood proof to avoid noisy false blockers.
+
+## Continuous QC Project
+
+Continuous QC is now a standing Autopilot project, not a one-off cleanup. The goal is to keep running UnClick through its own proof system until the product feels coherent, visible, and trustworthy across public pages, admin pages, worker setup, Autopilot, XPass, Memory, Apps, Passport, Ledger, and Boardroom.
+
+Operating shape:
+
+- XPass Gate runs first in advisory mode and names the checks a change should receive.
+- Missing Passes are recorded as missing or skipped, never treated as PASS.
+- Continuous Improvement owns repeated QC friction and turns it into front-of-line build chips.
+- Dogfood Room owns realistic user journeys, not just isolated component checks.
+- Ledger should receive receipts for meaningful QC outcomes as the receipt surface matures.
+
+Priority order:
+
+1. Finish UXPass enough to support visual/site sweeps, screenshot evidence, console errors, obvious layout problems, navigation confusion, and mobile/desktop checks.
+2. Finish QualityPass enough to catch messy AI-build risks, weak abstractions, brittle tests, and obvious maintainability problems.
+3. Finish CopyPass enough to catch unclear product wording, old names, mixed metaphors, and overcomplicated user-facing copy.
+4. Harden SecurityPass for auth, keys, sessions, redaction, permissions, browser extension, OAuth, API keys, and Password Bridge surfaces.
+5. Add SEOPass and LegalPass when public, pricing, docs, legal, privacy, or compliance surfaces change.
+
+Enforcement path:
+
+- Phase 1: advisory only. XPass says what should run and what is missing.
+- Phase 2: enforce completed Passes only. A missing incomplete Pass is a recorded skip, not a blocker.
+- Phase 3: enforce all relevant completed Passes before merge for Autopilot, admin UI, public pages, tools/connectors, and security-sensitive surfaces.
+
+This project should bias toward fixing real user-visible confusion over inventing new dashboards. When in doubt, dogfood the current product, write down the friction, and ship the smallest improvement that removes it.
 
 ## Autonomy Tiers
 
@@ -51,7 +140,7 @@ Workers should ask once before turning these into standing behavior:
 - Dependency auto-merge policy for patch and minor updates.
 - Public dogfood reports and public status pages.
 - New recurring scheduled jobs.
-- Pass-family documentation generation.
+- XPass documentation generation.
 - Memory public-release checklist changes.
 - Any rule that changes who owns a class of work.
 
@@ -186,6 +275,6 @@ Before merging:
 
 ## Current Priority Rule
 
-Autopilot foundation work comes before new Pass-family expansion. Pass dogfood work may continue when it supports autopilot, but new Pass product lanes should wait until the autopilot rails are landed.
+Autopilot foundation work comes before new XPass expansion. XPass dogfood work may continue when it supports Autopilot, but new XPass product lanes should wait until the Autopilot rails are landed.
 
 <!-- build-d probe 4920fa -->

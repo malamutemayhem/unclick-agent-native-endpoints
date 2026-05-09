@@ -2270,7 +2270,7 @@ export const ADDITIONAL_TOOLS = [
         decrypt: { type: "boolean" },
         api_key: { type: "string" },
       },
-      anyOf: [{ required: ["project_id"] }, { required: ["projectId"] }],
+      required: ["project_id"],
     },
   },
   {
