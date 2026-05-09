@@ -122,8 +122,7 @@ jobs:
                   echo "::warning::Could not read commit messages for PR #${pr_number}: $(cat /tmp/gh-pr-view.err)"
                   pr_commits=""
                 }
-              pr_text="${pr_text}
-${pr_commits}"
+              pr_text="${pr_text}"$'\n'"${pr_commits}"
             fi
 
             if [ -z "${pr_text:-}" ]; then
