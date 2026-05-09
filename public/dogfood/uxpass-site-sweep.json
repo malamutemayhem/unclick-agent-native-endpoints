@@ -1,8 +1,8 @@
 {
   "kind": "uxpass_site_sweep_receipt",
-  "generated_at": "2026-05-08T17:45:58.931Z",
+  "generated_at": "2026-05-09T17:15:19.132Z",
   "status": "blocked",
-  "target_sha": "b29b5112aa05b96844c53f26348d566957105e5b",
+  "target_sha": "eaa001e4e8013a2bfa47c0b846de875a3ac1c3a6",
   "min_score": 80,
   "allowed_origins": [
     "https://unclick.world",
