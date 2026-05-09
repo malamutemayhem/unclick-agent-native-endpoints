@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS mc_autopilot_events (
       'lease_grant',
       'lease_refresh',
       'lease_expired',
+      'lane_check',
+      'lane_violation',
       'release',
       'build_start',
       'build_end',

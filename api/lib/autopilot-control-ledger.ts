@@ -6,6 +6,8 @@ export const AUTOPILOT_EVENT_TYPES = [
   "lease_grant",
   "lease_refresh",
   "lease_expired",
+  "lane_check",
+  "lane_violation",
   "release",
   "build_start",
   "build_end",

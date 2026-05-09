@@ -52,6 +52,35 @@ describe("autopilot control ledger helpers", () => {
     expect(row.idempotency_key).toContain("lease_grant:dispatch:dispatch-123:runner:");
   });
 
+  it("records lane check decisions for role-fit routing", () => {
+    const row = buildAutopilotEventRow({
+      apiKeyHash: "hash_123",
+      eventType: "lane_check",
+      actorAgentId: "watcher-seat",
+      refKind: "todo",
+      refId: "todo-123",
+      now,
+      payload: {
+        decision: "reject",
+        reason: "Builder lane task assigned to Watcher seat",
+        suggested_recipient: "builder-seat",
+      },
+    });
+
+    expect(row).toMatchObject({
+      event_type: "lane_check",
+      actor_agent_id: "watcher-seat",
+      ref_kind: "todo",
+      ref_id: "todo-123",
+      payload: {
+        decision: "reject",
+        reason: "Builder lane task assigned to Watcher seat",
+        suggested_recipient: "builder-seat",
+      },
+    });
+    expect(row.idempotency_key).toContain("lane_check:todo:todo-123:watcher-seat:");
+  });
+
   it("plans todo state and claim events from before/after rows", () => {
     const events = planTodoLedgerEvents({
       todoId: "todo-123",
