@@ -4,10 +4,12 @@ import {
   CHECKIN_ACK_LEASE_SECONDS,
   CHECKIN_ACTIVE_GRACE_MS,
   CHECKIN_DORMANT_SUPPRESS_MS,
+  CHECKIN_OVERDUE_SUPPRESS_MS,
   WAKEPASS_REROUTE_LEASE_SECONDS,
   buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
   buildWakepassAutoReroutePlan,
+  isMissedCheckinDispatch,
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
   isWakepassAutoRerouteEligible,
@@ -108,6 +110,21 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
           ...baseProfile,
           last_seen_at: new Date(nowMs - CHECKIN_ACTIVE_GRACE_MS + 1_000).toISOString(),
           next_checkin_at: "2026-05-01T01:21:00.000Z",
+        },
+        nowMs,
+      ),
+    ).toBe(false);
+  });
+
+  it("suppresses missed check-ins once the missed window is old noise", () => {
+    const nowMs = Date.parse("2026-05-01T14:00:00.000Z");
+
+    expect(
+      isMissedCheckinCandidate(
+        {
+          ...baseProfile,
+          last_seen_at: new Date(nowMs - CHECKIN_OVERDUE_SUPPRESS_MS - 60_000).toISOString(),
+          next_checkin_at: new Date(nowMs - CHECKIN_OVERDUE_SUPPRESS_MS - 1_000).toISOString(),
         },
         nowMs,
       ),
@@ -282,6 +299,14 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
     };
     const signal = buildDispatchReclaimSignal(staleCheckinDispatch, nowMs);
 
+    expect(isMissedCheckinDispatch(staleCheckinDispatch)).toBe(true);
+    expect(signal).toMatchObject({
+      action: "stale_dispatch_reclaimed",
+      summary: "Reclaimed stale missed check-in dispatch for worker-1",
+      payload: {
+        wake_reason: "missed_next_checkin",
+      },
+    });
     expect(isWakepassAutoRerouteEligible(staleCheckinDispatch)).toBe(false);
     expect(
       buildWakepassAutoReroutePlan({

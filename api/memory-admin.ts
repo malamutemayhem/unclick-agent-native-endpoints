@@ -35,6 +35,8 @@
  *   - admin_build_tasks: method=list|get|create|update_status|soft_delete
  *   - admin_build_workers: method=list|register|update|delete|health_check
  *   - admin_build_dispatch: POST with task_id + worker_id (same tenant) and optional idempotency_key
+ *   - admin_unclick_connect_dry_run: POST tether intent -> route packet -> assignment/HOLD/BLOCKER, no writes
+ *   - admin_unclick_connect_commit: POST experiment-only route packet -> mc_agent_dispatches row
  *   - reliability_dispatches: method=list|get|upsert|claim|release
  *   - reliability_heartbeats: method=list|publish
  *   - reliability_reclaim_stale: POST with optional { limit, dry_run }
@@ -125,6 +127,15 @@ import {
   recordAutopilotEvent,
   recordAutopilotEvents,
 } from "./lib/autopilot-control-ledger.js";
+import { runRoutePacketConsumerDryRun, type VisibleWorker } from "./lib/route-packet-consumer.js";
+import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
+import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
+import {
+  buildWorkersToVisibleWorkers,
+  fishbowlProfilesToVisibleWorkers,
+  type BuildWorkerDiscoveryRow,
+  type FishbowlProfileDiscoveryRow,
+} from "./lib/unclick-connect-worker-discovery.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -720,6 +731,87 @@ async function postFishbowlEvent(
   } catch (err) {
     console.error(`[fishbowl postEvent ${eventTag}] failed:`, (err as Error).message);
   }
+}
+
+type UnClickConnectWorkerSource = "client" | "server";
+
+interface UnClickConnectWorkerResolution {
+  visibleWorkers: VisibleWorker[];
+  workerSource: UnClickConnectWorkerSource;
+  discovery: {
+    build_workers_seen: number;
+    fishbowl_profiles_seen: number;
+    visible_workers_used: number;
+  };
+}
+
+async function resolveUnClickConnectVisibleWorkers(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+  body: Record<string, unknown>,
+): Promise<UnClickConnectWorkerResolution> {
+  const requestedSource = String(body.worker_source ?? "").trim().toLowerCase();
+  const workerSource: UnClickConnectWorkerSource = requestedSource === "client" ? "client" : "server";
+
+  if (workerSource === "client") {
+    const visibleWorkers = Array.isArray(body.visible_workers)
+      ? (body.visible_workers as VisibleWorker[])
+      : [];
+    return {
+      visibleWorkers,
+      workerSource,
+      discovery: {
+        build_workers_seen: 0,
+        fishbowl_profiles_seen: 0,
+        visible_workers_used: visibleWorkers.length,
+      },
+    };
+  }
+
+  const [buildWorkersResult, fishbowlProfilesResult] = await Promise.all([
+    supabase
+      .from("build_workers")
+      .select("id, name, worker_type, status, last_health_check_at")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("status", "available")
+      .limit(50),
+    supabase
+      .from("mc_fishbowl_profiles")
+      .select("agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at")
+      .eq("api_key_hash", apiKeyHash)
+      .order("last_seen_at", { ascending: false })
+      .limit(50),
+  ]);
+
+  if (buildWorkersResult.error) throw buildWorkersResult.error;
+  if (fishbowlProfilesResult.error) throw fishbowlProfilesResult.error;
+
+  const buildWorkers = (buildWorkersResult.data ?? []) as BuildWorkerDiscoveryRow[];
+  const fishbowlProfiles = (fishbowlProfilesResult.data ?? []) as FishbowlProfileDiscoveryRow[];
+  const visibleWorkers = uniqueVisibleWorkers([
+    ...buildWorkersToVisibleWorkers(buildWorkers),
+    ...fishbowlProfilesToVisibleWorkers(fishbowlProfiles),
+  ]);
+
+  return {
+    visibleWorkers,
+    workerSource,
+    discovery: {
+      build_workers_seen: buildWorkers.length,
+      fishbowl_profiles_seen: fishbowlProfiles.length,
+      visible_workers_used: visibleWorkers.length,
+    },
+  };
+}
+
+function uniqueVisibleWorkers(workers: VisibleWorker[]): VisibleWorker[] {
+  const seen = new Set<string>();
+  return workers.filter((worker) => {
+    const workerId = String(worker.agent_id ?? worker.worker_id ?? worker.id ?? "").trim();
+    if (!workerId || seen.has(workerId)) return false;
+    seen.add(workerId);
+    return true;
+  });
 }
 
 // ─── Setup guide content ────────────────────────────────────────────────────
@@ -4860,6 +4952,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (updErr) throw updErr;
 
         return res.status(200).json({ data: eventData, was_duplicate: false });
+      }
+
+      case "admin_unclick_connect_dry_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        const workerResolution = await resolveUnClickConnectVisibleWorkers(supabase, apiKeyHash, body);
+        const result = runRoutePacketConsumerDryRun({
+          packet,
+          visibleWorkers: workerResolution.visibleWorkers,
+        });
+
+        return res.status(200).json({
+          ...result,
+          tenant_scoped: true,
+          worker_source: workerResolution.workerSource,
+          discovery: workerResolution.discovery,
+        });
+      }
+
+      case "admin_unclick_connect_commit": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const commitMode = String(body.commit_mode ?? body.mode ?? "").trim().toLowerCase();
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        if (commitMode !== "experiment" || !packet.experiment) {
+          return res.status(400).json({
+            error: "admin_unclick_connect_commit is experiment-only",
+          });
+        }
+
+        const workerResolution = await resolveUnClickConnectVisibleWorkers(supabase, apiKeyHash, body);
+        const idempotencyKey =
+          typeof body.idempotency_key === "string" && body.idempotency_key.trim()
+            ? body.idempotency_key.trim()
+            : packet.idempotency_key;
+        const row = buildUnClickConnectDispatchRow({
+          apiKeyHash,
+          packet,
+          visibleWorkers: workerResolution.visibleWorkers,
+          idempotencyKey,
+        });
+
+        const { data, error } = await supabase
+          .from("mc_agent_dispatches")
+          .insert(row)
+          .select(
+            "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+          )
+          .single();
+
+        if (error) {
+          if ((error as { code?: string }).code === "23505") {
+            const existing = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", row.dispatch_id)
+              .maybeSingle();
+            if (existing.error) throw existing.error;
+            return res.status(200).json({
+              data: existing.data,
+              was_duplicate: true,
+              tenant_scoped: true,
+              worker_source: workerResolution.workerSource,
+              discovery: workerResolution.discovery,
+            });
+          }
+          throw error;
+        }
+
+        return res.status(200).json({
+          data,
+          was_duplicate: false,
+          tenant_scoped: true,
+          worker_source: workerResolution.workerSource,
+          discovery: workerResolution.discovery,
+        });
       }
 
       case "reliability_dispatches": {

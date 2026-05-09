@@ -66,6 +66,7 @@ const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
 export const CHECKIN_ACTIVE_GRACE_MS = 30 * 60 * 1000;
+export const CHECKIN_OVERDUE_SUPPRESS_MS = 12 * 60 * 60 * 1000;
 export const CHECKIN_DORMANT_SUPPRESS_MS = 7 * 24 * 60 * 60 * 1000;
 export const CHECKIN_ACK_LEASE_SECONDS = 600;
 const STALE_DISPATCH_RECLAIM_LIMIT = 50;
@@ -95,6 +96,7 @@ export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): bo
   const dueMs = new Date(profile.next_checkin_at).getTime();
   if (Number.isNaN(dueMs)) return false;
   if (dueMs >= nowMs) return false;
+  if (nowMs - dueMs >= CHECKIN_OVERDUE_SUPPRESS_MS) return false;
   const seenMs = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0;
   if (Number.isNaN(seenMs)) return false;
   if (seenMs > 0 && nowMs - seenMs <= CHECKIN_ACTIVE_GRACE_MS) return false;
@@ -341,6 +343,14 @@ export function isReclaimableDispatchCandidate(row: DispatchRow, nowMs: number):
   ).isStale;
 }
 
+export function isMissedCheckinDispatch(row: DispatchRow): boolean {
+  const payload = row.payload ?? {};
+  return (
+    normalizeToken(payload.wake_reason) === "missed_next_checkin" ||
+    normalizeToken(row.task_ref).startsWith("fishbowl-checkin:")
+  );
+}
+
 export function buildDispatchReclaimSignal(row: DispatchRow, nowMs: number) {
   const staleDecision = decideStaleLease(
     {
@@ -352,6 +362,21 @@ export function buildDispatchReclaimSignal(row: DispatchRow, nowMs: number) {
   );
 
   if (!staleDecision.isStale) return null;
+
+  if (isMissedCheckinDispatch(row)) {
+    return {
+      action: "stale_dispatch_reclaimed" as const,
+      summary: `Reclaimed stale missed check-in dispatch for ${row.target_agent_id}`,
+      payload: {
+        dispatch_id: row.dispatch_id,
+        source: row.source,
+        target_agent_id: row.target_agent_id,
+        task_ref: row.task_ref ?? null,
+        stale_seconds: staleDecision.staleSeconds,
+        ...(row.payload ?? {}),
+      },
+    };
+  }
 
   return createReclaimSignal(
     {
@@ -458,6 +483,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let checkinSignalsEmitted = 0;
   let checkinDispatchesEmitted = 0;
+  let checkinTimersCleared = 0;
   let staleDispatchesReclaimed = 0;
   let staleDispatchesRerouted = 0;
   let staleDispatchRerouteFailures = 0;
@@ -537,6 +563,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     } else {
       checkinSignalsEmitted++;
+      const { error: clearCheckinErr } = await supabase
+        .from("mc_fishbowl_profiles")
+        .update({ next_checkin_at: null })
+        .eq("api_key_hash", profile.api_key_hash)
+        .eq("agent_id", profile.agent_id)
+        .eq("next_checkin_at", profile.next_checkin_at);
+      if (clearCheckinErr) {
+        console.error(
+          "[fishbowl-watcher] missed checkin timer clear error:",
+          clearCheckinErr.message,
+        );
+      } else {
+        checkinTimersCleared++;
+      }
     }
   }
 
@@ -750,6 +790,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     checkin_signals_emitted: checkinSignalsEmitted,
     checkin_dispatches_emitted: checkinDispatchesEmitted,
+    checkin_timers_cleared: checkinTimersCleared,
     stale_dispatches_reclaimed: staleDispatchesReclaimed,
     stale_dispatches_rerouted: staleDispatchesRerouted,
     stale_dispatch_reroute_failures: staleDispatchRerouteFailures,
