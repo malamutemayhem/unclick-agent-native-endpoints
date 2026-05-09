@@ -105,6 +105,87 @@ describe("embedText", () => {
   });
 });
 
+// ─── 2a. Keyword fallback asOf filtering ─────────────────────────────────────
+
+class FakeQuery {
+  calls: Array<{ method: string; args: unknown[] }> = [];
+
+  constructor(public table: string) {}
+
+  select(...args: unknown[]) { return this.call("select", args); }
+  eq(...args: unknown[]) { return this.call("eq", args); }
+  is(...args: unknown[]) { return this.call("is", args); }
+  ilike(...args: unknown[]) { return this.call("ilike", args); }
+  or(...args: unknown[]) { return this.call("or", args); }
+  lte(...args: unknown[]) { return this.call("lte", args); }
+  order(...args: unknown[]) { return this.call("order", args); }
+  limit(...args: unknown[]) { return this.call("limit", args); }
+
+  then<TResult1 = { data: unknown[] }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[] }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return Promise.resolve({ data: [] }).then(onfulfilled, onrejected);
+  }
+
+  private call(method: string, args: unknown[]) {
+    this.calls.push({ method, args });
+    return this;
+  }
+}
+
+class FakeClient {
+  queries: FakeQuery[] = [];
+
+  from(table: string) {
+    const query = new FakeQuery(table);
+    this.queries.push(query);
+    return query;
+  }
+}
+
+describe("keyword fallback asOf cutoff", () => {
+  test("filters fallback facts by valid time and sessions by created_at", async () => {
+    const { SupabaseBackend } = await import("../supabase.js");
+    const client = new FakeClient();
+    const backend = Object.create(SupabaseBackend.prototype) as {
+      client: FakeClient;
+      tenancy: { mode: "byod" };
+      tables: { extracted_facts: string; session_summaries: string };
+      keywordFallback: (query: string, maxResults: number, asOf?: string) => Promise<unknown[]>;
+    };
+    backend.client = client;
+    backend.tenancy = { mode: "byod" };
+    backend.tables = {
+      extracted_facts: "extracted_facts",
+      session_summaries: "session_summaries",
+    };
+
+    const asOf = "2025-04-01T00:00:00Z";
+    const results = await backend.keywordFallback("UnClick", 3, asOf);
+    assert.deepEqual(results, []);
+
+    const factQuery = client.queries.find((q) => q.table === "extracted_facts");
+    const sessionQuery = client.queries.find((q) => q.table === "session_summaries");
+    assert.ok(factQuery, "facts query should run");
+    assert.ok(sessionQuery, "session query should run");
+    assert.ok(
+      factQuery.calls.some((c) => c.method === "lte" && c.args[0] === "valid_from" && c.args[1] === asOf),
+      "facts fallback should not return facts created after asOf"
+    );
+    assert.ok(
+      factQuery.calls.some(
+        (c) => c.method === "or" && c.args[0] === `valid_to.is.null,valid_to.gt.${asOf}`
+      ),
+      "facts fallback should honor valid_to when asOf is provided"
+    );
+    assert.ok(
+      sessionQuery.calls.some((c) => c.method === "lte" && c.args[0] === "created_at" && c.args[1] === asOf),
+      "session fallback should not return summaries created after asOf"
+    );
+  });
+});
+
 // ─── 2b. Keyword-fallback regression (P0) ─────────────────────────────────────
 //
 // Reproduces the production bug: a fact with NULL embedding whose proper-noun

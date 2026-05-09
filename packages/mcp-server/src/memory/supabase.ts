@@ -315,7 +315,7 @@ export class SupabaseBackend implements MemoryBackend {
     } catch (err) {
       console.error("[search_memory] hybrid search failed, falling back to keyword:", err);
     }
-    return this.keywordFallback(query, maxResults);
+    return this.keywordFallback(query, maxResults, asOf);
   }
 
   /**
@@ -330,7 +330,7 @@ export class SupabaseBackend implements MemoryBackend {
    * that returns nothing we degrade to OR-of-tokens and rank rows by how
    * many tokens they contain so partial matches at least surface something.
    */
-  private async keywordFallback(query: string, maxResults: number): Promise<unknown[]> {
+  private async keywordFallback(query: string, maxResults: number, asOf?: string): Promise<unknown[]> {
     const tokens = query
       .toLowerCase()
       .split(/\s+/)
@@ -353,6 +353,13 @@ export class SupabaseBackend implements MemoryBackend {
       let sessQ = this.client
         .from(this.tables.session_summaries)
         .select("id, summary, created_at");
+
+      if (asOf) {
+        factQ = factQ
+          .lte("valid_from", asOf)
+          .or(`valid_to.is.null,valid_to.gt.${asOf}`);
+        sessQ = sessQ.lte("created_at", asOf);
+      }
 
       if (mode === "and") {
         for (const p of patterns) {
