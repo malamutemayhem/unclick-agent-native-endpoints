@@ -10,6 +10,8 @@ name: Auto-close Fishbowl todo on PR merge
 on:
   pull_request:
     types: [closed]
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       pr_numbers:
@@ -23,7 +25,7 @@ permissions:
 
 jobs:
   close-todos:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     name: Close linked Fishbowl todos
     runs-on: ubuntu-latest
     steps:
@@ -35,6 +37,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
           MANUAL_PR_NUMBERS: ${{ github.event.inputs.pr_numbers || '' }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -62,8 +65,25 @@ jobs:
               echo "::warning::No PR numbers supplied for manual reconciliation."
               exit 0
             fi
-          else
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            mapfile -t PR_NUMBERS < <(gh api \
+              -H "Accept: application/vnd.github.groot-preview+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[] | select(.merged_at != null) | .number' \
+              2>/tmp/gh-pr-lookup.err | sort -n -u) || {
+                echo "::warning::Could not resolve merged PR for ${GITHUB_SHA}: $(cat /tmp/gh-pr-lookup.err)"
+                PR_NUMBERS=()
+              }
+
+            if [ "${#PR_NUMBERS[@]}" -eq 0 ]; then
+              echo "No merged PR associated with push ${GITHUB_SHA} - nothing to close."
+              exit 0
+            fi
+          elif [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
             PR_NUMBERS=("${PR_NUMBER}")
+          else
+            echo "Unsupported event ${GITHUB_EVENT_NAME} - nothing to close."
+            exit 0
           fi
 
           if [ "${#PR_NUMBERS[@]}" -eq 0 ]; then
