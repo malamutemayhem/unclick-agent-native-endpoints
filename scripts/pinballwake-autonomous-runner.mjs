@@ -422,6 +422,18 @@ function validateBoardroomClaimSourceState(job = {}) {
     };
   }
 
+  const sourceLeaseToken = String(state.lease_token || "").trim();
+  const jobClaimId = String(job?.claim_id || "").trim();
+  const sourceLeaseExpiresAt = Date.parse(String(state.lease_expires_at || ""));
+  const jobClaimedAt = Date.parse(String(job?.claimed_at || ""));
+  const sourceLeaseExpired =
+    Number.isFinite(sourceLeaseExpiresAt) &&
+    Number.isFinite(jobClaimedAt) &&
+    sourceLeaseExpiresAt <= jobClaimedAt;
+  if (sourceLeaseToken && sourceLeaseToken !== jobClaimId && !sourceLeaseExpired) {
+    return { ok: false, reason: "boardroom_todo_lease_token_mismatch" };
+  }
+
   return { ok: true };
 }
 
@@ -626,6 +638,9 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
       todo_id: id || null,
       status: todo.status || null,
       assigned_to_agent_id: todo.assigned_to_agent_id || null,
+      lease_expires_at: todo.lease_expires_at || null,
+      lease_token: todo.lease_token || null,
+      reclaim_count: Number.isFinite(todo.reclaim_count) ? todo.reclaim_count : null,
       actionability_reason: todo.actionability_reason || null,
       updated_at: todo.updated_at || null,
     },
