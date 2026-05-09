@@ -11,7 +11,7 @@ import { createClient, type UnClickClient } from "./client.js";
 import { ADDITIONAL_TOOLS, ADDITIONAL_HANDLERS } from "./tool-wiring.js";
 import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
-import { markContextLoaded, recordToolCall, sessionState } from "./memory/session-state.js";
+import { markContextLoaded, recordToolCall } from "./memory/session-state.js";
 import { emitSignal } from "./signals/emit.js";
 import { getHeartbeatProtocol } from "./heartbeat-protocol.js";
 import { createHash } from "node:crypto";
@@ -884,16 +884,12 @@ const MEMORY_TOOL_ALIASES: Record<string, string> = {
   // search_memory and invalidate_fact keep their names
 };
 
-const LOAD_MEMORY_HINT =
-  "[hint] No load_memory call detected this session -- call it for personalised context.\n\n";
-
-function memoryToolText(memoryKey: string, result: unknown): string {
+export function memoryToolText(memoryKey: string, result: unknown): string {
   if (memoryKey === "get_startup_context") {
     markContextLoaded("manual");
     return JSON.stringify(result, null, 2);
   }
-  const text = JSON.stringify(result, null, 2);
-  return sessionState.contextLoaded ? text : `${LOAD_MEMORY_HINT}${text}`;
+  return JSON.stringify(result, null, 2);
 }
 
 const DIRECT_TOOLS = [
