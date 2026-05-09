@@ -38,9 +38,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
-          MANUAL_PR_NUMBERS: ${{ github.event.inputs.pr_numbers || '' }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           UNCLICK_API_KEY: ${{ secrets.FISHBOWL_AUTOCLOSE_TOKEN }}
           API_URL: https://unclick.world/api/memory-admin
           AGENT_ID: github-action-autoclose
@@ -53,6 +50,10 @@ jobs:
             echo "::warning::FISHBOWL_AUTOCLOSE_TOKEN secret not set - skipping."
             exit 0
           fi
+
+          MANUAL_PR_NUMBERS=$(jq -r '.inputs.pr_numbers // ""' "${GITHUB_EVENT_PATH}")
+          PR_BODY=$(jq -r '.pull_request.body // ""' "${GITHUB_EVENT_PATH}")
+          PR_NUMBER=$(jq -r '.pull_request.number // ""' "${GITHUB_EVENT_PATH}")
 
           PR_NUMBERS=()
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
