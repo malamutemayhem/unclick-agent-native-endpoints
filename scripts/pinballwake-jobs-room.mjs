@@ -33,6 +33,38 @@ function safeList(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function firstArray(...values) {
+  return values.find((value) => Array.isArray(value)) || [];
+}
+
+function livenessSnapshotFrom(input = {}) {
+  const source = input.liveness || input.autopilotKit || input.autopilotkit_liveness || input.autopilotKitLiveness || {};
+  const profiles = firstArray(
+    source.profiles,
+    source.worker_profiles,
+    source.workerProfiles,
+    input.livenessProfiles,
+    input.worker_profiles,
+    input.workerProfiles,
+  );
+  const messages = firstArray(
+    source.messages,
+    source.fishbowlMessages,
+    source.fishbowl_messages,
+    input.livenessMessages,
+    input.liveness_messages,
+  );
+
+  if (profiles.length === 0 && messages.length === 0) return null;
+
+  return {
+    ...source,
+    now: source.now || input.now,
+    profiles,
+    messages,
+  };
+}
+
 function normalize(value) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -273,30 +305,29 @@ function countsBy(items, key) {
   }, {});
 }
 
-function evaluateAutoPilotKitSnapshot({
-  autopilotKit,
-  workerProfiles = [],
-  livenessMessages = [],
-  now,
-} = {}) {
-  const profiles = safeList(autopilotKit?.profiles ?? workerProfiles);
-  const messages = safeList(autopilotKit?.messages ?? livenessMessages);
-  if (profiles.length === 0 && messages.length === 0) return null;
-  return evaluateAutoPilotKitLiveness({
-    ...(autopilotKit || {}),
-    now: autopilotKit?.now || now,
-    profiles,
-    messages,
-  });
+function jobsManagerAdvisory(input = {}) {
+  const snapshot = livenessSnapshotFrom(input);
+  if (!snapshot) return null;
+
+  const liveness = evaluateAutoPilotKitLiveness(snapshot);
+  const jobs = liveness.adapter_examples.jobs_manager;
+  if (safeList(jobs.reason_codes).length === 0 && safeList(jobs.stale_agent_ids).length === 0) return null;
+
+  return {
+    ...jobs,
+    execute: false,
+    source: "autopilotkit_liveness",
+    generated_at: liveness.generated_at,
+    safe_mode: liveness.safe_mode,
+  };
 }
 
-function jobsAdviceFromSnapshot(snapshot) {
-  const advice = snapshot?.adapter_examples?.jobs_manager;
-  if (!advice || safeList(advice.reason_codes).length === 0) return null;
+function withJobsAdvisory(output, advisory) {
+  if (!advisory) return output;
   return {
-    ...advice,
-    safe_mode: snapshot.safe_mode,
-    generated_at: snapshot.generated_at,
+    ...output,
+    autopilotkit_jobs_advisory: advisory,
+    autopilotkit_jobs_advice: advisory,
   };
 }
 
@@ -307,9 +338,27 @@ export function evaluateJobsRoom({
   now = new Date().toISOString(),
   limit = 5,
   autopilotKit = null,
-  workerProfiles = [],
-  livenessMessages = [],
+  liveness,
+  autopilotkit_liveness,
+  autopilotKitLiveness,
+  livenessProfiles,
+  livenessMessages,
+  worker_profiles,
+  workerProfiles,
+  liveness_messages,
 } = {}) {
+  const input = {
+    now,
+    autopilotKit,
+    liveness,
+    autopilotkit_liveness,
+    autopilotKitLiveness,
+    livenessProfiles,
+    livenessMessages,
+    worker_profiles,
+    workerProfiles,
+    liveness_messages,
+  };
   const safeLedger = createCodingRoomJobLedger({
     jobs: jobs || ledger?.jobs || [],
     updatedAt: ledger?.updated_at || now,
@@ -321,10 +370,9 @@ export function evaluateJobsRoom({
 
   const actionable = decisions.filter((decision) => decision.priority > 0 && decision.next_action !== "none");
   const top = actionable.slice(0, limit);
-  const autopilotKitSnapshot = evaluateAutoPilotKitSnapshot({ autopilotKit, workerProfiles, livenessMessages, now });
-  const autopilotkitJobsAdvice = jobsAdviceFromSnapshot(autopilotKitSnapshot);
+  const advisory = jobsManagerAdvisory(input);
 
-  const result = {
+  const output = {
     ok: true,
     action: "jobs_room",
     result: actionable.length ? "todos" : "idle",
@@ -336,7 +384,7 @@ export function evaluateJobsRoom({
     packets: top.map((decision) => decision.packet).filter(Boolean),
   };
 
-  return autopilotkitJobsAdvice ? { ...result, autopilotkit_jobs_advice: autopilotkitJobsAdvice } : result;
+  return withJobsAdvisory(output, advisory);
 }
 
 export async function readJobsRoomInput(filePath) {

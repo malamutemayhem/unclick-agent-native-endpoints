@@ -84,6 +84,7 @@ describe("PinballWake Jobs Room", () => {
     assert.equal(result.next.priority, 80);
     assert.equal(result.packets[0].worker, "forge");
     assert.match(result.packets[0].expected_proof, /Claim the job/);
+    assert.equal(result.autopilotkit_jobs_advisory, undefined);
   });
 
   it("routes unscoped Boardroom jobs to the Jobs Worker before PinballWake builds", () => {
@@ -233,5 +234,35 @@ describe("PinballWake Jobs Room", () => {
     assert(result.autopilotkit_jobs_advice.reason_codes.includes("coordinator_fallback_needed"));
     assert(result.autopilotkit_jobs_advice.stale_agent_ids.includes("master"));
     assert.equal(result.autopilotkit_jobs_advice.safe_mode.no_secret_access, true);
+  });
+
+  it("adds advisory AutoPilotKit Jobs Manager output for stale liveness context", () => {
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({ jobs: [codeJob({ status: "done" })] }),
+      runner: builder,
+      now: "2026-05-05T00:12:00.000Z",
+      liveness: {
+        profiles: [
+          {
+            agent_id: "master",
+            display_name: "Master Coordinator",
+            last_seen_at: "2026-05-04T21:00:00.000Z",
+            current_status_updated_at: "2026-05-04T21:00:00.000Z",
+          },
+          {
+            agent_id: "builder-seat",
+            display_name: "Builder Seat",
+            last_seen_at: "2026-05-03T00:00:00.000Z",
+          },
+        ],
+        messages: [],
+      },
+    });
+
+    assert.equal(result.result, "idle");
+    assert.equal(result.autopilotkit_jobs_advisory.execute, false);
+    assert.equal(result.autopilotkit_jobs_advisory.safe_mode.no_merge_or_claim, true);
+    assert(result.autopilotkit_jobs_advisory.reason_codes.includes("coordinator_fallback_needed"));
+    assert.deepEqual(result.autopilotkit_jobs_advisory.stale_agent_ids, ["master", "builder-seat"]);
   });
 });

@@ -120,6 +120,7 @@ describe("PinballWake ACK ledger room", () => {
 
     assert.equal(result.result, "missing_ack");
     assert.deepEqual(result.missing_reviewers, ["popcorn"]);
+    assert.equal(result.autopilotkit_review_advisory, undefined);
   });
 
   it("keeps a newer reviewer blocker ahead of an older PASS", () => {
@@ -305,5 +306,41 @@ describe("PinballWake ACK ledger room", () => {
     });
 
     assert.equal(result.result, "full_pass");
+  });
+
+  it("adds advisory AutoPilotKit review reroute output only with liveness context", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      comments: [
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z", "forge"),
+      ],
+      liveness: {
+        now: "2026-05-05T00:12:00.000Z",
+        profiles: [
+          {
+            agent_id: "review-seat",
+            display_name: "Review Coordinator",
+            current_status: "ACKed wake; actual diff pass deferred",
+            last_seen_at: "2026-05-05T00:10:00.000Z",
+            current_status_updated_at: "2026-05-05T00:10:00.000Z",
+          },
+        ],
+        messages: [
+          {
+            id: "wake-528",
+            tags: ["wakepass", "reroute"],
+            text: "WakePass auto-reroute. Reason: missed ACK for Review Coordinator.",
+          },
+        ],
+      },
+    });
+
+    assert.equal(result.result, "missing_ack");
+    assert.equal(result.autopilotkit_review_advisory.execute, false);
+    assert.equal(result.autopilotkit_review_advisory.safe_mode.read_only, true);
+    assert(result.autopilotkit_review_advisory.reason_codes.includes("required_ack_missing"));
+    assert(result.autopilotkit_review_advisory.reason_codes.includes("missed_ack_reroute_detected"));
+    assert(result.autopilotkit_review_advisory.reason_codes.includes("deferred_review_or_ack_only"));
   });
 });
