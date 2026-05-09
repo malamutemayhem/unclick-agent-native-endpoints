@@ -67,6 +67,15 @@ export interface FishbowlPostLedgerInput {
   now?: Date;
 }
 
+export interface AutoPilotKitRecommendationLedgerInput {
+  actorAgentId: string;
+  refId: string;
+  refKind?: AutopilotRefKind | string;
+  source?: string;
+  recommendations?: Array<Record<string, unknown>> | null;
+  now?: Date;
+}
+
 const EVENT_TYPE_SET = new Set<string>(AUTOPILOT_EVENT_TYPES);
 const REF_KIND_SET = new Set<string>(AUTOPILOT_REF_KINDS);
 const SENSITIVE_KEY_RE = /(api[_-]?key|secret|token|password|credential|authorization|cookie)/i;
@@ -304,6 +313,44 @@ export function planFishbowlPostLedgerEvent(input: FishbowlPostLedgerInput): Aut
   }
 
   return null;
+}
+
+export function planAutoPilotKitRecommendationLedgerEvents(
+  input: AutoPilotKitRecommendationLedgerInput,
+): AutopilotEventInput[] {
+  const recommendations = Array.isArray(input.recommendations) ? input.recommendations : [];
+  return recommendations
+    .map((recommendation) => {
+      const action = compact(recommendation.action, 120);
+      const reason = compact(recommendation.reason, 160);
+      if (!action || !reason) return null;
+      const targetLane = compact(recommendation.target_lane, 120);
+      const proofMessageId = compact(recommendation.proof_message_id, 160);
+      const affectedAgentIds = Array.isArray(recommendation.affected_agent_ids)
+        ? recommendation.affected_agent_ids.map((agentId) => compact(agentId, 128)).filter(Boolean).slice(0, 12)
+        : [];
+
+      return {
+        apiKeyHash: "",
+        eventType: "lane_check",
+        actorAgentId: input.actorAgentId,
+        refKind: input.refKind ?? "run",
+        refId: input.refId,
+        now: input.now,
+        payload: {
+          source: compact(input.source ?? "autopilotkit", 120),
+          decision: "advisory",
+          advisory: true,
+          execute: false,
+          recommendation_action: action,
+          reason_code: reason,
+          target_lane: targetLane || null,
+          proof_message_id: proofMessageId || null,
+          affected_agent_ids: affectedAgentIds,
+        },
+      } satisfies AutopilotEventInput;
+    })
+    .filter((event): event is AutopilotEventInput => event !== null);
 }
 
 export async function recordAutopilotEvent(

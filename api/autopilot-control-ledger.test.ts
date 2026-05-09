@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAutopilotEventRow,
+  planAutoPilotKitRecommendationLedgerEvents,
   planFishbowlPostLedgerEvent,
   planTodoLedgerEvents,
 } from "./lib/autopilot-control-ledger";
@@ -160,5 +161,90 @@ describe("autopilot control ledger helpers", () => {
         payload: { api_key: "uc_abc1234567890def" },
       }),
     ).toThrow(/sensitive key/);
+  });
+
+  it("plans advisory AutoPilotKit reroute recommendations as lane check ledger events", () => {
+    const events = planAutoPilotKitRecommendationLedgerEvents({
+      actorAgentId: "autopilotkit",
+      refKind: "run",
+      refId: "wake-528",
+      source: "review_coordinator",
+      now,
+      recommendations: [
+        {
+          action: "reroute_missed_ack_to_live_worker",
+          reason: "missed_ack_reroute_detected",
+          target_lane: "reviewer",
+          proof_message_id: "msg-528",
+        },
+        {
+          action: "activate_second_tier_coordinator",
+          reason: "coordinator_fallback_needed",
+          target_lane: "coordinator",
+        },
+      ],
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      eventType: "lane_check",
+      actorAgentId: "autopilotkit",
+      refKind: "run",
+      refId: "wake-528",
+      payload: {
+        source: "review_coordinator",
+        decision: "advisory",
+        advisory: true,
+        execute: false,
+        recommendation_action: "reroute_missed_ack_to_live_worker",
+        reason_code: "missed_ack_reroute_detected",
+        target_lane: "reviewer",
+        proof_message_id: "msg-528",
+      },
+    });
+  });
+
+  it("keeps AutoPilotKit recommendation rows idempotent and sanitized", () => {
+    const event = planAutoPilotKitRecommendationLedgerEvents({
+      actorAgentId: "autopilotkit",
+      refId: "run-123",
+      now,
+      recommendations: [
+        {
+          action: "separate_ack_from_diff_review",
+          reason: "deferred_review_or_ack_only",
+          target_lane: "reviewer",
+          affected_agent_ids: ["review-seat", "review-seat-2"],
+        },
+      ],
+    })[0];
+
+    const first = buildAutopilotEventRow({ ...event, apiKeyHash: "hash_123" });
+    const second = buildAutopilotEventRow({ ...event, apiKeyHash: "hash_123" });
+
+    expect(first.idempotency_key).toBe(second.idempotency_key);
+    expect(first.payload).toMatchObject({
+      decision: "advisory",
+      execute: false,
+      affected_agent_ids: ["review-seat", "review-seat-2"],
+    });
+    expect(JSON.stringify(first.payload)).not.toContain("undefined");
+  });
+
+  it("rejects secret-looking AutoPilotKit recommendation text at row build time", () => {
+    const event = planAutoPilotKitRecommendationLedgerEvents({
+      actorAgentId: "autopilotkit",
+      refId: "run-123",
+      now,
+      recommendations: [
+        {
+          action: "reroute_missed_ack_to_live_worker",
+          reason: "authorization: bearer sk-test-not-real-secret",
+          target_lane: "reviewer",
+        },
+      ],
+    })[0];
+
+    expect(() => buildAutopilotEventRow({ ...event, apiKeyHash: "hash_123" })).toThrow(/sensitive text/);
   });
 });
