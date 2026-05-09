@@ -528,7 +528,7 @@ function ConnectShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-start justify-center pt-16 pb-24 px-4">
+    <main className="min-h-screen bg-[#0A0A0A] flex items-start justify-center pt-16 pb-24 px-4">
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -572,6 +572,6 @@ function ConnectShell({
           Credentials are encrypted with AES-256-GCM using your API key before storage.
         </p>
       </div>
-    </div>
+    </main>
   );
 }
