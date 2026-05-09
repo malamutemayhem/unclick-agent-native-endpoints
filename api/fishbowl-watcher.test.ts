@@ -222,6 +222,29 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
     expect(messageAcknowledgesDispatch(dispatch, message)).toBe(true);
   });
 
+  it("matches threaded QueuePush ACK replies without requiring repeated packet text", () => {
+    const dispatch: DispatchRow = {
+      ...baseDispatch,
+      task_ref: "fishbowl-message:msg-queuepush",
+      payload: {
+        kind: "message_handoff",
+        ack_required: true,
+        handoff_message_id: "msg-queuepush",
+        summary:
+          "QueuePush ID: queuepush:v3:pr-544:blocked_chris_only:caef570:e53888490d",
+      },
+    };
+    const message: FishbowlMessageAckRow = {
+      id: "msg-ack",
+      text: "ACK. BLOCKER: exact Chris decision still required.",
+      thread_id: "msg-queuepush",
+      created_at: "2026-05-01T01:12:00.000Z",
+      author_agent_id: "chatgpt-codex-heartbeat",
+    };
+
+    expect(messageAcknowledgesDispatch(dispatch, message)).toBe(true);
+  });
+
   it("does not count wake prompt copy as an ACK reply", () => {
     const wakeEventId = "wake-pull_request-pr-508-5e6cd76ba13e";
     const message: FishbowlMessageAckRow = {

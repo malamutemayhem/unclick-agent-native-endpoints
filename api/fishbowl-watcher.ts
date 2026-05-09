@@ -198,17 +198,19 @@ export function messageAcknowledgesDispatch(
   row: DispatchRow,
   message: FishbowlMessageAckRow,
 ): boolean {
-  const ackToken = ackTokenForDispatch(row);
-  if (!ackToken) return false;
-
   const text = String(message.text ?? "").trim();
   if (!/^ACK\b/i.test(text)) return false;
-  if (!text.includes(ackToken)) return false;
 
   const handoffMessageId = nonEmptyString(row.payload?.handoff_message_id);
+  if (handoffMessageId && message.thread_id === handoffMessageId) return true;
+
+  const ackToken = ackTokenForDispatch(row);
+  if (!ackToken) return false;
+  if (!text.includes(ackToken)) return false;
+
   if (!handoffMessageId) return true;
 
-  return message.thread_id === handoffMessageId || message.thread_id === null;
+  return message.thread_id === null;
 }
 
 function newestFirst(a: ProfileRow, b: ProfileRow): number {
@@ -455,9 +457,6 @@ async function findDispatchAckMessage(
   supabase: ReturnType<typeof createClient>,
   row: DispatchRow,
 ): Promise<FishbowlMessageAckRow | null> {
-  const ackToken = ackTokenForDispatch(row);
-  if (!ackToken) return null;
-
   const createdMs = Date.parse(String(row.created_at ?? ""));
   let query = supabase
     .from("mc_fishbowl_messages")
