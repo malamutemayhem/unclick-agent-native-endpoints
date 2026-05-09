@@ -30,8 +30,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Check TestPass token availability
+        id: token
+        shell: bash
+        env:
+          TESTPASS_TOKEN: ${{ secrets.TESTPASS_TOKEN }}
+        run: |
+          if [ -n "${TESTPASS_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run TestPass
         id: testpass
+        if: ${{ steps.token.outputs.has_token == 'true' }}
         # Don't abort the workflow on infra failures - we still want to post a
         # PR comment that explains what happened so reviewers can tell infra
         # noise (stale token, transport blip) from a real product regression.
@@ -46,7 +59,7 @@ jobs:
       - name: Post PR comment
         # Run regardless of TestPass step outcome - infra failures still need a
         # human-readable comment so the PR doesn't look mysteriously broken.
-        if: ${{ always() && github.event_name == 'pull_request' }}
+        if: ${{ always() && github.event_name == 'pull_request' && steps.token.outputs.has_token == 'true' }}
         uses: actions/github-script@v9
         env:
           RUN_ID: ${{ steps.testpass.outputs.run_id }}
@@ -157,11 +170,36 @@ jobs:
               body,
             });
 
+      - name: Explain Dependabot TestPass skip
+        if: ${{ always() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' && steps.token.outputs.has_token != 'true' }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '### TestPass: skipped for Dependabot',
+                '',
+                'GitHub does not expose repository secrets to this Dependabot PR, so `TESTPASS_TOKEN` is unavailable and TestPass cannot run from this event.',
+                '',
+                '_This is an auth/permissions skip, not a product test failure. Maintainer-triggered checks still run fail-closed when a token is available._',
+              ].join('\n'),
+            });
+
+      - name: Fail if TestPass token is missing for trusted events
+        if: ${{ always() && steps.token.outputs.has_token != 'true' && (github.event_name != 'pull_request' || github.actor != 'dependabot[bot]') }}
+        shell: bash
+        run: |
+          echo "TESTPASS_TOKEN is missing. TestPass can only be skipped for Dependabot PRs where GitHub withholds secrets." >&2
+          exit 1
+
       - name: Fail job unless TestPass completed cleanly
         # Keep PR trust fail-closed: only a complete TestPass run with zero
         # failed checks is green. Running, unknown, and infra states must stay
         # visible/retryable instead of looking like evaluated product passes.
-        if: ${{ always() && (steps.testpass.outputs.status != 'complete' || steps.testpass.outputs.fail_count != '0') }}
+        if: ${{ always() && steps.token.outputs.has_token == 'true' && (steps.testpass.outputs.status != 'complete' || steps.testpass.outputs.fail_count != '0') }}
         shell: bash
         env:
           STATUS: ${{ steps.testpass.outputs.status }}
