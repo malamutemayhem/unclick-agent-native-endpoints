@@ -359,6 +359,12 @@ export function extractBoardroomTodoIdFromCodingRoomJob(job = {}) {
   return todoId && todoId !== "unknown" ? todoId : "";
 }
 
+const BOARDROOM_SCOPING_ACTION_REASONS = new Set([
+  "stale_in_progress",
+  "stale_assigned_open",
+  "role_assigned_open",
+]);
+
 function boardroomClaimAgentId(runner = {}) {
   const safeRunner = createAutonomousRunner(runner);
   return safeRunner.agent_id || safeRunner.id || DEFAULT_AUTONOMOUS_RUNNER.id;
@@ -442,6 +448,93 @@ export async function syncClaimedBoardroomTodoToUnClick({
     status: "in_progress",
     comment_ok: true,
     comment_id: comment.data?.comment?.id || null,
+  };
+}
+
+export function selectBoardroomTodoForScoping({ queueSourceResult = {}, lastResult = {} } = {}) {
+  if (queueSourceResult.source !== "unclick" || lastResult.action !== "idle") {
+    return null;
+  }
+
+  const missingScopepackIds = new Set(
+    (lastResult.skipped || [])
+      .filter((skip) => skip?.reason === "boardroom_todo_missing_scopepack")
+      .map((skip) => String(skip.job_id || "").replace(/^boardroom-todo:/, "").trim())
+      .filter(Boolean),
+  );
+  if (missingScopepackIds.size === 0) return null;
+
+  return (queueSourceResult.todos || []).find((todo) => (
+    missingScopepackIds.has(String(todo.id || "").trim()) &&
+    BOARDROOM_SCOPING_ACTION_REASONS.has(String(todo.actionability_reason || "").trim())
+  )) || null;
+}
+
+export async function syncBoardroomTodoScopingRequestToUnClick({
+  todo,
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const todoId = String(todo?.id || "").trim();
+  if (!todoId) {
+    return { ok: true, skipped: true, reason: "missing_todo_id" };
+  }
+
+  const agentId = boardroomClaimAgentId(runner);
+  const update = await callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "update_todo",
+    arguments: {
+      agent_id: agentId,
+      todo_id: todoId,
+      status: "open",
+      assigned_to_agent_id: "",
+    },
+  });
+
+  if (!update.ok) {
+    return {
+      ok: false,
+      reason: "scope_request_update_failed",
+      todo_id: todoId,
+      detail: update.reason || update.error || null,
+      status: update.status ?? null,
+    };
+  }
+
+  const comment = await callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "comment_on",
+    arguments: {
+      agent_id: agentId,
+      target_kind: "todo",
+      target_id: todoId,
+      text: compact(
+        [
+          "Autonomous Runner could not safely build this job yet because no ScopePack was attached.",
+          "Reopened for scoping instead of holding a stale active claim.",
+          "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
+          `reason=${todo.actionability_reason || "missing_scopepack"}.`,
+        ].join(" "),
+        700,
+      ),
+    },
+  });
+
+  return {
+    ok: true,
+    todo_id: todoId,
+    status: "open",
+    assigned_to_agent_id: null,
+    comment_ok: comment.ok,
+    comment_id: comment.ok ? comment.data?.comment?.id || null : null,
+    comment_detail: comment.ok ? null : comment.reason || comment.error || null,
   };
 }
 
@@ -541,6 +634,7 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
       priority: todo.priority || null,
       status: todo.status || null,
       assigned_to_agent_id: todo.assigned_to_agent_id || null,
+      actionability_reason: todo.actionability_reason || null,
     })),
   };
 }
@@ -815,6 +909,7 @@ export async function runAutonomousRunnerFile({
   const shouldPersist = safeMode !== "dry-run" && !safePolicy.disabled && !executeBlocked;
   const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
   let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
+  let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
 
   if (
     shouldPersist &&
@@ -848,14 +943,44 @@ export async function runAutonomousRunnerFile({
     }
   }
 
+  const todoForScoping = selectBoardroomTodoForScoping({ queueSourceResult, lastResult: last });
+  if (shouldPersist && todoForScoping) {
+    todoScopingSync = await syncBoardroomTodoScopingRequestToUnClick({
+      todo: todoForScoping,
+      runner,
+      apiKey: unclickApiKey,
+      mcpUrl: unclickMcpUrl,
+      fetchImpl,
+    });
+
+    if (!todoScopingSync.ok) {
+      return {
+        ...last,
+        ok: false,
+        action: "blocked",
+        reason: "todo_scoping_sync_failed",
+        mode: safeMode,
+        dry_run: safeMode === "dry-run",
+        persisted: false,
+        cycles: results,
+        ledger,
+        ledger_path: ledgerPath,
+        queue_source: queueSourceResult,
+        todo_claim_sync: todoClaimSync,
+        todo_scoping_sync: todoScopingSync,
+      };
+    }
+  }
+
   if (shouldPersist) {
     await writeCodingRoomJobLedger(ledgerPath, ledger);
   }
 
   return {
     ...last,
-    ok: results.every((result) => result.ok) && todoClaimSync.ok,
-    action: last.action,
+    ok: results.every((result) => result.ok) && todoClaimSync.ok && todoScopingSync.ok,
+    action: todoForScoping && shouldPersist ? "scoping_requested" : last.action,
+    reason: todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason,
     mode: safeMode,
     dry_run: safeMode === "dry-run",
     persisted: shouldPersist,
@@ -864,6 +989,7 @@ export async function runAutonomousRunnerFile({
     ledger_path: ledgerPath,
     queue_source: queueSourceResult,
     todo_claim_sync: todoClaimSync,
+    todo_scoping_sync: todoScopingSync,
   };
 }
 

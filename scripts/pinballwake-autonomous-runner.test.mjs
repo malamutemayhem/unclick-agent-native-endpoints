@@ -390,6 +390,127 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("reopens stale unscoped UnClick todos for scoping instead of idling forever", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const calls = [];
+      const fetchImpl = async (url, init = {}) => {
+        calls.push({ url, init, body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-stale-1",
+                            title: "Stale vague build job",
+                            status: "in_progress",
+                            priority: "urgent",
+                            assigned_to_agent_id: "old-worker",
+                            actionability_reason: "stale_in_progress",
+                            created_at: "2026-05-08T05:00:00.000Z",
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-stale-1",
+                          status: "open",
+                          assigned_to_agent_id: null,
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "comment_on") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ comment: { id: "comment-scope-1" } }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-08T05:30:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "scoping_requested");
+      assert.equal(result.reason, "boardroom_todo_reopened_for_scoping");
+      assert.deepEqual(calls.map((call) => call.body.params.name), [
+        "list_actionable_todos",
+        "update_todo",
+        "comment_on",
+      ]);
+      assert.deepEqual(calls[1].body.params.arguments, {
+        agent_id: "runner-plex-1",
+        todo_id: "todo-stale-1",
+        status: "open",
+        assigned_to_agent_id: "",
+      });
+      assert.match(calls[2].body.params.arguments.text, /Reopened for scoping/);
+      assert.equal(result.todo_scoping_sync.ok, true);
+      assert.equal(result.todo_scoping_sync.todo_id, "todo-stale-1");
+
+      const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
+      assert.equal(persisted.jobs[0].status, "queued");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("blocks and avoids persisting when UnClick todo claim sync fails", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
