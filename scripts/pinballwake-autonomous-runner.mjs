@@ -332,6 +332,7 @@ export async function fetchUnClickActionableTodos({
     arguments: {
       agent_id: agentId,
       limit,
+      include_description: true,
     },
   });
 

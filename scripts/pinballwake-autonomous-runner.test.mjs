@@ -370,6 +370,7 @@ describe("PinballWake autonomous Runner seat", () => {
         "update_todo",
         "comment_on",
       ]);
+      assert.equal(calls[0].body.params.arguments.include_description, true);
       assert.deepEqual(calls[1].body.params.arguments, {
         agent_id: "runner-plex-1",
         todo_id: "todo-claim-1",

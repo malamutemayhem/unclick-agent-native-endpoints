@@ -8311,34 +8311,118 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (action === "fishbowl_list_actionable_todos") {
           const limit = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 50);
+          const includeDescription = body.include_description === true || body.includeDescription === true;
+          const nowMs = Date.now();
+          const staleOpenAssignedMs = 6 * 60 * 60 * 1000;
+          const staleInProgressMs = 6 * 60 * 60 * 1000;
+          const liveOwnerMs = 60 * 60 * 1000;
+          const roleAssignees = new Set([
+            "master",
+            "coordinator",
+            "builder",
+            "reviewer",
+            "watcher",
+            "planner",
+            "tester",
+            "safety",
+            "messenger",
+            "pinballwake-job-runner",
+          ]);
+          const isRoleAssignee = (raw: unknown): boolean => {
+            const value = String(raw ?? "").trim().toLowerCase();
+            return (
+              roleAssignees.has(value) ||
+              value.startsWith("codex-forge-") ||
+              value.startsWith("claude-pc-tether-") ||
+              value.startsWith("claude-code-pc-tether-")
+            );
+          };
+          const ageMs = (raw: unknown): number => {
+            const ms = Date.parse(String(raw ?? ""));
+            return Number.isFinite(ms) ? Math.max(0, nowMs - ms) : Number.POSITIVE_INFINITY;
+          };
+
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
             .select("*")
             .eq("api_key_hash", apiKeyHash)
-            .eq("status", "open")
-            .is("assigned_to_agent_id", null)
+            .in("status", ["open", "in_progress"])
             .order("created_at", { ascending: true })
             .limit(500);
           if (error) throw error;
 
+          const assigneeIds = Array.from(
+            new Set(
+              (data ?? [])
+                .map((t) => String(t.assigned_to_agent_id ?? "").trim())
+                .filter(Boolean),
+            ),
+          );
+          const lastSeenByAgent = new Map<string, string | null>();
+          if (assigneeIds.length > 0) {
+            const { data: profileRows, error: profileErr } = await supabase
+              .from("mc_fishbowl_profiles")
+              .select("agent_id,last_seen_at")
+              .eq("api_key_hash", apiKeyHash)
+              .in("agent_id", assigneeIds);
+            if (profileErr) throw profileErr;
+            for (const profile of profileRows ?? []) {
+              lastSeenByAgent.set(String(profile.agent_id), profile.last_seen_at ?? null);
+            }
+          }
+
+          const actionabilityFor = (todo: Record<string, unknown>): string | null => {
+            const status = String(todo.status ?? "");
+            const assignee = String(todo.assigned_to_agent_id ?? "").trim();
+            const todoAge = ageMs(todo.updated_at ?? todo.created_at);
+            const ownerLastSeen = assignee ? lastSeenByAgent.get(assignee) ?? null : null;
+            const ownerAge = ownerLastSeen ? ageMs(ownerLastSeen) : Number.POSITIVE_INFINITY;
+            const ownerLooksDormant = !assignee || isRoleAssignee(assignee) || ownerAge > liveOwnerMs;
+
+            if (status === "open" && !assignee) return "unassigned_open";
+            if (status === "open" && isRoleAssignee(assignee)) return "role_assigned_open";
+            if (status === "open" && todoAge > staleOpenAssignedMs && ownerLooksDormant) return "stale_assigned_open";
+            if (status === "in_progress" && todoAge > staleInProgressMs && ownerLooksDormant) return "stale_in_progress";
+
+            return null;
+          };
+
           const actionable = (data ?? [])
+            .map((todo) => ({
+              todo,
+              actionability_reason: actionabilityFor(todo),
+            }))
+            .filter((item) => item.actionability_reason)
             .sort((a, b) => {
+              const todoA = a.todo;
+              const todoB = b.todo;
               const priorityDelta =
-                (todoPriorityRank[String(b.priority ?? "normal")] ?? 1) -
-                (todoPriorityRank[String(a.priority ?? "normal")] ?? 1);
+                (todoPriorityRank[String(todoB.priority ?? "normal")] ?? 1) -
+                (todoPriorityRank[String(todoA.priority ?? "normal")] ?? 1);
               if (priorityDelta !== 0) return priorityDelta;
 
-              const createdA = Date.parse(String(a.created_at ?? "")) || 0;
-              const createdB = Date.parse(String(b.created_at ?? "")) || 0;
+              const reasonRank: Record<string, number> = {
+                stale_in_progress: 4,
+                role_assigned_open: 3,
+                unassigned_open: 2,
+                stale_assigned_open: 1,
+              };
+              const reasonDelta =
+                (reasonRank[b.actionability_reason ?? ""] ?? 0) -
+                (reasonRank[a.actionability_reason ?? ""] ?? 0);
+              if (reasonDelta !== 0) return reasonDelta;
+
+              const createdA = Date.parse(String(todoA.created_at ?? "")) || 0;
+              const createdB = Date.parse(String(todoB.created_at ?? "")) || 0;
               if (createdA !== createdB) return createdA - createdB;
 
-              return String(a.id).localeCompare(String(b.id));
+              return String(todoA.id).localeCompare(String(todoB.id));
             })
             .slice(0, limit);
 
           let countMap: Record<string, number> = {};
           if (actionable.length > 0) {
-            const ids = actionable.map((t) => t.id);
+            const ids = actionable.map((item) => item.todo.id);
             const { data: comments } = await supabase
               .from("mc_fishbowl_comments")
               .select("target_id")
@@ -8352,9 +8436,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }, {});
           }
 
-          const decorated = actionable.map((t, index) => ({
+          const decorated = actionable.map(({ todo: t, actionability_reason }, index) => ({
             id: t.id,
             title: t.title,
+            ...(includeDescription ? { description: t.description } : {}),
             status: t.status,
             priority: t.priority,
             assigned_to_agent_id: t.assigned_to_agent_id,
@@ -8364,6 +8449,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             completed_at: t.completed_at,
             comment_count: countMap[t.id as string] ?? 0,
             actionable_rank: index + 1,
+            actionability_reason,
+            owner_last_seen_at: t.assigned_to_agent_id
+              ? lastSeenByAgent.get(String(t.assigned_to_agent_id)) ?? null
+              : null,
             scope_pack:
               t.scope_pack ??
               t.scopePack ??
@@ -8379,7 +8468,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             todos: decorated,
             response_bounds: {
               compact: true,
-              descriptions_included: false,
+              descriptions_included: includeDescription,
               todos_returned: decorated.length,
             },
           });
