@@ -53,6 +53,7 @@ import AdminTools from "./pages/admin/AdminTools.tsx";
 import AdminActivity from "./pages/admin/AdminActivity.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminAgentsPage from "./pages/admin/AdminAgents.tsx";
+import AdminSeatHeartbeatPage from "./pages/admin/AdminSeatHeartbeat.tsx";
 import AdminAnalytics from "./pages/admin/AdminAnalytics.tsx";
 import AdminCodebase from "./pages/admin/AdminCodebase.tsx";
 import AdminOrchestratorPage from "./pages/admin/AdminOrchestrator.tsx";
@@ -163,6 +164,7 @@ const App = () => (
             <Route path="projects" element={<AdminProjects />} />
             <Route path="autopilot" element={<AdminAutopilot />} />
             <Route path="agents"     element={<AdminAgentsPage />} />
+            <Route path="agents/heartbeat" element={<AdminSeatHeartbeatPage />} />
             <Route path="workers" element={<AdminWorkers />} />
             <Route path="jobs" element={<AdminJobs />} />
             <Route path="todos" element={<Navigate to="/admin/jobs" replace />} />

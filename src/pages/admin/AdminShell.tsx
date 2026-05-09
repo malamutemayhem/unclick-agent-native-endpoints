@@ -238,6 +238,34 @@ function MemoryNavItem({ onClick }: { onClick?: () => void }) {
   );
 }
 
+function SeatsNavItem({ onClick }: { onClick?: () => void }) {
+  const location = useLocation();
+  const isSeats = location.pathname === "/admin/agents" || location.pathname.startsWith("/admin/agents/");
+  const heartbeatActive = location.pathname === "/admin/agents/heartbeat";
+
+  return (
+    <div>
+      <SurfaceLink path="/admin/agents" label="Seats" icon={Bot} onClick={onClick} />
+      {isSeats && (
+        <div className="ml-7 mt-0.5 flex flex-col gap-0.5">
+          <Link
+            to="/admin/agents/heartbeat"
+            onClick={onClick}
+            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              heartbeatActive
+                ? "bg-[#61C1C4]/10 text-[#61C1C4]"
+                : "text-[#666] hover:bg-white/[0.04] hover:text-[#aaa]"
+            }`}
+          >
+            <HeartPulse className="h-3 w-3 shrink-0" />
+            Heartbeat
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SidebarNav({
   isAdmin,
   signalsUnread,
@@ -254,7 +282,7 @@ function SidebarNav({
       <MemoryNavItem onClick={onLinkClick} />
       <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
       <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
-      <SurfaceLink path="/admin/agents"    label="Seats"                   icon={Bot} onClick={onLinkClick} />
+      <SeatsNavItem onClick={onLinkClick} />
       <AutopilotNavGroup onLinkClick={onLinkClick} />
       <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
       {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
