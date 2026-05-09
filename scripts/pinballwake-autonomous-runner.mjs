@@ -154,6 +154,35 @@ function firstPresentObject(...values) {
   return null;
 }
 
+function parseLabeledJsonObjectFromText(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const label = String.raw`(?:scope[_ -]?pack|scopepack|runner[_ -]?scope|autonomous[_ -]?scope|coding[_ -]?room[_ -]?scope)`;
+  const fencedPatterns = [
+    new RegExp(String.raw`(?:^|\n)\s*${label}\s*:?\s*\r?\n\s*` + "```(?:json)?\\s*([\\s\\S]*?)```", "gi"),
+    new RegExp(String.raw`(?:^|\n)\s*${label}\s*:\s*` + "```(?:json)?\\s*([\\s\\S]*?)```", "gi"),
+    /<scope_pack>\s*([\s\S]*?)\s*<\/scope_pack>/gi,
+  ];
+
+  for (const pattern of fencedPatterns) {
+    let match;
+    while ((match = pattern.exec(text))) {
+      const parsed = parseJsonObject(match[1]);
+      if (parsed) return parsed;
+    }
+  }
+
+  const inlinePattern = new RegExp(String.raw`(?:^|\n)\s*${label}\s*:\s*(\{[^\r\n]*\})`, "gi");
+  let match;
+  while ((match = inlinePattern.exec(text))) {
+    const parsed = parseJsonObject(match[1]);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
 function listFromUnknown(value) {
   if (Array.isArray(value)) {
     return value.map((item) => normalizePath(item)).filter(Boolean);
@@ -177,6 +206,9 @@ function extractBoardroomTodoScopePack(todo = {}) {
     todo.autonomousScope,
     todo.coding_room_scope,
     todo.codingRoomScope,
+    parseLabeledJsonObjectFromText(todo.description),
+    parseLabeledJsonObjectFromText(todo.body),
+    parseLabeledJsonObjectFromText(todo.notes),
   );
 
   if (!scope) {

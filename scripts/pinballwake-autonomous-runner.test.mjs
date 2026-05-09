@@ -161,6 +161,77 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("imports a ScopePack embedded in an UnClick todo description", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const scopePack = {
+        owned_files: ["docs/autonomous-runner-scopepack.md"],
+        patch: "diff --git a/docs/autonomous-runner-scopepack.md b/docs/autonomous-runner-scopepack.md\n--- a/docs/autonomous-runner-scopepack.md\n+++ b/docs/autonomous-runner-scopepack.md\n@@ -1 +1 @@\n-old\n+new\n",
+        tests: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
+      };
+
+      const fetchImpl = async () => ({
+        ok: true,
+        async json() {
+          return {
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    todos: [
+                      {
+                        id: "todo-description-scopepack",
+                        title: "Document autonomous runner ScopePack parsing",
+                        status: "open",
+                        priority: "high",
+                        assigned_to_agent_id: null,
+                        description: [
+                          "Small safe implementation chip.",
+                          "ScopePack:",
+                          "```json",
+                          JSON.stringify(scopePack, null, 2),
+                          "```",
+                        ].join("\n"),
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          };
+        },
+      });
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "dry-run",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-09T10:30:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "claimed");
+      assert.equal(result.persisted, false);
+      assert.equal(result.queue_source.imported, 1);
+      assert.deepEqual(result.ledger.jobs[0].owned_files, ["docs/autonomous-runner-scopepack.md"]);
+      assert.match(result.ledger.jobs[0].build.patch, /docs\/autonomous-runner-scopepack\.md/);
+      assert.deepEqual(result.ledger.jobs[0].expected_proof.tests, [
+        "node --test scripts/pinballwake-autonomous-runner.test.mjs",
+      ]);
+      assert.match(result.ledger.jobs[0].context, /scopepack=present/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("does not pretend the queue is empty when UnClick queue auth is missing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
