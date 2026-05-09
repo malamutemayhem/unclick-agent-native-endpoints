@@ -142,3 +142,13 @@ jurisdiction-resolver, consent-ledger.
 Pricing experiments, marketplace economics, Phase 2 jurisdictions,
 Phase 2 hats (5 through 12), and the full bar-rule mapping per
 jurisdiction are covered in the long brief.
+
+## 12. Phase-1 package scaffold
+
+Chunk 1 keeps the code surface intentionally narrow:
+
+- `schema.ts` defines the advisory report, evidence, finding, hat, fixture document, and GEOPass adapter shapes for the three public-safe MVP hats.
+- `hat-library.ts` defines deterministic fixture checks for Privacy Policy, ToS and Unfair Terms, and OSS Licence.
+- `verdict-pack.ts` can emit a plan-only pack or evaluate public fixture text without live crawling, private uploads, production rows, paid calls, or legal instructions.
+
+Every report carries the issue-spotter disclaimer and stays framed as review input for a qualified practitioner.

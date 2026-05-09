@@ -7,6 +7,9 @@
 // for a qualified practitioner. See docs/legalpass-product-brief.md.
 
 export * from "./pack-schema.js";
+export * from "./schema.js";
+export * from "./hat-library.js";
+export * from "./verdict-pack.js";
 export type * from "./types.js";
 export {
   LEGALPASS_TOOLS,
