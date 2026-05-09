@@ -6,6 +6,7 @@ import {
   createCodingRoomJobLedger,
   runnerCanClaimCodingRoomJob,
 } from "./pinballwake-coding-room.mjs";
+import { evaluateAutoPilotKitLiveness } from "./lib/autopilotkit-liveness.mjs";
 import { DEFAULT_CODING_ROOM_RUNNER, createCodingRoomRunner } from "./pinballwake-coding-room-runner.mjs";
 
 export const DEFAULT_JOBS_WORKER = {
@@ -272,12 +273,42 @@ function countsBy(items, key) {
   }, {});
 }
 
+function evaluateAutoPilotKitSnapshot({
+  autopilotKit,
+  workerProfiles = [],
+  livenessMessages = [],
+  now,
+} = {}) {
+  const profiles = safeList(autopilotKit?.profiles ?? workerProfiles);
+  const messages = safeList(autopilotKit?.messages ?? livenessMessages);
+  if (profiles.length === 0 && messages.length === 0) return null;
+  return evaluateAutoPilotKitLiveness({
+    ...(autopilotKit || {}),
+    now: autopilotKit?.now || now,
+    profiles,
+    messages,
+  });
+}
+
+function jobsAdviceFromSnapshot(snapshot) {
+  const advice = snapshot?.adapter_examples?.jobs_manager;
+  if (!advice || safeList(advice.reason_codes).length === 0) return null;
+  return {
+    ...advice,
+    safe_mode: snapshot.safe_mode,
+    generated_at: snapshot.generated_at,
+  };
+}
+
 export function evaluateJobsRoom({
   ledger,
   jobs,
   runner = DEFAULT_CODING_ROOM_RUNNER,
   now = new Date().toISOString(),
   limit = 5,
+  autopilotKit = null,
+  workerProfiles = [],
+  livenessMessages = [],
 } = {}) {
   const safeLedger = createCodingRoomJobLedger({
     jobs: jobs || ledger?.jobs || [],
@@ -290,8 +321,10 @@ export function evaluateJobsRoom({
 
   const actionable = decisions.filter((decision) => decision.priority > 0 && decision.next_action !== "none");
   const top = actionable.slice(0, limit);
+  const autopilotKitSnapshot = evaluateAutoPilotKitSnapshot({ autopilotKit, workerProfiles, livenessMessages, now });
+  const autopilotkitJobsAdvice = jobsAdviceFromSnapshot(autopilotKitSnapshot);
 
-  return {
+  const result = {
     ok: true,
     action: "jobs_room",
     result: actionable.length ? "todos" : "idle",
@@ -302,6 +335,8 @@ export function evaluateJobsRoom({
     todos: top,
     packets: top.map((decision) => decision.packet).filter(Boolean),
   };
+
+  return autopilotkitJobsAdvice ? { ...result, autopilotkit_jobs_advice: autopilotkitJobsAdvice } : result;
 }
 
 export async function readJobsRoomInput(filePath) {

@@ -210,5 +210,28 @@ describe("PinballWake Jobs Room", () => {
     assert.equal(result.result, "idle");
     assert.equal(result.reason, "no_actionable_jobs");
     assert.equal(result.packets.length, 0);
+    assert.equal(result.autopilotkit_jobs_advice, undefined);
+  });
+
+  it("adds advisory AutoPilotKit Jobs Manager output for dormant coordination context", () => {
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({ jobs: [codeJob({ status: "done" })] }),
+      runner: builder,
+      now: "2026-05-09T22:59:17.000Z",
+      workerProfiles: [
+        {
+          agent_id: "master",
+          display_name: "Master Coordinator",
+          user_agent_hint: "unclick-master/coordinator",
+          last_seen_at: "2026-05-06T03:59:07.640Z",
+        },
+      ],
+    });
+
+    assert.equal(result.result, "idle");
+    assert.equal(result.autopilotkit_jobs_advice.execute, false);
+    assert(result.autopilotkit_jobs_advice.reason_codes.includes("coordinator_fallback_needed"));
+    assert(result.autopilotkit_jobs_advice.stale_agent_ids.includes("master"));
+    assert.equal(result.autopilotkit_jobs_advice.safe_mode.no_secret_access, true);
   });
 });

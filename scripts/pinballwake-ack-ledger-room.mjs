@@ -2,6 +2,8 @@
 
 import { readFile } from "node:fs/promises";
 
+import { evaluateAutoPilotKitLiveness } from "./lib/autopilotkit-liveness.mjs";
+
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
   const found = process.argv.find((arg) => arg.startsWith(prefix));
@@ -231,6 +233,37 @@ function latestClaimsByReviewer(claims = []) {
   return latest;
 }
 
+function evaluateAutoPilotKitSnapshot({
+  autopilotKit,
+  workerProfiles = [],
+  livenessMessages = [],
+  now,
+} = {}) {
+  const profiles = safeList(autopilotKit?.profiles ?? workerProfiles);
+  const messages = safeList(autopilotKit?.messages ?? livenessMessages);
+  if (profiles.length === 0 && messages.length === 0) return null;
+  return evaluateAutoPilotKitLiveness({
+    ...(autopilotKit || {}),
+    now: autopilotKit?.now || now,
+    profiles,
+    messages,
+  });
+}
+
+function reviewAdviceFromSnapshot(snapshot) {
+  const advice = snapshot?.adapter_examples?.review_coordinator;
+  if (!advice || safeList(advice.reason_codes).length === 0) return null;
+  return {
+    ...advice,
+    safe_mode: snapshot.safe_mode,
+    generated_at: snapshot.generated_at,
+  };
+}
+
+function withReviewAdvice(result, advice) {
+  return advice ? { ...result, autopilotkit_review_advice: advice } : result;
+}
+
 export function evaluateAckLedgerRoom({
   pr,
   comments = [],
@@ -238,6 +271,10 @@ export function evaluateAckLedgerRoom({
   messages = [],
   reviews = [],
   requiredReviewers = ["gatekeeper", "popcorn", "forge"],
+  autopilotKit = null,
+  workerProfiles = [],
+  livenessMessages = [],
+  now,
 } = {}) {
   const number = prNumber(pr);
   if (!number) {
@@ -258,9 +295,11 @@ export function evaluateAckLedgerRoom({
     .filter((claim) => claim?.verdict === "BLOCKER");
   const missing_reviewers = required.filter((reviewer) => latest_by_reviewer[reviewer]?.verdict !== "PASS");
   const full_ack_set = blockers.length === 0 && missing_reviewers.length === 0;
+  const autopilotKitSnapshot = evaluateAutoPilotKitSnapshot({ autopilotKit, workerProfiles, livenessMessages, now });
+  const autopilotKitReviewAdvice = reviewAdviceFromSnapshot(autopilotKitSnapshot);
 
   if (blockers.length > 0) {
-    return {
+    return withReviewAdvice({
       ok: false,
       action: "ack_ledger_room",
       result: "blocked",
@@ -271,11 +310,11 @@ export function evaluateAckLedgerRoom({
       blockers,
       missing_reviewers,
       latest_by_reviewer,
-    };
+    }, autopilotKitReviewAdvice);
   }
 
   if (!full_ack_set) {
-    return {
+    return withReviewAdvice({
       ok: true,
       action: "ack_ledger_room",
       result: "missing_ack",
@@ -293,7 +332,7 @@ export function evaluateAckLedgerRoom({
         deadline: "next heartbeat",
         ack: "done/blocker",
       },
-    };
+    }, autopilotKitReviewAdvice);
   }
 
   return {

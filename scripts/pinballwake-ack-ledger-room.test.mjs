@@ -261,6 +261,39 @@ describe("PinballWake ACK ledger room", () => {
     assert.equal(result.blockers[0].reviewer, "gatekeeper");
   });
 
+  it("adds advisory AutoPilotKit review reroute output when ACK is missing", () => {
+    const result = evaluateAckLedgerRoom({
+      pr: pr(),
+      comments: [
+        comment("Gatekeeper PASS on #528.", "2026-05-05T00:00:00.000Z", "gatekeeper"),
+        comment("Forge PASS on #528.", "2026-05-05T00:00:00.000Z", "forge"),
+      ],
+      now: "2026-05-09T22:59:17.000Z",
+      workerProfiles: [
+        {
+          agent_id: "claude-cowork-seat",
+          display_name: "Reviewer Seat",
+          current_status: "ACKed PR #528 wake; actual diff pass deferred",
+          last_seen_at: "2026-05-09T22:50:00.000Z",
+          current_status_updated_at: "2026-05-09T22:50:00.000Z",
+        },
+      ],
+      livenessMessages: [
+        {
+          id: "wake-528",
+          tags: ["wakepass", "reroute"],
+          text: "WakePass auto-reroute. Reason: missed ACK for Review Coordinator.",
+        },
+      ],
+    });
+
+    assert.equal(result.result, "missing_ack");
+    assert.equal(result.autopilotkit_review_advice.execute, false);
+    assert(result.autopilotkit_review_advice.reason_codes.includes("missed_ack_reroute_detected"));
+    assert(result.autopilotkit_review_advice.reason_codes.includes("deferred_review_or_ack_only"));
+    assert.equal(result.autopilotkit_review_advice.safe_mode.no_merge_or_claim, true);
+  });
+
   it("accepts explicitly trusted structured lane ACK records", () => {
     const result = evaluateAckLedgerRoom({
       pr: pr(),
