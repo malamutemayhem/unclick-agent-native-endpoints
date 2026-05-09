@@ -461,6 +461,81 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("blocks stale assigned UnClick todo claims before syncing ownership", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const calls = [];
+      const fetchImpl = async (_url, init = {}) => {
+        calls.push({ body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-stale-scoped-1",
+                            title: "Scoped but stale runner chip",
+                            status: "in_progress",
+                            priority: "urgent",
+                            assigned_to_agent_id: "old-worker",
+                            actionability_reason: "stale_in_progress",
+                            created_at: "2026-05-08T05:00:00.000Z",
+                            updated_at: "2026-05-08T05:05:00.000Z",
+                            scope_pack: {
+                              owned_files: ["docs/stale-scoped-chip.md"],
+                              patch: "diff --git a/docs/stale-scoped-chip.md b/docs/stale-scoped-chip.md\n--- a/docs/stale-scoped-chip.md\n+++ b/docs/stale-scoped-chip.md\n@@ -1 +1 @@\n-old\n+new\n",
+                              tests: [],
+                            },
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-09T12:35:00.000Z",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "blocked");
+      assert.equal(result.reason, "todo_claim_sync_failed");
+      assert.equal(result.todo_claim_sync.reason, "claim_source_state_mismatch");
+      assert.equal(result.todo_claim_sync.detail, "boardroom_todo_not_open");
+      assert.equal(result.todo_claim_sync.source_status, "in_progress");
+      assert.deepEqual(calls.map((call) => call.body.params.name), ["list_actionable_todos"]);
+
+      const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
+      assert.equal(persisted.jobs.length, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("reopens stale unscoped UnClick todos for scoping instead of idling forever", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");

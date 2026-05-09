@@ -120,6 +120,7 @@ export function createCodingRoomJob(input = {}) {
         worker: input.worker,
       }),
     source: compactText(input.source || "manual", 80),
+    source_state: input.sourceState || input.source_state || null,
     pr_number: input.prNumber ?? null,
     worker: compactText(input.worker || "", 80),
     chip: compactText(input.chip || "", 180),

@@ -402,6 +402,29 @@ function boardroomClaimAgentId(runner = {}) {
   return safeRunner.agent_id || safeRunner.id || DEFAULT_AUTONOMOUS_RUNNER.id;
 }
 
+function validateBoardroomClaimSourceState(job = {}) {
+  const state = job?.source_state || {};
+  if (!state || typeof state !== "object") {
+    return { ok: false, reason: "missing_boardroom_claim_source_state" };
+  }
+
+  const sourceStatus = String(state.status || "").trim();
+  if (sourceStatus !== "open") {
+    return { ok: false, reason: "boardroom_todo_not_open", source_status: sourceStatus || null };
+  }
+
+  const sourceAssignee = String(state.assigned_to_agent_id || "").trim();
+  if (sourceAssignee) {
+    return {
+      ok: false,
+      reason: "boardroom_todo_already_assigned",
+      source_assigned_to_agent_id: sourceAssignee,
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function syncClaimedBoardroomTodoToUnClick({
   job,
   runner = DEFAULT_AUTONOMOUS_RUNNER,
@@ -415,6 +438,18 @@ export async function syncClaimedBoardroomTodoToUnClick({
   }
 
   const agentId = boardroomClaimAgentId(runner);
+  const sourceState = validateBoardroomClaimSourceState(job);
+  if (!sourceState.ok) {
+    return {
+      ok: false,
+      reason: "claim_source_state_mismatch",
+      todo_id: todoId,
+      detail: sourceState.reason,
+      source_status: sourceState.source_status ?? null,
+      source_assigned_to_agent_id: sourceState.source_assigned_to_agent_id ?? null,
+    };
+  }
+
   const update = await callUnClickMcpTool({
     mcpUrl,
     apiKey,
@@ -587,6 +622,13 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
   return createCodingRoomJob({
     jobId: stableTodoJobId(todo),
     source: "unclick-boardroom-actionable-todo",
+    sourceState: {
+      todo_id: id || null,
+      status: todo.status || null,
+      assigned_to_agent_id: todo.assigned_to_agent_id || null,
+      actionability_reason: todo.actionability_reason || null,
+      updated_at: todo.updated_at || null,
+    },
     worker: assignee || "builder",
     chip: title,
     context: `${contextParts.join("; ")}. Imported for autonomous claim/routing; claim only when a ScopePack names owned files and an executable patch.`,
