@@ -6,6 +6,9 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./schema": "./dist/schema.js",
+    "./hat-library": "./dist/hat-library.js",
+    "./verdict-pack": "./dist/verdict-pack.js",
     "./types": "./dist/types.js",
     "./tools": "./dist/tools/index.js",
     "./passguard/verdict-linter": "./dist/passguard/verdict-linter.js",
@@ -13,6 +16,7 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
