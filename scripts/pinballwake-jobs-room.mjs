@@ -8,6 +8,20 @@ import {
 } from "./pinballwake-coding-room.mjs";
 import { DEFAULT_CODING_ROOM_RUNNER, createCodingRoomRunner } from "./pinballwake-coding-room-runner.mjs";
 
+export const DEFAULT_JOBS_WORKER = {
+  id: "pinballwake-jobs-worker",
+  name: "PinballWake Jobs Worker",
+  emoji: "📋",
+  readiness: "context_only",
+  capabilities: ["queue_management", "status_relay"],
+};
+
+const JOBS_WORKER_REASONS = new Set([
+  "boardroom_todo_missing_scopepack",
+  "missing_owned_files",
+  "owned_file_overlap",
+]);
+
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
   const found = process.argv.find((arg) => arg.startsWith(prefix));
@@ -53,15 +67,34 @@ function requestedWorker(job = {}) {
   return compactText(job.worker || "forge", 80);
 }
 
-function packetFor(job, nextAction, context, expectedProof, deadline = "next heartbeat") {
+function packetFor(job, nextAction, context, expectedProof, deadline = "next heartbeat", worker = requestedWorker(job)) {
   return {
-    worker: requestedWorker(job),
+    worker,
     chip: jobLabel(job),
     context: compactText(context || job.context || job.job_id),
     expected_proof: expectedProof,
     deadline,
     ack: "done/blocker",
   };
+}
+
+function jobsWorkerPacketFor(job, nextAction, reason, deadline = "next heartbeat") {
+  const sourceState = job.source_state || {};
+  const sourceText = sourceState.todo_id ? `Boardroom todo ${sourceState.todo_id}.` : "";
+  const overlapText = reason.file ? ` Overlap: ${reason.file}.` : "";
+  return packetFor(
+    job,
+    nextAction,
+    [
+      sourceText,
+      `Prepare this Job for PinballWake before a Builder claims it. Reason: ${reason.reason}.`,
+      overlapText,
+      "Add a narrow ScopePack comment with owned files, proof/tests, stop conditions, and whether the stale owner should be released.",
+    ].join(" "),
+    "Post one scoped Jobs comment or release/reroute receipt; do not edit product code.",
+    deadline,
+    DEFAULT_JOBS_WORKER.id,
+  );
 }
 
 function classifyJob({ job, ledger, runner, now }) {
@@ -94,6 +127,20 @@ function classifyJob({ job, ledger, runner, now }) {
             ? "Reply PASS/BLOCKER with latest-head proof."
             : "Claim the job, build only owned files, run listed proof, and report done/blocker.",
         ),
+      };
+    }
+
+    if (JOBS_WORKER_REASONS.has(claim.reason)) {
+      const action = claim.reason === "owned_file_overlap" ? "resolve_job_overlap" : "prepare_scopepack";
+      return {
+        job_id: job.job_id,
+        status: job.status,
+        job_type: type,
+        next_action: action,
+        priority: action === "resolve_job_overlap" ? 88 : 87,
+        reason: claim.reason,
+        file: claim.file || null,
+        packet: jobsWorkerPacketFor(job, action, claim, "next Jobs Worker pulse"),
       };
     }
 

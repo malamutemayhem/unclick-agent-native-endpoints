@@ -29,6 +29,7 @@ const qcRunner = {
 function codeJob(input = {}) {
   return createCodingRoomJob({
     jobId: input.jobId || "jobs-room:code",
+    source: input.source,
     prNumber: 528,
     worker: input.worker || "forge",
     chip: input.chip || "Jobs Room code chip",
@@ -83,6 +84,57 @@ describe("PinballWake Jobs Room", () => {
     assert.equal(result.next.priority, 80);
     assert.equal(result.packets[0].worker, "forge");
     assert.match(result.packets[0].expected_proof, /Claim the job/);
+  });
+
+  it("routes unscoped Boardroom jobs to the Jobs Worker before PinballWake builds", () => {
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({
+        jobs: [
+          codeJob({
+            jobId: "boardroom-todo:todo-missing-scope",
+            source: "unclick-boardroom-actionable-todo",
+            chip: "Stale vague Job needs a ScopePack",
+            files: [],
+            status: "queued",
+          }),
+        ],
+      }),
+      runner: builder,
+      now: "2026-05-04T00:01:00.000Z",
+    });
+
+    assert.equal(result.next.next_action, "prepare_scopepack");
+    assert.equal(result.next.priority, 87);
+    assert.equal(result.packets[0].worker, "pinballwake-jobs-worker");
+    assert.match(result.packets[0].context, /Prepare this Job for PinballWake/);
+    assert.match(result.packets[0].expected_proof, /scoped Jobs comment/);
+  });
+
+  it("routes owned-file overlaps to the Jobs Worker instead of a Builder", () => {
+    const active = claimCodingRoomJob({
+      runner: builder,
+      job: codeJob({ jobId: "jobs-room:active-overlap" }),
+      now: "2026-05-04T00:00:00.000Z",
+    }).job;
+
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({
+        jobs: [
+          active,
+          codeJob({
+            jobId: "jobs-room:queued-overlap",
+            chip: "Overlapping chip",
+          }),
+        ],
+      }),
+      runner: builder,
+      now: "2026-05-04T00:01:00.000Z",
+    });
+
+    assert.equal(result.next.next_action, "resolve_job_overlap");
+    assert.equal(result.next.priority, 88);
+    assert.equal(result.packets[0].worker, "pinballwake-jobs-worker");
+    assert.match(result.packets[0].context, /Overlap: scripts\/pinballwake-jobs-room\.mjs/);
   });
 
   it("turns queued review jobs into reviewer todos only for matching reviewer", () => {

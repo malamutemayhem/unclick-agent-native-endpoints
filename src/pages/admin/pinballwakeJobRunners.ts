@@ -16,6 +16,7 @@ export type PinballWakeRunnerReadiness =
 
 export type PinballWakeJobKind =
   | "implementation"
+  | "queue_management"
   | "owner_decision"
   | "qc_review"
   | "merge_proof"
@@ -43,6 +44,19 @@ export interface PinballWakeJobRequest {
 }
 
 export const PINBALLWAKE_JOB_RUNNERS: PinballWakeJobRunner[] = [
+  {
+    id: "jobs-worker",
+    emoji: "📋",
+    name: "Jobs Worker",
+    kind: "local-runner",
+    host: "PinballWake Jobs lane",
+    readiness: "context_only",
+    capabilities: ["queue_management", "owner_decision", "status_relay"],
+    safeFor: ["jobs", "queue", "scopepack", "stale jobs", "boardroom", "pinballwake"],
+    notFor: ["product code", "branch edits", "merge execution", "secrets", "billing", "domains", "migrations"],
+    proof: "Keeps Jobs runnable by preparing ScopePacks, releasing stale claims, and reducing duplicate queue noise.",
+    nextProbe: "Use before PinballWake builder runs when a Job is stale, vague, duplicated, or missing a ScopePack.",
+  },
   {
     id: "coordinator-codex-desktop",
     emoji: "🧭",

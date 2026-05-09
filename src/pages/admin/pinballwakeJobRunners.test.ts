@@ -54,6 +54,19 @@ describe("PinballWake job runners", () => {
     expect(runner?.id).toBe("tester-product-context");
   });
 
+  it("routes Jobs queue cleanup to the Jobs Worker before builders", () => {
+    const runner = choosePinballWakeJobRunner({
+      kind: "queue_management",
+      lane: "jobs stale queue scopepack",
+      title: "Prepare stale Jobs for PinballWake",
+      requiresCode: false,
+    });
+
+    expect(runner?.id).toBe("jobs-worker");
+    expect(runner?.capabilities).toContain("queue_management");
+    expect(runner?.notFor).toContain("product code");
+  });
+
   it("summarizes runnable hands separately from probes", () => {
     const summary = summarizePinballWakeJobRunners();
 
