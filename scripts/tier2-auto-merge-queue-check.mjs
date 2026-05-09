@@ -92,6 +92,25 @@ function safePrSummary(pr = {}) {
   };
 }
 
+function auditReasons(summary = {}) {
+  const reasons = [];
+  if (summary.isDraft) reasons.push("draft");
+  if (summary.mergeStateStatus !== "CLEAN") {
+    reasons.push(`merge_state_${String(summary.mergeStateStatus || "UNKNOWN").toLowerCase()}`);
+  }
+  if (summary.risk_level !== "low") {
+    reasons.push(`risk_${summary.risk_level || "unknown"}`);
+  }
+  for (const reason of summary.risk_reasons || []) {
+    if (!reasons.includes(reason)) reasons.push(reason);
+  }
+  return reasons;
+}
+
+function auditKey(summary = {}, index = 0) {
+  return summary.number ? `#${summary.number}` : `unknown-${index + 1}`;
+}
+
 export function evaluateTier2AutoMergeQueue({ prs = [], now = new Date().toISOString() } = {}) {
   const openPrs = Array.isArray(prs) ? prs : [];
   const summaries = openPrs.map(safePrSummary);
@@ -105,14 +124,30 @@ export function evaluateTier2AutoMergeQueue({ prs = [], now = new Date().toISOSt
       open_pr_count: 0,
       safe_to_merge_count: 0,
       execute: false,
+      no_execute_reason: "audit_only_no_merge_execution",
       low_risk_count: 0,
+      candidate_count: 0,
+      candidate_pr_numbers: [],
+      blocked_prs: [],
+      blocked_reasons_by_pr: {},
       summaries: [],
     };
   }
 
-  const lowRiskCount = summaries.filter((summary) =>
-    !summary.isDraft && summary.mergeStateStatus === "CLEAN" && summary.risk_level === "low",
-  ).length;
+  const candidates = [];
+  const blockedPrs = [];
+  const blockedReasonsByPr = {};
+
+  for (const [index, summary] of summaries.entries()) {
+    const reasons = auditReasons(summary);
+    if (reasons.length === 0) {
+      candidates.push(summary);
+      continue;
+    }
+    const key = auditKey(summary, index);
+    blockedPrs.push({ number: summary.number, reasons });
+    blockedReasonsByPr[key] = reasons;
+  }
 
   return {
     ok: true,
@@ -123,7 +158,12 @@ export function evaluateTier2AutoMergeQueue({ prs = [], now = new Date().toISOSt
     open_pr_count: openPrs.length,
     safe_to_merge_count: 0,
     execute: false,
-    low_risk_count: lowRiskCount,
+    no_execute_reason: "audit_only_no_merge_execution",
+    low_risk_count: candidates.length,
+    candidate_count: candidates.length,
+    candidate_pr_numbers: candidates.map((summary) => summary.number).filter(Number.isFinite),
+    blocked_prs: blockedPrs,
+    blocked_reasons_by_pr: blockedReasonsByPr,
     summaries,
   };
 }
