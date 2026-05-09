@@ -5,7 +5,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
+  GitPullRequest,
   GripVertical,
   Loader2,
   MessageSquare,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/auth";
 import Comments from "./fishbowl/Comments";
+import { buildJobGithubSyncSignal, type JobGithubSyncSignal } from "./jobsGithubSync";
 
 interface FishbowlProfile {
   agent_id: string;
@@ -108,11 +111,12 @@ const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
 const TITLE_MAX_CHARS = 90;
 
 const JOB_ROW_GRID =
-  "md:grid md:grid-cols-[48px_minmax(360px,1.25fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(200px,0.55fr)_30px_18px] md:items-center md:gap-1.5";
+  "md:grid md:grid-cols-[48px_minmax(320px,1.2fr)_48px_58px_minmax(96px,0.35fr)_40px_minmax(190px,0.5fr)_78px_30px_18px] md:items-center md:gap-1.5";
 
 interface JobDisplayCopy {
   title: string;
   summary: string;
+  context: string;
 }
 
 function compactTitle(title: string): string {
@@ -161,16 +165,8 @@ function simplifyJobTitle(title: string): string {
   return compactTitle(cleaned || title);
 }
 
-function simplifyJobSummary(todo: JobTodo): string {
-  const rawDescription = todo.description?.trim();
-  const source = rawDescription && rawDescription.length > 0 ? rawDescription : todo.title;
-  const firstUsefulLine =
-    source
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^[-*#>\s]+/, "").trim())
-      .find((line) => line.length > 0 && !/^https?:\/\//i.test(line)) ?? source;
-
-  const cleaned = stripNoisyLead(firstUsefulLine)
+function cleanJobCopy(value: string): string {
+  return stripNoisyLead(value)
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\[[^\]]+\]\([^)]+\)/g, "")
@@ -180,14 +176,35 @@ function simplifyJobSummary(todo: JobTodo): string {
     .replace(/\bunclick\b/gi, "UnClick")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function usefulJobLines(todo: JobTodo): string[] {
+  const rawDescription = todo.description?.trim();
+  const source = rawDescription && rawDescription.length > 0 ? rawDescription : todo.title;
+  return source
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*#>\s]+/, "").trim())
+    .filter((line) => line.length > 0 && !/^https?:\/\//i.test(line));
+}
+
+function simplifyJobSummary(todo: JobTodo): string {
+  const firstUsefulLine = usefulJobLines(todo)[0] ?? todo.title;
+  const cleaned = cleanJobCopy(firstUsefulLine);
 
   return trimSentence(cleaned || simplifyJobTitle(todo.title), 130);
+}
+
+function simplifyJobContext(todo: JobTodo): string {
+  const usefulLines = usefulJobLines(todo);
+  const cleaned = cleanJobCopy(usefulLines.join(" ") || todo.title);
+  return cleaned || simplifyJobTitle(todo.title);
 }
 
 function displayCopyFor(todo: JobTodo): JobDisplayCopy {
   return {
     title: simplifyJobTitle(todo.title),
     summary: simplifyJobSummary(todo),
+    context: simplifyJobContext(todo),
   };
 }
 
@@ -279,6 +296,44 @@ function StageStrip({ todo }: { todo: JobTodo }) {
         ))}
       </div>
     </div>
+  );
+}
+
+const SYNC_SIGNAL_STYLE: Record<JobGithubSyncSignal["tone"], string> = {
+  quiet: "border-white/[0.08] bg-white/[0.025] text-white/40",
+  linked: "border-[#61C1C4]/30 bg-[#61C1C4]/10 text-[#8EE8EB]",
+  done: "border-green-400/25 bg-green-400/10 text-green-300",
+  alert: "border-red-300/30 bg-red-500/10 text-red-200",
+};
+
+function SyncSignalPill({ signal }: { signal: JobGithubSyncSignal }) {
+  const content = (
+    <>
+      <GitPullRequest className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 truncate">{signal.label}</span>
+      {signal.href && <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden="true" />}
+    </>
+  );
+  const className = `inline-flex max-w-[78px] items-center gap-1 rounded-[4px] border px-1 py-px text-[9px] font-semibold ${SYNC_SIGNAL_STYLE[signal.tone]}`;
+
+  if (signal.href) {
+    return (
+      <a
+        href={signal.href}
+        target="_blank"
+        rel="noreferrer"
+        className={`${className} hover:border-[#61C1C4]/45 hover:bg-[#61C1C4]/15`}
+        title={signal.detail}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <span className={className} title={signal.detail}>
+      {content}
+    </span>
   );
 }
 
@@ -557,6 +612,7 @@ function JobRow({
   const alert = attention ? attentionCopy(todo) : null;
   const emoji = ownerEmoji(todo);
   const displayCopy = displayCopyFor(todo);
+  const syncSignal = buildJobGithubSyncSignal(todo);
 
   return (
     <li
@@ -655,6 +711,7 @@ function JobRow({
           <span className="text-[11px] font-medium text-white/55">
             <StageStrip todo={todo} />
           </span>
+          <SyncSignalPill signal={syncSignal} />
           <span className="flex items-center gap-0.5 text-[11px] text-white/45">
             <MessageSquare className="h-3 w-3" />
             {todo.comment_count ?? 0}
@@ -685,7 +742,7 @@ function JobRow({
               <span className="text-red-100/45">Fallback: {alert.actions.join(" / ")}</span>
             </div>
           )}
-          <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-4">
+          <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-5">
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Created</span>
               <span>{relativeTime(todo.created_at)}</span>
@@ -703,6 +760,12 @@ function JobRow({
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Pipeline</span>
               <StageStrip todo={todo} />
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase tracking-wide text-white/30">Proof</span>
+              <div className="mt-0.5">
+                <SyncSignalPill signal={syncSignal} />
+              </div>
             </div>
           </div>
 
@@ -722,7 +785,7 @@ function JobRow({
             </div>
             <div className="mt-2 space-y-1.5">
               <p className="text-xs font-medium text-white/70">{displayCopy.title}</p>
-              <p className="text-xs leading-5 text-white/50">{displayCopy.summary}</p>
+              <p className="text-xs leading-5 text-white/50">{displayCopy.context}</p>
             </div>
             {showDetails && (
               <div className="mt-3 rounded-[5px] border border-white/[0.05] bg-black/20 p-2">
@@ -891,6 +954,7 @@ function JobSection({
             <SortHeader label="Worker" value="worker" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="Live" value="live" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <SortHeader label="Progress" value="progress" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
+            <span>Proof</span>
             <SortHeader label="Notes" value="notes" sortKey={sortKey} sortDirection={sortDirection} onSort={setSort} />
             <span className="text-right">!</span>
           </li>
@@ -1153,11 +1217,11 @@ export default function AdminJobs() {
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-3 inline-flex items-center rounded-full border border-[#61C1C4]/30 bg-[#61C1C4]/10 px-3 py-1 text-xs font-medium text-[#61C1C4]">
-            Jobs source of truth
+            Work board
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white">Jobs</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-            One work list for active, next, queued, and completed UnClick jobs.
+            One work list for active, next, queued, and completed jobs. GitHub and deployment links appear as proof when code work moves.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">

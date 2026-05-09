@@ -11,6 +11,8 @@ const TODO_REFERENCE_RE = new RegExp(
 );
 
 const NO_TODO_RE = /^no-todo:\s*(\S.*)$/gim;
+const PR_URL_RE = /github\.com\/[^\s/)]+\/[^\s/)]+\/pull\/(\d+)/gi;
+const PR_NUMBER_RE = /\bPR\s*#(\d{1,7})\b/gi;
 
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -48,6 +50,23 @@ function prText(pr = {}) {
       commit.commit?.message,
     ]),
   ).join("\n");
+}
+
+function todoText(todo = {}) {
+  return textParts(
+    todo.title,
+    todo.description,
+    todo.pipeline_evidence,
+    todo.pipelineEvidence,
+  ).join("\n");
+}
+
+export function extractPullRequestNumbers(...parts) {
+  const text = textParts(...parts).join("\n");
+  const numbers = new Set();
+  for (const match of text.matchAll(PR_URL_RE)) numbers.add(Number(match[1]));
+  for (const match of text.matchAll(PR_NUMBER_RE)) numbers.add(Number(match[1]));
+  return [...numbers].filter(Number.isFinite).sort((a, b) => a - b);
 }
 
 export function extractTodoReferenceIds(...parts) {
@@ -162,6 +181,118 @@ export function buildInProgressReconciliationPlan({
   };
 }
 
+export function buildJobsGithubSyncPlan({
+  todos = [],
+  pullRequests = [],
+} = {}) {
+  const safeTodos = Array.isArray(todos) ? todos : [];
+  const safePrs = Array.isArray(pullRequests) ? pullRequests : [];
+  const todoById = new Map(
+    safeTodos
+      .map((todo) => [String(todo?.id ?? "").toLowerCase(), todo])
+      .filter(([id]) => id),
+  );
+  const prByNumber = new Map(
+    safePrs
+      .map((pr) => [Number(pr?.number ?? pr?.pr_number), pr])
+      .filter(([number]) => Number.isFinite(number)),
+  );
+  const prsByTodo = new Map();
+  const issues = [];
+  const linked = [];
+
+  for (const pr of safePrs) {
+    const number = Number(pr?.number ?? pr?.pr_number);
+    if (!Number.isFinite(number)) continue;
+
+    const text = prText(pr);
+    const todoIds = extractTodoReferenceIds(text);
+    const noTodoReason = findNoTodoReason(text);
+
+    if (todoIds.length === 0 && !noTodoReason) {
+      issues.push({
+        kind: "pr_needs_job_link",
+        severity: "high",
+        pr_number: number,
+        message: `PR #${number} is not linked to an UnClick Job.`,
+        next: "Add `Closes UnClick todo: <job id>` to the PR body, or add `no-todo: <reason>` for tiny safe changes.",
+      });
+      continue;
+    }
+
+    for (const todoId of todoIds) {
+      const list = prsByTodo.get(todoId) ?? [];
+      list.push(number);
+      prsByTodo.set(todoId, list);
+
+      if (!todoById.has(todoId)) {
+        issues.push({
+          kind: "pr_points_to_missing_job",
+          severity: "medium",
+          pr_number: number,
+          todo_id: todoId,
+          message: `PR #${number} points to a Job ID that is not visible in the current Jobs list.`,
+          next: "Confirm the Job exists, then refresh the Jobs list or correct the PR marker.",
+        });
+      } else {
+        linked.push({ pr_number: number, todo_id: todoId });
+      }
+    }
+  }
+
+  for (const todo of safeTodos) {
+    const todoId = String(todo?.id ?? "").toLowerCase();
+    if (!todoId || todo?.status === "dropped") continue;
+
+    const mentionedPrs = extractPullRequestNumbers(todoText(todo));
+    const markedPrs = new Set(prsByTodo.get(todoId) ?? []);
+
+    for (const prNumber of mentionedPrs) {
+      if (markedPrs.has(prNumber)) continue;
+      if (!prByNumber.has(prNumber)) continue;
+      issues.push({
+        kind: "job_mentions_pr_without_marker",
+        severity: "high",
+        todo_id: todo.id,
+        pr_number: prNumber,
+        message: `Job ${todo.id} mentions PR #${prNumber}, but the PR does not carry this Job ID.`,
+        next: `Add \`Closes UnClick todo: ${todo.id}\` to PR #${prNumber} before merge.`,
+      });
+    }
+
+    const mergedMarkedPr = [...markedPrs]
+      .map((number) => prByNumber.get(number))
+      .find((pr) => parseTime(pr?.merged_at ?? pr?.mergedAt) !== null);
+    if (todo.status === "in_progress" && mergedMarkedPr) {
+      issues.push({
+        kind: "job_ready_to_complete",
+        severity: "high",
+        todo_id: todo.id,
+        pr_number: Number(mergedMarkedPr.number ?? mergedMarkedPr.pr_number),
+        message: `Job ${todo.id} has a merged linked PR but is still active.`,
+        next: "Run the auto-close reconciliation or complete the Job with the linked PR as proof.",
+      });
+    }
+
+    if (todo.status === "done" && markedPrs.size === 0 && mentionedPrs.length === 0) {
+      issues.push({
+        kind: "done_job_missing_proof",
+        severity: "medium",
+        todo_id: todo.id,
+        message: `Completed Job ${todo.id} has no visible GitHub proof link.`,
+        next: "Add the PR, run, or deployment link to the Job proof so future seats can audit it.",
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    reason: "jobs_github_sync_plan",
+    issues,
+    linked,
+  };
+}
+
 export async function readReconciliationInput(filePath) {
   if (!filePath) return { ok: false, reason: "missing_input_path" };
   return JSON.parse(await readFile(filePath, "utf8"));
@@ -171,6 +302,12 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
   readReconciliationInput(getArg("input", process.env.FISHBOWL_RECONCILIATION_INPUT || ""))
     .then((input) => {
       if (Array.isArray(input.todos) || Array.isArray(input.pullRequests) || Array.isArray(input.pull_requests)) {
+        if (input.mode === "jobs_github_sync") {
+          return buildJobsGithubSyncPlan({
+            todos: input.todos,
+            pullRequests: input.pullRequests ?? input.pull_requests,
+          });
+        }
         return buildInProgressReconciliationPlan({
           todos: input.todos,
           pullRequests: input.pullRequests ?? input.pull_requests,
