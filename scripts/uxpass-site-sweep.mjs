@@ -2,10 +2,16 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 const DEFAULT_PATHS = ["/", "/dashboard", "/admin/you"];
 const DEFAULT_MIN_SCORE = 80;
 const DEFAULT_ALLOWED_ORIGINS = ["https://unclick.world", "https://www.unclick.world"];
+const DEFAULT_VIEWPORTS = [
+  { name: "desktop", width: 1440, height: 1000 },
+  { name: "mobile", width: 390, height: 844 },
+];
+const ISSUE_LIMIT = 20;
 
 function argValue(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -54,6 +60,135 @@ function normalizeOrigin(value) {
   }
 }
 
+function normalizeRouteTarget(url) {
+  try {
+    const parsed = new URL(url);
+    return {
+      url: parsed.toString(),
+      origin: parsed.origin,
+      path: `${parsed.pathname}${parsed.search}${parsed.hash}`,
+    };
+  } catch {
+    return {
+      url: compactText(url, 500),
+      origin: "",
+      path: "",
+    };
+  }
+}
+
+function normalizeViewport(value) {
+  if (value && typeof value === "object") {
+    const width = Number(value.width);
+    const height = Number(value.height);
+    if (Number.isFinite(width) && Number.isFinite(height)) {
+      return {
+        name: compactText(value.name || `${width}x${height}`, 80),
+        width,
+        height,
+      };
+    }
+  }
+
+  const text = String(value ?? "").trim();
+  const named = text.match(/^([a-z0-9_-]+):(\d{2,5})x(\d{2,5})$/i);
+  if (named) {
+    return {
+      name: named[1].toLowerCase(),
+      width: Number(named[2]),
+      height: Number(named[3]),
+    };
+  }
+
+  const sized = text.match(/^(\d{2,5})x(\d{2,5})$/);
+  if (sized) {
+    return {
+      name: text.toLowerCase(),
+      width: Number(sized[1]),
+      height: Number(sized[2]),
+    };
+  }
+
+  return null;
+}
+
+export function resolveSweepViewports(values = []) {
+  const source = values.length > 0 ? values : DEFAULT_VIEWPORTS;
+  const normalized = source.map(normalizeViewport).filter(Boolean);
+  return normalized.length > 0 ? normalized : DEFAULT_VIEWPORTS;
+}
+
+function normalizeIssue(issue) {
+  if (!issue) return null;
+  if (typeof issue === "string") {
+    return { message: compactText(issue, 500) };
+  }
+
+  return {
+    type: compactText(issue.type || issue.kind || "", 80) || null,
+    severity: compactText(issue.severity || issue.level || "", 80) || null,
+    message: compactText(issue.message || issue.text || issue.summary || JSON.stringify(issue), 500),
+    source: compactText(issue.source || issue.url || "", 500) || null,
+    viewport: compactText(issue.viewport || issue.viewport_name || "", 80) || null,
+  };
+}
+
+function normalizeIssues(value) {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list
+    .map(normalizeIssue)
+    .filter((issue) => issue && issue.message)
+    .slice(0, ISSUE_LIMIT);
+}
+
+function issuesSummary(consoleIssues, layoutIssues) {
+  const parts = [];
+  if (consoleIssues.length > 0) parts.push(`${consoleIssues.length} console issue(s)`);
+  if (layoutIssues.length > 0) parts.push(`${layoutIssues.length} layout issue(s)`);
+  return parts.join(", ");
+}
+
+function viewportEvidence(viewports, captureStatus, { consoleIssues = [], layoutIssues = [], screenshotUrl = null } = {}) {
+  return viewports.map((viewport) => ({
+    name: viewport.name,
+    width: viewport.width,
+    height: viewport.height,
+    capture_status: captureStatus,
+    screenshot_url: screenshotUrl,
+    console_issues: consoleIssues.filter((issue) => !issue.viewport || issue.viewport === viewport.name),
+    layout_issues: layoutIssues.filter((issue) => !issue.viewport || issue.viewport === viewport.name),
+  }));
+}
+
+function makeTarget({
+  url,
+  status,
+  runId = null,
+  uxScore = null,
+  summary,
+  proof = null,
+  viewports,
+  captureStatus,
+  consoleIssues = [],
+  layoutIssues = [],
+  screenshotUrl = null,
+}) {
+  return {
+    url,
+    route_target: normalizeRouteTarget(url),
+    status,
+    run_id: runId,
+    ux_score: uxScore,
+    summary,
+    proof,
+    evidence: {
+      viewports: viewportEvidence(viewports, captureStatus, { consoleIssues, layoutIssues, screenshotUrl }),
+      console_issues: consoleIssues,
+      layout_issues: layoutIssues,
+    },
+  };
+}
+
 function resolveAllowedOrigins(values = []) {
   return unique((values.length > 0 ? values : DEFAULT_ALLOWED_ORIGINS).map(normalizeOrigin));
 }
@@ -69,21 +204,24 @@ export function resolveSweepTargets({ publicUrl, urls = [] } = {}) {
   return requested.map((url) => new URL(url, `${base}/`).toString());
 }
 
-export function splitAllowedSweepTargets(targets, allowedOrigins) {
+function blockedOriginTarget(target, allowedOrigins, viewports = DEFAULT_VIEWPORTS) {
+  return makeTarget({
+    url: target,
+    status: "blocked",
+    summary: `Target origin is outside the owned-origin allowlist: ${allowedOrigins.join(", ")}.`,
+    viewports: resolveSweepViewports(viewports),
+    captureStatus: "blocked_off_origin",
+  });
+}
+
+export function splitAllowedSweepTargets(targets, allowedOrigins, viewports = DEFAULT_VIEWPORTS) {
   const allowed = [];
   const blocked = [];
   for (const target of targets) {
     if (isAllowedOrigin(target, allowedOrigins)) {
       allowed.push(target);
     } else {
-      blocked.push({
-        url: target,
-        status: "blocked",
-        run_id: null,
-        ux_score: null,
-        summary: `Target origin is outside the owned-origin allowlist: ${allowedOrigins.join(", ")}.`,
-        proof: null,
-      });
+      blocked.push(blockedOriginTarget(target, allowedOrigins, viewports));
     }
   }
   return { allowed, blocked };
@@ -139,6 +277,55 @@ function dryRunTarget(url, targetSha) {
   };
 }
 
+function gateStatus(status) {
+  if (status === "passing") return "passed";
+  if (status === "failing") return "failed";
+  if (status === "blocked") return "blocked";
+  if (status === "pending") return "skipped";
+  return "missing";
+}
+
+function receiptRunId({ status, targetSha, now }) {
+  const source = `${status}:${targetSha || "no-sha"}:${now}`;
+  return `uxpass-site-sweep-${createHash("sha256").update(source).digest("hex").slice(0, 16)}`;
+}
+
+function withGateResult(receipt, { publicUrl }) {
+  return {
+    ...receipt,
+    check: "uxpass",
+    name: "UXPass",
+    xpass_gate_result: {
+      check: "uxpass",
+      name: "UXPass",
+      status: gateStatus(receipt.status),
+      run_id: receipt.run_id,
+      target_sha: receipt.target_sha || null,
+      url: publicUrl,
+      summary: receipt.summary,
+      generated_at: receipt.generated_at,
+    },
+  };
+}
+
+function makeReceipt({ now, status, targetSha, minScore, allowedOrigins, viewports, targets, summary, publicUrl }) {
+  return withGateResult({
+    kind: "uxpass_site_sweep_receipt",
+    check: "uxpass",
+    name: "UXPass",
+    generated_at: now,
+    run_id: receiptRunId({ status, targetSha, now }),
+    status,
+    target_sha: targetSha || null,
+    min_score: minScore,
+    allowed_origins: allowedOrigins,
+    viewports,
+    targets,
+    action_needed: actionNeeded(targets),
+    summary,
+  }, { publicUrl });
+}
+
 export async function runUxPassSiteSweep({
   apiBase = "https://unclick.world",
   publicUrl = "https://unclick.world",
@@ -148,84 +335,103 @@ export async function runUxPassSiteSweep({
   minScore = DEFAULT_MIN_SCORE,
   dryRun = false,
   allowedOrigins = DEFAULT_ALLOWED_ORIGINS,
+  viewports = DEFAULT_VIEWPORTS,
   now = new Date().toISOString(),
   fetchImpl = fetch,
 } = {}) {
   const targets = resolveSweepTargets({ publicUrl, urls });
   const ownedOrigins = resolveAllowedOrigins(allowedOrigins);
+  const sweepViewports = resolveSweepViewports(viewports);
   const apiUrl = `${trimTrailingSlash(apiBase)}/api/uxpass-run`;
 
   if (dryRun) {
-    const dryTargets = targets.map((url) => dryRunTarget(url, targetSha));
-    return {
-      kind: "uxpass_site_sweep_receipt",
-      generated_at: now,
+    const dryTargets = targets.map((url) => {
+      const dryTarget = dryRunTarget(url, targetSha);
+      return makeTarget({
+        url: dryTarget.url,
+        status: dryTarget.status,
+        runId: dryTarget.run_id,
+        uxScore: dryTarget.ux_score,
+        summary: dryTarget.summary,
+        proof: dryTarget.proof,
+        viewports: sweepViewports,
+        captureStatus: "dry_run",
+      });
+    });
+    return makeReceipt({
+      now,
       status: "passing",
-      target_sha: targetSha || null,
-      min_score: minScore,
+      targetSha,
+      minScore,
+      allowedOrigins: ownedOrigins,
+      viewports: sweepViewports,
       targets: dryTargets,
-      action_needed: [],
       summary: `Dry-run UXPass site sweep covered ${dryTargets.length} URL(s).`,
-    };
+      publicUrl,
+    });
   }
 
-  const { allowed: allowedTargets, blocked: blockedTargets } = splitAllowedSweepTargets(targets, ownedOrigins);
+  const { allowed: allowedTargets, blocked: blockedTargets } = splitAllowedSweepTargets(targets, ownedOrigins, sweepViewports);
   if (!isAllowedOrigin(apiUrl, ownedOrigins)) {
-    const apiBlockedTargets = targets.map((url) => ({
+    const apiBlockedTargets = targets.map((url) => makeTarget({
       url,
       status: "blocked",
-      run_id: null,
-      ux_score: null,
       summary: `UXPass API origin is outside the owned-origin allowlist: ${ownedOrigins.join(", ")}.`,
-      proof: null,
+      viewports: sweepViewports,
+      captureStatus: "blocked_api_origin",
     }));
-    return {
-      kind: "uxpass_site_sweep_receipt",
-      generated_at: now,
+    return makeReceipt({
+      now,
       status: "blocked",
-      target_sha: targetSha || null,
-      min_score: minScore,
-      allowed_origins: ownedOrigins,
+      targetSha,
+      minScore,
+      allowedOrigins: ownedOrigins,
+      viewports: sweepViewports,
       targets: apiBlockedTargets,
-      action_needed: actionNeeded(apiBlockedTargets),
       summary: "UXPass site sweep could not run because the API origin is not allowed.",
-    };
+      publicUrl,
+    });
   }
 
   if (allowedTargets.length === 0) {
-    return {
-      kind: "uxpass_site_sweep_receipt",
-      generated_at: now,
+    return makeReceipt({
+      now,
       status: "blocked",
-      target_sha: targetSha || null,
-      min_score: minScore,
-      allowed_origins: ownedOrigins,
+      targetSha,
+      minScore,
+      allowedOrigins: ownedOrigins,
+      viewports: sweepViewports,
       targets: blockedTargets,
-      action_needed: actionNeeded(blockedTargets),
       summary: "UXPass site sweep did not run because every target was outside the owned-origin allowlist.",
-    };
+      publicUrl,
+    });
   }
 
   if (!token) {
-    const missingTokenTargets = allowedTargets.map((url) => ({
+    const missingTokenTargets = allowedTargets.map((url) => makeTarget({
       url,
       status: "blocked",
-      run_id: null,
-      ux_score: null,
       summary: "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
-      proof: null,
+      proof: {
+        kind: "safe_fallback_receipt",
+        reason: "missing_credential",
+        targetUrl: url,
+        target_sha: targetSha || null,
+      },
+      viewports: sweepViewports,
+      captureStatus: "skipped_missing_credential",
     }));
-    return {
-      kind: "uxpass_site_sweep_receipt",
-      generated_at: now,
+    return makeReceipt({
+      now,
       status: "blocked",
-      target_sha: targetSha || null,
-      min_score: minScore,
-      allowed_origins: ownedOrigins,
+      targetSha,
+      minScore,
+      allowedOrigins: ownedOrigins,
+      viewports: sweepViewports,
       targets: [...missingTokenTargets, ...blockedTargets],
-      action_needed: actionNeeded([...missingTokenTargets, ...blockedTargets]),
       summary: "UXPass site sweep could not run because no token was available.",
-    };
+      publicUrl,
+    });
   }
 
   const sweptTargets = [...blockedTargets];
@@ -240,15 +446,22 @@ export async function runUxPassSiteSweep({
 
       const runId = compactText(json.run_id || "", 160);
       const uxScore = typeof json.ux_score === "number" ? json.ux_score : null;
-      const passed = ok && json.status === "complete" && (uxScore === null || uxScore >= minScore);
-      sweptTargets.push({
+      const consoleIssues = normalizeIssues(json.console_issues || json.consoleIssues);
+      const layoutIssues = normalizeIssues(json.layout_issues || json.layoutIssues);
+      const issueSummary = issuesSummary(consoleIssues, layoutIssues);
+      const passed = ok
+        && json.status === "complete"
+        && (uxScore === null || uxScore >= minScore)
+        && consoleIssues.length === 0
+        && layoutIssues.length === 0;
+      sweptTargets.push(makeTarget({
         url,
         status: passed ? "passing" : "failing",
-        run_id: runId || null,
-        ux_score: uxScore,
+        runId: runId || null,
+        uxScore,
         summary: passed
           ? `UXPass completed${uxScore === null ? "" : ` with score ${uxScore}`}.`
-          : `UXPass returned HTTP ${status}, status ${json.status || "unknown"}${uxScore === null ? "" : `, score ${uxScore}`}.`,
+          : `UXPass returned HTTP ${status}, status ${json.status || "unknown"}${uxScore === null ? "" : `, score ${uxScore}`}${issueSummary ? `, ${issueSummary}` : ""}.`,
         proof: runId
           ? {
               kind: "uxpass_run",
@@ -257,31 +470,35 @@ export async function runUxPassSiteSweep({
               target_sha: targetSha || null,
             }
           : null,
-      });
+        viewports: sweepViewports,
+        captureStatus: "api_receipt",
+        consoleIssues,
+        layoutIssues,
+        screenshotUrl: compactText(json.screenshot_url || json.screenshotUrl || "", 500) || null,
+      }));
     } catch (error) {
-      sweptTargets.push({
+      sweptTargets.push(makeTarget({
         url,
         status: "failing",
-        run_id: null,
-        ux_score: null,
         summary: `UXPass site sweep could not reach the API: ${error instanceof Error ? error.message : String(error)}`,
-        proof: null,
-      });
+        viewports: sweepViewports,
+        captureStatus: "api_unreachable",
+      }));
     }
   }
 
   const status = statusFromTargets(sweptTargets);
-  return {
-    kind: "uxpass_site_sweep_receipt",
-    generated_at: now,
+  return makeReceipt({
+    now,
     status,
-    target_sha: targetSha || null,
-    min_score: minScore,
-    allowed_origins: ownedOrigins,
+    targetSha,
+    minScore,
+    allowedOrigins: ownedOrigins,
+    viewports: sweepViewports,
     targets: sweptTargets,
-    action_needed: actionNeeded(sweptTargets),
     summary: `UXPass site sweep ${status} across ${sweptTargets.length} URL(s).`,
-  };
+    publicUrl,
+  });
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
@@ -292,6 +509,10 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
   const urls = [
     ...splitList(process.env.UXPASS_SITE_SWEEP_URLS),
     ...argValues("url"),
+  ];
+  const viewports = [
+    ...splitList(process.env.UXPASS_SITE_SWEEP_VIEWPORTS),
+    ...argValues("viewport"),
   ];
   const receipt = await runUxPassSiteSweep({
     apiBase: argValue("api-base", process.env.DOGFOOD_API_BASE || "https://unclick.world"),
@@ -305,6 +526,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     targetSha: argValue("target-sha", process.env.GITHUB_SHA || process.env.VERCEL_GIT_COMMIT_SHA || ""),
     minScore: Number(argValue("min-score", process.env.UXPASS_SITE_SWEEP_MIN_SCORE || DEFAULT_MIN_SCORE)),
     allowedOrigins: splitList(process.env.UXPASS_SITE_SWEEP_ALLOWED_ORIGINS),
+    viewports,
     dryRun,
   });
 

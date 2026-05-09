@@ -1,37 +1,154 @@
 {
   "kind": "uxpass_site_sweep_receipt",
-  "generated_at": "2026-05-09T17:15:19.132Z",
+  "check": "uxpass",
+  "name": "UXPass",
+  "generated_at": "2026-05-09T20:50:42.979Z",
+  "run_id": "uxpass-site-sweep-3d7a9c6519a0fe59",
   "status": "blocked",
-  "target_sha": "eaa001e4e8013a2bfa47c0b846de875a3ac1c3a6",
+  "target_sha": "6aadc437a0aafbd0a24c9aedfc496b766e05d745",
   "min_score": 80,
   "allowed_origins": [
     "https://unclick.world",
     "https://www.unclick.world"
   ],
+  "viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
   "targets": [
     {
       "url": "https://unclick.world/",
+      "route_target": {
+        "url": "https://unclick.world/",
+        "origin": "https://unclick.world",
+        "path": "/"
+      },
       "status": "blocked",
       "run_id": null,
       "ux_score": null,
       "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
-      "proof": null
+      "proof": {
+        "kind": "safe_fallback_receipt",
+        "reason": "missing_credential",
+        "targetUrl": "https://unclick.world/",
+        "target_sha": "6aadc437a0aafbd0a24c9aedfc496b766e05d745"
+      },
+      "evidence": {
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1000,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          }
+        ],
+        "console_issues": [],
+        "layout_issues": []
+      }
     },
     {
       "url": "https://unclick.world/dashboard",
+      "route_target": {
+        "url": "https://unclick.world/dashboard",
+        "origin": "https://unclick.world",
+        "path": "/dashboard"
+      },
       "status": "blocked",
       "run_id": null,
       "ux_score": null,
       "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
-      "proof": null
+      "proof": {
+        "kind": "safe_fallback_receipt",
+        "reason": "missing_credential",
+        "targetUrl": "https://unclick.world/dashboard",
+        "target_sha": "6aadc437a0aafbd0a24c9aedfc496b766e05d745"
+      },
+      "evidence": {
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1000,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          }
+        ],
+        "console_issues": [],
+        "layout_issues": []
+      }
     },
     {
       "url": "https://unclick.world/admin/you",
+      "route_target": {
+        "url": "https://unclick.world/admin/you",
+        "origin": "https://unclick.world",
+        "path": "/admin/you"
+      },
       "status": "blocked",
       "run_id": null,
       "ux_score": null,
       "summary": "Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
-      "proof": null
+      "proof": {
+        "kind": "safe_fallback_receipt",
+        "reason": "missing_credential",
+        "targetUrl": "https://unclick.world/admin/you",
+        "target_sha": "6aadc437a0aafbd0a24c9aedfc496b766e05d745"
+      },
+      "evidence": {
+        "viewports": [
+          {
+            "name": "desktop",
+            "width": 1440,
+            "height": 1000,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          },
+          {
+            "name": "mobile",
+            "width": 390,
+            "height": 844,
+            "capture_status": "skipped_missing_credential",
+            "screenshot_url": null,
+            "console_issues": [],
+            "layout_issues": []
+          }
+        ],
+        "console_issues": [],
+        "layout_issues": []
+      }
     }
   ],
   "action_needed": [
@@ -39,5 +156,15 @@
     "https://unclick.world/dashboard: Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET.",
     "https://unclick.world/admin/you: Missing UXPASS_SITE_SWEEP_TOKEN, DOGFOOD_UXPASS_TOKEN, UXPASS_TOKEN, or CRON_SECRET."
   ],
-  "summary": "UXPass site sweep could not run because no token was available."
+  "summary": "UXPass site sweep could not run because no token was available.",
+  "xpass_gate_result": {
+    "check": "uxpass",
+    "name": "UXPass",
+    "status": "blocked",
+    "run_id": "uxpass-site-sweep-3d7a9c6519a0fe59",
+    "target_sha": "6aadc437a0aafbd0a24c9aedfc496b766e05d745",
+    "url": "https://unclick.world",
+    "summary": "UXPass site sweep could not run because no token was available.",
+    "generated_at": "2026-05-09T20:50:42.979Z"
+  }
 }
