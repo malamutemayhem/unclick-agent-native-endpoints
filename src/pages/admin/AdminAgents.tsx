@@ -710,12 +710,35 @@ function profileMatchesSeat(profile: FishbowlProfile, seat: AISeat): boolean {
   return needles.some((needle) => haystack.includes(needle));
 }
 
+function mapProfilesToSeats(seats: AISeat[], profiles: FishbowlProfile[]): Map<string, FishbowlProfile> {
+  const seatProfiles = new Map<string, FishbowlProfile>();
+  const usedProfiles = new Set<string>();
+
+  for (const seat of seats) {
+    const exactMatch = profiles.find((profile) => !usedProfiles.has(profile.agent_id) && profileMatchesSeat(profile, seat));
+    if (!exactMatch) continue;
+    seatProfiles.set(seat.id, exactMatch);
+    usedProfiles.add(exactMatch.agent_id);
+  }
+
+  for (const seat of seats) {
+    if (seat.isVirtual || seatProfiles.has(seat.id)) continue;
+    const fallbackMatch = profiles.find((profile) => !usedProfiles.has(profile.agent_id));
+    if (!fallbackMatch) continue;
+    seatProfiles.set(seat.id, fallbackMatch);
+    usedProfiles.add(fallbackMatch.agent_id);
+  }
+
+  return seatProfiles;
+}
+
 function AISeatsPanel() {
   const [seats, setSeats] = useState<AISeat[]>(() => loadSeatOverrides());
   const [profiles, setProfiles] = useState<FishbowlProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [editingSeatId, setEditingSeatId] = useState<string | null>(null);
   const issues = seats.filter((seat) => seat.issue);
+  const seatProfiles = useMemo(() => mapProfilesToSeats(seats, profiles), [profiles, seats]);
 
   const loadProfiles = useCallback(async () => {
     if (!getApiKey()) return;
@@ -759,7 +782,7 @@ function AISeatsPanel() {
   }, [seats]);
 
   useEffect(() => {
-    void loadProfiles();
+    queueMicrotask(() => void loadProfiles());
     const id = window.setInterval(() => void loadProfiles(), 30_000);
     return () => window.clearInterval(id);
   }, [loadProfiles]);
@@ -790,12 +813,21 @@ function AISeatsPanel() {
           <div>
             <h2 className="text-sm font-semibold text-heading">AI Seats</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Manual capacity slots. Unknown platform/device details stay generic until UnClick has real metadata.
+              Connected AI capacity with the newest live check-in shown in each row.
             </p>
           </div>
-          <span className="inline-flex w-fit items-center rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Manual mode
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadProfiles()}
+              className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-heading"
+            >
+              {profilesLoading ? "Checking..." : "Refresh"}
+            </button>
+            <span className="inline-flex w-fit items-center rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Manual mode
+            </span>
+          </div>
         </div>
         <div className="grid grid-cols-[minmax(210px,1.4fr)_110px_130px_minmax(150px,0.8fr)_minmax(180px,1.2fr)_minmax(190px,1fr)] gap-3 border-b border-border/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Seat</span>
@@ -810,14 +842,14 @@ function AISeatsPanel() {
               Even split
             </button>
           </span>
-          <span>Last seen</span>
+          <span>Last check-in</span>
           <span>Assigned work</span>
           <span>Controls</span>
         </div>
         <div className="divide-y divide-border/30">
           {seats.map((seat) => {
             const editing = editingSeatId === seat.id;
-            const matchedProfile = profiles.find((profile) => profileMatchesSeat(profile, seat));
+            const matchedProfile = seatProfiles.get(seat.id);
             const emojiOptions = AI_SEAT_EMOJI_OPTIONS.some((option) => option.emoji === seat.emoji)
               ? AI_SEAT_EMOJI_OPTIONS
               : [{ emoji: seat.emoji, label: "Custom" }, ...AI_SEAT_EMOJI_OPTIONS];
@@ -910,8 +942,10 @@ function AISeatsPanel() {
                     </>
                   ) : (
                     <>
-                      <p className="text-xs text-muted-foreground">No match</p>
-                      <p className="text-[10px] text-muted-foreground/70">Use recent check-ins below</p>
+                      <p className="text-xs text-muted-foreground">No check-in yet</p>
+                      <p className="text-[10px] text-muted-foreground/70">
+                        {profilesLoading ? "Checking..." : "Waiting for live seat"}
+                      </p>
                     </>
                   )}
                 </div>
@@ -942,51 +976,6 @@ function AISeatsPanel() {
             );
           })}
         </div>
-      </div>
-
-      <div className="rounded-xl border border-border/40 bg-card/20 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-heading">Recent check-ins</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Live seats that have touched UnClick recently.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadProfiles()}
-            className="rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-heading"
-          >
-            {profilesLoading ? "Checking..." : "Refresh"}
-          </button>
-        </div>
-        {profiles.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No live seat check-ins found yet.</p>
-        ) : (
-          <div className="grid gap-2 md:grid-cols-2">
-            {profiles.slice(0, 8).map((profile) => (
-              <div key={profile.agent_id} className="rounded-lg border border-border/35 bg-card/30 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold text-heading">
-                      <span className="mr-1.5" aria-hidden="true">{profile.emoji ?? "AI"}</span>
-                      {profileDisplayName(profile)}
-                    </p>
-                    <p className="truncate text-[10px] text-muted-foreground" title={profile.agent_id}>
-                      {profile.agent_id}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-                    {relativeTime(profile.last_seen_at)}
-                  </span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-[11px] text-body">
-                  {profile.current_status || profile.user_agent_hint || "No status text"}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {issues.length > 0 && (
