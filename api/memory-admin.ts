@@ -35,6 +35,8 @@
  *   - admin_build_tasks: method=list|get|create|update_status|soft_delete
  *   - admin_build_workers: method=list|register|update|delete|health_check
  *   - admin_build_dispatch: POST with task_id + worker_id (same tenant) and optional idempotency_key
+ *   - admin_unclick_connect_dry_run: POST tether intent -> route packet -> assignment/HOLD/BLOCKER, no writes
+ *   - admin_unclick_connect_commit: POST experiment-only route packet -> mc_agent_dispatches row
  *   - reliability_dispatches: method=list|get|upsert|claim|release
  *   - reliability_heartbeats: method=list|publish
  *   - reliability_reclaim_stale: POST with optional { limit, dry_run }
@@ -119,6 +121,9 @@ import {
   buildFishbowlTodoHandoffDispatchRow,
   planFishbowlTodoHandoff,
 } from "./lib/fishbowl-todo-handoff.js";
+import { runRoutePacketConsumerDryRun } from "./lib/route-packet-consumer.js";
+import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
+import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -4854,6 +4859,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (updErr) throw updErr;
 
         return res.status(200).json({ data: eventData, was_duplicate: false });
+      }
+
+      case "admin_unclick_connect_dry_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        const visibleWorkers = Array.isArray(body.visible_workers) ? body.visible_workers : [];
+        const result = runRoutePacketConsumerDryRun({
+          packet,
+          visibleWorkers,
+        });
+
+        return res.status(200).json({
+          ...result,
+          tenant_scoped: true,
+        });
+      }
+
+      case "admin_unclick_connect_commit": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const commitMode = String(body.commit_mode ?? body.mode ?? "").trim().toLowerCase();
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        if (commitMode !== "experiment" || !packet.experiment) {
+          return res.status(400).json({
+            error: "admin_unclick_connect_commit is experiment-only",
+          });
+        }
+
+        const visibleWorkers = Array.isArray(body.visible_workers) ? body.visible_workers : [];
+        const idempotencyKey =
+          typeof body.idempotency_key === "string" && body.idempotency_key.trim()
+            ? body.idempotency_key.trim()
+            : packet.idempotency_key;
+        const row = buildUnClickConnectDispatchRow({
+          apiKeyHash,
+          packet,
+          visibleWorkers,
+          idempotencyKey,
+        });
+
+        const { data, error } = await supabase
+          .from("mc_agent_dispatches")
+          .insert(row)
+          .select(
+            "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+          )
+          .single();
+
+        if (error) {
+          if ((error as { code?: string }).code === "23505") {
+            const existing = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", row.dispatch_id)
+              .maybeSingle();
+            if (existing.error) throw existing.error;
+            return res.status(200).json({
+              data: existing.data,
+              was_duplicate: true,
+              tenant_scoped: true,
+            });
+          }
+          throw error;
+        }
+
+        return res.status(200).json({
+          data,
+          was_duplicate: false,
+          tenant_scoped: true,
+        });
       }
 
       case "reliability_dispatches": {
