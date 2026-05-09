@@ -147,6 +147,10 @@ import {
   evaluateLaneClaim,
   type WorkerLaneRow,
 } from "./lib/worker-lanes.js";
+import {
+  pickScopePackFromComments,
+  type ScopePackCommentRow,
+} from "./lib/scope-pack-comments.js";
 import { runRoutePacketConsumerDryRun, type VisibleWorker } from "./lib/route-packet-consumer.js";
 import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
 import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
@@ -8555,11 +8559,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .slice(0, limit);
 
           let countMap: Record<string, number> = {};
+          let commentMap: Record<string, ScopePackCommentRow[]> = {};
           if (actionable.length > 0) {
             const ids = actionable.map((item) => item.todo.id);
             const { data: comments } = await supabase
               .from("mc_fishbowl_comments")
-              .select("target_id")
+              .select("id,target_id,text,created_at")
               .eq("api_key_hash", apiKeyHash)
               .eq("target_kind", "todo")
               .in("target_id", ids);
@@ -8568,26 +8573,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               acc[k] = (acc[k] ?? 0) + 1;
               return acc;
             }, {});
+            commentMap = (comments ?? []).reduce<Record<string, ScopePackCommentRow[]>>((acc, c) => {
+              const k = c.target_id as string;
+              acc[k] = [
+                ...(acc[k] ?? []),
+                {
+                  id: typeof c.id === "string" ? c.id : null,
+                  text: typeof c.text === "string" ? c.text : null,
+                  created_at: typeof c.created_at === "string" ? c.created_at : null,
+                },
+              ];
+              return acc;
+            }, {});
           }
 
-          const decorated = actionable.map(({ todo: t, actionability_reason }, index) => ({
-            id: t.id,
-            title: t.title,
-            ...(includeDescription ? { description: t.description } : {}),
-            status: t.status,
-            priority: t.priority,
-            assigned_to_agent_id: t.assigned_to_agent_id,
-            created_by_agent_id: t.created_by_agent_id,
-            created_at: t.created_at,
-            updated_at: t.updated_at,
-            completed_at: t.completed_at,
-            comment_count: countMap[t.id as string] ?? 0,
-            actionable_rank: index + 1,
-            actionability_reason,
-            owner_last_seen_at: t.assigned_to_agent_id
-              ? lastSeenByAgent.get(String(t.assigned_to_agent_id)) ?? null
-              : null,
-            scope_pack:
+          const decorated = actionable.map(({ todo: t, actionability_reason }, index) => {
+            const fieldScopePack =
               t.scope_pack ??
               t.scopePack ??
               t.runner_scope ??
@@ -8596,8 +8597,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               t.autonomousScope ??
               t.coding_room_scope ??
               t.codingRoomScope ??
-              null,
-          }));
+              null;
+            const commentScopePack = fieldScopePack
+              ? null
+              : pickScopePackFromComments(commentMap[t.id as string] ?? []);
+
+            return {
+              id: t.id,
+              title: t.title,
+              ...(includeDescription ? { description: t.description } : {}),
+              status: t.status,
+              priority: t.priority,
+              assigned_to_agent_id: t.assigned_to_agent_id,
+              created_by_agent_id: t.created_by_agent_id,
+              created_at: t.created_at,
+              updated_at: t.updated_at,
+              completed_at: t.completed_at,
+              comment_count: countMap[t.id as string] ?? 0,
+              actionable_rank: index + 1,
+              actionability_reason,
+              owner_last_seen_at: t.assigned_to_agent_id
+                ? lastSeenByAgent.get(String(t.assigned_to_agent_id)) ?? null
+                : null,
+              scope_pack: fieldScopePack ?? commentScopePack?.scope_pack ?? null,
+              scope_pack_source: fieldScopePack ? "field" : commentScopePack?.source ?? null,
+              scope_pack_comment_id: commentScopePack?.comment_id ?? null,
+            };
+          });
           return res.status(200).json({
             todos: decorated,
             response_bounds: {
