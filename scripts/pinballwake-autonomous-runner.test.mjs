@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  evaluateBoardroomTodoAutoClaimEligibility,
   extractBoardroomTodoIdFromCodingRoomJob,
   fetchUnClickActionableTodos,
   inspectAutonomousRunnerJobSafety,
@@ -232,6 +233,140 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("quietly skips scoped UnClick todos that are not safe to auto-claim", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    const scopePack = {
+      owned_files: ["docs/safe-chip.md"],
+      patch: "diff --git a/docs/safe-chip.md b/docs/safe-chip.md\n--- a/docs/safe-chip.md\n+++ b/docs/safe-chip.md\n@@ -1 +1 @@\n-old\n+new\n",
+      tests: [],
+    };
+
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const fetchImpl = async () => ({
+        ok: true,
+        async json() {
+          return {
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    todos: [
+                      {
+                        id: "todo-low",
+                        title: "Low priority safe chip",
+                        status: "open",
+                        priority: "normal",
+                        assigned_to_agent_id: null,
+                        actionability_reason: "unassigned_open",
+                        scope_pack: scopePack,
+                      },
+                      {
+                        id: "todo-hold",
+                        title: "Builder HOLD on owner decision",
+                        status: "open",
+                        priority: "urgent",
+                        assigned_to_agent_id: null,
+                        actionability_reason: "unassigned_open",
+                        scope_pack: scopePack,
+                      },
+                      {
+                        id: "todo-auth",
+                        title: "Auth session hardening",
+                        status: "open",
+                        priority: "urgent",
+                        assigned_to_agent_id: null,
+                        actionability_reason: "unassigned_open",
+                        scope_pack: scopePack,
+                      },
+                      {
+                        id: "todo-assigned",
+                        title: "Assigned scoped chip",
+                        status: "open",
+                        priority: "urgent",
+                        assigned_to_agent_id: "other-seat",
+                        actionability_reason: "unassigned_open",
+                        scope_pack: scopePack,
+                      },
+                      {
+                        id: "todo-safe",
+                        title: "Safe docs chip",
+                        status: "open",
+                        priority: "urgent",
+                        assigned_to_agent_id: null,
+                        actionability_reason: "unassigned_open",
+                        scope_pack: scopePack,
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          };
+        },
+      });
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "dry-run",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-09T11:00:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "claimed");
+      assert.equal(result.queue_source.seen, 5);
+      assert.equal(result.queue_source.imported, 1);
+      assert.equal(result.ledger.jobs[0].job_id, "boardroom-todo:todo-safe");
+      assert.deepEqual(
+        result.queue_source.skipped.map((skip) => skip.reason).sort(),
+        [
+          "boardroom_todo_already_assigned",
+          "boardroom_todo_hold_or_blocker_marker",
+          "boardroom_todo_priority_not_allowed",
+          "protected_surface_auth",
+        ].sort(),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a scoped todo eligible only for the builder allowlist and open unassigned queue", () => {
+    const base = {
+      id: "todo-role",
+      title: "Safe docs chip",
+      status: "open",
+      priority: "urgent",
+      assigned_to_agent_id: null,
+      actionability_reason: "unassigned_open",
+      scope_pack: {
+        owned_files: ["docs/safe-chip.md"],
+        patch: "diff --git a/docs/safe-chip.md b/docs/safe-chip.md\n--- a/docs/safe-chip.md\n+++ b/docs/safe-chip.md\n@@ -1 +1 @@\n-old\n+new\n",
+        role: "builder",
+      },
+    };
+
+    assert.equal(evaluateBoardroomTodoAutoClaimEligibility(base).ok, true);
+    assert.equal(
+      evaluateBoardroomTodoAutoClaimEligibility({
+        ...base,
+        scope_pack: {
+          ...base.scope_pack,
+          role: "coordinator",
+        },
+      }).reason,
+      "boardroom_todo_role_not_allowed",
+    );
+  });
+
   it("does not pretend the queue is empty when UnClick queue auth is missing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
@@ -431,6 +566,7 @@ describe("PinballWake autonomous Runner seat", () => {
         unclickMcpUrl: "https://unclick.test/api/mcp",
         fetchImpl,
         now: "2026-05-08T05:30:00.000Z",
+        wakeSource: "queuepush",
       });
 
       assert.equal(result.ok, true);
@@ -450,6 +586,8 @@ describe("PinballWake autonomous Runner seat", () => {
       });
       assert.equal(calls[2].body.params.arguments.target_id, "todo-claim-1");
       assert.match(calls[2].body.params.arguments.text, /dispatch=coding-room-claim:/);
+      assert.match(calls[2].body.params.arguments.text, /lease_token=coding-room-claim:/);
+      assert.match(calls[2].body.params.arguments.text, /wake_source=queuepush/);
       assert.equal(result.todo_claim_sync.ok, true);
       assert.equal(result.todo_claim_sync.todo_id, "todo-claim-1");
 
@@ -461,7 +599,7 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
-  it("blocks stale assigned UnClick todo claims before syncing ownership", async () => {
+  it("quietly skips stale assigned UnClick todo claims before syncing ownership", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
     try {
@@ -521,12 +659,11 @@ describe("PinballWake autonomous Runner seat", () => {
         now: "2026-05-09T12:35:00.000Z",
       });
 
-      assert.equal(result.ok, false);
-      assert.equal(result.action, "blocked");
-      assert.equal(result.reason, "todo_claim_sync_failed");
-      assert.equal(result.todo_claim_sync.reason, "claim_source_state_mismatch");
-      assert.equal(result.todo_claim_sync.detail, "boardroom_todo_not_open");
-      assert.equal(result.todo_claim_sync.source_status, "in_progress");
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "idle");
+      assert.equal(result.reason, "no_claimable_jobs");
+      assert.equal(result.queue_source.skipped[0].id, "todo-stale-scoped-1");
+      assert.equal(result.queue_source.skipped[0].reason, "boardroom_todo_not_open");
       assert.deepEqual(calls.map((call) => call.body.params.name), ["list_actionable_todos"]);
 
       const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
@@ -945,12 +1082,17 @@ describe("PinballWake autonomous Runner seat", () => {
     const workflow = await readFile(".github/workflows/autonomous-runner.yml", "utf8");
 
     assert.match(workflow, /cron:\s*"3,13,23,33,43,53 \* \* \* \*"/);
+    assert.match(workflow, /workflow_run:/);
+    assert.match(workflow, /Fleet Throughput Watch/);
     assert.match(workflow, /node scripts\/pinballwake-autonomous-runner\.mjs/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_QUEUE_SOURCE:.*'unclick'/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_WAKE_SOURCE:.*queuepush/);
     assert.match(workflow, /UNCLICK_API_KEY:.*secrets\.UNCLICK_API_KEY.*secrets\.FISHBOWL_AUTOCLOSE_TOKEN.*secrets\.FISHBOWL_WAKE_TOKEN/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_MODE:.*'claim'/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOW_EXECUTE:\s*"false"/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES:\s*"false"/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOWED_PRIORITIES:.*urgent,high/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_ALLOWED_ACTION_REASONS:.*unassigned_open/);
     assert.match(workflow, /kill_switch:/);
     assert.doesNotMatch(workflow, /^\s+- execute$/m);
   });

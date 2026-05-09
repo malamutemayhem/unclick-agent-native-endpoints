@@ -28,9 +28,15 @@ export const DEFAULT_AUTONOMOUS_RUNNER_POLICY = {
   allowProtectedSurfaces: false,
   allowExecute: false,
   maxCycles: 1,
+  allowedPriorities: ["urgent", "high"],
+  allowedActionReasons: ["unassigned_open"],
+  allowedTodoRoles: ["builder", "plex-builder", "implementation", "test_fix", "docs_update", "code"],
 };
 
 export const DEFAULT_UNCLICK_MCP_URL = "https://unclick.world/api/mcp";
+
+const HOLD_TITLE_PATTERN = /\b(hold|blocker|blocked|dirty)\b/i;
+const HOLD_BODY_MARKER_PATTERN = /(?:^|\n)\s*(hold|blocker|blocked|dirty)\s*:/i;
 
 const PROTECTED_SURFACE_PATTERNS = [
   {
@@ -95,6 +101,10 @@ function normalizePath(value) {
   return String(value ?? "").replace(/\\/g, "/").trim();
 }
 
+function normalizeToken(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function compact(value, max = 240) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
@@ -116,6 +126,49 @@ function priorityWeight(priority) {
   if (raw === "normal") return 50;
   if (raw === "low") return 20;
   return 0;
+}
+
+function tokenSet(value, fallback = []) {
+  return new Set(parseList(value, fallback).map(normalizeToken).filter(Boolean));
+}
+
+function listTodoRoleTokens(todo = {}, scopePack = {}) {
+  const raw = [
+    todo.worker,
+    todo.worker_role,
+    todo.role,
+    todo.lane,
+    todo.assigned_role,
+    todo.assigned_work,
+    scopePack.worker,
+    scopePack.worker_role,
+    scopePack.role,
+  ];
+
+  return raw
+    .flatMap((value) => parseList(value, []))
+    .map(normalizeToken)
+    .filter(Boolean);
+}
+
+function recentTodoCommentText(todo = {}) {
+  const comments = Array.isArray(todo.recent_comments)
+    ? todo.recent_comments
+    : Array.isArray(todo.comments)
+      ? todo.comments
+      : [];
+  const commentText = comments
+    .map((comment) => `${comment?.result || ""} ${comment?.status || ""} ${comment?.body || ""} ${comment?.text || ""}`)
+    .join("\n");
+
+  return [
+    todo.latest_comment_result,
+    todo.latest_comment_status,
+    todo.latest_comment_text,
+    todo.last_comment_text,
+    todo.recent_blocker_comment,
+    commentText,
+  ].join("\n");
 }
 
 function extractMcpTextJson(payload) {
@@ -246,6 +299,9 @@ function extractBoardroomTodoScopePack(todo = {}) {
     patch,
     tests,
     jobType: String(scope.job_type || scope.jobType || "code").trim() || "code",
+    worker: String(scope.worker || "").trim(),
+    worker_role: String(scope.worker_role || scope.workerRole || "").trim(),
+    role: String(scope.role || "").trim(),
   };
 }
 
@@ -499,7 +555,9 @@ export async function syncClaimedBoardroomTodoToUnClick({
           "Autonomous Runner claim synced: status open -> in_progress.",
           `owner=${agentId}.`,
           `dispatch=${job?.claim_id || "none"}.`,
+          `lease_token=${job?.claim_id || "none"}.`,
           `source=${job?.source || "unknown"}.`,
+          `wake_source=${job?.source_state?.wake_source || "unknown"}.`,
           `job=${job?.job_id || "unknown"}.`,
         ].join(" "),
         600,
@@ -643,6 +701,7 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
       reclaim_count: Number.isFinite(todo.reclaim_count) ? todo.reclaim_count : null,
       actionability_reason: todo.actionability_reason || null,
       updated_at: todo.updated_at || null,
+      wake_source: todo.wake_source || todo.wakeSource || null,
     },
     worker: assignee || "builder",
     chip: title,
@@ -663,6 +722,70 @@ export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date
   });
 }
 
+export function evaluateBoardroomTodoAutoClaimEligibility(
+  todo = {},
+  {
+    scopePack = extractBoardroomTodoScopePack(todo),
+    allowedPriorities = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedPriorities,
+    allowedActionReasons = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons,
+    allowedTodoRoles = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedTodoRoles,
+    allowProtectedSurfaces = false,
+    now = new Date().toISOString(),
+  } = {},
+) {
+  if (!scopePack.hasScopePack) {
+    return { ok: true, reason: "missing_scopepack_kept_for_scoping" };
+  }
+
+  const priority = normalizeToken(todo.priority || "normal");
+  const safePriorities = tokenSet(allowedPriorities, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedPriorities);
+  if (!safePriorities.has(priority)) {
+    return { ok: false, reason: "boardroom_todo_priority_not_allowed", priority };
+  }
+
+  const status = normalizeToken(todo.status || "");
+  if (status !== "open") {
+    return { ok: false, reason: "boardroom_todo_not_open", status: status || null };
+  }
+
+  const assignedTo = String(todo.assigned_to_agent_id || "").trim();
+  if (assignedTo) {
+    return { ok: false, reason: "boardroom_todo_already_assigned", assigned_to_agent_id: assignedTo };
+  }
+
+  const actionReason = normalizeToken(todo.actionability_reason || "");
+  const safeActionReasons = tokenSet(allowedActionReasons, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons);
+  if (actionReason && safeActionReasons.size > 0 && !safeActionReasons.has(actionReason)) {
+    return { ok: false, reason: "boardroom_todo_action_reason_not_allowed", actionability_reason: actionReason };
+  }
+
+  const title = String(todo.title || "");
+  const description = String(todo.description || todo.body || todo.notes || "");
+  if (HOLD_TITLE_PATTERN.test(title) || HOLD_BODY_MARKER_PATTERN.test(description)) {
+    return { ok: false, reason: "boardroom_todo_hold_or_blocker_marker" };
+  }
+
+  if (/\b(blocker|blocked)\b/i.test(recentTodoCommentText(todo))) {
+    return { ok: false, reason: "boardroom_todo_recent_blocker_comment" };
+  }
+
+  const safeRoles = tokenSet(allowedTodoRoles, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedTodoRoles);
+  const roleTokens = listTodoRoleTokens(todo, scopePack);
+  const hasAllowedRole = roleTokens.length === 0 || roleTokens.some((role) => safeRoles.has(role));
+  if (!hasAllowedRole) {
+    return { ok: false, reason: "boardroom_todo_role_not_allowed", role: roleTokens[0] || null };
+  }
+
+  if (!allowProtectedSurfaces) {
+    const safety = inspectAutonomousRunnerJobSafety(createCodingRoomJobFromBoardroomTodo(todo, { now }));
+    if (!safety.ok) {
+      return { ok: false, reason: safety.reason, file: safety.file || null };
+    }
+  }
+
+  return { ok: true, reason: "boardroom_todo_claim_eligible" };
+}
+
 export async function hydrateAutonomousRunnerLedgerFromUnClick({
   ledger,
   runner = DEFAULT_AUTONOMOUS_RUNNER,
@@ -671,6 +794,11 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
   mcpUrl = DEFAULT_UNCLICK_MCP_URL,
   limit = 10,
   fetchImpl = globalThis.fetch,
+  wakeSource = "unknown",
+  allowedPriorities = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedPriorities,
+  allowedActionReasons = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons,
+  allowedTodoRoles = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedTodoRoles,
+  allowProtectedSurfaces = false,
 } = {}) {
   const fetched = await fetchUnClickActionableTodos({
     agentId: runner.agent_id || runner.id || DEFAULT_AUTONOMOUS_RUNNER.id,
@@ -699,10 +827,40 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
 
   let next = createCodingRoomJobLedger({ jobs: ledger?.jobs || [], updatedAt: ledger?.updated_at || now });
   let imported = 0;
+  const skipped = [];
   for (const todo of ordered) {
+    const scopePack = extractBoardroomTodoScopePack(todo);
+    const eligibility = evaluateBoardroomTodoAutoClaimEligibility(todo, {
+      scopePack,
+      allowedPriorities,
+      allowedActionReasons,
+      allowedTodoRoles,
+      allowProtectedSurfaces,
+      now,
+    });
+    if (!eligibility.ok) {
+      skipped.push({
+        id: todo.id,
+        title: compact(todo.title, 140),
+        priority: todo.priority || null,
+        status: todo.status || null,
+        assigned_to_agent_id: todo.assigned_to_agent_id || null,
+        actionability_reason: todo.actionability_reason || null,
+        reason: eligibility.reason,
+        file: eligibility.file || null,
+      });
+      continue;
+    }
+
     const upserted = upsertCodingRoomJob({
       ledger: next,
-      job: createCodingRoomJobFromBoardroomTodo(todo, { now }),
+      job: createCodingRoomJobFromBoardroomTodo(
+        {
+          ...todo,
+          wake_source: wakeSource,
+        },
+        { now },
+      ),
       now,
     });
     if (upserted.ok) {
@@ -717,6 +875,7 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
     ledger: next,
     imported,
     seen: ordered.length,
+    skipped,
     todos: ordered.map((todo) => ({
       id: todo.id,
       title: compact(todo.title, 140),
@@ -761,6 +920,9 @@ export function createAutonomousRunnerPolicy(input = {}) {
     allowProtectedSurfaces: Boolean(input.allowProtectedSurfaces),
     allowExecute: Boolean(input.allowExecute),
     maxCycles: Math.max(1, Number.isFinite(input.maxCycles) ? input.maxCycles : DEFAULT_AUTONOMOUS_RUNNER_POLICY.maxCycles),
+    allowedPriorities: parseList(input.allowedPriorities, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedPriorities),
+    allowedActionReasons: parseList(input.allowedActionReasons, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons),
+    allowedTodoRoles: parseList(input.allowedTodoRoles, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedTodoRoles),
   };
 }
 
@@ -928,6 +1090,7 @@ export async function runAutonomousRunnerFile({
   fetchImpl = globalThis.fetch,
   now = new Date().toISOString(),
   leaseSeconds,
+  wakeSource = "unknown",
 } = {}) {
   if (!ledgerPath) {
     return { ok: false, reason: "missing_ledger_path" };
@@ -955,6 +1118,11 @@ export async function runAutonomousRunnerFile({
         mcpUrl: unclickMcpUrl,
         limit: todoLimit,
         fetchImpl,
+        wakeSource,
+        allowedPriorities: safePolicy.allowedPriorities,
+        allowedActionReasons: safePolicy.allowedActionReasons,
+        allowedTodoRoles: safePolicy.allowedTodoRoles,
+        allowProtectedSurfaces: safePolicy.allowProtectedSurfaces,
       })),
     };
     ledger = queueSourceResult.ledger || ledger;
@@ -1096,11 +1264,15 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     unclickMcpUrl: getArg("unclick-mcp-url", process.env.UNCLICK_MCP_URL || DEFAULT_UNCLICK_MCP_URL),
     todoLimit: parseIntOption(getArg("todo-limit", process.env.AUTONOMOUS_RUNNER_TODO_LIMIT), 10),
     leaseSeconds: parseIntOption(getArg("lease-seconds", process.env.CODING_ROOM_LEASE_SECONDS), undefined),
+    wakeSource: getArg("wake-source", process.env.AUTONOMOUS_RUNNER_WAKE_SOURCE || process.env.GITHUB_EVENT_NAME || "unknown"),
     policy: createAutonomousRunnerPolicy({
       disabled: parseBoolean(process.env.AUTONOMOUS_RUNNER_DISABLED),
       allowProtectedSurfaces: parseBoolean(process.env.AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES),
       allowExecute: parseBoolean(process.env.AUTONOMOUS_RUNNER_ALLOW_EXECUTE),
       maxCycles: parseIntOption(getArg("max-cycles", process.env.AUTONOMOUS_RUNNER_MAX_CYCLES), 1),
+      allowedPriorities: process.env.AUTONOMOUS_RUNNER_ALLOWED_PRIORITIES,
+      allowedActionReasons: process.env.AUTONOMOUS_RUNNER_ALLOWED_ACTION_REASONS,
+      allowedTodoRoles: process.env.AUTONOMOUS_RUNNER_ALLOWED_TODO_ROLES,
     }),
   })
     .then((result) => {

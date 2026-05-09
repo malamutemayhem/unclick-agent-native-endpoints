@@ -3,6 +3,10 @@ name: PinballWake Autonomous Runner
 on:
   schedule:
     - cron: "3,13,23,33,43,53 * * * *"
+  workflow_run:
+    workflows:
+      - Fleet Throughput Watch
+    types: [completed]
   workflow_dispatch:
     inputs:
       mode:
@@ -33,6 +37,7 @@ jobs:
   runner:
     name: Run autonomous queue cycle
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -52,11 +57,15 @@ jobs:
           CODING_ROOM_LEDGER_PATH: ${{ vars.CODING_ROOM_LEDGER_PATH || '.pinballwake/coding-room-ledger.json' }}
           CODING_ROOM_LEASE_SECONDS: ${{ vars.CODING_ROOM_LEASE_SECONDS || '1800' }}
           AUTONOMOUS_RUNNER_QUEUE_SOURCE: ${{ vars.AUTONOMOUS_RUNNER_QUEUE_SOURCE || 'unclick' }}
+          AUTONOMOUS_RUNNER_WAKE_SOURCE: ${{ github.event_name == 'workflow_run' && 'queuepush' || github.event_name }}
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
           AUTONOMOUS_RUNNER_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.AUTONOMOUS_RUNNER_MODE || 'claim' }}
           AUTONOMOUS_RUNNER_DISABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.kill_switch == 'true' && 'true' || vars.AUTONOMOUS_RUNNER_DISABLED || 'false' }}
           AUTONOMOUS_RUNNER_ALLOW_EXECUTE: "false"
           AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES: "false"
+          AUTONOMOUS_RUNNER_ALLOWED_PRIORITIES: ${{ vars.AUTONOMOUS_RUNNER_ALLOWED_PRIORITIES || 'urgent,high' }}
+          AUTONOMOUS_RUNNER_ALLOWED_ACTION_REASONS: ${{ vars.AUTONOMOUS_RUNNER_ALLOWED_ACTION_REASONS || 'unassigned_open' }}
+          AUTONOMOUS_RUNNER_ALLOWED_TODO_ROLES: ${{ vars.AUTONOMOUS_RUNNER_ALLOWED_TODO_ROLES || 'builder,plex-builder,implementation,test_fix,docs_update,code' }}
           AUTONOMOUS_RUNNER_MAX_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_cycles || vars.AUTONOMOUS_RUNNER_MAX_CYCLES || '1' }}
           UNCLICK_MCP_URL: ${{ vars.UNCLICK_MCP_URL || 'https://unclick.world/api/mcp' }}
           UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY || secrets.FISHBOWL_AUTOCLOSE_TOKEN || secrets.FISHBOWL_WAKE_TOKEN }}
