@@ -1,4 +1,4 @@
-// ─── Frontend Connector Registry ──────────────────────────────────────────────
+// Frontend Connector Registry
 // Mirrors packages/mcp-server/src/connectors/ for use in the React frontend.
 // Pure data, no Node.js dependencies. Safe to import in browser code.
 
@@ -25,9 +25,79 @@ export interface ConnectorConfig {
   docsUrl?:    string;
 }
 
-// ─── Platform definitions ─────────────────────────────────────────────────────
+// Platform definitions
 
 export const CONNECTORS: Record<string, ConnectorConfig> = {
+
+  github: {
+    name:        "GitHub",
+    slug:        "github",
+    authType:    "api_key",
+    description: "GitHub repositories, pull requests, issues, and workflow checks.",
+    credentialFields: [
+      {
+        key:          "api_key",
+        label:        "GitHub token",
+        description:  "Personal access token or fine-grained token with the repo and workflow access UnClick needs.",
+        secret:       true,
+        placeholder:  "ghp_... or github_pat_...",
+        findGuideUrl: "https://github.com/settings/tokens",
+      },
+    ],
+    docsUrl: "https://docs.github.com/rest",
+  },
+
+  vercel: {
+    name:        "Vercel",
+    slug:        "vercel",
+    authType:    "api_key",
+    description: "Vercel projects, deployments, domains, and environment variables.",
+    credentialFields: [
+      {
+        key:          "api_key",
+        label:        "Vercel token",
+        description:  "Vercel account token used by UnClick for deployment and project checks.",
+        secret:       true,
+        placeholder:  "vcp_...",
+        findGuideUrl: "https://vercel.com/account/settings/tokens",
+      },
+    ],
+    docsUrl: "https://vercel.com/docs/rest-api",
+  },
+
+  supabase: {
+    name:        "Supabase",
+    slug:        "supabase",
+    authType:    "api_key",
+    description: "Supabase project access for database, auth, and service operations.",
+    credentialFields: [
+      {
+        key:          "project_ref",
+        label:        "Project ref",
+        description:  "The short Supabase project reference from your project URL.",
+        secret:       false,
+        placeholder:  "abcdefghijklmnopqrst",
+        findGuideUrl: "https://supabase.com/dashboard/projects",
+      },
+      {
+        key:          "anon_key",
+        label:        "Anon key",
+        description:  "Public anon key for client-safe checks.",
+        secret:       true,
+        placeholder:  "eyJhbGciOi...",
+        findGuideUrl: "https://supabase.com/dashboard/project/_/settings/api",
+      },
+      {
+        key:          "service_role_key",
+        label:        "Service role key",
+        description:  "Server-only key. Store only inside Passport or trusted server environments.",
+        secret:       true,
+        placeholder:  "eyJhbGciOi...",
+        findGuideUrl: "https://supabase.com/dashboard/project/_/settings/api",
+      },
+    ],
+    docsUrl: "https://supabase.com/docs/reference",
+  },
 
   xero: {
     name:        "Xero",

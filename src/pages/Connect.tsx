@@ -6,7 +6,7 @@ import { Input }    from "@/components/ui/input";
 import { Label }    from "@/components/ui/label";
 import { Badge }    from "@/components/ui/badge";
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// --- Types ---------------------------------------------------------------------
 
 type PageState =
   | { kind: "idle" }
@@ -15,7 +15,7 @@ type PageState =
   | { kind: "success" }
   | { kind: "error"; message: string };
 
-// ─── OAuth helpers ─────────────────────────────────────────────────────────────
+// --- OAuth helpers -------------------------------------------------------------
 
 const VITE_ENV = import.meta.env as Record<string, string>;
 
@@ -62,7 +62,7 @@ function getApiKey(): string {
   }
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// --- Sub-components ------------------------------------------------------------
 
 function ScopeList({ scopes }: { scopes: string[] }) {
   return (
@@ -137,7 +137,7 @@ function FieldInput({
   );
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
+// --- Main page -----------------------------------------------------------------
 
 export default function ConnectPage() {
   const { platform }      = useParams<{ platform: string }>();
@@ -154,7 +154,7 @@ export default function ConnectPage() {
   const [apiKey, setApiKey]           = useState(getApiKey);
   const callbackFired                 = useRef(false);
 
-  // ── Handle OAuth callback ────────────────────────────────────────────────
+  // -- Handle OAuth callback ------------------------------------------------
   useEffect(() => {
     if (!code || !connector || callbackFired.current) return;
     callbackFired.current = true;
@@ -206,23 +206,23 @@ export default function ConnectPage() {
       });
   }, [code, connector, stateParam, apiKey]);
 
-  // ── Loading / unknown platform ───────────────────────────────────────────
+  // -- Loading / unknown service --------------------------------------------
   if (!connector) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
         <div className="text-center space-y-4 max-w-md px-6">
           <p className="text-[#E8E8E8]/60 text-lg">
-            {platform ? `Unknown platform: ${platform}` : "No platform specified."}
+            {platform ? `This Passport service is not listed yet: ${platform}` : "No Passport service specified."}
           </p>
-          <Link to="/" className="text-[#E2B93B] hover:underline text-sm">
-            Back to home
+          <Link to="/admin/keychain" className="text-[#E2B93B] hover:underline text-sm">
+            Back to Passport
           </Link>
         </div>
       </div>
     );
   }
 
-  // ── Success state ────────────────────────────────────────────────────────
+  // -- Success state --------------------------------------------------------
   if (pageState.kind === "success") {
     const vaultCommands = connector.credentialFields.map(
       (f) => `vault_store key="${connector.slug}/${f.key}" value="..."`
@@ -255,15 +255,15 @@ export default function ConnectPage() {
             ))}
           </div>
 
-          <Link to="/" className="inline-block text-sm text-[#E8E8E8]/60 hover:text-[#E8E8E8]">
-            Back to home
+          <Link to="/admin/keychain" className="inline-block text-sm text-[#E8E8E8]/60 hover:text-[#E8E8E8]">
+            Back to Passport
           </Link>
         </div>
       </ConnectShell>
     );
   }
 
-  // ── Error state ──────────────────────────────────────────────────────────
+  // -- Error state ----------------------------------------------------------
   if (pageState.kind === "error") {
     return (
       <ConnectShell connector={connector}>
@@ -290,7 +290,7 @@ export default function ConnectPage() {
     );
   }
 
-  // ── Callback processing ──────────────────────────────────────────────────
+  // -- Callback processing --------------------------------------------------
   if (pageState.kind === "callback" || pageState.kind === "connecting") {
     return (
       <ConnectShell connector={connector}>
@@ -306,7 +306,7 @@ export default function ConnectPage() {
     );
   }
 
-  // ── Idle: show connect form ──────────────────────────────────────────────
+  // -- Idle: show connect form ----------------------------------------------
 
   const isOAuth2          = connector.authType === "oauth2";
   const origin            = window.location.origin;
@@ -512,7 +512,7 @@ export default function ConnectPage() {
   );
 }
 
-// ─── Shell layout ──────────────────────────────────────────────────────────────
+// --- Shell layout --------------------------------------------------------------
 
 function ConnectShell({
   connector,
@@ -539,7 +539,7 @@ function ConnectShell({
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            unclick.world
+            Passport
           </Link>
 
           <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">

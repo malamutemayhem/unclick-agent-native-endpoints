@@ -1,5 +1,5 @@
 /**
- * AdminKeychain - Connections admin surface (/admin/keychain)
+ * AdminKeychain - Passport admin surface (/admin/keychain)
  *
  * Full CRUD on the user_credentials vault:
  *   - List every credential the signed-in user owns (metadata only)
@@ -55,9 +55,8 @@ import {
   type SystemCredentialProvider,
   type SystemCredentialRisk,
 } from "./systemCredentialInventory";
-import { AdminPassportIntro } from "./AdminEcosystemPages";
 
-// ─── Platform catalog ─────────────────────────────────────────────
+// Platform catalog
 
 const PLATFORMS = [
   // AI / LLM
@@ -106,7 +105,9 @@ const PLATFORMS = [
   { slug: "zapier",     name: "Zapier",       category: "Productivity", desc: "Workflow automation" },
 ] as const;
 
-// ─── Types ───────────────────────────────────────────────────────
+const CORE_PASSPORT_PLATFORMS = ["github", "vercel", "supabase"] as const;
+
+// Types
 
 interface Credential {
   id:               string;
@@ -166,7 +167,7 @@ interface AuditEntry {
   created_at:    string;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// Helpers
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "never";
@@ -325,7 +326,7 @@ const OWNER_CONFIDENCE_BADGES: Record<SystemCredentialOwnerConfidence, {
   },
 };
 
-// ─── Component ──────────────────────────────────────────────────
+// Component
 
 export default function AdminKeychain() {
   const { session } = useSession();
@@ -574,7 +575,7 @@ export default function AdminKeychain() {
       setCopiedField(field);
       window.setTimeout(() => setCopiedField((c) => (c === field ? null : c)), 2_000);
     } catch {
-      // no-op — browser blocked clipboard
+      // no-op: browser blocked clipboard
     }
   }
 
@@ -621,7 +622,7 @@ export default function AdminKeychain() {
       const url      = URL.createObjectURL(blob);
       const anchor   = document.createElement("a");
       const filename = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1]
-        ?? `unclick-connections-${new Date().toISOString().slice(0, 10)}.enc`;
+        ?? `unclick-passport-${new Date().toISOString().slice(0, 10)}.enc`;
       anchor.href     = url;
       anchor.download = filename;
       anchor.click();
@@ -648,12 +649,22 @@ export default function AdminKeychain() {
     return { label: "Weak", color: "bg-red-500" };
   }
 
-  const grouped = credentials.reduce<Record<string, Credential[]>>((acc, cred) => {
-    const cat = cred.connector?.category ?? "Other";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(cred);
-    return acc;
-  }, {});
+  const credentialByPlatform = useMemo(() => {
+    const map = new Map<string, Credential>();
+    for (const cred of credentials) {
+      if (!map.has(cred.platform)) map.set(cred.platform, cred);
+    }
+    return map;
+  }, [credentials]);
+
+  const sortedCredentials = useMemo(() => {
+    const coreOrder = new Map(CORE_PASSPORT_PLATFORMS.map((platform, index) => [platform, index]));
+    return [...credentials].sort((a, b) => {
+      const aCore = coreOrder.get(a.platform) ?? 99;
+      const bCore = coreOrder.get(b.platform) ?? 99;
+      return aCore - bCore || (a.connector?.name ?? a.platform).localeCompare(b.connector?.name ?? b.platform);
+    });
+  }, [credentials]);
 
   const healthCounts = credentials.reduce<Record<CredentialHealthStatus, number>>((acc, cred) => {
     acc[credentialHealth(cred)] += 1;
@@ -665,6 +676,9 @@ export default function AdminKeychain() {
     stale:          0,
     needs_rotation: 0,
   });
+  const attentionCredentials = sortedCredentials.filter((cred) => credentialHealth(cred) !== "healthy");
+  const healthyCount = healthCounts.healthy;
+  const attentionCount = credentials.length - healthyCount;
 
   const systemCredentialInventory = useMemo(() => listSystemCredentialHealthRows(), []);
   const inventorySummary = useMemo(() => ({
@@ -686,7 +700,7 @@ export default function AdminKeychain() {
         <div>
           <h1 className="text-2xl font-semibold text-white">Passport</h1>
           <p className="mt-1 text-sm text-[#888]">
-            Permissions, keys, logins, and connection health. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
+            Permissions, keys, logins, and health. {credentials.length} saved item{credentials.length === 1 ? "" : "s"}.
           </p>
         </div>
         <div className="flex gap-2">
@@ -713,129 +727,121 @@ export default function AdminKeychain() {
         </div>
       </div>
 
-      <AdminPassportIntro />
-
-      {/* Encryption notice */}
-      <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#E2B93B]/20 bg-[#E2B93B]/5 px-4 py-3">
-        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[#E2B93B]" />
-        <div>
-          <p className="text-xs font-medium text-[#E2B93B]">Encrypted connection secrets</p>
-          <p className="mt-0.5 text-[11px] text-[#888]">
-            Connection secrets are AES-256-GCM encrypted with a key derived from your UnClick API key.
-            UnClick staff cannot decrypt them — even revealing a value requires your API key to be present in this browser.
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-xl border border-white/[0.06] bg-[#111111] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential inventory</p>
-            <p className="mt-1 text-[11px] text-[#888]">
-              Name-only map of what powers each workflow, who owns it, and how to rotate safely. Untested means no safe probe has confirmed health yet.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              ["Tracked", inventorySummary.total],
-              ["Expected", inventorySummary.expected],
-              ["Critical", inventorySummary.critical],
-              ["High", inventorySummary.high],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[#555]">{label}</p>
-                <p className="mt-1 text-sm font-semibold text-white">{value}</p>
-              </div>
-            ))}
+      <section className="mb-6 grid gap-4 lg:grid-cols-[1fr_18rem]">
+        <div className="rounded-xl border border-[#61C1C4]/20 bg-[#61C1C4]/[0.06] p-4">
+          <div className="flex items-start gap-3">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[#61C1C4]" />
+            <div>
+              <p className="text-sm font-semibold text-white">Passport controls what UnClick can use.</p>
+              <p className="mt-1 text-xs leading-5 text-[#aaa]">
+                Save GitHub, Vercel, Supabase, and other service access here once. AI Seats should use Passport through UnClick instead of carrying separate keys.
+              </p>
+            </div>
           </div>
         </div>
-
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {(Object.keys(inventoryByProvider) as SystemCredentialProvider[]).map((provider) => (
-            <div key={provider} className="rounded-lg border border-white/[0.05] bg-black/20">
-              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2">
-                <p className="text-xs font-semibold text-white">{PROVIDER_LABELS[provider]}</p>
-                <p className="text-[10px] text-[#666]">{inventoryByProvider[provider].length} names</p>
-              </div>
-              <div className="divide-y divide-white/[0.04]">
-                {inventoryByProvider[provider].map((entry) => {
-                  const risk = INVENTORY_RISK_BADGES[entry.risk];
-                  const status = INVENTORY_STATUS_BADGES[entry.displayStatus];
-                  const ownerConfidence = OWNER_CONFIDENCE_BADGES[entry.ownerConfidence];
-                  return (
-                    <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_auto]">
-                      <div className="min-w-0">
-                        <p className="truncate font-mono text-[#ddd]">{entry.name}</p>
-                        <p className="mt-0.5 text-[#555]">{entry.sourceLabel}</p>
-                        <p className="mt-0.5 text-[#666]">{entry.scope}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[#ccc]">Used by: {entry.workload}</p>
-                        <div className="mt-1 grid gap-1 text-[#666] sm:grid-cols-2">
-                          <p>Owner: {entry.ownerLabel} ({entry.ownerConfidence})</p>
-                          <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "no safe check yet"}</p>
-                        </div>
-                        <p className="mt-1 text-[#666]">Health evidence: {entry.healthEvidenceLabel}</p>
-                        <p className="mt-1 text-[#666]">{entry.docsHint}</p>
-                        <p className="mt-1 text-[#888]">Impact: {entry.rotationImpactSummary}</p>
-                        <div className="mt-1 space-y-0.5 text-[#888]">
-                          {entry.safeRotationNotes.map((note) => (
-                            <p key={note}>Rotate: {note}</p>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-start gap-1 md:justify-end">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.className}`}
-                          title={status.description}
-                        >
-                          {status.label}
-                        </span>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>
-                          {risk.label}
-                        </span>
-                        <span className="rounded-full border border-white/[0.05] bg-white/[0.03] px-2 py-0.5 text-[10px] text-[#aaa]">
-                          {entry.expected ? "Expected" : "Optional"}
-                        </span>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${ownerConfidence.className}`}>
-                          {ownerConfidence.label}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+        <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+          {[
+            ["Connected", credentials.length],
+            ["Healthy", healthyCount],
+            ["Needs review", attentionCount],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-white/[0.06] bg-[#111111] px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#666]">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-white">{value}</p>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      {credentials.length > 0 && (
-        <div className="mb-6 rounded-xl border border-white/[0.06] bg-[#111111] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">System credential health</p>
-              <p className="mt-1 text-[11px] text-[#888]">
-                Metadata only: ownership, usage, checks, and rotation notes.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {(Object.keys(HEALTH_BADGES) as CredentialHealthStatus[]).map((status) => {
-                const badge = HEALTH_BADGES[status];
-                const Icon = badge.icon;
-                return (
-                  <div key={status} className={`rounded-lg border px-3 py-2 ${badge.className}`}>
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium">
-                      <Icon className="h-3 w-3" />
-                      {badge.label}
-                    </div>
-                    <p className="mt-1 text-sm font-semibold">{healthCounts[status]}</p>
-                  </div>
-                );
-              })}
-            </div>
+      <section className="mb-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Core access</h2>
+            <p className="mt-0.5 text-xs text-[#666]">The main services AutoPilot needs for code, deploys, and data.</p>
           </div>
+          <button
+            onClick={() => setStarterOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-3 py-2 text-xs font-semibold text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
         </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {CORE_PASSPORT_PLATFORMS.map((platform) => {
+            const cred = credentialByPlatform.get(platform);
+            const platformInfo = PLATFORMS.find((item) => item.slug === platform);
+            const health = cred ? credentialHealth(cred) : null;
+            const badge = health ? HEALTH_BADGES[health] : null;
+            const HealthIcon = badge?.icon;
+            return (
+              <div key={platform} className="rounded-xl border border-white/[0.06] bg-[#111111] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{platformInfo?.name ?? platform}</p>
+                    <p className="mt-1 text-xs text-[#666]">{platformInfo?.desc}</p>
+                  </div>
+                  {cred && badge && HealthIcon ? (
+                    <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                      <HealthIcon className="h-3 w-3" /> {badge.label}
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-[#aaa]">
+                      Not saved
+                    </span>
+                  )}
+                </div>
+                <p className="mt-3 text-[11px] text-[#777]">
+                  {cred
+                    ? `${credentialLastCheckDisplay(cred).label}: ${credentialLastCheckDisplay(cred).value}`
+                    : "Add once so all UnClick Seats can request this service through Passport."}
+                </p>
+                <div className="mt-4">
+                  {cred ? (
+                    <button
+                      onClick={() => setRotateTarget(cred)}
+                      className="text-xs font-medium text-[#61C1C4] hover:text-[#61C1C4]/80"
+                    >
+                      Manage access
+                    </button>
+                  ) : (
+                    <Link to={`/connect/${platform}`} className="text-xs font-medium text-[#E2B93B] hover:text-[#E2B93B]/80">
+                      Connect
+                    </Link>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {attentionCredentials.length > 0 && (
+        <section className="mb-6 rounded-xl border border-[#E2B93B]/20 bg-[#E2B93B]/5 p-4">
+          <p className="text-sm font-semibold text-[#E2B93B]">Needs review</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {attentionCredentials.slice(0, 6).map((cred) => {
+              const health = credentialHealth(cred);
+              const badge = HEALTH_BADGES[health];
+              const Icon = badge.icon;
+              return (
+                <button
+                  key={cred.id}
+                  onClick={() => setRotateTarget(cred)}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-left"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium text-white">{cred.connector?.name ?? cred.platform}</span>
+                    <span className="text-[11px] text-[#888]">{credentialLastCheckDisplay(cred).value}</span>
+                  </span>
+                  <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+                    <Icon className="h-3 w-3" /> {badge.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* List */}
@@ -848,12 +854,12 @@ export default function AdminKeychain() {
       {loading ? (
         <div className="flex items-center gap-2 py-12 text-[#666]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Loading connections...</span>
+          <span className="text-sm">Loading Passport...</span>
         </div>
       ) : credentials.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/[0.08] bg-[#111111] p-8 text-center">
           <KeyRound className="mx-auto h-8 w-8 text-[#333]" />
-          <p className="mt-3 text-sm text-[#666]">No connections yet</p>
+          <p className="mt-3 text-sm text-[#666]">No saved access yet</p>
           <p className="mt-1 text-xs text-[#444]">
             Connect a platform or add a manual key or token.
           </p>
@@ -862,18 +868,17 @@ export default function AdminKeychain() {
             className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-3 py-2 text-xs font-semibold text-[#E2B93B] transition-colors hover:bg-[#E2B93B]/20"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add connection
+            Add access
           </button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.entries(grouped).map(([category, creds]) => (
-            <div key={category}>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#666]">
-                {category}
-              </h3>
-              <div className="space-y-2">
-                {creds.map((cred) => {
+        <section className="mb-6">
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-white">Saved access</h2>
+            <p className="mt-0.5 text-xs text-[#666]">Manage saved services without exposing secret values on-screen.</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {sortedCredentials.map((cred) => {
                   const plaintext = revealed[cred.id];
                   const isOpen    = Boolean(plaintext);
                   const busy      = revealing[cred.id];
@@ -1058,7 +1063,7 @@ export default function AdminKeychain() {
                             );
                           })}
                           <p className="mt-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#444]">
-                            Auto-hides in 60s. Values are masked on-screen — click copy to get the full value onto your clipboard.
+                            Auto-hides in 60s. Values are masked on-screen. Click copy to get the full value onto your clipboard.
                           </p>
                         </div>
                       )}
@@ -1066,10 +1071,69 @@ export default function AdminKeychain() {
                   );
                 })}
               </div>
+        </section>
+      )}
+
+      <details className="mt-6 rounded-xl border border-white/[0.06] bg-[#111111] p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-white">
+          Advanced system inventory
+          <span className="ml-2 text-xs font-normal text-[#666]">
+            {inventorySummary.total} tracked names, {inventorySummary.critical + inventorySummary.high} elevated risk
+          </span>
+        </summary>
+        <p className="mt-2 text-xs leading-5 text-[#888]">
+          Name-only map of the GitHub and Vercel runtime credentials that power workflows. This is for debugging and rotation planning, not day-to-day Passport setup.
+        </p>
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {(Object.keys(inventoryByProvider) as SystemCredentialProvider[]).map((provider) => (
+            <div key={provider} className="rounded-lg border border-white/[0.05] bg-black/20">
+              <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2">
+                <p className="text-xs font-semibold text-white">{PROVIDER_LABELS[provider]}</p>
+                <p className="text-[10px] text-[#666]">{inventoryByProvider[provider].length} names</p>
+              </div>
+              <div className="divide-y divide-white/[0.04]">
+                {inventoryByProvider[provider].map((entry) => {
+                  const risk = INVENTORY_RISK_BADGES[entry.risk];
+                  const status = INVENTORY_STATUS_BADGES[entry.displayStatus];
+                  const ownerConfidence = OWNER_CONFIDENCE_BADGES[entry.ownerConfidence];
+                  return (
+                    <div key={`${entry.provider}-${entry.name}-${entry.workload}`} className="grid gap-2 px-3 py-3 text-[11px] md:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)_auto]">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-[#ddd]">{entry.name}</p>
+                        <p className="mt-0.5 text-[#555]">{entry.sourceLabel}</p>
+                        <p className="mt-0.5 text-[#666]">{entry.scope}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[#ccc]">Used by: {entry.workload}</p>
+                        <div className="mt-1 grid gap-1 text-[#666] sm:grid-cols-2">
+                          <p>Owner: {entry.ownerLabel} ({entry.ownerConfidence})</p>
+                          <p>Last checked: {entry.lastCheckedAt ? timeAgo(entry.lastCheckedAt) : "no safe check yet"}</p>
+                        </div>
+                        <p className="mt-1 text-[#666]">Health evidence: {entry.healthEvidenceLabel}</p>
+                        <p className="mt-1 text-[#888]">Impact: {entry.rotationImpactSummary}</p>
+                      </div>
+                      <div className="flex flex-wrap items-start gap-1 md:justify-end">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.className}`}
+                          title={status.description}
+                        >
+                          {status.label}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${risk.className}`}>
+                          {risk.label}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${ownerConfidence.className}`}>
+                          {ownerConfidence.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
-      )}
+      </details>
 
       {/* Edit-label modal */}
       {editTarget && (
@@ -1110,15 +1174,15 @@ export default function AdminKeychain() {
         />
       )}
 
-      {/* Export connections modal */}
+      {/* Export Passport modal */}
       {exportOpen && (() => {
         const pw       = exportPassword;
         const strength = exportPasswordStrength(pw);
         const canDownload = pw.length >= 12 && pw === exportConfirm;
         return (
-          <ModalShell title="Export connections" onClose={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}>
+          <ModalShell title="Export Passport" onClose={() => { setExportOpen(false); setExportPassword(""); setExportConfirm(""); setExportError(null); }}>
             <p className="mb-4 text-xs text-[#888]">
-              Download an encrypted backup of your Connections secrets. Set a password to protect the file.
+              Download an encrypted backup of your Passport secrets. Set a password to protect the file.
             </p>
             <div className="space-y-3">
               <div>
@@ -1180,7 +1244,7 @@ export default function AdminKeychain() {
         );
       })()}
 
-      {/* Add connection modal */}
+      {/* Add Passport access modal */}
       {starterOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -1193,7 +1257,7 @@ export default function AdminKeychain() {
           >
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-4">
-              <h3 className="text-sm font-semibold text-white">Add connection</h3>
+              <h3 className="text-sm font-semibold text-white">Add Passport access</h3>
               <button
                 onClick={() => { setStarterOpen(false); resetAddModal(); }}
                 className="rounded-md p-1 text-[#888] transition-colors hover:bg-white/[0.04] hover:text-white"
@@ -1214,7 +1278,7 @@ export default function AdminKeychain() {
                       : "text-[#666] hover:text-[#aaa]"
                   }`}
                 >
-                  {mode === "browse" ? "Browse Platforms" : "Add Manually"}
+                  {mode === "browse" ? "Browse services" : "Add manually"}
                 </button>
               ))}
             </div>
@@ -1227,7 +1291,7 @@ export default function AdminKeychain() {
                     <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#555]" />
                     <input
                       type="text"
-                      placeholder="Search platforms..."
+                      placeholder="Search services..."
                       value={platformSearch}
                       onChange={(e) => setPlatformSearch(e.target.value)}
                       className="w-full rounded-md border border-white/[0.08] bg-black/30 py-2 pl-8 pr-3 text-xs text-white placeholder-[#555] focus:border-[#61C1C4]/40 focus:outline-none"
@@ -1235,8 +1299,48 @@ export default function AdminKeychain() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto px-4 pb-4">
-                  <div className="space-y-1">
-                    {PLATFORMS.filter(
+                  <div className="space-y-3">
+                    {CORE_PASSPORT_PLATFORMS.some((platform) =>
+                      PLATFORMS.some((item) => item.slug === platform && (
+                        !platformSearch ||
+                        item.name.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        item.category.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                        item.desc.toLowerCase().includes(platformSearch.toLowerCase())
+                      )),
+                    ) && (
+                      <div>
+                        <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-[#666]">Core services</p>
+                        <div className="space-y-1">
+                          {CORE_PASSPORT_PLATFORMS.map((slug) => PLATFORMS.find((item) => item.slug === slug))
+                            .filter((p): p is (typeof PLATFORMS)[number] => Boolean(p))
+                            .filter(
+                              (p) =>
+                                !platformSearch ||
+                                p.name.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                                p.category.toLowerCase().includes(platformSearch.toLowerCase()) ||
+                                p.desc.toLowerCase().includes(platformSearch.toLowerCase()),
+                            )
+                            .map(({ slug, name, desc }) => (
+                              <Link
+                                key={slug}
+                                to={`/connect/${slug}`}
+                                onClick={() => { setStarterOpen(false); resetAddModal(); }}
+                                className="flex items-center justify-between rounded-lg border border-[#61C1C4]/20 bg-[#61C1C4]/[0.06] px-3 py-2.5 transition-colors hover:border-[#61C1C4]/40 hover:bg-[#61C1C4]/10"
+                              >
+                                <div>
+                                  <p className="text-xs font-medium text-white">{name}</p>
+                                  <p className="text-[11px] text-[#888]">{desc}</p>
+                                </div>
+                                <Plus className="h-3.5 w-3.5 shrink-0 text-[#61C1C4]" />
+                              </Link>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-[#666]">More services</p>
+                      <div className="space-y-1">
+                    {PLATFORMS.filter((p) => !CORE_PASSPORT_PLATFORMS.includes(p.slug as typeof CORE_PASSPORT_PLATFORMS[number])).filter(
                       (p) =>
                         !platformSearch ||
                         p.name.toLowerCase().includes(platformSearch.toLowerCase()) ||
@@ -1256,6 +1360,8 @@ export default function AdminKeychain() {
                         <Plus className="h-3.5 w-3.5 shrink-0 text-[#555]" />
                       </Link>
                     ))}
+                      </div>
+                    </div>
                     {PLATFORMS.filter(
                       (p) =>
                         !platformSearch ||
@@ -1263,7 +1369,7 @@ export default function AdminKeychain() {
                         p.category.toLowerCase().includes(platformSearch.toLowerCase()) ||
                         p.desc.toLowerCase().includes(platformSearch.toLowerCase()),
                     ).length === 0 && (
-                      <p className="py-6 text-center text-xs text-[#555]">No platforms match "{platformSearch}"</p>
+                      <p className="py-6 text-center text-xs text-[#555]">No services match "{platformSearch}"</p>
                     )}
                   </div>
                 </div>
@@ -1281,7 +1387,7 @@ export default function AdminKeychain() {
                 )}
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-[11px] text-[#888]">Platform name</label>
+                    <label className="mb-1 block text-[11px] text-[#888]">Service name</label>
                     <input
                       type="text"
                       placeholder="e.g. GitHub, My Custom API"
@@ -1357,7 +1463,7 @@ export default function AdminKeychain() {
   );
 }
 
-// ─── Modals ───────────────────────────────────────────────────────
+// Modals
 
 function ModalShell({
   title,
@@ -1428,7 +1534,7 @@ function EditLabelModal({
   return (
     <ModalShell title={`Rename ${cred.connector?.name ?? cred.platform}`} onClose={onClose}>
       <p className="mb-3 text-xs text-[#888]">
-        Labels distinguish multiple connections for the same platform (e.g. "claude-code", "bailey-plex-3"). Leave blank for the default.
+        Labels distinguish multiple saved keys for the same platform (e.g. "claude-code", "bailey-plex-3"). Leave blank for the default.
       </p>
       <input
         value={label}
@@ -1579,7 +1685,7 @@ function DeleteModal({
       <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
         <p className="text-xs text-red-400">
-          This permanently removes <span className="font-mono">{cred.platform}{cred.label ? ` [${cred.label}]` : ""}</span> from Connections. The audit log is preserved.
+          This permanently removes <span className="font-mono">{cred.platform}{cred.label ? ` [${cred.label}]` : ""}</span> from Passport. The audit log is preserved.
         </p>
       </div>
       {err && <p className="mt-2 text-[11px] text-red-400">{err}</p>}
@@ -1620,7 +1726,7 @@ function AuditDrawer({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-white">Audit log</h3>
-            <p className="text-[11px] text-[#666]">Every reveal, update, and delete on your Connections secrets.</p>
+            <p className="text-[11px] text-[#666]">Every reveal, update, and delete on your Passport secrets.</p>
           </div>
           <button
             onClick={onClose}
