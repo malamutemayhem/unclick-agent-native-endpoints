@@ -154,6 +154,8 @@ export interface OrchestratorProfileCard {
   emoji?: string | null;
   device_hint?: string | null;
   last_seen_at?: string | null;
+  freshness_label: "Live" | "Recent" | "Missed check-in" | "Quiet";
+  checkin_age_minutes: number | null;
   current_status?: string | null;
   next_checkin_at?: string | null;
 }
@@ -238,7 +240,7 @@ export function compactText(input: unknown, maxChars = 220): string {
 export function buildOrchestratorContext(input: BuildOrchestratorContextInput): OrchestratorContext {
   const nowMs = Date.parse(input.generatedAt);
   const profiles = input.profiles
-    .map((profile) => buildProfileCard(profile))
+    .map((profile) => buildProfileCard(profile, nowMs))
     .sort((a, b) => compareIsoDesc(a.last_seen_at, b.last_seen_at));
   const activeSeatCount = profiles.filter((profile) => isFresh(profile.last_seen_at, nowMs)).length;
 
@@ -339,19 +341,46 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
   };
 }
 
-function buildProfileCard(profile: OrchestratorProfileRow): OrchestratorProfileCard {
+function buildProfileCard(profile: OrchestratorProfileRow, nowMs: number): OrchestratorProfileCard {
   const label = profile.display_name?.trim() || prettifyAgentId(profile.agent_id);
   const role = profile.user_agent_hint === "admin-ui" || profile.agent_id.startsWith("human-") ? "human" : "ai-seat";
+  const lastSeenAt = profile.last_seen_at ?? profile.created_at ?? null;
+  const freshness = getSeatFreshness(lastSeenAt, profile.next_checkin_at, nowMs);
   return {
     agent_id: profile.agent_id,
     label,
     role,
     emoji: profile.emoji ?? null,
     device_hint: profile.user_agent_hint ?? null,
-    last_seen_at: profile.last_seen_at ?? profile.created_at ?? null,
+    last_seen_at: lastSeenAt,
+    freshness_label: freshness.label,
+    checkin_age_minutes: freshness.ageMinutes,
     current_status: compactText(profile.current_status ?? "", 140) || null,
     next_checkin_at: profile.next_checkin_at ?? null,
   };
+}
+
+function getSeatFreshness(
+  lastSeenAt: string | null,
+  nextCheckinAt: string | null | undefined,
+  nowMs: number,
+): { label: OrchestratorProfileCard["freshness_label"]; ageMinutes: number | null } {
+  const seenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+  const dueMs = nextCheckinAt ? Date.parse(nextCheckinAt) : NaN;
+  if (Number.isFinite(dueMs) && dueMs < nowMs && (!Number.isFinite(seenMs) || seenMs < dueMs)) {
+    return {
+      label: "Missed check-in",
+      ageMinutes: Number.isFinite(seenMs) ? Math.max(0, Math.floor((nowMs - seenMs) / 60_000)) : null,
+    };
+  }
+  if (!Number.isFinite(seenMs) || !Number.isFinite(nowMs)) {
+    return { label: "Quiet", ageMinutes: null };
+  }
+  const ageMs = Math.max(0, nowMs - seenMs);
+  const ageMinutes = Math.floor(ageMs / 60_000);
+  if (ageMs <= ACTIVE_WINDOW_MS) return { label: "Live", ageMinutes };
+  if (ageMs <= 24 * 60 * 60 * 1000) return { label: "Recent", ageMinutes };
+  return { label: "Quiet", ageMinutes };
 }
 
 function messageToEvent(message: OrchestratorMessageRow): OrchestratorContinuityEvent {

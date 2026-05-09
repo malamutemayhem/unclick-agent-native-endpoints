@@ -141,11 +141,54 @@ describe("orchestrator context", () => {
     expect(context.current_state_card.blocker_count).toBe(1);
     expect(context.current_state_card.next_actions[0]).toContain("Orchestrator context layer");
     expect(context.profile_cards.find((profile) => profile.agent_id === "human-chris")?.role).toBe("human");
+    expect(context.profile_cards.find((profile) => profile.agent_id === "chatgpt-codex-seat")?.freshness_label).toBe("Live");
+    expect(context.profile_cards.find((profile) => profile.agent_id === "human-chris")?.freshness_label).toBe("Recent");
     expect(context.continuity_events.some((event) => event.kind === "proof" && event.source_id === "msg-proof")).toBe(true);
     expect(context.continuity_events.some((event) => event.source_kind === "conversation_turn" && event.role === "user")).toBe(true);
     expect(context.library_snapshots.map((snapshot) => snapshot.source_kind)).toEqual(
       expect.arrayContaining(["library", "business_context", "session_summary"]),
     );
+  });
+
+  it("labels profile-card check-in freshness for AI seats", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-09T12:00:00.000Z",
+      profiles: [
+        {
+          agent_id: "live-seat",
+          last_seen_at: "2026-05-09T11:55:00.000Z",
+        },
+        {
+          agent_id: "recent-seat",
+          last_seen_at: "2026-05-09T09:30:00.000Z",
+        },
+        {
+          agent_id: "missed-seat",
+          last_seen_at: "2026-05-09T10:00:00.000Z",
+          next_checkin_at: "2026-05-09T11:00:00.000Z",
+        },
+        {
+          agent_id: "quiet-seat",
+          last_seen_at: "2026-05-08T00:00:00.000Z",
+        },
+      ],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    const labels = new Map(context.profile_cards.map((profile) => [profile.agent_id, profile.freshness_label]));
+
+    expect(labels.get("live-seat")).toBe("Live");
+    expect(labels.get("recent-seat")).toBe("Recent");
+    expect(labels.get("missed-seat")).toBe("Missed check-in");
+    expect(labels.get("quiet-seat")).toBe("Quiet");
   });
 
   it("redacts sensitive auth and billing material before summaries leave the layer", () => {

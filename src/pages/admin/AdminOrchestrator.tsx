@@ -70,6 +70,8 @@ interface OrchestratorContext {
     role: "human" | "ai-seat";
     emoji?: string | null;
     last_seen_at?: string | null;
+    freshness_label?: SeatFreshnessLabel | null;
+    checkin_age_minutes?: number | null;
     current_status?: string | null;
     next_checkin_at?: string | null;
   }>;
@@ -97,6 +99,14 @@ interface OrchestratorContext {
 }
 
 type ConnectionTier = "channel" | "gemini" | "unconfigured";
+type SeatFreshnessLabel = "Live" | "Recent" | "Missed check-in" | "Quiet";
+
+const FRESHNESS_STYLES: Record<SeatFreshnessLabel, string> = {
+  Live: "border-[#61C1C4]/35 bg-[#61C1C4]/10 text-[#61C1C4]",
+  Recent: "border-white/[0.08] bg-white/[0.04] text-white/60",
+  "Missed check-in": "border-[#E2B93B]/35 bg-[#E2B93B]/10 text-[#E2B93B]",
+  Quiet: "border-white/[0.06] bg-black/20 text-white/35",
+};
 
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -323,9 +333,12 @@ function OrchestratorContextCard({
 
         <ContextSection title="Profiles" icon={Users}>
           {context.profile_cards.slice(0, 5).map((profile) => (
-            <div key={profile.agent_id} className="flex items-center justify-between gap-2 text-xs">
+            <div key={profile.agent_id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 text-xs">
               <span className="min-w-0 truncate text-white/70">
                 {profile.emoji ? `${profile.emoji} ` : ""}{profile.label}
+              </span>
+              <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${FRESHNESS_STYLES[profile.freshness_label ?? "Quiet"]}`}>
+                {profile.freshness_label ?? "Quiet"}
               </span>
               <span className="shrink-0 text-white/35">{formatRelative(profile.last_seen_at)}</span>
             </div>
