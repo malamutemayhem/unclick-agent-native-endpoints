@@ -53,7 +53,7 @@ jobs:
         run: node scripts/uxpass-site-sweep.mjs --output public/dogfood/uxpass-site-sweep.json --target-sha "$GITHUB_SHA" --allow-non-passing
 
       - name: Upload receipt artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dogfood-latest
           path: |
