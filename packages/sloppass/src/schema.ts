@@ -18,6 +18,11 @@ export const SlopPassTargetSchema = z.object({
   ref: z.string().optional(),
 });
 
+export const SlopPassSourceFileSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
 export const SlopPassFindingSchema = z.object({
   title: z.string().min(1),
   category: SlopPassCategorySchema,
@@ -30,16 +35,44 @@ export const SlopPassFindingSchema = z.object({
   line: z.number().int().positive().optional(),
 });
 
+export const SlopPassVerdictSchema = z.enum(["pass", "warn", "fail", "unknown"]);
+
+export const SlopPassScopeSchema = z.object({
+  checks_attempted: z.array(SlopPassCategorySchema),
+  files_reviewed: z.array(z.string().min(1)),
+  provider: z.string().min(1),
+});
+
+export const SlopPassNotCheckedSchema = z.object({
+  label: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+export const SlopPassSummarySchema = z.object({
+  posture: z.string().min(1),
+  counts_by_severity: z.record(SlopPassSeveritySchema, z.number().int().nonnegative()),
+  coverage_note: z.string().min(1),
+});
+
+export const SlopPassDisclaimerSchema = z.object({
+  headline: z.string().min(1),
+  body: z.string().min(1),
+  compact: z.string().min(1),
+});
+
+export const SlopPassResultSchema = z.object({
+  target: SlopPassTargetSchema,
+  scope: SlopPassScopeSchema,
+  verdict: SlopPassVerdictSchema,
+  findings: z.array(SlopPassFindingSchema),
+  not_checked: z.array(SlopPassNotCheckedSchema),
+  summary: SlopPassSummarySchema,
+  disclaimer: SlopPassDisclaimerSchema,
+});
+
 export const SlopPassRunInputSchema = z.object({
   target: SlopPassTargetSchema,
-  files: z
-    .array(
-      z.object({
-        path: z.string().min(1),
-        content: z.string(),
-      })
-    )
-    .min(1),
+  files: z.array(SlopPassSourceFileSchema).min(1),
   checks: z.array(SlopPassCategorySchema).optional(),
   provider: z.enum(["openai", "anthropic", "google", "ollama", "http"]).default("http"),
 });

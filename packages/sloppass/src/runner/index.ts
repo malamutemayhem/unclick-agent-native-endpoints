@@ -4,6 +4,7 @@ import { SlopPassRunInputSchema, type SlopPassRunInput } from "../schema.js";
 import type { SlopPassResult, SlopPassSeverity } from "../types.js";
 import { detectSlopSignals } from "./detectors.js";
 import { getProvider } from "../vendor/promptfoo-lite/index.js";
+import { toSlopPassVerdict } from "../verdict-pack.js";
 
 const SEVERITIES: SlopPassSeverity[] = ["critical", "high", "medium", "low", "info"];
 
@@ -37,6 +38,7 @@ export async function runSlopPass(input: SlopPassRunInput): Promise<SlopPassResu
       files_reviewed: parsed.files.map((file) => file.path),
       provider: provider.id,
     },
+    verdict: toSlopPassVerdict(counts),
     findings,
     not_checked: notChecked,
     summary: {

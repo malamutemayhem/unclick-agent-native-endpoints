@@ -9,6 +9,8 @@
     "./types": "./dist/types.js",
     "./runner": "./dist/runner/index.js",
     "./reporter": "./dist/reporter.js",
+    "./smell-library": "./dist/smell-library.js",
+    "./verdict-pack": "./dist/verdict-pack.js",
     "./vendor/promptfoo-lite": "./dist/vendor/promptfoo-lite/index.js"
   },
   "scripts": {

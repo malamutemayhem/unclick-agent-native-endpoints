@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CHECKS } from "../categories.js";
-import { SlopPassRunInputSchema } from "../schema.js";
+import { SlopPassResultSchema, SlopPassRunInputSchema } from "../schema.js";
 
 describe("SlopPass run schema", () => {
   it("accepts the canonical target, files, and provider shape", () => {
@@ -31,5 +31,37 @@ describe("SlopPass run schema", () => {
         files: [],
       })
     ).toThrow();
+  });
+
+  it("validates the advisory result contract with verdict and scope", () => {
+    const parsed = SlopPassResultSchema.parse({
+      target: { kind: "files", label: "fixture", files: ["src/example.ts"] },
+      scope: {
+        checks_attempted: ["maintenance_change_risk"],
+        files_reviewed: ["src/example.ts"],
+        provider: "fixture-only",
+      },
+      verdict: "warn",
+      findings: [],
+      not_checked: [
+        {
+          label: "logic_plausibility",
+          reason: "Check was not requested.",
+        },
+      ],
+      summary: {
+        posture: "Scoped static review completed.",
+        counts_by_severity: { critical: 0, high: 0, medium: 0, low: 1, info: 0 },
+        coverage_note: "Only fixture files were inspected.",
+      },
+      disclaimer: {
+        headline: "Scoped review only",
+        body: "Human review is still required.",
+        compact: "Scoped review only.",
+      },
+    });
+
+    expect(parsed.verdict).toBe("warn");
+    expect(parsed.scope.provider).toBe("fixture-only");
   });
 });
