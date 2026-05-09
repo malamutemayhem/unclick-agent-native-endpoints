@@ -28,7 +28,7 @@ export default function AdminToolsPage() {
 
   useEffect(() => {
     if (!session) {
-      setLoading(false);
+      queueMicrotask(() => setLoading(false));
       return;
     }
     (async () => {
@@ -106,7 +106,7 @@ export default function AdminToolsPage() {
                 <PenSquare className="h-4 w-4 text-fuchsia-300" />
                 <h3 className="text-sm font-semibold text-white">CopyPass</h3>
                 <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-fuchsia-500/10 text-fuchsia-300">
-                  XPass / Checks
+                  XPass
                 </span>
               </div>
               <p className="mt-2 text-xs text-white/50">

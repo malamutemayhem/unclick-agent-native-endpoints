@@ -115,25 +115,41 @@ export function AdminProjects() {
 export function AdminAutopilot() {
   return (
     <PageShell
-      kicker="Development and work assembly line"
-      title="Autopilot"
-      subtitle="Autopilot turns a request into a controlled path: research, plan, build, test, review, safety, merge, publish, repair, and improvement."
+      kicker="Engine room"
+      title="AutoPilot"
+      subtitle="AutoPilot is the controlled work hub for projects. It gives people and companies a safe bubble to plan, build, check, route, and prove work using UnClick's tools and automation."
     >
       <TileGrid
         items={[
-          { title: "Research Room", body: "Explores the idea, market, risks, options, and low-hanging fruit before work begins.", icon: Microscope },
-          { title: "Plan Room", body: "Turns research into an exact ScopePack: owned files, proof, risk, and handoff.", icon: FileText },
-          { title: "Build Room", body: "Applies tightly scoped code or content changes with ownership declared first.", icon: Hammer },
-          { title: "Test Room", body: "Runs the proof commands and records whether they passed.", icon: ClipboardCheck },
-          { title: "Review Room", body: "Checks shape, quality, clarity, and whether the change matches the request.", icon: SearchCheck },
-          { title: "Safety Room", body: "Looks for protected surfaces, stomp risk, unsafe merge state, and release blockers.", icon: ShieldCheck },
-          { title: "Merge Room", body: "Decides whether a clean, approved change can leave draft and merge.", icon: BadgeCheck },
-          { title: "Publish Room", body: "Watches deployment and publish proof after merge.", icon: Rocket },
-          { title: "Repair Room", body: "Routes failures into small repair chips instead of broad panic fixes.", icon: Wrench },
-          { title: "Improve Room", body: "Turns repeated resistance into a front-of-line improvement job.", icon: RefreshCw },
-          { title: "Wake & Retry", body: "Keeps stale jobs moving with retries, nudges, and fallback rules.", icon: BellRing, mote: "PinballWake plumbing stays internal" },
+          { title: "Boardroom", body: "Shared room for decisions, handoffs, and short updates from people and AI workers.", icon: MessagesSquare, href: "/admin/boardroom" },
+          { title: "Jobs", body: "The live work queue. Pick, assign, complete, and prove the next safe step.", icon: ListTodo, href: "/admin/jobs" },
+          { title: "XPass", body: "Proof and quality checks for work before it ships.", icon: ClipboardCheck, href: "/admin/checks" },
+          { title: "Projects", body: "Containers for company, team, client, or personal work areas.", icon: FolderKanban, href: "/admin/projects" },
+          { title: "Ledger", body: "Receipts, approvals, blockers, and recovery history for trusted work.", icon: ReceiptText, href: "/admin/ledger" },
+          { title: "Workers", body: "The roles AutoPilot can route work through: planner, builder, tester, reviewer, safety, and more.", icon: Users, href: "/admin/workers" },
         ]}
       />
+      <div className="mt-8">
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-white">Controlled assembly line</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-white/50">
+            AutoPilot stays flexible, but it keeps order by moving work through clear roles and proof.
+          </p>
+        </div>
+        <TileGrid
+          items={[
+            { title: "Research", body: "Explore the idea, risks, options, and useful shortcuts before work begins.", icon: Microscope },
+            { title: "Plan", body: "Turn intent into a small work packet with clear ownership and proof.", icon: FileText },
+            { title: "Build", body: "Make focused changes inside agreed boundaries.", icon: Hammer },
+            { title: "Test", body: "Run checks and record whether they passed.", icon: ClipboardCheck },
+            { title: "Review", body: "Check quality, clarity, and fit before work moves on.", icon: SearchCheck },
+            { title: "Safety", body: "Protect secrets, releases, permissions, and shared work.", icon: ShieldCheck },
+            { title: "Publish", body: "Watch deploys, receipts, and final proof after release.", icon: Rocket },
+            { title: "Repair", body: "Route failures into exact fixes instead of broad rewrites.", icon: Wrench },
+            { title: "Improve", body: "Turn repeated friction into a better system.", icon: RefreshCw },
+          ]}
+        />
+      </div>
     </PageShell>
   );
 }
@@ -187,7 +203,7 @@ export function AdminChecks() {
   return (
     <PageShell
       kicker="Proof and quality checks"
-      title="XPass / Checks"
+      title="XPass"
       subtitle="XPass is the check family. It proves work with receipts instead of relying on a worker saying 'done'."
     >
       <TileGrid

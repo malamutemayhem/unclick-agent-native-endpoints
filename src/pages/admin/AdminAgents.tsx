@@ -430,9 +430,9 @@ export default function AdminAgentsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-heading">Workers</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-heading">Seats</h1>
         <p className="mt-1 text-sm text-body">
-          UnClick Workers are the roles. AI Seats are the connected AI capacity behind them.
+          Seats are the connected AI capacity across UnClick. Workers are the AutoPilot roles those seats can power.
         </p>
       </header>
 

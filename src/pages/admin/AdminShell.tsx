@@ -90,6 +90,40 @@ function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
   );
 }
 
+const AUTOPILOT_LINKS = [
+  { path: "/admin/boardroom", label: "Boardroom", icon: MessagesSquare },
+  { path: "/admin/jobs", label: "Jobs", icon: ListTodo },
+  { path: "/admin/checks", label: "XPass", icon: ClipboardCheck },
+  { path: "/admin/projects", label: "Projects", icon: FolderKanban },
+  { path: "/admin/ledger", label: "Ledger", icon: ReceiptText },
+  { path: "/admin/workers", label: "Workers", icon: Bot },
+] as const;
+
+function AutopilotNavGroup({ onLinkClick }: { onLinkClick?: () => void }) {
+  const location = useLocation();
+  const open = location.pathname.startsWith("/admin/autopilot") ||
+    AUTOPILOT_LINKS.some((item) => location.pathname.startsWith(item.path));
+
+  return (
+    <div className="rounded-lg border border-[#61C1C4]/15 bg-[#61C1C4]/[0.03] p-1">
+      <SurfaceLink path="/admin/autopilot" label="AutoPilot" icon={Plane} onClick={onLinkClick} />
+      {open && (
+        <div className="mt-1 space-y-0.5 border-l border-[#61C1C4]/20 pl-3">
+          {AUTOPILOT_LINKS.map((item) => (
+            <SurfaceLink
+              key={item.path}
+              path={item.path}
+              label={item.label}
+              icon={item.icon}
+              onClick={onLinkClick}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ADMIN_SUBMENU = [
   { path: "/admin/analytics",     label: "Analytics",             icon: BarChart3   },
   { path: "/admin/codebase",      label: "Codebase",              icon: Code2       },
@@ -204,6 +238,33 @@ function MemoryNavItem({ onClick }: { onClick?: () => void }) {
   );
 }
 
+function SidebarNav({
+  isAdmin,
+  signalsUnread,
+  onLinkClick,
+}: {
+  isAdmin: boolean;
+  signalsUnread: number;
+  onLinkClick?: () => void;
+}) {
+  return (
+    <>
+      <SurfaceLink path="/admin/dashboard" label="Dashboard"               icon={LayoutDashboard} onClick={onLinkClick} />
+      <SurfaceLink path="/admin/you"      label="You"                      icon={User}    onClick={onLinkClick} />
+      <MemoryNavItem onClick={onLinkClick} />
+      <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
+      <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
+      <SurfaceLink path="/admin/agents"    label="Seats"                   icon={Bot} onClick={onLinkClick} />
+      <AutopilotNavGroup onLinkClick={onLinkClick} />
+      <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
+      {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
+      <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
+      <SurfaceLink path="/admin/billing"  label="Billing"                  icon={CreditCard} onClick={onLinkClick} />
+      {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}
+    </>
+  );
+}
+
 export default function AdminShell() {
   const { user, session } = useSession();
   const navigate = useNavigate();
@@ -241,7 +302,9 @@ export default function AdminShell() {
         if (!res.ok) return;
         const body = await res.json();
         if (!cancelled) setSignalsUnread((body.signals ?? []).length);
-      } catch {}
+      } catch {
+        if (!cancelled) setSignalsUnread(0);
+      }
     }
 
     void fetchUnread();
@@ -252,30 +315,6 @@ export default function AdminShell() {
   async function handleLogout() {
     await signOut();
     navigate("/login", { replace: true });
-  }
-
-  function SidebarNav({ onLinkClick }: { onLinkClick?: () => void }) {
-    return (
-      <>
-        <SurfaceLink path="/admin/dashboard" label="Dashboard"               icon={LayoutDashboard} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/you"      label="You"                      icon={User}    onClick={onLinkClick} />
-        <MemoryNavItem onClick={onLinkClick} />
-        <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/projects" label="Projects"                 icon={FolderKanban} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/autopilot" label="Autopilot"               icon={Plane} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/agents"    label="Workers"                 icon={Bot} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/boardroom" label="Boardroom"               icon={MessagesSquare} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/jobs"      label="Jobs"                    icon={ListTodo} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/checks"    label="XPass / Checks"          icon={ClipboardCheck} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/ledger"    label="Ledger"                  icon={ReceiptText} onClick={onLinkClick} />
-        <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
-        {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
-        <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
-        <SurfaceLink path="/admin/billing"  label="Billing"                  icon={CreditCard} onClick={onLinkClick} />
-        {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}
-      </>
-    );
   }
 
   return (
@@ -294,7 +333,7 @@ export default function AdminShell() {
         </div>
 
         <nav className="mt-4 flex flex-1 flex-col gap-1 overflow-y-auto px-3">
-          <SidebarNav />
+          <SidebarNav isAdmin={isAdmin} signalsUnread={signalsUnread} />
           <a
             href="/memory"
             className="text-white/30 hover:text-white/50 text-xs block px-3 py-2"
@@ -372,7 +411,11 @@ export default function AdminShell() {
             <AdminSearchBar />
           </div>
           <nav className="flex flex-col gap-1">
-            <SidebarNav onLinkClick={() => setMobileNavOpen(false)} />
+            <SidebarNav
+              isAdmin={isAdmin}
+              signalsUnread={signalsUnread}
+              onLinkClick={() => setMobileNavOpen(false)}
+            />
           </nav>
           <div className="mt-3 border-t border-white/[0.06] pt-3">
             <BugReportButton />
