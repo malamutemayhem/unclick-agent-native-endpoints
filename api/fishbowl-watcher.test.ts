@@ -13,9 +13,11 @@ import {
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
   isWakepassAutoRerouteEligible,
+  messageAcknowledgesDispatch,
   resolveWakepassRerouteTarget,
   shouldMarkDispatchStaleAfterReclaimSignalInsert,
   type DispatchRow,
+  type FishbowlMessageAckRow,
   type ProfileRow,
 } from "./fishbowl-watcher.js";
 
@@ -196,6 +198,53 @@ describe("fishbowl watcher PinballWake ACK coverage", () => {
         wake_reason: "PR ready for review",
       },
     });
+  });
+
+  it("matches threaded ACK replies that name the exact wake event", () => {
+    const wakeEventId = "wake-pull_request-pr-508-5e6cd76ba13e";
+    const dispatch: DispatchRow = {
+      ...baseDispatch,
+      task_ref: wakeEventId,
+      payload: {
+        ack_required: true,
+        handoff_message_id: "msg-123",
+        wake_event_id: wakeEventId,
+      },
+    };
+    const message: FishbowlMessageAckRow = {
+      id: "msg-ack",
+      text: `ACK ${wakeEventId}. PASS: already merged.`,
+      thread_id: "msg-123",
+      created_at: "2026-05-01T01:12:00.000Z",
+      author_agent_id: "chatgpt-codex-heartbeat",
+    };
+
+    expect(messageAcknowledgesDispatch(dispatch, message)).toBe(true);
+  });
+
+  it("does not count wake prompt copy as an ACK reply", () => {
+    const wakeEventId = "wake-pull_request-pr-508-5e6cd76ba13e";
+    const message: FishbowlMessageAckRow = {
+      id: "msg-123",
+      text: `Wake event id: ${wakeEventId}\nACK requested: reply ACK ${wakeEventId}`,
+      thread_id: null,
+      created_at: "2026-05-01T01:00:00.000Z",
+      author_agent_id: "github-action-wake-router",
+    };
+
+    expect(
+      messageAcknowledgesDispatch(
+        {
+          ...baseDispatch,
+          task_ref: wakeEventId,
+          payload: {
+            ack_required: true,
+            wake_event_id: wakeEventId,
+          },
+        },
+        message,
+      ),
+    ).toBe(false);
   });
 
   it("does not reclaim active or non-leased dispatches", () => {

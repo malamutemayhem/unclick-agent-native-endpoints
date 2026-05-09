@@ -61,6 +61,14 @@ export interface DispatchRow {
   updated_at: string;
 }
 
+export interface FishbowlMessageAckRow {
+  id: string;
+  text: string | null;
+  thread_id: string | null;
+  created_at: string;
+  author_agent_id: string | null;
+}
+
 const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
@@ -169,6 +177,38 @@ function normalizeToken(value: unknown): string {
 function compactText(value: unknown, max = 240): string {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function ackTokenForDispatch(row: DispatchRow): string | null {
+  const payload = row.payload ?? {};
+  return (
+    nonEmptyString(payload.wake_event_id) ||
+    nonEmptyString(payload.dispatch_id) ||
+    nonEmptyString(row.task_ref)
+  );
+}
+
+export function messageAcknowledgesDispatch(
+  row: DispatchRow,
+  message: FishbowlMessageAckRow,
+): boolean {
+  const ackToken = ackTokenForDispatch(row);
+  if (!ackToken) return false;
+
+  const text = String(message.text ?? "").trim();
+  if (!/^ACK\b/i.test(text)) return false;
+  if (!text.includes(ackToken)) return false;
+
+  const handoffMessageId = nonEmptyString(row.payload?.handoff_message_id);
+  if (!handoffMessageId) return true;
+
+  return message.thread_id === handoffMessageId || message.thread_id === null;
 }
 
 function newestFirst(a: ProfileRow, b: ProfileRow): number {
@@ -411,6 +451,81 @@ async function listProfilesForTenant(
   return (data ?? []) as ProfileRow[];
 }
 
+async function findDispatchAckMessage(
+  supabase: ReturnType<typeof createClient>,
+  row: DispatchRow,
+): Promise<FishbowlMessageAckRow | null> {
+  const ackToken = ackTokenForDispatch(row);
+  if (!ackToken) return null;
+
+  const createdMs = Date.parse(String(row.created_at ?? ""));
+  let query = supabase
+    .from("mc_fishbowl_messages")
+    .select("id, text, thread_id, created_at, author_agent_id")
+    .eq("api_key_hash", row.api_key_hash)
+    .ilike("text", "ACK%")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (Number.isFinite(createdMs)) {
+    query = query.gte("created_at", row.created_at);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[fishbowl-watcher] ACK message lookup failed:", error.message);
+    return null;
+  }
+
+  return (
+    ((data ?? []) as FishbowlMessageAckRow[]).find((message) =>
+      messageAcknowledgesDispatch(row, message),
+    ) ?? null
+  );
+}
+
+async function completeDispatchFromAckMessage(
+  supabase: ReturnType<typeof createClient>,
+  row: DispatchRow,
+  message: FishbowlMessageAckRow,
+  nowIso: string,
+): Promise<boolean> {
+  let updateQuery = supabase
+    .from("mc_agent_dispatches")
+    .update({
+      status: "completed",
+      lease_owner: null,
+      lease_expires_at: null,
+      last_real_action_at: message.created_at,
+      updated_at: nowIso,
+      payload: {
+        ...(row.payload ?? {}),
+        ack_message_id: message.id,
+        ack_message_created_at: message.created_at,
+        ack_detected_at: nowIso,
+        ack_matcher: "fishbowl_wake_event_id",
+      },
+    })
+    .eq("api_key_hash", row.api_key_hash)
+    .eq("dispatch_id", row.dispatch_id)
+    .eq("status", row.status)
+    .eq("updated_at", row.updated_at);
+
+  updateQuery = row.lease_owner
+    ? updateQuery.eq("lease_owner", row.lease_owner)
+    : updateQuery.is("lease_owner", null);
+  updateQuery = row.lease_expires_at
+    ? updateQuery.eq("lease_expires_at", row.lease_expires_at)
+    : updateQuery.is("lease_expires_at", null);
+
+  const { data, error } = await updateQuery.select("dispatch_id").maybeSingle();
+  if (error) {
+    console.error("[fishbowl-watcher] ACK dispatch completion failed:", error.message);
+    return false;
+  }
+  return Boolean(data);
+}
+
 async function ensureDefaultBoardroomRoomId(
   supabase: ReturnType<typeof createClient>,
   apiKeyHash: string,
@@ -485,6 +600,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let checkinDispatchesEmitted = 0;
   let checkinTimersCleared = 0;
   let staleDispatchesReclaimed = 0;
+  let staleDispatchesAcked = 0;
   let staleDispatchesRerouted = 0;
   let staleDispatchRerouteFailures = 0;
   let digestSignalsEmitted = 0;
@@ -601,6 +717,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   for (const row of (staleDispatchRows ?? []) as DispatchRow[]) {
     if (!isReclaimableDispatchCandidate(row, nowMs)) continue;
+    const ackMessage = await findDispatchAckMessage(supabase, row);
+    if (ackMessage) {
+      const completed = await completeDispatchFromAckMessage(
+        supabase,
+        row,
+        ackMessage,
+        nowIso,
+      );
+      if (completed) staleDispatchesAcked++;
+      continue;
+    }
     const signal = buildDispatchReclaimSignal(row, nowMs);
     if (!signal) continue;
 
@@ -792,6 +919,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     checkin_dispatches_emitted: checkinDispatchesEmitted,
     checkin_timers_cleared: checkinTimersCleared,
     stale_dispatches_reclaimed: staleDispatchesReclaimed,
+    stale_dispatches_acked: staleDispatchesAcked,
     stale_dispatches_rerouted: staleDispatchesRerouted,
     stale_dispatch_reroute_failures: staleDispatchRerouteFailures,
     digest_signals_emitted: digestSignalsEmitted,
