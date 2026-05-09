@@ -8489,6 +8489,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .limit(500);
           if (error) throw error;
 
+          const { data: callerLaneRow, error: callerLaneErr } = await supabase
+            .from("worker_lanes")
+            .select("api_key_hash, agent_id, role, scope_allowlist, scope_denylist, enforce_mode")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("agent_id", agentId)
+            .maybeSingle();
+          if (callerLaneErr) throw callerLaneErr;
+          const callerLane = callerLaneRow as WorkerLaneRow | null;
+
           const assigneeIds = Array.from(
             new Set(
               (data ?? [])
@@ -8526,11 +8535,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
 
           const actionable = (data ?? [])
-            .map((todo) => ({
-              todo,
-              actionability_reason: actionabilityFor(todo),
-            }))
+            .map((todo) => {
+              const tokens = buildTodoLaneTokens({
+                title: todo.title,
+                description: todo.description,
+                priority: todo.priority,
+                status: todo.status,
+              });
+              const laneCheck = evaluateLaneClaim(callerLane, tokens);
+              return {
+                todo,
+                actionability_reason: actionabilityFor(todo),
+                lane_check: callerLane
+                  ? {
+                      decision: laneCheck.decision,
+                      reason: laneCheck.reason,
+                      matched_token: laneCheck.matched_token ?? null,
+                    }
+                  : null,
+              };
+            })
             .filter((item) => item.actionability_reason)
+            .filter((item) => item.lane_check?.decision !== "reject")
             .sort((a, b) => {
               const todoA = a.todo;
               const todoB = b.todo;
@@ -8587,7 +8613,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }, {});
           }
 
-          const decorated = actionable.map(({ todo: t, actionability_reason }, index) => {
+          const decorated = actionable.map(({ todo: t, actionability_reason, lane_check }, index) => {
             const fieldScopePack =
               t.scope_pack ??
               t.scopePack ??
@@ -8622,6 +8648,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               scope_pack: fieldScopePack ?? commentScopePack?.scope_pack ?? null,
               scope_pack_source: fieldScopePack ? "field" : commentScopePack?.source ?? null,
               scope_pack_comment_id: commentScopePack?.comment_id ?? null,
+              ...(lane_check ? { lane_check } : {}),
             };
           });
           return res.status(200).json({

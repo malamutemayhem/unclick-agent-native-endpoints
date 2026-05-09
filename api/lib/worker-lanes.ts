@@ -29,6 +29,7 @@ export interface LaneClaimEvaluation {
 
 export interface TodoLaneTokenInput {
   title?: unknown;
+  description?: unknown;
   priority?: unknown;
   status?: unknown;
 }
@@ -110,6 +111,7 @@ export function evaluateLaneClaim(lane: WorkerLaneRow | null, todoTokens: unknow
 
 export function buildTodoLaneTokens(input: TodoLaneTokenInput): string[] {
   const titleTokens = typeof input.title === "string" ? input.title.split(/[\s,]+/) : [];
-  return normalizeScopeTokens([input.priority, input.status, ...titleTokens]);
+  const descriptionTokens = typeof input.description === "string" ? input.description.split(/[\s,]+/).slice(0, 120) : [];
+  return normalizeScopeTokens([input.priority, input.status, ...titleTokens, ...descriptionTokens]);
 }
 

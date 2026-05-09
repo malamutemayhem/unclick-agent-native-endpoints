@@ -61,10 +61,27 @@ describe("worker lane helpers", () => {
     expect(
       buildTodoLaneTokens({
         title: "Build F: Standing auto-merge bot + PR risk score",
+        description: "ScopePack: safe code lane only",
         priority: "urgent",
         status: "open",
       }),
-    ).toEqual(["urgent", "open", "build", "f:", "standing", "auto-merge", "bot", "pr", "risk", "score"]);
+    ).toEqual([
+      "urgent",
+      "open",
+      "build",
+      "f:",
+      "standing",
+      "auto-merge",
+      "bot",
+      "pr",
+      "risk",
+      "score",
+      "scopepack:",
+      "safe",
+      "code",
+      "lane",
+      "only",
+    ]);
   });
 
   it("warns before enforcing allowlist misses", () => {
