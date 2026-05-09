@@ -10,6 +10,12 @@ Most SEO tooling is built for specialists and dashboards. SEOPass is built for a
 
 This chip is a scaffold only. It adds the SEOPass pack schema, a core pack, a Lighthouse execution-plan helper, four MCP tools, and this product brief. It does not run Lighthouse, write database rows, or create UI.
 
+## Verdict-pack scope
+
+This verdict-pack sits on the shared GEOPass scanner contract instead of creating a second crawler. It keeps SEOPass focused on search-engine readiness: indexability, metadata, canonical signals, structured data, internal links, and a Core Web Vitals placeholder.
+
+The current adapter is plan-only and public-safe. It accepts GEOPass-shaped source metadata and records which shared checks can feed SEO verdicts, but it does not execute Lighthouse, crawl live pages, call paid search APIs, write production rows, or claim ranking outcomes.
+
 ## MCP tools
 
 - `seopass_run` returns a planned run for a URL or registered pack.
@@ -20,9 +26,10 @@ This chip is a scaffold only. It adds the SEOPass pack schema, a core pack, a Li
 ## Build sequence
 
 1. Chunk 1: schema, pack, MCP tools, Lighthouse plan, brief.
-2. Chunk 2: execute Lighthouse and persist SEOPass runs/findings.
-3. Chunk 3: crawler checks for robots, sitemap, canonical, redirects, and internal links.
-4. Chunk 4: admin UI, reports, and Fishbowl/Signals routing.
+2. Verdict-pack: typed SEO report/finding/verdict shapes plus the shared GEOPass scanner adapter.
+3. Chunk 2: execute Lighthouse and persist SEOPass runs/findings.
+4. Chunk 3: crawler checks for robots, sitemap, canonical, redirects, and internal links.
+5. Chunk 4: admin UI, reports, and Fishbowl/Signals routing.
 
 ## Positioning
 
