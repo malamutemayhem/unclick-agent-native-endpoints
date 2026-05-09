@@ -121,6 +121,12 @@ import {
   buildFishbowlTodoHandoffDispatchRow,
   planFishbowlTodoHandoff,
 } from "./lib/fishbowl-todo-handoff.js";
+import {
+  planFishbowlPostLedgerEvent,
+  planTodoLedgerEvents,
+  recordAutopilotEvent,
+  recordAutopilotEvents,
+} from "./lib/autopilot-control-ledger.js";
 import { runRoutePacketConsumerDryRun, type VisibleWorker } from "./lib/route-packet-consumer.js";
 import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
 import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
@@ -7283,6 +7289,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ profile: data });
       }
 
+      case "autopilot_record_event": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as {
+          event_type?: string | null;
+          actor_agent_id?: string | null;
+          ref_kind?: string | null;
+          ref_id?: string | null;
+          payload?: Record<string, unknown> | null;
+        };
+        const actorAgentId = String(body.actor_agent_id ?? "").trim();
+        const refId = String(body.ref_id ?? "").trim();
+        if (!actorAgentId) return res.status(400).json({ error: "actor_agent_id required" });
+        if (!refId) return res.status(400).json({ error: "ref_id required" });
+        if (actorAgentId.length > 128) return res.status(400).json({ error: "actor_agent_id must be at most 128 characters" });
+        if (refId.length > 160) return res.status(400).json({ error: "ref_id must be at most 160 characters" });
+        if (body.payload != null && !isRecord(body.payload)) {
+          return res.status(400).json({ error: "payload must be an object" });
+        }
+
+        const result = await recordAutopilotEvent(supabase, {
+          apiKeyHash,
+          eventType: String(body.event_type ?? ""),
+          actorAgentId,
+          refKind: String(body.ref_kind ?? ""),
+          refId,
+          payload: body.payload ?? {},
+        });
+        if (!result.ok) return res.status(400).json({ error: result.error });
+        return res.status(200).json({ ok: true });
+      }
+
       case "fishbowl_post": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
@@ -7425,6 +7469,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
           .single();
         if (insertErr) throw insertErr;
+
+        const ledgerEvent = planFishbowlPostLedgerEvent({
+          actorAgentId: agentId,
+          messageId: inserted.id,
+          threadId,
+          text,
+          tags,
+          recipients,
+        });
+        if (ledgerEvent) {
+          const ledgerResult = await recordAutopilotEvent(supabase, {
+            ...ledgerEvent,
+            apiKeyHash,
+          });
+          if (!ledgerResult.ok) {
+            console.warn("[fishbowl_post] autopilot ledger write skipped:", ledgerResult.error);
+          }
+        }
 
         // Bump post-side presence so active authors do not look stale on Now Playing.
         // Posting is a live pulse, so it refreshes status and clears any prior
@@ -7766,6 +7828,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .single();
           if (error) throw error;
 
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: null,
+              after: data,
+            }),
+          );
+
           void postFishbowlEvent(
             supabase,
             apiKeyHash,
@@ -7828,6 +7901,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
 
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
+
           const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
           if (body.title != null) {
             const titleRes = validateTitle(body.title);
@@ -7869,12 +7950,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
           return res.status(200).json({ todo: data });
         }
 
         if (action === "fishbowl_complete_todo") {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
           const nowIso = new Date().toISOString();
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
@@ -7885,6 +7984,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
 
           void postFishbowlEvent(
             supabase,
@@ -7899,6 +8009,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (action === "fishbowl_drop_todo") {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
             .update({ status: "dropped", updated_at: new Date().toISOString() })
@@ -7908,6 +8025,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
           return res.status(200).json({ todo: data });
         }
 
