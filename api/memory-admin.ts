@@ -77,6 +77,8 @@
  *                       for self-hosted export / portability.
  *   - admin_clear_all: POST with body.confirm === "DELETE", deletes every
  *                      memory row scoped to the user's api_key_hash.
+ *   - orchestrator_context_read: GET/POST read-only compact cross-seat state
+ *                                from Memory, Boardroom, dispatches, signals.
  *
  * Conflict detection actions (competing memory tools):
  *   - conflict_detect: POST with Bearer + { tool, platform? } -- log detection,
@@ -99,6 +101,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
+import {
+  buildOrchestratorContext,
+  type OrchestratorBusinessContextRow,
+  type OrchestratorCommentRow,
+  type OrchestratorConversationTurnRow,
+  type OrchestratorDispatchRow,
+  type OrchestratorLibraryRow,
+  type OrchestratorMessageRow,
+  type OrchestratorProfileRow,
+  type OrchestratorSessionRow,
+  type OrchestratorSignalRow,
+  type OrchestratorTodoRow,
+} from "./lib/orchestrator-context.js";
 import {
   createDispatchThroughputMetrics,
   decorateThroughputDispatch,
@@ -7698,6 +7713,125 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           room,
           messages: messages ?? [],
           profiles: profiles ?? [],
+        });
+      }
+
+      case "orchestrator_context_read": {
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'. Run the UnClick setup wizard if you do not have one.",
+          });
+        }
+
+        const body = (req.body ?? {}) as { limit?: number };
+        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), 120);
+        const smallerLimit = Math.min(limit, 40);
+
+        const [
+          profilesResult,
+          messagesResult,
+          todosResult,
+          commentsResult,
+          dispatchesResult,
+          signalsResult,
+          sessionsResult,
+          libraryResult,
+          businessContextResult,
+          conversationTurnsResult,
+        ] = await Promise.all([
+          supabase
+            .from("mc_fishbowl_profiles")
+            .select("agent_id, emoji, display_name, user_agent_hint, created_at, last_seen_at, current_status, current_status_updated_at, next_checkin_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("last_seen_at", { ascending: false, nullsFirst: false })
+            .limit(smallerLimit),
+          supabase
+            .from("mc_fishbowl_messages")
+            .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+          supabase
+            .from("mc_fishbowl_todos")
+            .select("id, title, description, status, priority, created_by_agent_id, assigned_to_agent_id, source_idea_id, created_at, updated_at, completed_at")
+            .eq("api_key_hash", apiKeyHash)
+            .neq("status", "dropped")
+            .order("updated_at", { ascending: false })
+            .limit(smallerLimit),
+          supabase
+            .from("mc_fishbowl_comments")
+            .select("id, target_kind, target_id, author_agent_id, text, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(smallerLimit),
+          supabase
+            .from("mc_agent_dispatches")
+            .select("dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("updated_at", { ascending: false })
+            .limit(smallerLimit),
+          supabase
+            .from("mc_signals")
+            .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(smallerLimit),
+          supabase
+            .from("mc_session_summaries")
+            .select("id, session_id, platform, summary, decisions, open_loops, topics, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(12),
+          supabase
+            .from("mc_knowledge_library")
+            .select("slug, title, category, tags, version, updated_at, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("updated_at", { ascending: false })
+            .limit(16),
+          supabase
+            .from("mc_business_context")
+            .select("id, category, key, value, priority, updated_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("priority", { ascending: false })
+            .limit(16),
+          supabase
+            .from("mc_conversation_log")
+            .select("id, session_id, role, content, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(smallerLimit),
+        ]);
+
+        const errors = [
+          profilesResult.error,
+          messagesResult.error,
+          todosResult.error,
+          commentsResult.error,
+          dispatchesResult.error,
+          signalsResult.error,
+          sessionsResult.error,
+          libraryResult.error,
+          businessContextResult.error,
+          conversationTurnsResult.error,
+        ].filter(Boolean);
+        if (errors.length > 0) throw errors[0];
+
+        return res.status(200).json({
+          context: buildOrchestratorContext({
+            generatedAt: new Date().toISOString(),
+            profiles: (profilesResult.data ?? []) as OrchestratorProfileRow[],
+            messages: (messagesResult.data ?? []) as OrchestratorMessageRow[],
+            todos: (todosResult.data ?? []) as OrchestratorTodoRow[],
+            comments: (commentsResult.data ?? []) as OrchestratorCommentRow[],
+            dispatches: (dispatchesResult.data ?? []) as OrchestratorDispatchRow[],
+            signals: (signalsResult.data ?? []) as OrchestratorSignalRow[],
+            sessions: (sessionsResult.data ?? []) as OrchestratorSessionRow[],
+            library: (libraryResult.data ?? []) as OrchestratorLibraryRow[],
+            businessContext: (businessContextResult.data ?? []) as OrchestratorBusinessContextRow[],
+            conversationTurns: (conversationTurnsResult.data ?? []) as OrchestratorConversationTurnRow[],
+          }),
         });
       }
 

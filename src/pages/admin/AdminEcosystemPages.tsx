@@ -122,6 +122,7 @@ export function AdminAutopilot() {
       <TileGrid
         items={[
           { title: "Boardroom", body: "Shared room for decisions, handoffs, and short updates from people and AI workers.", icon: MessagesSquare, href: "/admin/boardroom" },
+          { title: "Orchestrator", body: "Compact cross-seat context with profile cards, continuity, and memory snapshots.", icon: Brain, href: "/admin/orchestrator" },
           { title: "Jobs", body: "The live work queue. Pick, assign, complete, and prove the next safe step.", icon: ListTodo, href: "/admin/jobs" },
           { title: "XPass", body: "Proof and quality checks for work before it ships.", icon: ClipboardCheck, href: "/admin/checks" },
           { title: "Projects", body: "Containers for company, team, client, or personal work areas.", icon: FolderKanban, href: "/admin/projects" },
