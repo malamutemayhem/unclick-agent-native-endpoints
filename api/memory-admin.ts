@@ -34,7 +34,9 @@
  * Build Desk admin actions (Bearer <api_key>, tenant-scoped by sha256hex):
  *   - admin_build_tasks: method=list|get|create|update_status|soft_delete
  *   - admin_build_workers: method=list|register|update|delete|health_check
- *   - admin_build_dispatch: POST with task_id + worker_id (same tenant)
+ *   - admin_build_dispatch: POST with task_id + worker_id (same tenant) and optional idempotency_key
+ *   - admin_unclick_connect_dry_run: POST tether intent -> route packet -> assignment/HOLD/BLOCKER, no writes
+ *   - admin_unclick_connect_commit: POST experiment-only route packet -> mc_agent_dispatches row
  *   - reliability_dispatches: method=list|get|upsert|claim|release
  *   - reliability_heartbeats: method=list|publish
  *   - reliability_reclaim_stale: POST with optional { limit, dry_run }
@@ -98,6 +100,16 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
 import {
+  createDispatchThroughputMetrics,
+  decorateThroughputDispatch,
+  shouldIncludeThroughputMetrics,
+} from "./lib/throughput-observability.js";
+import {
+  attachBuildDeskIdempotencyKey,
+  findBuildDeskRowByIdempotencyKey,
+  parseBuildDeskIdempotencyKey,
+} from "./lib/build-desk-idempotency.js";
+import {
   buildFishbowlMessageHandoffDispatchRow,
   planFishbowlMessageHandoffs,
 } from "./lib/fishbowl-message-handoff.js";
@@ -109,6 +121,21 @@ import {
   buildFishbowlTodoHandoffDispatchRow,
   planFishbowlTodoHandoff,
 } from "./lib/fishbowl-todo-handoff.js";
+import {
+  planFishbowlPostLedgerEvent,
+  planTodoLedgerEvents,
+  recordAutopilotEvent,
+  recordAutopilotEvents,
+} from "./lib/autopilot-control-ledger.js";
+import { runRoutePacketConsumerDryRun, type VisibleWorker } from "./lib/route-packet-consumer.js";
+import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
+import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
+import {
+  buildWorkersToVisibleWorkers,
+  fishbowlProfilesToVisibleWorkers,
+  type BuildWorkerDiscoveryRow,
+  type FishbowlProfileDiscoveryRow,
+} from "./lib/unclick-connect-worker-discovery.js";
 import { buildCard, type ConversationalCard } from "../packages/mcp-server/src/cards/card.js";
 import {
   createDispatchId,
@@ -121,6 +148,10 @@ import {
   decideStaleLease,
 } from "../packages/mcp-server/src/reliability.js";
 import { emitSignal } from "../packages/mcp-server/src/signals/emit.js";
+import {
+  effectiveMemoryTier,
+  isMemoryQuotaExemptEmail,
+} from "../packages/mcp-server/src/memory/quota-policy.js";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -233,10 +264,31 @@ function getRequestBaseUrl(req: VercelRequest): string | null {
   return `${proto}://${host}`;
 }
 
+function shouldSkipMemoryEmbedding(text: string): boolean {
+  const value = text.trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (lower.length < 24) return true;
+  if (lower.startsWith("heartbeat_last_state:")) return true;
+  if (lower.includes("<heartbeat") || lower.includes("</heartbeat>")) return true;
+
+  return [
+    "dont_notify",
+    "unclick healthy",
+    "no new signals",
+    "user is caught up",
+    "memory self-echo",
+    "fact saved: heartbeat_last_state",
+    "only memory self-echo signals",
+    "top queue unchanged",
+  ].some((needle) => lower.includes(needle));
+}
+
 function queueMemoryEmbedding(req: VercelRequest, table: string, id: string, text: string): void {
   const secret = process.env.ADMIN_EMBED_SECRET;
   const baseUrl = getRequestBaseUrl(req);
-  if (!secret || !baseUrl || text.trim().length === 0) return;
+  if (!secret || !baseUrl || shouldSkipMemoryEmbedding(text)) return;
 
   void fetch(`${baseUrl}/api/memory/embed`, {
     method: "POST",
@@ -529,7 +581,7 @@ async function resolveSessionTenant(
       userId: user.id,
       email: user.email,
       apiKeyHash: newRow.key_hash,
-      tier: newRow.tier ?? "free",
+      tier: effectiveMemoryTier(newRow.tier ?? "free", user.email),
     };
   }
 
@@ -548,7 +600,7 @@ async function resolveSessionTenant(
         userId: user.id,
         email: user.email,
         apiKeyHash: sha256hex(oldRow.api_key),
-        tier: "free",
+        tier: effectiveMemoryTier("free", user.email),
       };
     }
   } catch {
@@ -647,7 +699,7 @@ async function postFishbowlEvent(
     if (!roomId) {
       const { data: newRoom } = await supabase
         .from("mc_fishbowl_rooms")
-        .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Fishbowl" })
+        .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Boardroom" })
         .select("id")
         .single();
       roomId = newRoom?.id;
@@ -679,6 +731,87 @@ async function postFishbowlEvent(
   } catch (err) {
     console.error(`[fishbowl postEvent ${eventTag}] failed:`, (err as Error).message);
   }
+}
+
+type UnClickConnectWorkerSource = "client" | "server";
+
+interface UnClickConnectWorkerResolution {
+  visibleWorkers: VisibleWorker[];
+  workerSource: UnClickConnectWorkerSource;
+  discovery: {
+    build_workers_seen: number;
+    fishbowl_profiles_seen: number;
+    visible_workers_used: number;
+  };
+}
+
+async function resolveUnClickConnectVisibleWorkers(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+  body: Record<string, unknown>,
+): Promise<UnClickConnectWorkerResolution> {
+  const requestedSource = String(body.worker_source ?? "").trim().toLowerCase();
+  const workerSource: UnClickConnectWorkerSource = requestedSource === "client" ? "client" : "server";
+
+  if (workerSource === "client") {
+    const visibleWorkers = Array.isArray(body.visible_workers)
+      ? (body.visible_workers as VisibleWorker[])
+      : [];
+    return {
+      visibleWorkers,
+      workerSource,
+      discovery: {
+        build_workers_seen: 0,
+        fishbowl_profiles_seen: 0,
+        visible_workers_used: visibleWorkers.length,
+      },
+    };
+  }
+
+  const [buildWorkersResult, fishbowlProfilesResult] = await Promise.all([
+    supabase
+      .from("build_workers")
+      .select("id, name, worker_type, status, last_health_check_at")
+      .eq("api_key_hash", apiKeyHash)
+      .eq("status", "available")
+      .limit(50),
+    supabase
+      .from("mc_fishbowl_profiles")
+      .select("agent_id, emoji, display_name, last_seen_at, current_status, current_status_updated_at")
+      .eq("api_key_hash", apiKeyHash)
+      .order("last_seen_at", { ascending: false })
+      .limit(50),
+  ]);
+
+  if (buildWorkersResult.error) throw buildWorkersResult.error;
+  if (fishbowlProfilesResult.error) throw fishbowlProfilesResult.error;
+
+  const buildWorkers = (buildWorkersResult.data ?? []) as BuildWorkerDiscoveryRow[];
+  const fishbowlProfiles = (fishbowlProfilesResult.data ?? []) as FishbowlProfileDiscoveryRow[];
+  const visibleWorkers = uniqueVisibleWorkers([
+    ...buildWorkersToVisibleWorkers(buildWorkers),
+    ...fishbowlProfilesToVisibleWorkers(fishbowlProfiles),
+  ]);
+
+  return {
+    visibleWorkers,
+    workerSource,
+    discovery: {
+      build_workers_seen: buildWorkers.length,
+      fishbowl_profiles_seen: fishbowlProfiles.length,
+      visible_workers_used: visibleWorkers.length,
+    },
+  };
+}
+
+function uniqueVisibleWorkers(workers: VisibleWorker[]): VisibleWorker[] {
+  const seen = new Set<string>();
+  return workers.filter((worker) => {
+    const workerId = String(worker.agent_id ?? worker.worker_id ?? worker.id ?? "").trim();
+    if (!workerId || seen.has(workerId)) return false;
+    seen.add(workerId);
+    return true;
+  });
 }
 
 // ─── Setup guide content ────────────────────────────────────────────────────
@@ -1330,10 +1463,33 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
           .array(z.string())
           .optional()
           .describe("Concrete checklist items defining done"),
+        idempotency_key: z
+          .string()
+          .optional()
+          .describe("Optional retry key. Reusing it returns the existing build task instead of creating a duplicate."),
       }),
-      execute: async ({ title, description, acceptance_criteria }) => {
+      execute: async ({ title, description, acceptance_criteria, idempotency_key }) => {
         const missing = requireKey();
         if (missing) return missing;
+        const parsedIdempotencyKey = parseBuildDeskIdempotencyKey(idempotency_key);
+        if (parsedIdempotencyKey.error) return { success: false, error: parsedIdempotencyKey.error };
+
+        if (parsedIdempotencyKey.value) {
+          const { data: existingTasks, error: existingErr } = await supabase
+            .from("build_tasks")
+            .select("id, title, status, created_at, plan_json")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(50);
+          if (existingErr) return { success: false, error: existingErr.message };
+          const existing = findBuildDeskRowByIdempotencyKey(
+            existingTasks ?? [],
+            "plan_json",
+            parsedIdempotencyKey.value,
+          );
+          if (existing) return { success: true, task: existing, was_duplicate: true };
+        }
+
         const { data, error } = await supabase
           .from("build_tasks")
           .insert({
@@ -1341,12 +1497,13 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
             title,
             description,
             acceptance_criteria_json: acceptance_criteria ?? [],
+            plan_json: attachBuildDeskIdempotencyKey(null, parsedIdempotencyKey.value),
             status: "draft",
           })
           .select("id, title, status, created_at")
           .single();
         if (error) return { success: false, error: error.message };
-        return { success: true, task: data };
+        return { success: true, task: data, was_duplicate: false };
       },
     }),
 
@@ -3587,6 +3744,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // `generated_api_key`, so the frontend can surface it behind
         // the reveal UI. Subsequent calls only return the prefix.
         let generatedApiKey: string | null = null;
+        const provisionTier = effectiveMemoryTier("free", user.email);
         if (!keyRow) {
           const rawKey = `uc_${crypto.randomBytes(16).toString("hex")}`;
           const keyHash = sha256hex(rawKey);
@@ -3598,7 +3756,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               key_hash:  keyHash,
               key_prefix: keyPrefix,
               label:     "auto-provisioned",
-              tier:      "free",
+              tier:      provisionTier,
               is_active: true,
               usage_count: 0,
             })
@@ -3625,7 +3783,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               id: keyRow.id,
               prefix: keyRow.key_prefix ?? "",
               label:  keyRow.label ?? "",
-              tier:   keyRow.tier ?? "free",
+              tier:   effectiveMemoryTier(keyRow.tier ?? "free", user.email),
               is_active: Boolean(keyRow.is_active),
               usage_count: Number(keyRow.usage_count ?? 0),
               last_used_at: keyRow.last_used_at ?? null,
@@ -3649,11 +3807,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           user_id: user.id,
           email:   user.email,
-          tier:    apiKey ? apiKey.tier : "free",
+          tier:    apiKey ? apiKey.tier : effectiveMemoryTier("free", user.email),
           needs_key: !apiKey,
           api_key: apiKey,
           generated_api_key: generatedApiKey,
           is_admin: isAdmin,
+          memory_quota_exempt: isMemoryQuotaExemptEmail(user.email),
         });
       }
 
@@ -3676,7 +3835,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({
             api_key: null,
             prefix:  existing.key_prefix ?? "",
-            tier:    existing.tier ?? "free",
+            tier:    effectiveMemoryTier(existing.tier ?? "free", user.email),
             already_provisioned: true,
           });
         }
@@ -3687,7 +3846,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           key_hash:  sha256hex(rawKey),
           key_prefix: rawKey.slice(0, 8),
           label:     "default",
-          tier:      "free",
+          tier:      effectiveMemoryTier("free", user.email),
           is_active: true,
           usage_count: 0,
         });
@@ -3696,7 +3855,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           api_key: rawKey,
           prefix:  rawKey.slice(0, 8),
-          tier:    "free",
+          tier:    effectiveMemoryTier("free", user.email),
           already_provisioned: false,
         });
       }
@@ -3747,7 +3906,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           api_key: rawKey,
           prefix:  rawKey.slice(0, 8),
-          tier:    existing.tier ?? "free",
+          tier:    effectiveMemoryTier(existing.tier ?? "free", user.email),
         });
       }
 
@@ -4502,8 +4661,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               acceptance_criteria_json,
               assigned_worker_id,
               parent_task_id,
+              idempotency_key,
             } = req.body ?? {};
             if (!title) return res.status(400).json({ error: "title required" });
+            const parsedIdempotencyKey = parseBuildDeskIdempotencyKey(
+              idempotency_key ?? (isRecord(plan_json) ? plan_json.idempotency_key : undefined),
+            );
+            if (parsedIdempotencyKey.error) {
+              return res.status(400).json({ error: parsedIdempotencyKey.error });
+            }
+
+            if (parsedIdempotencyKey.value) {
+              const { data: existingTasks, error: existingErr } = await supabase
+                .from("build_tasks")
+                .select("*")
+                .eq("api_key_hash", apiKeyHash)
+                .order("created_at", { ascending: false })
+                .limit(50);
+              if (existingErr) throw existingErr;
+              const existing = findBuildDeskRowByIdempotencyKey(
+                existingTasks ?? [],
+                "plan_json",
+                parsedIdempotencyKey.value,
+              );
+              if (existing) return res.status(200).json({ data: existing, was_duplicate: true });
+            }
 
             if (assigned_worker_id) {
               const { data: w, error: wErr } = await supabase
@@ -4533,7 +4715,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 title,
                 description: description ?? null,
                 status: status ?? "draft",
-                plan_json: plan_json ?? null,
+                plan_json: attachBuildDeskIdempotencyKey(plan_json, parsedIdempotencyKey.value),
                 acceptance_criteria_json: acceptance_criteria_json ?? null,
                 assigned_worker_id: assigned_worker_id ?? null,
                 parent_task_id: parent_task_id ?? null,
@@ -4541,7 +4723,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .select()
               .single();
             if (error) throw error;
-            return res.status(200).json({ data });
+            return res.status(200).json({ data, was_duplicate: false });
           }
           case "update_status": {
             if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
@@ -4688,6 +4870,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!task_id || !worker_id) {
           return res.status(400).json({ error: "task_id and worker_id required" });
         }
+        const parsedIdempotencyKey = parseBuildDeskIdempotencyKey(
+          req.body?.idempotency_key ?? (isRecord(payload_json) ? payload_json.idempotency_key : undefined),
+        );
+        if (parsedIdempotencyKey.error) {
+          return res.status(400).json({ error: parsedIdempotencyKey.error });
+        }
 
         const [taskRes, workerRes] = await Promise.all([
           supabase
@@ -4708,6 +4896,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!taskRes.data) return res.status(404).json({ error: "task_id not found" });
         if (!workerRes.data) return res.status(404).json({ error: "worker_id not found" });
 
+        if (parsedIdempotencyKey.value) {
+          const { data: existingEvents, error: existingErr } = await supabase
+            .from("build_dispatch_events")
+            .select()
+            .eq("api_key_hash", apiKeyHash)
+            .eq("task_id", task_id)
+            .eq("worker_id", worker_id)
+            .eq("event_type", "dispatched")
+            .order("created_at", { ascending: false })
+            .limit(50);
+          if (existingErr) throw existingErr;
+          const existingEvent = findBuildDeskRowByIdempotencyKey(
+            existingEvents ?? [],
+            "payload_json",
+            parsedIdempotencyKey.value,
+          );
+          if (existingEvent) {
+            const { error: updErr } = await supabase
+              .from("build_tasks")
+              .update({
+                status: "dispatched",
+                assigned_worker_id: worker_id,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("id", task_id);
+            if (updErr) throw updErr;
+            return res.status(200).json({ data: existingEvent, was_duplicate: true });
+          }
+        }
+
         const { data: eventData, error: eventErr } = await supabase
           .from("build_dispatch_events")
           .insert({
@@ -4715,7 +4934,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             task_id,
             worker_id,
             event_type: "dispatched",
-            payload_json: payload_json ?? null,
+            payload_json: attachBuildDeskIdempotencyKey(payload_json, parsedIdempotencyKey.value),
           })
           .select()
           .single();
@@ -4732,7 +4951,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("id", task_id);
         if (updErr) throw updErr;
 
-        return res.status(200).json({ data: eventData });
+        return res.status(200).json({ data: eventData, was_duplicate: false });
+      }
+
+      case "admin_unclick_connect_dry_run": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        const workerResolution = await resolveUnClickConnectVisibleWorkers(supabase, apiKeyHash, body);
+        const result = runRoutePacketConsumerDryRun({
+          packet,
+          visibleWorkers: workerResolution.visibleWorkers,
+        });
+
+        return res.status(200).json({
+          ...result,
+          tenant_scoped: true,
+          worker_source: workerResolution.workerSource,
+          discovery: workerResolution.discovery,
+        });
+      }
+
+      case "admin_unclick_connect_commit": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
+
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const commitMode = String(body.commit_mode ?? body.mode ?? "").trim().toLowerCase();
+        const intent = isRecord(body.intent) ? body.intent : body;
+        const packet = buildTetherRoutePacket(intent);
+        if (commitMode !== "experiment" || !packet.experiment) {
+          return res.status(400).json({
+            error: "admin_unclick_connect_commit is experiment-only",
+          });
+        }
+
+        const workerResolution = await resolveUnClickConnectVisibleWorkers(supabase, apiKeyHash, body);
+        const idempotencyKey =
+          typeof body.idempotency_key === "string" && body.idempotency_key.trim()
+            ? body.idempotency_key.trim()
+            : packet.idempotency_key;
+        const row = buildUnClickConnectDispatchRow({
+          apiKeyHash,
+          packet,
+          visibleWorkers: workerResolution.visibleWorkers,
+          idempotencyKey,
+        });
+
+        const { data, error } = await supabase
+          .from("mc_agent_dispatches")
+          .insert(row)
+          .select(
+            "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+          )
+          .single();
+
+        if (error) {
+          if ((error as { code?: string }).code === "23505") {
+            const existing = await supabase
+              .from("mc_agent_dispatches")
+              .select(
+                "id, api_key_hash, dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at",
+              )
+              .eq("api_key_hash", apiKeyHash)
+              .eq("dispatch_id", row.dispatch_id)
+              .maybeSingle();
+            if (existing.error) throw existing.error;
+            return res.status(200).json({
+              data: existing.data,
+              was_duplicate: true,
+              tenant_scoped: true,
+              worker_source: workerResolution.workerSource,
+              discovery: workerResolution.discovery,
+            });
+          }
+          throw error;
+        }
+
+        return res.status(200).json({
+          data,
+          was_duplicate: false,
+          tenant_scoped: true,
+          worker_source: workerResolution.workerSource,
+          discovery: workerResolution.discovery,
+        });
       }
 
       case "reliability_dispatches": {
@@ -4745,6 +5052,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const limit = getClampedLimit(req.query.limit ?? req.body?.limit, 50, 200);
             const status = String(req.query.status ?? req.body?.status ?? "").trim();
             const source = String(req.query.source ?? req.body?.source ?? "").trim();
+            const includeMetrics = shouldIncludeThroughputMetrics(
+              req.query.include_metrics ?? req.body?.include_metrics,
+            );
             const targetAgentIdFilter = parseOptionalFilterToken(
               req.query.target_agent_id ?? req.body?.target_agent_id,
               "target_agent_id",
@@ -4780,7 +5090,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const { data, error } = await query;
             if (error) throw error;
-            return res.status(200).json({ dispatches: data ?? [] });
+            const dispatchRows = (data ?? []) as ReliabilityDispatchRow[];
+            return res.status(200).json({
+              dispatches: includeMetrics
+                ? dispatchRows.map((row) => decorateThroughputDispatch(row))
+                : dispatchRows,
+              ...(includeMetrics
+                ? { throughput: createDispatchThroughputMetrics(dispatchRows) }
+                : {}),
+            });
           }
 
           case "get": {
@@ -6971,6 +7289,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ profile: data });
       }
 
+      case "autopilot_record_event": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
+        if (!apiKeyHash) {
+          return res.status(401).json({
+            error: "Authorization header required",
+            how_to_fix: "Pass your UnClick API key as 'Authorization: Bearer <api_key>'.",
+          });
+        }
+        const body = (req.body ?? {}) as {
+          event_type?: string | null;
+          actor_agent_id?: string | null;
+          ref_kind?: string | null;
+          ref_id?: string | null;
+          payload?: Record<string, unknown> | null;
+        };
+        const actorAgentId = String(body.actor_agent_id ?? "").trim();
+        const refId = String(body.ref_id ?? "").trim();
+        if (!actorAgentId) return res.status(400).json({ error: "actor_agent_id required" });
+        if (!refId) return res.status(400).json({ error: "ref_id required" });
+        if (actorAgentId.length > 128) return res.status(400).json({ error: "actor_agent_id must be at most 128 characters" });
+        if (refId.length > 160) return res.status(400).json({ error: "ref_id must be at most 160 characters" });
+        if (body.payload != null && !isRecord(body.payload)) {
+          return res.status(400).json({ error: "payload must be an object" });
+        }
+
+        const result = await recordAutopilotEvent(supabase, {
+          apiKeyHash,
+          eventType: String(body.event_type ?? ""),
+          actorAgentId,
+          refKind: String(body.ref_kind ?? ""),
+          refId,
+          payload: body.payload ?? {},
+        });
+        if (!result.ok) return res.status(400).json({ error: result.error });
+        return res.status(200).json({ ok: true });
+      }
+
       case "fishbowl_post": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
@@ -7090,7 +7446,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!roomId) {
           const { data: newRoom, error: roomErr } = await supabase
             .from("mc_fishbowl_rooms")
-            .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Fishbowl" })
+            .insert({ api_key_hash: apiKeyHash, slug: "default", name: "Boardroom" })
             .select("id")
             .single();
           if (roomErr) throw roomErr;
@@ -7113,6 +7469,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
           .single();
         if (insertErr) throw insertErr;
+
+        const ledgerEvent = planFishbowlPostLedgerEvent({
+          actorAgentId: agentId,
+          messageId: inserted.id,
+          threadId,
+          text,
+          tags,
+          recipients,
+        });
+        if (ledgerEvent) {
+          const ledgerResult = await recordAutopilotEvent(supabase, {
+            ...ledgerEvent,
+            apiKeyHash,
+          });
+          if (!ledgerResult.ok) {
+            console.warn("[fishbowl_post] autopilot ledger write skipped:", ledgerResult.error);
+          }
+        }
 
         // Bump post-side presence so active authors do not look stale on Now Playing.
         // Posting is a live pulse, so it refreshes status and clears any prior
@@ -7226,7 +7600,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               action: "message_posted",
               severity,
               summary,
-              deep_link: `/admin/fishbowl#msg-${inserted.id}`,
+              deep_link: `/admin/boardroom#msg-${inserted.id}`,
               payload: {
                 author_emoji: inserted.author_emoji,
                 author_agent_id: inserted.author_agent_id,
@@ -7454,6 +7828,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .single();
           if (error) throw error;
 
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: null,
+              after: data,
+            }),
+          );
+
           void postFishbowlEvent(
             supabase,
             apiKeyHash,
@@ -7516,6 +7901,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
 
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
+
           const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
           if (body.title != null) {
             const titleRes = validateTitle(body.title);
@@ -7557,12 +7950,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
           return res.status(200).json({ todo: data });
         }
 
         if (action === "fishbowl_complete_todo") {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
           const nowIso = new Date().toISOString();
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
@@ -7573,6 +7984,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
 
           void postFishbowlEvent(
             supabase,
@@ -7587,6 +8009,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (action === "fishbowl_drop_todo") {
           const idRes = validateUuid(body.todo_id, "todo_id");
           if (typeof idRes !== "string") return res.status(400).json(idRes);
+          const { data: beforeTodo, error: beforeErr } = await supabase
+            .from("mc_fishbowl_todos")
+            .select("id,title,status,assigned_to_agent_id,priority")
+            .eq("api_key_hash", apiKeyHash)
+            .eq("id", idRes)
+            .maybeSingle();
+          if (beforeErr) throw beforeErr;
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
             .update({ status: "dropped", updated_at: new Date().toISOString() })
@@ -7596,6 +8025,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle();
           if (error) throw error;
           if (!data) return res.status(404).json({ error: "todo not found" });
+
+          await recordAutopilotEvents(
+            supabase,
+            apiKeyHash,
+            planTodoLedgerEvents({
+              todoId: data.id,
+              actorAgentId: agentId,
+              before: beforeTodo,
+              after: data,
+            }),
+          );
           return res.status(200).json({ todo: data });
         }
 
@@ -7652,24 +8092,123 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { data, error } = await q;
           if (error) throw error;
 
-          // Decorate with comment_count for the kanban cards.
+          const stageRank = {
+            brief: 1,
+            build: 2,
+            proof: 3,
+            review: 4,
+            ship: 5,
+          } as const;
+          const stageProgress: Record<number, number> = {
+            1: 10,
+            2: 55,
+            3: 70,
+            4: 85,
+            5: 100,
+          };
+          function positiveStageHit(text: string, positive: RegExp, negative?: RegExp): boolean {
+            if (!positive.test(text)) return false;
+            return negative ? !negative.test(text) : true;
+          }
+          function inferJobPipeline(todo: Record<string, unknown>, commentTexts: string[]) {
+            const corpus = [
+              todo.title,
+              todo.description,
+              ...commentTexts,
+            ]
+              .filter((value) => typeof value === "string" && value.trim().length > 0)
+              .join("\n")
+              .toLowerCase();
+            const status = String(todo.status ?? "");
+            let activeCount = status === "done" ? stageRank.ship : status === "in_progress" ? stageRank.build : 1;
+            let source = status === "done" ? "status: done" : status === "in_progress" ? "status: active" : "status: open";
+            const evidence: string[] = [];
+
+            if (
+              positiveStageHit(
+                corpus,
+                /\b(implemented|built|build complete|patch applied|changes applied|pr\s*#?\d+|branch ready|commit(?:ted)?|ready for proof)\b/i,
+              )
+            ) {
+              activeCount = Math.max(activeCount, stageRank.build);
+              evidence.push("build");
+              source = "receipt: build";
+            }
+            if (
+              positiveStageHit(
+                corpus,
+                /\b(build passed|checks? (?:passed|green)|tests? passed|proof (?:passed|complete|attached|submitted|recorded|current|clean)|verification (?:passed|complete)|ci passed|npm run build passed)\b/i,
+                /\b(no|missing|needs?|needed|waiting for|without|incomplete|stale)\s+(?:live\s+)?proof\b|\bproof\s+(?:missing|needed|incomplete|stale|not available)\b/i,
+              )
+            ) {
+              activeCount = Math.max(activeCount, stageRank.proof);
+              evidence.push("proof");
+              source = "receipt: proof";
+            }
+            if (
+              positiveStageHit(
+                corpus,
+                /\b(qc pass|review(?:ed)?|reviewer pass|gatekeeper pass|safety pass|approved|ack:\s*pass|pass on #\d+|ready for review)\b/i,
+                /\b(no|missing|needs?|needed|waiting for|without|incomplete)\s+(?:qc|review|pass)\b|\b(blocker|hold|do not merge|do not lift)\b/i,
+              )
+            ) {
+              activeCount = Math.max(activeCount, stageRank.review);
+              evidence.push("review");
+              source = "receipt: review";
+            }
+            if (
+              positiveStageHit(
+                corpus,
+                /\b(pr\s*#?\d+\s+merged|merged\s+#?\d+|merged into main|deployed|published|shipped|live on production|production live)\b/i,
+                /\b(not merged|unmerged|do not merge|blocked from merge|merge blocked)\b/i,
+              )
+            ) {
+              activeCount = Math.max(activeCount, stageRank.ship);
+              evidence.push("ship");
+              source = "receipt: ship";
+            }
+
+            return {
+              pipeline_stage_count: activeCount,
+              pipeline_progress: stageProgress[activeCount] ?? 10,
+              pipeline_source: source,
+              pipeline_evidence: evidence,
+            };
+          }
+
+          // Decorate with comment_count and stage evidence for the jobs board.
           const todos = data ?? [];
           let countMap: Record<string, number> = {};
+          let textMap: Record<string, string[]> = {};
           if (todos.length > 0) {
             const ids = todos.map((t) => t.id);
             const { data: comments } = await supabase
               .from("mc_fishbowl_comments")
-              .select("target_id")
+              .select("target_id,text")
               .eq("api_key_hash", apiKeyHash)
               .eq("target_kind", "todo")
               .in("target_id", ids);
-            countMap = (comments ?? []).reduce<Record<string, number>>((acc, c) => {
+            const commentRows = comments ?? [];
+            countMap = commentRows.reduce<Record<string, number>>((acc, c) => {
               const k = c.target_id as string;
               acc[k] = (acc[k] ?? 0) + 1;
               return acc;
             }, {});
+            textMap = commentRows.reduce<Record<string, string[]>>((acc, c) => {
+              const k = c.target_id as string;
+              const text = typeof c.text === "string" ? c.text : "";
+              if (text) acc[k] = [...(acc[k] ?? []), text];
+              return acc;
+            }, {});
           }
-          const decorated = todos.map((t) => ({ ...t, comment_count: countMap[t.id as string] ?? 0 }));
+          const decorated = todos.map((t) => {
+            const id = t.id as string;
+            return {
+              ...t,
+              comment_count: countMap[id] ?? 0,
+              ...inferJobPipeline(t, textMap[id] ?? []),
+            };
+          });
           const compactTodos = decorated.map((t) => ({
             id: t.id,
             title: t.title,
@@ -7681,6 +8220,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             updated_at: t.updated_at,
             completed_at: t.completed_at,
             comment_count: t.comment_count,
+            pipeline_stage_count: t.pipeline_stage_count,
+            pipeline_progress: t.pipeline_progress,
+            pipeline_source: t.pipeline_source,
+            pipeline_evidence: t.pipeline_evidence,
           }));
           return res.status(200).json({
             todos: includeDescription ? decorated : compactTodos,
@@ -7749,6 +8292,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             completed_at: t.completed_at,
             comment_count: countMap[t.id as string] ?? 0,
             actionable_rank: index + 1,
+            scope_pack:
+              t.scope_pack ??
+              t.scopePack ??
+              t.runner_scope ??
+              t.runnerScope ??
+              t.autonomous_scope ??
+              t.autonomousScope ??
+              t.coding_room_scope ??
+              t.codingRoomScope ??
+              null,
           }));
           return res.status(200).json({
             todos: decorated,
@@ -8057,7 +8610,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!isAdminCaller && netUp < 1) {
             return res.status(403).json({
               error: "idea needs net upvotes >= 1 (or admin caller) to promote",
-              how_to_fix: "Vote it up first, or have the human admin promote it from the Fishbowl admin UI.",
+              how_to_fix: "Vote it up first, or have the human admin promote it from the Boardroom admin UI.",
             });
           }
 

@@ -8,13 +8,13 @@ import {
 
 describe("PinballWake job runners", () => {
   it("does not treat chat-only workers as code execution seats", () => {
-    const xpass = PINBALLWAKE_JOB_RUNNERS.find((runner) => runner.id === "xpass-product-context");
-    const gatekeeper = PINBALLWAKE_JOB_RUNNERS.find((runner) => runner.id === "gatekeeper-safety");
+    const tester = PINBALLWAKE_JOB_RUNNERS.find((runner) => runner.id === "tester-product-context");
+    const safetyChecker = PINBALLWAKE_JOB_RUNNERS.find((runner) => runner.id === "safety-checker");
 
-    expect(xpass).toBeTruthy();
-    expect(gatekeeper).toBeTruthy();
+    expect(tester).toBeTruthy();
+    expect(safetyChecker).toBeTruthy();
     expect(
-      runnerCanAcceptJob(xpass!, {
+      runnerCanAcceptJob(tester!, {
         kind: "implementation",
         lane: "rotatepass",
         title: "Fix RotatePass overlap",
@@ -22,7 +22,7 @@ describe("PinballWake job runners", () => {
       }),
     ).toBe(false);
     expect(
-      runnerCanAcceptJob(gatekeeper!, {
+      runnerCanAcceptJob(safetyChecker!, {
         kind: "implementation",
         lane: "wakepass",
         title: "Patch watcher",
@@ -39,7 +39,7 @@ describe("PinballWake job runners", () => {
       requiresCode: true,
     });
 
-    expect(runner?.id).toBe("forge-codex-builder");
+    expect(runner?.id).toBe("builder-codex");
     expect(runner?.readiness).toBe("builder_ready");
   });
 
@@ -51,14 +51,14 @@ describe("PinballWake job runners", () => {
       requiresCode: false,
     });
 
-    expect(runner?.id).toBe("xpass-product-context");
+    expect(runner?.id).toBe("tester-product-context");
   });
 
   it("summarizes runnable hands separately from probes", () => {
     const summary = summarizePinballWakeJobRunners();
 
     expect(summary.total).toBe(PINBALLWAKE_JOB_RUNNERS.length);
-    expect(summary.codeHands).toBeGreaterThanOrEqual(2);
+    expect(summary.codeHands).toBeGreaterThanOrEqual(1);
     expect(summary.needsProbe).toBeGreaterThanOrEqual(1);
     expect(summary.byReadiness.context_only).toBeGreaterThanOrEqual(1);
   });

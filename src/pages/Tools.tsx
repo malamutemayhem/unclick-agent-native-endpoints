@@ -236,10 +236,10 @@ const AUSTRALIA_TOOLS = [
 const Tools = () => {
   useCanonical("/tools");
   useMetaTags({
-    title: "178+ AI Agent Tools - UnClick Marketplace",
-    description: "Browse 178+ verified tools across 60+ integrations - email, finance, productivity, dev tools and more. One npm install, instantly callable by any MCP-compatible AI agent.",
-    ogTitle: "UnClick Marketplace - 178+ Tools for AI Agents",
-    ogDescription: "Browse 178+ verified tools across 60+ integrations. One npm install gives your AI agent access to everything.",
+    title: "UnClick Apps - Built-in tools and connected services",
+    description: "Browse UnClick apps: built-in tools that work straight away, plus connected services that need login or API keys.",
+    ogTitle: "UnClick Apps - Built-in tools and connected services",
+    ogDescription: "Browse built-in apps and connected services for AI agents.",
     ogUrl: "https://unclick.world/tools",
   });
 
@@ -255,20 +255,21 @@ const Tools = () => {
         <div className="relative z-10 mx-auto max-w-3xl text-center">
           <FadeIn>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 backdrop-blur-sm">
-              <span className="font-mono text-xs font-medium text-primary">178+ Tools</span>
+              <span className="font-mono text-xs font-medium text-primary">Apps</span>
             </div>
           </FadeIn>
 
           <FadeIn delay={0.05}>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-              178+ tools.{" "}
+              Apps your AI can use.{" "}
               <span className="text-primary">One command.</span>
             </h1>
           </FadeIn>
 
           <FadeIn delay={0.1}>
             <p className="mt-4 text-lg text-body max-w-xl mx-auto leading-relaxed">
-              Every tool your AI agent needs - weather, email, finance, security, social media, gaming, and more. All accessible through a single MCP server. No API keys to manage. No rate limits to worry about.
+              Built-in apps work straight away. Connected apps use Passport when they need login,
+              API keys, or extra permission.
             </p>
           </FadeIn>
 
@@ -300,7 +301,7 @@ const Tools = () => {
               All categories
             </h2>
             <p className="mt-3 text-center text-body max-w-xl mx-auto">
-              19 categories. 178+ tools. Choose what you need.
+              Categories, built-in options, connected services, and more.
             </p>
           </FadeIn>
 
@@ -326,7 +327,7 @@ const Tools = () => {
                   <h3 className="text-sm font-semibold text-heading">{cat.name}</h3>
                   <p className="mt-1 text-xs text-body leading-relaxed">{cat.desc}</p>
                   <div className="mt-4 pt-4 border-t border-border/30">
-                    <p className="text-xs text-muted-foreground mb-2">Example tools:</p>
+                    <p className="text-xs text-muted-foreground mb-2">Example app actions:</p>
                     <div className="flex flex-wrap gap-1">
                       {cat.tools.map((tool) => (
                         <span key={tool} className="text-xs bg-primary/5 text-primary px-2 py-1 rounded">
@@ -351,7 +352,7 @@ const Tools = () => {
           <FadeIn>
             <div className="flex items-center gap-3 mb-2">
               <Mail className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl font-semibold tracking-tight">Email Tools</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Email Apps</h2>
             </div>
             <p className="text-body mt-2 max-w-2xl">
               AI-powered email management. Search, read, send, and organize - all through natural language.
@@ -387,7 +388,7 @@ const Tools = () => {
           <FadeIn>
             <div className="flex items-center gap-3 mb-2">
               <TrendingUp className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl font-semibold tracking-tight">Finance Tools</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Finance Apps</h2>
             </div>
             <p className="text-body mt-2 max-w-2xl">
               Unified financial data. Crypto, stocks, and forex in one interface.
@@ -423,7 +424,7 @@ const Tools = () => {
           <FadeIn>
             <div className="flex items-center gap-3 mb-2">
               <Shield className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl font-semibold tracking-tight">Security Tools</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">Security Apps</h2>
             </div>
             <p className="text-body mt-2 max-w-2xl">
               Threat intelligence at your fingertips. Scan URLs, check breaches, monitor CVEs.
@@ -462,7 +463,7 @@ const Tools = () => {
               <h2 className="text-2xl font-semibold tracking-tight">Australian Services</h2>
             </div>
             <p className="text-body mt-2 max-w-2xl">
-              Built in Melbourne. Tools for Australian businesses and residents.
+              Built in Melbourne. Apps for Australian businesses and residents.
             </p>
           </FadeIn>
 

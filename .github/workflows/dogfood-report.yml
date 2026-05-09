@@ -13,6 +13,10 @@ on:
         description: MCP endpoint URL for TestPass.
         required: false
         default: https://unclick.world/api/mcp
+      site_sweep_urls:
+        description: Comma-separated URLs for the UXPass site sweep.
+        required: false
+        default: https://unclick.world,https://unclick.world/dashboard,https://unclick.world/admin/you
 
 permissions:
   contents: write
@@ -39,11 +43,22 @@ jobs:
           DOGFOOD_UXPASS_TOKEN: ${{ secrets.UXPASS_TOKEN || secrets.CRON_SECRET }}
         run: node scripts/build-dogfood-report.mjs
 
+      - name: Build UXPass site sweep receipt
+        env:
+          DOGFOOD_API_BASE: https://unclick.world
+          DOGFOOD_PUBLIC_URL: ${{ inputs.public_url || 'https://unclick.world' }}
+          UXPASS_SITE_SWEEP_URLS: ${{ inputs.site_sweep_urls || 'https://unclick.world,https://unclick.world/dashboard,https://unclick.world/admin/you' }}
+          UXPASS_SITE_SWEEP_ALLOWED_ORIGINS: https://unclick.world,https://www.unclick.world
+          UXPASS_SITE_SWEEP_TOKEN: ${{ secrets.UXPASS_TOKEN || secrets.CRON_SECRET }}
+        run: node scripts/uxpass-site-sweep.mjs --output public/dogfood/uxpass-site-sweep.json --target-sha "$GITHUB_SHA" --allow-non-passing
+
       - name: Upload receipt artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dogfood-latest
-          path: public/dogfood/latest.json
+          path: |
+            public/dogfood/latest.json
+            public/dogfood/uxpass-site-sweep.json
 
       - name: Summarize receipt
         shell: bash
@@ -55,10 +70,13 @@ jobs:
             echo "- Status: \`$(jq -r '.status // \"unknown\"' public/dogfood/latest.json)\`"
             echo "- Source: \`$(jq -r '.source // \"unknown\"' public/dogfood/latest.json)\`"
             echo "- Output: \`public/dogfood/latest.json\`"
+            echo "- UXPass site sweep: \`$(jq -r '.status // \"unknown\"' public/dogfood/uxpass-site-sweep.json)\` across \`$(jq -r '.targets | length' public/dogfood/uxpass-site-sweep.json)\` URL(s)"
             echo "- Public URL: \`${{ inputs.public_url || 'https://unclick.world' }}\`"
             echo "- MCP URL: \`${{ inputs.mcp_url || 'https://unclick.world/api/mcp' }}\`"
             echo ""
             jq -r '.results[] | "- \(.name): \(.status) - \(.summary)\(if .blockedReason then " Blocked reason: \(.blockedReason)" else "" end)"' public/dogfood/latest.json
+            echo ""
+            jq -r '.targets[] | "- UXPass sweep \(.url): \(.status) - \(.summary)"' public/dogfood/uxpass-site-sweep.json
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit public receipt
@@ -66,7 +84,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/dogfood/latest.json
+          git add public/dogfood/latest.json public/dogfood/uxpass-site-sweep.json
           if git diff --cached --quiet; then
             echo "Dogfood receipt unchanged."
             exit 0

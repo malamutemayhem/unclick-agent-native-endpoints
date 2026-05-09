@@ -2,7 +2,7 @@
  * AdminShell - shared layout wrapper for admin pages.
  *
  * Renders the top Navbar + Footer plus a left sidebar with links to the
- * admin sections (You, Agents, Memory, Tools, Keychain, Activity, Settings).
+ * admin sections (You, Workers, Memory, Apps, Passport, Activity, Settings).
  * Pages render inside the right pane.
  */
 
@@ -42,15 +42,15 @@ export default function AdminShell({ title, subtitle, agentCount, children }: Ad
   const items: SidebarItem[] = [
     { label: "You", to: "/settings", icon: UserIcon, matchPrefix: "/settings" },
     {
-      label: "Agents",
+      label: "Workers",
       to: "/admin/agents",
       icon: Bot,
       badge: agentCount,
       matchPrefix: "/admin/agents",
     },
     { label: "Memory", to: "/memory/admin", icon: Brain, matchPrefix: "/memory" },
-    { label: "Tools", to: "/tools", icon: Wrench, matchPrefix: "/tools" },
-    { label: "Keychain (BackstagePass)", to: "/admin/keychain", icon: KeyRound, matchPrefix: "/admin/keychain" },
+    { label: "Apps", to: "/tools", icon: Wrench, matchPrefix: "/tools" },
+    { label: "Passport", to: "/admin/keychain", icon: KeyRound, matchPrefix: "/admin/keychain" },
     { label: "Activity", to: "/dispatch", icon: Activity, matchPrefix: "/dispatch" },
     { label: "Settings", to: "/settings", icon: SettingsIcon, matchPrefix: "/settings" },
   ];

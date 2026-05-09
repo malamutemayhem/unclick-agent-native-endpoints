@@ -11,6 +11,7 @@ const unclickApiKey = process.env.FISHBOWL_WAKE_TOKEN || process.env.FISHBOWL_AU
 const dryRun = parseBooleanFlag(process.env.QUEUEPUSH_DRY_RUN) || process.argv.includes("--dry-run");
 const maxPackets = parseBoundedInt(process.env.QUEUEPUSH_MAX_PACKETS, 10, 1, 12);
 const recentFishbowlLimit = parseBoundedInt(process.env.QUEUEPUSH_FISHBOWL_LIMIT, 100, 20, 100);
+const packetRetryMinutes = parseBoundedInt(process.env.QUEUEPUSH_PACKET_RETRY_MINUTES, 180, 15, 1440);
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -24,9 +25,9 @@ export const DEFAULT_QUEUEPUSH_RUNNERS = [
     safeFor: ["wakepass", "pinballwake", "queuepush", "reliability"],
   },
   {
-    emoji: "🧠",
-    readiness: "builder_ready",
-    capabilities: ["implementation", "owner_decision", "merge_proof", "status_relay"],
+    emoji: "🧭",
+    readiness: "context_only",
+    capabilities: ["owner_decision", "merge_proof", "status_relay"],
     safeFor: ["blocked_chris_only", "chris-only", "human policy", "merge", "master"],
   },
   {
@@ -36,10 +37,10 @@ export const DEFAULT_QUEUEPUSH_RUNNERS = [
     safeFor: ["rotatepass", "xpass", "system credentials", "systemcredential", "adminkeychain", "connectedservices"],
   },
   {
-    emoji: "🍿",
+    emoji: "🔍",
     readiness: "review_only",
     capabilities: ["qc_review", "status_relay"],
-    safeFor: ["ready_for_qc", "qc", "second-read", "proof review"],
+    safeFor: ["ready_for_qc", "qc", "reviewer", "second-read", "proof review"],
   },
   {
     emoji: "📣",
@@ -48,7 +49,7 @@ export const DEFAULT_QUEUEPUSH_RUNNERS = [
     safeFor: ["docs", "prd", "brief", "handoff", "status"],
   },
   {
-    emoji: "🦾",
+    emoji: "🩹",
     readiness: "needs_probe",
     capabilities: ["implementation", "status_relay"],
     safeFor: ["small implementation", "docs"],
@@ -134,6 +135,56 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function isMissingFinalQcText(text) {
+  return (
+    /\b(final qc|qc ack|qc pass|reviewer|tester)\b|🔍|🧪/.test(text) &&
+    /\b(missing|needed|needs|waiting|awaiting|only missing|no final|no .*visible)\b/.test(text)
+  );
+}
+
+function isQcWaitOnlyHold(text) {
+  if (!/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) return false;
+  if (!isMissingFinalQcText(text)) return false;
+  const exactHoldClause = text.match(/\bexact hold:\s*([^.!?]{0,180})/)?.[1] || "";
+  const exactHoldIsQcOnly =
+    Boolean(exactHoldClause) &&
+    /\b(?:missing|waiting|awaiting|needs?)\b.{0,80}\b(?:final qc|qc ack|qc pass|reviewer|tester)\b/.test(
+      exactHoldClause,
+    ) &&
+    !/\b(and|but|however|unresolved|remains|concern|issue|blocker|risk|schema|protected|mismatch|overlap|anti-stomp|dirty|failing|failed|red)\b/.test(
+      exactHoldClause,
+    );
+  const explicitQcOnlyWait =
+    /\b(?:final qc|qc ack|qc pass|reviewer|tester)\b.{0,80}\b(?:only|sole|solely|just)\b/.test(text) ||
+    /\b(?:only|sole|solely|just)\b.{0,80}\b(?:final qc|qc ack|qc pass|reviewer|tester)\b/.test(text) ||
+    exactHoldIsQcOnly;
+  if (!explicitQcOnlyWait) return false;
+  return !/\b(exact blocker|proof mismatch|body proof|stale proof|stale pr body|overlap|anti-stomp|dirty branch|not clean against main|targeted proof|focused proof|failing|failed|red|secrets|auth|billing|dns|migration|raw key|human decision|chris-only|needs chris)\b/.test(
+    text,
+  );
+}
+
+function isAckRequestText(text) {
+  return (
+    /\b(?:need|needs|needed|please|reply|ack)\b.{0,120}\bpass\s*(?:\/|or)\s*blocker\b/.test(text) ||
+    /\back:\s*pass\/blocker\b/.test(text)
+  );
+}
+
+function isExplicitActiveBlockerText(text) {
+  return /(?:^|\n)\s*(?:[-*]\s*)?(?:[^\w\s]+\s*)?(?:(?:gatekeeper|forge|reviewer|tester|safety checker|release safety|builder|qc)\s+)?(?:blocker|hold)(?:\s*:|\s+on\b)/.test(
+    text,
+  );
+}
+
+function isBlockerResolutionText(text) {
+  if (isExplicitActiveBlockerText(text)) return false;
+  return (
+    /\b(?:blocker|hold)\b.{0,80}\b(?:fix|fixed|resolved|cleared|closed)\b/.test(text) ||
+    /\b(?:fix|fixed|resolved|cleared|closed)\b.{0,80}\b(?:blocker|hold)\b/.test(text)
+  );
+}
+
 function sourceUrl(pr) {
   return pr.html_url || `${serverUrl}/${repository}/pull/${pr.number}`;
 }
@@ -181,9 +232,9 @@ export function latestCommentSignals(comments = []) {
   let lastOverlap = -1;
   let lastFailedProof = -1;
   let lastDirtyBranch = -1;
-  let lastGatekeeperPass = -1;
-  let lastForgePass = -1;
-  let lastPopcornPass = -1;
+  let lastSafetyPass = -1;
+  let lastBuilderPass = -1;
+  let lastReviewerPass = -1;
   let lastMissingFinalQcAck = -1;
   let hasChrisOnly = false;
   let hasProof = false;
@@ -208,21 +259,24 @@ export function latestCommentSignals(comments = []) {
       hasProof = true;
     }
     if (lanePass && /\b(gatekeeper|release safety|safety checker)\b|🛡️/.test(text)) {
-      lastGatekeeperPass = index;
+      lastSafetyPass = index;
     }
     if (lanePass && /\b(forge|builder|implementation-shape)\b|🛠️/.test(text)) {
-      lastForgePass = index;
+      lastBuilderPass = index;
     }
-    if (lanePass && /\b(popcorn|qc|reviewer)\b|🍿/.test(text)) {
-      lastPopcornPass = index;
+    if (lanePass && /\b(qc|reviewer|tester)\b|🔍|🧪/.test(text)) {
+      lastReviewerPass = index;
     }
-    if (/\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text)) {
+    const qcWaitOnlyHold = isQcWaitOnlyHold(text);
+    if (
+      /\b(hold|do not merge|do not lift|blocker|blocked)\b/.test(text) &&
+      !qcWaitOnlyHold &&
+      !isAckRequestText(text)
+      && !isBlockerResolutionText(text)
+    ) {
       lastHold = index;
     }
-    if (
-      /\b(final qc|qc ack|qc pass|popcorn|reviewer)\b|🍿/.test(text) &&
-      /\b(missing|needed|needs|waiting|awaiting|only missing|no final|no .*visible)\b/.test(text)
-    ) {
+    if (isMissingFinalQcText(text)) {
       lastMissingFinalQcAck = index;
     }
     if (/\b(overlap|anti-stomp|supersede|supersedes|rebase\/close|close one lane|same files)\b/.test(text)) {
@@ -248,10 +302,10 @@ export function latestCommentSignals(comments = []) {
     hasOverlap: lastOverlap > lastPass,
     hasFailedProof: lastFailedProof > lastPass,
     hasDirtyBranch: lastDirtyBranch > lastPass,
-    hasGatekeeperPass: lastGatekeeperPass >= 0 && lastGatekeeperPass > lastHold,
-    hasForgePass: lastForgePass >= 0 && lastForgePass > lastHold,
-    hasPopcornPass: lastPopcornPass >= 0 && lastPopcornPass > lastHold,
-    hasMissingFinalQcAck: lastMissingFinalQcAck > lastPopcornPass,
+    hasSafetyPass: lastSafetyPass >= 0 && lastSafetyPass > lastHold,
+    hasBuilderPass: lastBuilderPass >= 0 && lastBuilderPass > lastHold,
+    hasReviewerPass: lastReviewerPass >= 0 && lastReviewerPass > lastHold,
+    hasMissingFinalQcAck: lastMissingFinalQcAck > lastReviewerPass,
     hasChrisOnly,
     hasProof,
   };
@@ -366,9 +420,9 @@ export function classifyPullRequest(input) {
     pr.draft &&
     green &&
     clean &&
-    signals.hasGatekeeperPass &&
-    signals.hasForgePass &&
-    !signals.hasPopcornPass
+    signals.hasSafetyPass &&
+    signals.hasBuilderPass &&
+    !signals.hasReviewerPass
   ) {
     return {
       state: "missing_final_qc_ack",
@@ -487,9 +541,30 @@ export function buildQueuePacket(input) {
   };
 }
 
-export function filterDuplicatePackets(packets, fishbowlMessages = []) {
-  const recentText = fishbowlMessages.map((message) => String(message.text || "")).join("\n");
-  return packets.filter((packet) => !recentText.includes(packet.packetId));
+function messageCreatedAt(message) {
+  const value =
+    message?.created_at ||
+    message?.createdAt ||
+    message?.inserted_at ||
+    message?.timestamp ||
+    message?.created ||
+    "";
+  const time = Date.parse(String(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+export function filterDuplicatePackets(
+  packets,
+  fishbowlMessages = [],
+  { now = Date.now(), retryAfterMinutes = packetRetryMinutes } = {},
+) {
+  const retryMs = retryAfterMinutes * 60 * 1000;
+  return packets.filter((packet) => {
+    const matches = fishbowlMessages.filter((message) => String(message.text || "").includes(packet.packetId));
+    if (matches.length === 0) return true;
+    const newest = Math.max(...matches.map((message) => messageCreatedAt(message) ?? now));
+    return now - newest >= retryMs;
+  });
 }
 
 async function githubJson(path) {
@@ -610,8 +685,9 @@ function prioritizePackets(packets) {
     hold_overlap: 1,
     failed_targeted_proof: 2,
     blocked_chris_only: 3,
-    ready_for_qc: 4,
-    draft_green_needs_owner_lift: 5,
+    missing_final_qc_ack: 4,
+    ready_for_qc: 5,
+    draft_green_needs_owner_lift: 6,
   };
   return [...packets].sort((a, b) => {
     const stateDiff = (priority[a.state] ?? 99) - (priority[b.state] ?? 99);

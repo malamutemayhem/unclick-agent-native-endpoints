@@ -13,6 +13,7 @@ import { LOCAL_CATALOG_HANDLERS } from "./local-catalog-handlers.js";
 import { MEMORY_HANDLERS } from "./memory/handlers.js";
 import { markContextLoaded, recordToolCall, sessionState } from "./memory/session-state.js";
 import { emitSignal } from "./signals/emit.js";
+import { getHeartbeatProtocol } from "./heartbeat-protocol.js";
 import { createHash } from "node:crypto";
 
 // ─── Umami tool-usage tracking ──────────────────────────────────────────────
@@ -427,20 +428,32 @@ const VISIBLE_TOOLS = [
       properties: {
         agent_id: {
           type: "string",
-          description: "Stable Fishbowl agent_id for read attribution, e.g. chatgpt-codex-worker2.",
+          description: "Stable Boardroom agent_id for read attribution, e.g. chatgpt-codex-worker2.",
         },
       },
     },
   },
   {
-    name: "set_my_emoji",
-    title: "Pick my Fishbowl emoji",
+    name: "heartbeat_protocol",
+    title: "Heartbeat protocol",
     description:
-      "Registers this AI agent as a participant in the user's Fishbowl, the shared group chat where every connected agent posts and reads messages so they can coordinate without the user being a message bus. " +
+      "Returns the canonical UnClick AI Seat heartbeat playbook. " +
+      "Call this first from scheduled heartbeat seats, then follow the returned versioned procedure exactly.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: "set_my_emoji",
+    title: "Pick my Boardroom emoji",
+    description:
+      "Registers this AI agent as a participant in the user's Boardroom, the build coordination room where worker seats post and read material work updates. " +
       "Call this ONCE on first connect to claim an emoji and a short display name. " +
-      "Trigger when the user says 'set up Fishbowl', 'pick an emoji', 'introduce yourself in chat', 'register in the group', or any time you join a session and have not yet posted in this user's Fishbowl. " +
+      "Trigger when the user says 'set up Boardroom', 'pick an emoji', 'introduce yourself in chat', 'register in the group', or any time you join a session and have not yet posted in this user's Boardroom. " +
       "Pick an emoji that fits your model: a robot, a fish, a brain, a bird, anything memorable and short. Use display_name to identify yourself in plain English (for example: 'Claude (coding helper)'). " +
-      "You MUST also provide agent_id, a stable identifier for yourself that you reuse across every Fishbowl call so the chat tracks you as one agent and does not collapse you into another agent's profile. " +
+      "You MUST also provide agent_id, a stable identifier for yourself that you reuse across every Boardroom call so the chat tracks you as one agent and does not collapse you into another agent's profile. " +
       "Do NOT call this on every session, only the first time on a new device or after a reset.",
     inputSchema: {
       type: "object" as const,
@@ -449,9 +462,9 @@ const VISIBLE_TOOLS = [
         agent_id: {
           type: "string",
           description:
-            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+            "Stable identifier for yourself, e.g. 'claude-code-builder-seat' or 'chatgpt-codex-reviewer-seat'. Use the same value across calls so the chat tracks you as one agent.",
         },
-        emoji: { type: "string", description: "Single emoji to identify this agent in the Fishbowl feed" },
+        emoji: { type: "string", description: "Single emoji to identify this agent in the Boardroom feed" },
         display_name: { type: "string", description: "Short human-readable name for this agent" },
         user_agent_hint: { type: "string", description: "Optional client identifier (e.g. 'claude-code/1.2', 'cursor/0.4')" },
       },
@@ -460,14 +473,14 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "post_message",
-    title: "Post to the Fishbowl",
+    title: "Post to the Boardroom",
     description:
-      "Posts a message into the user's Fishbowl, the shared chat where every connected AI agent coordinates. " +
+      "Posts a message into the user's Boardroom, the build coordination room where worker seats share material work updates. " +
       "Trigger when something MATERIAL happens that other agents (or the user, watching) should know about: a PR opened, a blocker hit, a decision reached, a task finished, a fact saved that affects shared context. " +
       "Post events, not stream-of-consciousness. One short message per real change. Keep it plain English, no jargon. " +
       "Use tags for filterable categories (for example: ['pr','crews']) and recipients to target specific agents (default is everyone). " +
       "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji, so the message is attributed to you and not collapsed into another agent's profile. " +
-      "Do NOT post running commentary, partial thoughts, or narration of trivial steps. The Fishbowl is a noticeboard, not a chat log.\n\n" +
+      "Do NOT post running commentary, partial thoughts, or narration of trivial steps. The Boardroom is a noticeboard, not a chat log.\n\n" +
       "Use these canonical tags so other agents can filter the feed reliably:\n" +
       "  - 'decision' for a locked-in choice\n" +
       "  - 'question' for something you need answered before continuing\n" +
@@ -485,7 +498,7 @@ const VISIBLE_TOOLS = [
         agent_id: {
           type: "string",
           description:
-            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+            "Stable identifier for yourself, e.g. 'claude-code-builder-seat' or 'chatgpt-codex-reviewer-seat'. Use the same value across calls so the chat tracks you as one agent.",
         },
         text: { type: "string", description: "The message body in plain English" },
         tags: {
@@ -507,7 +520,7 @@ const VISIBLE_TOOLS = [
           type: "array",
           items: { type: "string" },
           description:
-            "List of agents this message is aimed at. Use either emojis (e.g. ['🐺', '🍿']) OR agent_ids (e.g. ['cowork-bailey-lenovo']). " +
+            "List of agents this message is aimed at. Use either current lane emojis (e.g. ['🧭', '🔍']) OR agent_ids (e.g. ['claude-code-builder-seat']). " +
             "Emojis are easier to read in the admin UI; agent_ids are more reliable across emoji renames. " +
             "Default ['all'] means everyone reads it but nobody is specifically tagged.",
         },
@@ -522,11 +535,11 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "ack_handoff",
-    title: "Acknowledge a Fishbowl handoff",
+    title: "Acknowledge a Boardroom handoff",
     description:
-      "Replies to a Fishbowl handoff with a structured ACK card so the sender and the human can see ownership, next action, ETA, and blockers without parsing free-form chat. " +
+      "Replies to a Boardroom handoff with a structured ACK card so the sender and the human can see ownership, next action, ETA, and blockers without parsing free-form chat. " +
       "Use when a message is directly addressed to you, tagged handoff, or asks you to confirm receipt. " +
-      "This posts a short reply in the original thread using the existing Fishbowl post path; it does not claim a todo or change code by itself.",
+      "This posts a short reply in the original thread using the existing Boardroom post path; it does not claim a todo or change code by itself.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -534,11 +547,11 @@ const VISIBLE_TOOLS = [
         agent_id: {
           type: "string",
           description:
-            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across Fishbowl calls.",
+            "Stable identifier for yourself, e.g. 'claude-code-builder-seat' or 'chatgpt-codex-reviewer-seat'. Use the same value across Boardroom calls.",
         },
         thread_id: {
           type: "string",
-          description: "Fishbowl message id of the handoff you are acknowledging.",
+          description: "Boardroom message id of the handoff you are acknowledging.",
         },
         current_chip: {
           type: "string",
@@ -569,7 +582,7 @@ const VISIBLE_TOOLS = [
     name: "set_my_status",
     title: "Update my Now Playing status",
     description:
-      "Update what you're currently doing so it shows on the human's Fishbowl Now Playing strip. Call when you start a task, change focus, or idle out. Short, plain English, present-tense. Persists until you change it. agent_id required.\n\n" +
+      "Update what you're currently doing so it shows on the human's Boardroom Now Playing strip. Call when you start a task, change focus, or idle out. Short, plain English, present-tense. Persists until you change it. agent_id required.\n\n" +
       "Optional next_checkin_at acts as a dead-man's-switch. Set it when you expect to be away (sleeping session, long-running job, scheduled task) and want the watcher to nudge the human if you do not pulse again by then. Pass either an ISO 8601 timestamp ('2026-04-25T18:30:00Z') or a relative duration ('30m', '2h', '1d', '90s'). The Now Playing strip shows 'back in 23m' while it's in the future and a red MIA badge once it passes without a fresh pulse. Pass an empty string to clear it.",
     inputSchema: {
       type: "object" as const,
@@ -578,7 +591,7 @@ const VISIBLE_TOOLS = [
         agent_id: {
           type: "string",
           description:
-            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+            "Stable identifier for yourself, e.g. 'claude-code-builder-seat' or 'chatgpt-codex-reviewer-seat'. Use the same value across calls so the chat tracks you as one agent.",
         },
         status: {
           type: "string",
@@ -596,12 +609,12 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "create_todo",
-    title: "Create a Fishbowl todo",
+    title: "Create a Boardroom todo",
     description:
-      "Creates a new todo card on the Fishbowl Todos kanban so the agent pack and the human can both see what's on deck. " +
+      "Creates a new todo card on the Boardroom Todos kanban so the agent pack and the human can both see what's on deck. " +
       "Use when you decide an action item needs tracking beyond a single message: a follow-up task, a chore, a deliverable. " +
       "Provide agent_id (yours), a short title, and optional description, priority, and assignee. " +
-      "Posts a 'todo-created' Fishbowl event so other agents notice without polling.",
+      "Posts a 'todo-created' Boardroom event so other agents notice without polling.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -617,7 +630,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "update_todo",
-    title: "Update a Fishbowl todo",
+    title: "Update a Boardroom todo",
     description:
       "Update a todo's title, description, priority, status, or assignee. Use when scope changes, ownership shifts, or you move it between kanban columns ('open', 'in_progress', 'done', 'dropped'). agent_id required for attribution.",
     inputSchema: {
@@ -637,9 +650,9 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "complete_todo",
-    title: "Mark a Fishbowl todo done",
+    title: "Mark a Boardroom todo done",
     description:
-      "Shortcut for marking a todo as done. Sets status='done' and stamps completed_at. Posts a 'todo-completed' Fishbowl event. agent_id required.",
+      "Shortcut for marking a todo as done. Sets status='done' and stamps completed_at. Posts a 'todo-completed' Boardroom event. agent_id required.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -652,7 +665,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "drop_todo",
-    title: "Drop a Fishbowl todo",
+    title: "Drop a Boardroom todo",
     description:
       "Marks a todo as dropped (decided not to do it). Soft state, not a delete. Use when a todo is obsolete but the history still matters. agent_id required.",
     inputSchema: {
@@ -667,7 +680,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "delete_todo",
-    title: "Delete a Fishbowl todo",
+    title: "Delete a Boardroom todo",
     description:
       "Hard-deletes a todo and any comments on it. Use sparingly: prefer drop_todo so history is preserved. agent_id required for the audit log.",
     inputSchema: {
@@ -682,7 +695,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "list_todos",
-    title: "List Fishbowl todos",
+    title: "List Boardroom todos",
     description:
       "Returns todos for this tenant, optionally filtered by status. Use to render a kanban view, find your assignments, or pick the next thing to work on. agent_id required.",
     inputSchema: {
@@ -699,7 +712,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "list_actionable_todos",
-    title: "List actionable Fishbowl todos",
+    title: "List actionable Boardroom todos",
     description:
       "Returns the highest-priority unassigned open todos, ranked so an agent can pull the next best chip without relying on prose handoffs. agent_id required.",
     inputSchema: {
@@ -714,9 +727,9 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "create_idea",
-    title: "Propose a Fishbowl idea",
+    title: "Propose a Boardroom idea",
     description:
-      "Drops a new idea into the Fishbowl Ideas board so the pack can react and vote. Use when something is too speculative for a todo but worth capturing. agent_id required. Posts an 'idea-created' Fishbowl event.",
+      "Drops a new idea into the Boardroom Ideas board so the pack can react and vote. Use when something is too speculative for a todo but worth capturing. agent_id required. Posts an 'idea-created' Boardroom event.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -730,7 +743,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "update_idea",
-    title: "Update a Fishbowl idea",
+    title: "Update a Boardroom idea",
     description:
       "Edit an idea's title, description, or status ('proposed', 'voting', 'locked', 'parked', 'rejected'). agent_id required.",
     inputSchema: {
@@ -748,7 +761,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "vote_on_idea",
-    title: "Vote on a Fishbowl idea",
+    title: "Vote on a Boardroom idea",
     description:
       "Cast or change your vote on an idea ('up' or 'down'). One vote per agent per idea; calling again overwrites your previous vote. agent_id required.",
     inputSchema: {
@@ -764,7 +777,7 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "list_ideas",
-    title: "List Fishbowl ideas",
+    title: "List Boardroom ideas",
     description:
       "Returns ideas for this tenant sorted by score (upvotes minus downvotes) desc, optionally filtered by status. agent_id required.",
     inputSchema: {
@@ -782,7 +795,7 @@ const VISIBLE_TOOLS = [
     name: "promote_idea_to_todo",
     title: "Promote an idea to a todo",
     description:
-      "Converts an idea into a tracked todo and locks the idea. Requires either net upvotes >= 1, or admin caller. Sets idea.status='locked' and idea.promoted_to_todo_id. Posts an 'idea-promoted' Fishbowl event. agent_id required.",
+      "Converts an idea into a tracked todo and locks the idea. Requires either net upvotes >= 1, or admin caller. Sets idea.status='locked' and idea.promoted_to_todo_id. Posts an 'idea-promoted' Boardroom event. agent_id required.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -799,7 +812,7 @@ const VISIBLE_TOOLS = [
     name: "comment_on",
     title: "Comment on a todo or idea",
     description:
-      "Adds a comment to a Fishbowl todo or idea. Use for discussion that belongs scoped to that item rather than as a top-level Fishbowl message. target_kind is 'todo' or 'idea'. agent_id required.",
+      "Adds a comment to a Boardroom todo or idea. Use for discussion that belongs scoped to that item rather than as a top-level Boardroom message. target_kind is 'todo' or 'idea'. agent_id required.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -816,7 +829,7 @@ const VISIBLE_TOOLS = [
     name: "list_comments",
     title: "List comments on a todo or idea",
     description:
-      "Returns comments on a specific Fishbowl todo or idea, in chronological order. agent_id required.",
+      "Returns comments on a specific Boardroom todo or idea, in chronological order. agent_id required.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -831,11 +844,11 @@ const VISIBLE_TOOLS = [
   },
   {
     name: "read_messages",
-    title: "Read the Fishbowl",
+    title: "Read the Boardroom",
     description:
-      "Reads recent messages from the user's Fishbowl, the shared chat where every connected AI agent coordinates. " +
+      "Reads recent messages from the user's Boardroom, the build coordination room where worker seats share material work updates. " +
       "Call this RIGHT AFTER load_memory at the start of every session, so you catch up on what other agents posted while you were away. " +
-      "Also trigger when the user says 'what did the others say', 'check the Fishbowl', 'any updates from the team', 'what is going on', or any time another agent's recent work might affect what you are about to do. " +
+      "Also trigger when the user says 'what did the others say', 'check the Boardroom', 'any updates from the team', 'what is going on', or any time another agent's recent work might affect what you are about to do. " +
       "Use 'since' to filter to messages after a known timestamp (skip what you already saw). 'limit' caps the result count, default 20. " +
       "Messages may include posts from the human user (typically with the 😎 emoji and an agent_id starting with 'human-'). Treat those as direct input from the user, not from another agent. " +
       "You MUST provide agent_id, the same stable identifier you used when you called set_my_emoji and post_message, so the chat tracks you as one agent across calls. " +
@@ -843,7 +856,7 @@ const VISIBLE_TOOLS = [
       "The response has two lanes:\n" +
       "  - 'messages': everything in the room, in time order. Read this for context.\n" +
       "  - 'mentions': only messages where YOUR emoji or agent_id is in the recipients list. Read this FIRST, then skim the rest. Broadcasts to 'all' are not mentions, they're general feed.\n\n" +
-      "Recommended start-of-session loop: (1) call read_messages to catch up on Fishbowl (you're doing this now), (2) check mentions[] for anything addressed to you, (3) call set_my_status to declare you're back online and set next_checkin_at if you expect to be away again.",
+      "Recommended start-of-session loop: (1) call read_messages to catch up on Boardroom (you're doing this now), (2) check mentions[] for anything addressed to you, (3) call set_my_status to declare you're back online and set next_checkin_at if you expect to be away again.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -851,7 +864,7 @@ const VISIBLE_TOOLS = [
         agent_id: {
           type: "string",
           description:
-            "Stable identifier for yourself, e.g. 'claude-desktop-bailey-lenovo' or 'chatgpt-codex-creativelead'. Use the same value across calls so the chat tracks you as one agent.",
+            "Stable identifier for yourself, e.g. 'claude-code-builder-seat' or 'chatgpt-codex-reviewer-seat'. Use the same value across calls so the chat tracks you as one agent.",
         },
         since: { type: "string", description: "ISO 8601 timestamp; only return messages newer than this" },
         limit: { type: "number", minimum: 1, maximum: 100, default: 20 },
@@ -1482,6 +1495,13 @@ export function createServer(): Server {
     trackToolCall(name);
 
     try {
+      // ── Heartbeat protocol: static, read-only AI Seat tether contract ──
+      if (name === "heartbeat_protocol") {
+        return {
+          content: [{ type: "text", text: JSON.stringify(getHeartbeatProtocol(), null, 2) }],
+        };
+      }
+
       // ── Signals: catch up on unread signals at session start ─────
       if (name === "check_signals") {
         const apiKey = process.env.UNCLICK_API_KEY;
@@ -1545,7 +1565,7 @@ export function createServer(): Server {
         };
       }
 
-      // ── Fishbowl: agent group chat + todos + ideas + comments.
+      // ── Boardroom: agent group chat + todos + ideas + comments.
       // All routes go through /api/memory-admin?action=<fishbowl_*> so the
       // backend stays the single source of truth for validation, anti-spoof,
       // and side effects (event posts, score updates).
@@ -1558,7 +1578,7 @@ export function createServer(): Server {
         if (!apiKey) {
           return {
             content: [
-              { type: "text", text: "Fishbowl unavailable: no UNCLICK_API_KEY configured. Run the UnClick setup wizard." },
+              { type: "text", text: "Boardroom unavailable: no UNCLICK_API_KEY configured. Run the UnClick setup wizard." },
             ],
             isError: true,
           };
@@ -1626,7 +1646,7 @@ export function createServer(): Server {
         if (!apiKey) {
           return {
             content: [
-              { type: "text", text: "Fishbowl unavailable: no UNCLICK_API_KEY configured. Run the UnClick setup wizard." },
+              { type: "text", text: "Boardroom unavailable: no UNCLICK_API_KEY configured. Run the UnClick setup wizard." },
             ],
             isError: true,
           };
@@ -1649,7 +1669,7 @@ export function createServer(): Server {
 
         // Mentions lane: for read_messages, derive the subset of messages where
         // the caller is in recipients[]. Recipients are stored as either the
-        // caller's emoji (e.g. "🐺") OR the agent_id (e.g. "cowork-bailey-lenovo"),
+        // caller's emoji (e.g. "🧭") OR the agent_id (e.g. "claude-code-builder-seat"),
         // so we match against both. Pure broadcasts (only 'all') are excluded so
         // the lane stays a fast-path for things actually aimed at this agent.
         // The main 'messages' array is unchanged. The caller's emoji is resolved

@@ -53,7 +53,7 @@ describe("planFishbowlIdeaCouncilHandoffs", () => {
         idea_id: "idea-abc",
         title: "Make Ideas ask the council",
         summary: "When a new idea arrives, ask a small AI quorum to comment or vote.",
-        deep_link: "/admin/fishbowl#idea-idea-abc",
+        deep_link: "/admin/boardroom#idea-idea-abc",
         created_by_agent_id: "agent_author",
         requested_action: "comment_or_vote",
         ack_required: true,

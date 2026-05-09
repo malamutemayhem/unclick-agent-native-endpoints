@@ -55,6 +55,7 @@ import {
   type SystemCredentialProvider,
   type SystemCredentialRisk,
 } from "./systemCredentialInventory";
+import { AdminPassportIntro } from "./AdminEcosystemPages";
 
 // ─── Platform catalog ─────────────────────────────────────────────
 
@@ -215,6 +216,23 @@ function credentialHealth(cred: Credential): CredentialHealthStatus {
   if (testAge === null) return "untested";
   if (testAge >= STALE_TEST_DAYS) return "stale";
   return "healthy";
+}
+
+export function credentialLastCheckDisplay(cred: Pick<Credential, "last_checked_at" | "last_tested_at" | "supports_connection_test">): {
+  label: string;
+  value: string;
+} {
+  const lastChecked = cred.last_checked_at ?? cred.last_tested_at;
+  if (cred.supports_connection_test === false) {
+    return {
+      label: "Last metadata activity",
+      value: `${lastChecked ? timeAgo(lastChecked) : "never"} - untested`,
+    };
+  }
+  return {
+    label: "Last checked",
+    value: lastChecked ? timeAgo(lastChecked) : "never",
+  };
 }
 
 const HEALTH_BADGES: Record<CredentialHealthStatus, {
@@ -666,9 +684,9 @@ export default function AdminKeychain() {
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Connections</h1>
+          <h1 className="text-2xl font-semibold text-white">Passport</h1>
           <p className="mt-1 text-sm text-[#888]">
-            Connect services your agents can use. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
+            Permissions, keys, logins, and connection health. {credentials.length} connection{credentials.length === 1 ? "" : "s"} stored.
           </p>
         </div>
         <div className="flex gap-2">
@@ -676,7 +694,7 @@ export default function AdminKeychain() {
             onClick={() => { setExportOpen(true); setExportPassword(""); setExportConfirm(""); setExportError(null); }}
             className="rounded-lg border border-white/[0.06] px-3 py-2 text-xs text-[#888] transition-colors hover:border-[#E2B93B]/20 hover:text-[#E2B93B]"
           >
-            Export connections
+            Export Passport
           </button>
           <button
             onClick={openAudit}
@@ -694,6 +712,8 @@ export default function AdminKeychain() {
           </button>
         </div>
       </div>
+
+      <AdminPassportIntro />
 
       {/* Encryption notice */}
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#E2B93B]/20 bg-[#E2B93B]/5 px-4 py-3">
@@ -863,7 +883,7 @@ export default function AdminKeychain() {
                   const HealthIcon = badge.icon;
                   const usedBy    = cred.used_by?.filter(Boolean) ?? ["manual connection"];
                   const fields    = cred.expected_fields?.filter((f) => f.name || f.label) ?? [];
-                  const lastChecked = cred.last_checked_at ?? cred.last_tested_at;
+                  const lastCheckDisplay = credentialLastCheckDisplay(cred);
 
                   return (
                     <div
@@ -960,11 +980,8 @@ export default function AdminKeychain() {
                           <p className="mt-0.5 truncate text-[#ccc]">{cred.owner_email ?? "This UnClick account"}</p>
                         </div>
                         <div>
-                          <p className="text-[#555]">Last checked</p>
-                          <p className="mt-0.5 text-[#ccc]">
-                            {lastChecked ? timeAgo(lastChecked) : "never"}
-                            {cred.supports_connection_test === false ? " · manual" : ""}
-                          </p>
+                          <p className="text-[#555]">{lastCheckDisplay.label}</p>
+                          <p className="mt-0.5 text-[#ccc]">{lastCheckDisplay.value}</p>
                         </div>
                         <div className="sm:col-span-2">
                           <p className="text-[#555]">Used by</p>

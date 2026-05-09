@@ -60,12 +60,28 @@ function isActiveClaimStatus(status) {
   return ["claimed", "building", "testing"].includes(status);
 }
 
+function claimRunnerId(runner = {}) {
+  return String(runner.id || runner.emoji || "").trim();
+}
+
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
 function normalizeWorkerToken(value) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function hasExecutableBuildPatch(job = {}) {
+  return String(job?.build?.patch ?? "").trim().length > 0;
+}
+
+function isUnscopedBoardroomTodoJob(job = {}) {
+  return (
+    String(job?.source || "").trim() === "unclick-boardroom-actionable-todo" &&
+    job?.job_type !== "review" &&
+    ((job?.owned_files || []).length === 0 || !hasExecutableBuildPatch(job))
+  );
 }
 
 export function codingRoomJobId({ source = "manual", prNumber = "none", chip = "", worker = "" }) {
@@ -322,6 +338,10 @@ export function runnerCanClaimCodingRoomJob({ runner = {}, job, activeJobs = [] 
     return { ok: true, reason: "claimable_review" };
   }
 
+  if (isUnscopedBoardroomTodoJob(job)) {
+    return { ok: false, reason: "boardroom_todo_missing_scopepack" };
+  }
+
   const readiness = String(runner.readiness || "").trim();
   if (!CODING_ROOM_BUILDER_READINESS.has(readiness)) {
     return { ok: false, reason: "runner_not_builder_ready" };
@@ -365,10 +385,10 @@ export function claimCodingRoomJob({ runner = {}, job, activeJobs = [], now = ne
     job: {
       ...job,
       status: "claimed",
-      claimed_by: String(runner.id || runner.emoji || "").trim(),
+      claimed_by: claimRunnerId(runner),
       claim_id: codingRoomClaimId({
         jobId: job.job_id,
-        runnerId: String(runner.id || runner.emoji || "").trim(),
+        runnerId: claimRunnerId(runner),
         now,
       }),
       claimed_at: now,
@@ -476,6 +496,113 @@ export function claimCodingRoomLedgerJob({
       owned_files: result.job.owned_files || [],
       status: result.job.status,
     },
+  };
+}
+
+export function refreshCodingRoomJobLease({
+  job,
+  runner = {},
+  claimId = "",
+  now = new Date().toISOString(),
+  leaseSeconds,
+} = {}) {
+  if (!job) {
+    return { ok: false, reason: "missing_job" };
+  }
+
+  if (!isActiveClaimStatus(job.status)) {
+    return { ok: false, reason: "job_not_active" };
+  }
+
+  const runnerId = claimRunnerId(runner);
+  if (!runnerId) {
+    return { ok: false, reason: "missing_runner_id" };
+  }
+
+  if (String(job.claimed_by || "").trim() !== runnerId) {
+    return { ok: false, reason: "claim_owner_mismatch" };
+  }
+
+  const expectedClaimId = String(claimId || "").trim();
+  if (!expectedClaimId) {
+    return { ok: false, reason: "missing_claim_id" };
+  }
+
+  if (String(job.claim_id || "").trim() !== expectedClaimId) {
+    return { ok: false, reason: "claim_token_mismatch" };
+  }
+
+  const current = parseIso(now);
+  if (current === null) {
+    return { ok: false, reason: "invalid_now" };
+  }
+
+  const leaseExpiresAt = parseIso(job.lease_expires_at);
+  if (leaseExpiresAt === null) {
+    return { ok: false, reason: "invalid_lease" };
+  }
+
+  if (current > leaseExpiresAt) {
+    return { ok: false, reason: "lease_expired" };
+  }
+
+  const refreshed = {
+    ...job,
+    lease_expires_at: addSeconds(now, Number.isFinite(leaseSeconds) ? leaseSeconds : DEFAULT_LEASE_SECONDS),
+    lease_refreshed_at: now,
+  };
+
+  return {
+    ok: true,
+    job: refreshed,
+    lease: {
+      claim_id: refreshed.claim_id,
+      job_id: refreshed.job_id,
+      runner_id: refreshed.claimed_by,
+      lease_expires_at: refreshed.lease_expires_at,
+      lease_refreshed_at: refreshed.lease_refreshed_at,
+      status: refreshed.status,
+    },
+  };
+}
+
+export function refreshCodingRoomLedgerJobLease({
+  ledger,
+  jobId,
+  runner = {},
+  claimId = "",
+  now = new Date().toISOString(),
+  leaseSeconds,
+} = {}) {
+  const next = createCodingRoomJobLedger({
+    jobs: ledger?.jobs || [],
+    updatedAt: ledger?.updated_at || now,
+  });
+  const index = next.jobs.findIndex((job) => job.job_id === jobId);
+
+  if (index === -1) {
+    return { ok: false, reason: "missing_job" };
+  }
+
+  const refreshed = refreshCodingRoomJobLease({
+    job: next.jobs[index],
+    runner,
+    claimId,
+    now,
+    leaseSeconds,
+  });
+
+  if (!refreshed.ok) {
+    return refreshed;
+  }
+
+  next.jobs[index] = refreshed.job;
+  next.updated_at = now;
+  return {
+    ok: true,
+    ledger: next,
+    job: refreshed.job,
+    lease: refreshed.lease,
   };
 }
 

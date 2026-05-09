@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   buildQueuePacket,
+  buildPacketsFromInputs,
   checksAreGreen,
   chooseQueuePushRunner,
   classifyPullRequest,
@@ -40,7 +41,7 @@ describe("QueuePush PR classifier", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 506, draft: true }),
       files: [{ filename: "docs/connectors/system-credentials-health-panel.md" }],
-      comments: [{ body: "Gatekeeper PASS. Scope looks low risk.", created_at: "2026-05-03T01:00:00Z" }],
+      comments: [{ body: "Safety Checker PASS. Scope looks low risk.", created_at: "2026-05-03T01:00:00Z" }],
       checkRuns: greenChecks,
       statuses: greenStatus,
     });
@@ -53,8 +54,8 @@ describe("QueuePush PR classifier", () => {
       pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
       files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
       comments: [
-        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
-        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
         { body: "Status refreshed. No final review yet.", created_at: "2026-05-03T01:20:00Z" },
       ],
       checkRuns: greenChecks,
@@ -68,7 +69,41 @@ describe("QueuePush PR classifier", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
       files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
-      comments: [{ body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" }],
+      comments: [{ body: "Final QC ACK needed from Reviewer only.", created_at: "2026-05-03T01:20:00Z" }],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("does not treat PASS/BLOCKER review requests as active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Need:\n🛡️ Safety Checker: reply PASS/BLOCKER.\n🛠️ Builder: reply PASS/BLOCKER.\n🔍 Reviewer: reply PASS/BLOCKER.\n\nack:\nPASS/BLOCKER",
+          created_at: "2026-05-05T13:26:48Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("does not treat PASS or BLOCKER review requests as active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Need: Safety Checker reply PASS or BLOCKER. Builder reply PASS or BLOCKER. Reviewer reply PASS or BLOCKER.",
+          created_at: "2026-05-05T13:35:00Z",
+        },
+      ],
       checkRuns: greenChecks,
       statuses: greenStatus,
     });
@@ -81,10 +116,131 @@ describe("QueuePush PR classifier", () => {
       pr: pr({ number: 535, draft: true, title: "feat(autopilot): add Event Ledger Room" }),
       files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
       comments: [
-        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
-        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
-        { body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" },
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Final QC ACK needed from Reviewer only.", created_at: "2026-05-03T01:20:00Z" },
         { body: "HOLD: proof mismatch remains.", created_at: "2026-05-03T01:30:00Z" },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("does not treat blocker-fix updates as new active blockers", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Blocker fix pushed. Fixed Builder blocker: PASS or BLOCKER review request wording no longer becomes a fake active blocker.",
+          created_at: "2026-05-05T13:38:22Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("does not let unrelated blocker-fix updates clear an earlier safety HOLD", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 546, draft: true, title: "fix(autopilot): retry stale queue packets" }),
+      files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+      comments: [
+        {
+          body: "Safety Checker HOLD: unsafe path / proof mismatch remains.",
+          created_at: "2026-05-05T13:35:00Z",
+        },
+        {
+          body: "Blocker fix pushed: fixed Builder PASS-or-BLOCKER classifier issue.",
+          created_at: "2026-05-05T13:38:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  for (const body of [
+    "BLOCKER: blocker fix did not work; unsafe global clear remains.",
+    "HOLD: blocker fix still clears unrelated Safety Checker HOLD.",
+    "Safety Checker BLOCKER: blocker-fix detector is still unsafe.",
+    "🛠️ Builder BLOCKER on #546 latest head. Finding: blocker-fix detector is still unsafe and needs focused fix.",
+    "🛡️ Safety Checker HOLD on #546 latest head. Explicit blocker fix wording can still hide active blockers.",
+    "🛠️ Builder BLOCKER: blocker-fix detector is still unsafe.",
+    "🛡️ Safety Checker HOLD: blocker-fix detector is still unsafe.",
+  ]) {
+    it(`keeps explicit active blocker text even when it mentions a fix: ${body}`, () => {
+      const result = classifyPullRequest({
+        pr: pr({ number: 546, draft: false, title: "fix(autopilot): retry stale queue packets" }),
+        files: [{ filename: "scripts/fleet-throughput-watch.mjs" }],
+        comments: [
+          { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-05T13:59:31Z" },
+          { body, created_at: "2026-05-05T14:21:04Z" },
+        ],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      });
+
+      assert.equal(result.state, "blocked_chris_only");
+    });
+  }
+
+  it("treats HOLDs that only wait on Reviewer as missing final QC routing", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body:
+            "Builder HOLD on QueuePush owner-decision packet. Exact HOLD: missing 🔍 Reviewer QC PASS on latest head. No code changes and no merge/lift by Builder.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_final_qc_ack");
+  });
+
+  it("keeps missing Reviewer plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "HOLD: missing Reviewer QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "blocked_chris_only");
+  });
+
+  it("keeps exact HOLD missing Reviewer plus another unresolved concern as an active blocker", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+      files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+      comments: [
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        {
+          body: "Exact HOLD: missing Reviewer QC PASS and unresolved schema concern remains.",
+          created_at: "2026-05-03T01:30:00Z",
+        },
       ],
       checkRuns: greenChecks,
       statuses: greenStatus,
@@ -98,9 +254,9 @@ describe("QueuePush PR classifier", () => {
       pr: pr({ number: 537, draft: true, title: "docs(autopilot): add context boot packet" }),
       files: [{ filename: "AUTOPILOT.md" }],
       comments: [
-        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
-        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
-        { body: "Final QC ACK needed from Popcorn only.", created_at: "2026-05-03T01:20:00Z" },
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "Final QC ACK needed from Reviewer only.", created_at: "2026-05-03T01:20:00Z" },
         { body: "HOLD: overlap with #535 on AUTOPILOT.md.", created_at: "2026-05-03T01:30:00Z" },
       ],
       checkRuns: greenChecks,
@@ -115,9 +271,9 @@ describe("QueuePush PR classifier", () => {
       pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
       files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
       comments: [
-        { body: "Gatekeeper PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
-        { body: "Forge PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
-        { body: "PASS\n🍿", created_at: "2026-05-03T01:20:00Z" },
+        { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+        { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+        { body: "PASS\n🔍", created_at: "2026-05-03T01:20:00Z" },
       ],
       checkRuns: greenChecks,
       statuses: greenStatus,
@@ -226,7 +382,7 @@ describe("QueuePush routing and packets", () => {
     );
   });
 
-  it("routes reliability implementation files to Forge", () => {
+  it("routes reliability implementation files to Builder", () => {
     assert.equal(
       routeWorkerForPr(
         pr({ title: "Wake router fail-closed on missing non-manual event path" }),
@@ -237,7 +393,7 @@ describe("QueuePush routing and packets", () => {
     );
   });
 
-  it("keeps PinballWake owner decisions with Forge even when the PR mentions other lanes", () => {
+  it("keeps PinballWake owner decisions with Builder even when the PR mentions other lanes", () => {
     assert.equal(
       routeWorkerForPr(
         pr({ title: "PinballWake job runner registry", body: "Also mentions XPass context." }),
@@ -248,17 +404,17 @@ describe("QueuePush routing and packets", () => {
     );
   });
 
-  it("routes QC-ready PRs to Popcorn", () => {
-    assert.equal(routeWorkerForPr(pr({ draft: false }), [], "ready_for_qc"), "🍿");
+  it("routes QC-ready PRs to Reviewer", () => {
+    assert.equal(routeWorkerForPr(pr({ draft: false }), [], "ready_for_qc"), "🔍");
   });
 
-  it("routes missing final QC ACKs to Popcorn", () => {
-    assert.equal(routeWorkerForPr(pr({ draft: true }), [], "missing_final_qc_ack"), "🍿");
+  it("routes missing final QC ACKs to Reviewer", () => {
+    assert.equal(routeWorkerForPr(pr({ draft: true }), [], "missing_final_qc_ack"), "🔍");
   });
 
   it("does not treat probe-only runners as unattended code hands", () => {
     const runner = {
-      emoji: "🦾",
+      emoji: "🩹",
       readiness: "needs_probe",
       capabilities: ["implementation", "status_relay"],
       safeFor: ["small implementation"],
@@ -287,7 +443,7 @@ describe("QueuePush routing and packets", () => {
   it("lets a configured proven runner take matching code jobs", () => {
     const custom = [
       {
-        emoji: "🦾",
+        emoji: "🩹",
         readiness: "builder_ready",
         capabilities: ["implementation"],
         safeFor: ["rotatepass"],
@@ -310,7 +466,7 @@ describe("QueuePush routing and packets", () => {
       custom,
     );
 
-    assert.equal(runner?.emoji, "🦾");
+    assert.equal(runner?.emoji, "🩹");
   });
 
   it("falls back to the safe default runner roster when custom roster is empty or malformed", () => {
@@ -319,7 +475,7 @@ describe("QueuePush routing and packets", () => {
 
     assert.equal(empty[0]?.emoji, "🛠️");
     assert.equal(malformed[0]?.emoji, "🛠️");
-    assert.ok(empty.some((runner) => runner.emoji === "🍿"));
+    assert.ok(empty.some((runner) => runner.emoji === "🔍"));
   });
 
   it("maps process states to job kinds and code requirements", () => {
@@ -340,12 +496,12 @@ describe("QueuePush routing and packets", () => {
       files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
     });
 
-    assert.equal(packet.worker, "🍿");
+    assert.equal(packet.worker, "🔍");
     assert.equal(packet.jobKind, "qc_review");
     assert.equal(packet.requiresCode, false);
     assert.match(packet.packetId, /^queuepush:v3:pr-535:missing_final_qc_ack:abcdef1:[a-f0-9]{10}$/);
     assert.match(packet.text, /DIRECT QC PACKET/);
-    assert.match(packet.text, /worker: 🍿/);
+    assert.match(packet.text, /worker: 🔍/);
     assert.match(packet.text, /QC latest head only/);
   });
 
@@ -389,7 +545,7 @@ describe("QueuePush routing and packets", () => {
     assert.match(packet.text, /requires code: yes/);
   });
 
-  it("dedupes packets already visible in recent Fishbowl messages", () => {
+  it("dedupes packets already visible in recent Boardroom messages", () => {
     const first = buildQueuePacket({
       pr: pr({ number: 506 }),
       state: "draft_green_needs_owner_lift",
@@ -408,6 +564,73 @@ describe("QueuePush routing and packets", () => {
       remaining.map((packet) => packet.packetId),
       [second.packetId],
     );
+  });
+
+  it("retries stale QueuePush packets after the retry window", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 535, title: "feat(autopilot): add Event Ledger Room" }),
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+    });
+    const now = Date.parse("2026-05-05T06:30:00Z");
+    const messages = [
+      {
+        text: `old post ${packet.packetId}`,
+        created_at: "2026-05-05T02:08:00Z",
+      },
+    ];
+
+    const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
+    assert.deepEqual(
+      remaining.map((candidate) => candidate.packetId),
+      [packet.packetId],
+    );
+  });
+
+  it("keeps fresh QueuePush packets deduped before the retry window", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 535, title: "feat(autopilot): add Event Ledger Room" }),
+      state: "missing_final_qc_ack",
+      reason: "Safety and builder PASS are visible; final QC ACK is missing.",
+      files: [{ filename: "scripts/pinballwake-event-ledger-room.mjs" }],
+    });
+    const now = Date.parse("2026-05-05T06:30:00Z");
+    const messages = [
+      {
+        text: `fresh post ${packet.packetId}`,
+        created_at: "2026-05-05T06:00:00Z",
+      },
+    ];
+
+    const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
+    assert.deepEqual(remaining, []);
+  });
+
+  it("prioritizes missing final QC before routine owner lift", async () => {
+    const packets = await buildPacketsFromInputs([
+      {
+        pr: pr({ number: 536, draft: true, title: "feat(autopilot): add Worker Registry Room" }),
+        files: [{ filename: "scripts/pinballwake-worker-registry-room.mjs" }],
+        comments: [
+          { body: "Safety Checker PASS. CLEAN, safety PASS.", created_at: "2026-05-03T01:00:00Z" },
+          { body: "Builder PASS. Implementation-shape review is clean.", created_at: "2026-05-03T01:10:00Z" },
+          { body: "Status refreshed. No final review yet.", created_at: "2026-05-03T01:20:00Z" },
+        ],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      },
+      {
+        pr: pr({ number: 531, draft: true, title: "feat(autopilot): add personality room" }),
+        files: [{ filename: "scripts/pinballwake-personality-room.mjs" }],
+        comments: [{ body: "Safety Checker PASS. Scope looks low risk.", created_at: "2026-05-03T01:00:00Z" }],
+        checkRuns: greenChecks,
+        statuses: greenStatus,
+      },
+    ]);
+
+    assert.equal(packets[0]?.state, "missing_final_qc_ack");
+    assert.equal(packets[0]?.pr, 536);
   });
 });
 
@@ -449,7 +672,7 @@ describe("QueuePush signal helpers", () => {
         user: { login: "github-actions" },
       },
       {
-        body: "Gatekeeper HOLD / anti-stomp. Include exact targeted proof PASS before lift.",
+        body: "Safety Checker HOLD / anti-stomp. Include exact targeted proof PASS before lift.",
         created_at: "2026-05-03T02:00:00Z",
         user: { login: "malamutemayhem" },
       },

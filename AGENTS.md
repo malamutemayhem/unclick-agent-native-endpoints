@@ -4,6 +4,8 @@ AI agent operating system. One npm install gives agents access to 450+ callable 
 
 ## Fleet alignment
 
+Read `docs/unclick-context-boot-packet.md` before making product-map claims about UnClick, Autopilot, Launchpad, Rooms, XPass, or old Pass wording. It is the canonical context boot packet for worker chats that start with partial memory or connector-only context.
+
 Read `FLEET_SYNC.md` first when operating as part of the multi-PC UnClick fleet. It defines source-of-truth order, live worker lanes, Fishbowl coordination, and no-stomp rules.
 
 If you are unsure which worker should own a handoff, review `docs/fleet-worker-roles.md` for the current emoji role map and routing guide.

@@ -27,6 +27,7 @@ import type {
   CodeInput,
   LibraryDocInput,
 } from "./types.js";
+import { shouldEnforceManagedMemoryCaps } from "./quota-policy.js";
 
 function pgError(context: string, err: unknown): Error {
   if (err instanceof Error) return err;
@@ -43,7 +44,17 @@ function contentHash(text: string): string {
   return createHash("sha256").update(text.toLowerCase().trim(), "utf8").digest("hex");
 }
 
+function isAtomicFactExtractionEnabled(): boolean {
+  const raw =
+    process.env.MEMORY_OPENAI_FACT_EXTRACTION_ENABLED ??
+    process.env.MEMORY_AI_FACT_EXTRACTION_ENABLED ??
+    "";
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
 async function extractAtomicFacts(text: string): Promise<string[]> {
+  if (!isAtomicFactExtractionEnabled()) return [text];
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [text];
   try {
@@ -188,8 +199,14 @@ export class SupabaseBackend implements MemoryBackend {
    */
   private async enforceCaps(kind: "fact" | "general"): Promise<void> {
     if (this.tenancy.mode !== "managed") return;
-    const tier = (process.env.UNCLICK_TIER || "free").toLowerCase();
-    if (tier !== "free") return;
+
+    const shouldEnforceCaps = shouldEnforceManagedMemoryCaps({
+      tenancyMode: this.tenancy.mode,
+      tier: process.env.UNCLICK_TIER,
+      accountEmail: process.env.UNCLICK_ACCOUNT_EMAIL,
+      quotaExempt: process.env.UNCLICK_MEMORY_QUOTA_EXEMPT === "true",
+    });
+    if (!shouldEnforceCaps) return;
 
     if (kind === "fact") {
       const { data, error } = await this.client.rpc("mc_get_fact_count", {
