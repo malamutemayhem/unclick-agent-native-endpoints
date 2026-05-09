@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const AUTOPILOT_EVENT_TYPES = [
   "claim",
+  "lease_grant",
   "lease_refresh",
   "lease_expired",
   "release",

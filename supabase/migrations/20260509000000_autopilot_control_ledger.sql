@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS mc_autopilot_events (
   event_type text NOT NULL
     CHECK (event_type IN (
       'claim',
+      'lease_grant',
       'lease_refresh',
       'lease_expired',
       'release',

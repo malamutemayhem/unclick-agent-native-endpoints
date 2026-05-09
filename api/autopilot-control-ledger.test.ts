@@ -31,6 +31,27 @@ describe("autopilot control ledger helpers", () => {
     expect(row.idempotency_key).toContain("claim:todo:todo-123:runner:");
   });
 
+  it("records explicit lease grant events", () => {
+    const row = buildAutopilotEventRow({
+      apiKeyHash: "hash_123",
+      eventType: "lease_grant",
+      actorAgentId: "runner",
+      refKind: "dispatch",
+      refId: "dispatch-123",
+      now,
+      payload: { lease_owner: "runner", lease_minutes: 10 },
+    });
+
+    expect(row).toMatchObject({
+      event_type: "lease_grant",
+      actor_agent_id: "runner",
+      ref_kind: "dispatch",
+      ref_id: "dispatch-123",
+      payload: { lease_owner: "runner", lease_minutes: 10 },
+    });
+    expect(row.idempotency_key).toContain("lease_grant:dispatch:dispatch-123:runner:");
+  });
+
   it("plans todo state and claim events from before/after rows", () => {
     const events = planTodoLedgerEvents({
       todoId: "todo-123",
