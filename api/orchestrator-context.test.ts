@@ -24,6 +24,13 @@ describe("orchestrator context", () => {
           user_agent_hint: "admin-ui",
           last_seen_at: "2026-05-09T09:00:00.000Z",
         },
+        {
+          agent_id: "quiet-seat",
+          display_name: "Quiet Seat",
+          user_agent_hint: "codex-desktop",
+          last_seen_at: "2026-05-09T08:00:00.000Z",
+          next_checkin_at: "2026-05-09T10:00:00.000Z",
+        },
       ],
       messages: [
         {
@@ -141,6 +148,9 @@ describe("orchestrator context", () => {
     expect(context.current_state_card.blocker_count).toBe(1);
     expect(context.current_state_card.next_actions[0]).toContain("Orchestrator context layer");
     expect(context.profile_cards.find((profile) => profile.agent_id === "human-chris")?.role).toBe("human");
+    expect(context.profile_cards.find((profile) => profile.agent_id === "chatgpt-codex-seat")?.freshness_label).toBe("Live");
+    expect(context.profile_cards.find((profile) => profile.agent_id === "human-chris")?.freshness_label).toBe("Recent");
+    expect(context.profile_cards.find((profile) => profile.agent_id === "quiet-seat")?.freshness_label).toBe("Missed check-in");
     expect(context.continuity_events.some((event) => event.kind === "proof" && event.source_id === "msg-proof")).toBe(true);
     expect(context.continuity_events.some((event) => event.source_kind === "conversation_turn" && event.role === "user")).toBe(true);
     expect(context.library_snapshots.map((snapshot) => snapshot.source_kind)).toEqual(

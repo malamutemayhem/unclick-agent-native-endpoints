@@ -72,6 +72,8 @@ interface OrchestratorContext {
     last_seen_at?: string | null;
     current_status?: string | null;
     next_checkin_at?: string | null;
+    freshness_state?: "live" | "recent" | "missed_checkin" | "quiet" | "unknown";
+    freshness_label?: string;
   }>;
   continuity_events: Array<{
     source_kind: string;
@@ -327,7 +329,12 @@ function OrchestratorContextCard({
               <span className="min-w-0 truncate text-white/70">
                 {profile.emoji ? `${profile.emoji} ` : ""}{profile.label}
               </span>
-              <span className="shrink-0 text-white/35">{formatRelative(profile.last_seen_at)}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className={profileFreshnessClass(profile.freshness_state)}>
+                  {profile.freshness_label ?? "Quiet"}
+                </span>
+                <span className="text-white/35">{formatRelative(profile.last_seen_at)}</span>
+              </span>
             </div>
           ))}
           {context.profile_cards.length === 0 && (
@@ -354,6 +361,14 @@ function OrchestratorContextCard({
       </div>
     </section>
   );
+}
+
+function profileFreshnessClass(state: OrchestratorContext["profile_cards"][number]["freshness_state"]): string {
+  const base = "rounded-md border px-1.5 py-0.5 text-[10px] font-medium";
+  if (state === "live") return `${base} border-emerald-400/25 bg-emerald-400/10 text-emerald-200`;
+  if (state === "recent") return `${base} border-[#61C1C4]/25 bg-[#61C1C4]/10 text-[#9FE3E5]`;
+  if (state === "missed_checkin") return `${base} border-amber-300/25 bg-amber-300/10 text-amber-200`;
+  return `${base} border-white/[0.08] bg-white/[0.03] text-white/35`;
 }
 
 function ContextSection({

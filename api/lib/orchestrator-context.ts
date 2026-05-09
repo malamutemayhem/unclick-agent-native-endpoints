@@ -156,6 +156,8 @@ export interface OrchestratorProfileCard {
   last_seen_at?: string | null;
   current_status?: string | null;
   next_checkin_at?: string | null;
+  freshness_state: "live" | "recent" | "missed_checkin" | "quiet" | "unknown";
+  freshness_label: string;
 }
 
 export interface OrchestratorLibrarySnapshot extends OrchestratorSourceLink {
@@ -204,6 +206,7 @@ export interface OrchestratorContext {
 }
 
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
+const RECENT_WINDOW_MS = 6 * 60 * 60 * 1000;
 const PRIORITY_RANK: Record<string, number> = {
   urgent: 4,
   high: 3,
@@ -238,7 +241,7 @@ export function compactText(input: unknown, maxChars = 220): string {
 export function buildOrchestratorContext(input: BuildOrchestratorContextInput): OrchestratorContext {
   const nowMs = Date.parse(input.generatedAt);
   const profiles = input.profiles
-    .map((profile) => buildProfileCard(profile))
+    .map((profile) => buildProfileCard(profile, nowMs))
     .sort((a, b) => compareIsoDesc(a.last_seen_at, b.last_seen_at));
   const activeSeatCount = profiles.filter((profile) => isFresh(profile.last_seen_at, nowMs)).length;
 
@@ -339,19 +342,47 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
   };
 }
 
-function buildProfileCard(profile: OrchestratorProfileRow): OrchestratorProfileCard {
+function buildProfileCard(profile: OrchestratorProfileRow, nowMs: number): OrchestratorProfileCard {
   const label = profile.display_name?.trim() || prettifyAgentId(profile.agent_id);
   const role = profile.user_agent_hint === "admin-ui" || profile.agent_id.startsWith("human-") ? "human" : "ai-seat";
+  const lastSeenAt = profile.last_seen_at ?? profile.created_at ?? null;
+  const freshness = profileFreshness(lastSeenAt, profile.next_checkin_at ?? null, nowMs);
   return {
     agent_id: profile.agent_id,
     label,
     role,
     emoji: profile.emoji ?? null,
     device_hint: profile.user_agent_hint ?? null,
-    last_seen_at: profile.last_seen_at ?? profile.created_at ?? null,
+    last_seen_at: lastSeenAt,
     current_status: compactText(profile.current_status ?? "", 140) || null,
     next_checkin_at: profile.next_checkin_at ?? null,
+    freshness_state: freshness.freshness_state,
+    freshness_label: freshness.freshness_label,
   };
+}
+
+function profileFreshness(
+  lastSeenAt: string | null,
+  nextCheckinAt: string | null,
+  nowMs: number,
+): Pick<OrchestratorProfileCard, "freshness_state" | "freshness_label"> {
+  const lastSeenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+  const nextCheckinMs = nextCheckinAt ? Date.parse(nextCheckinAt) : NaN;
+
+  if (Number.isFinite(nextCheckinMs) && Number.isFinite(nowMs) && nextCheckinMs < nowMs) {
+    if (!Number.isFinite(lastSeenMs) || lastSeenMs < nextCheckinMs) {
+      return { freshness_state: "missed_checkin", freshness_label: "Missed check-in" };
+    }
+  }
+
+  if (!Number.isFinite(lastSeenMs) || !Number.isFinite(nowMs)) {
+    return { freshness_state: "unknown", freshness_label: "No check-in yet" };
+  }
+
+  const ageMs = nowMs - lastSeenMs;
+  if (ageMs <= ACTIVE_WINDOW_MS) return { freshness_state: "live", freshness_label: "Live" };
+  if (ageMs <= RECENT_WINDOW_MS) return { freshness_state: "recent", freshness_label: "Recent" };
+  return { freshness_state: "quiet", freshness_label: "Quiet" };
 }
 
 function messageToEvent(message: OrchestratorMessageRow): OrchestratorContinuityEvent {
