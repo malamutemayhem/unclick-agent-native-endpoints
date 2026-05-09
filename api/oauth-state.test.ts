@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createOAuthStateToken, verifyOAuthStateToken } from "./oauth-state";
 
 const env = {
+  GITHUB_CLIENT_SECRET: "github-secret",
   XERO_CLIENT_SECRET: "xero-secret",
   REDDIT_CLIENT_SECRET: "reddit-secret",
   SHOPIFY_CLIENT_SECRET: "shopify-secret",
@@ -10,15 +11,15 @@ const env = {
 describe("oauth state token", () => {
   it("round-trips a valid token", () => {
     const token = createOAuthStateToken({
-      platform: "xero",
-      redirectPath: "/connect/xero",
+      platform: "github",
+      redirectPath: "/connect/github",
       env,
       nowSeconds: 1_000,
     });
 
     expect(verifyOAuthStateToken(token, env, 1_100)).toMatchObject({
-      platform: "xero",
-      redirectPath: "/connect/xero",
+      platform: "github",
+      redirectPath: "/connect/github",
       v: 1,
     });
   });

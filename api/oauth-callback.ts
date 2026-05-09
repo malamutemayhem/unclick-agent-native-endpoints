@@ -16,6 +16,7 @@
  * Adding a new OAuth platform = add an entry to PLATFORM_CONFIGS.
  *
  * Required env vars per platform:
+ *   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI
  *   XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI
  *   REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REDIRECT_URI
  *   SHOPIFY_{STORE}_CLIENT_ID, etc. (Shopify is per-store, handled specially)
@@ -40,6 +41,18 @@ interface OAuthConfig {
 }
 
 const PLATFORM_CONFIGS: Record<string, OAuthConfig> = {
+
+  github: {
+    tokenUrl:        "https://github.com/login/oauth/access_token",
+    clientIdEnv:     "GITHUB_CLIENT_ID",
+    clientSecretEnv: "GITHUB_CLIENT_SECRET",
+    redirectUriEnv:  "GITHUB_REDIRECT_URI",
+    async extractCredentials(tokenResponse) {
+      const accessToken = String(tokenResponse.access_token ?? "");
+      if (!accessToken) throw new Error("No access_token in GitHub token response.");
+      return { api_key: accessToken };
+    },
+  },
 
   xero: {
     tokenUrl:         "https://identity.xero.com/connect/token",
@@ -141,7 +154,10 @@ async function exchangeCode(
 
   const res = await fetch(config.tokenUrl, {
     method:  "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept:         "application/json",
+    },
     body:    body.toString(),
   });
 

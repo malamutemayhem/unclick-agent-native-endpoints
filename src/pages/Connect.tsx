@@ -92,11 +92,12 @@ function FieldInput({
   disabled: boolean;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const fieldId = `credential_${field.key}`;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label htmlFor={field.key} className="text-sm text-[#E8E8E8]">
+        <Label htmlFor={fieldId} className="text-sm text-[#E8E8E8]">
           {field.label}
         </Label>
         {field.findGuideUrl && (
@@ -115,7 +116,7 @@ function FieldInput({
       )}
       <div className="relative">
         <Input
-          id={field.key}
+          id={fieldId}
           type={field.secret && !revealed ? "password" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -400,10 +401,10 @@ export default function ConnectPage() {
         {/* API key input (needed for all flows) */}
         <div className="space-y-1.5 border border-white/10 rounded-lg p-4 bg-white/[0.02]">
           <Label htmlFor="api_key" className="text-sm text-[#E8E8E8]">
-            Your UnClick API key
+            Your UnClick Passport key
           </Label>
           <p className="text-xs text-[#E8E8E8]/50">
-            Required to store credentials securely.{" "}
+            Needed once in this browser so Passport can store access securely.{" "}
             <Link to="/" className="text-[#E2B93B] hover:underline">Get one here.</Link>
           </p>
           <Input
@@ -447,7 +448,7 @@ export default function ConnectPage() {
             {oauthNotConfigured ? (
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
                 <p className="text-sm text-primary/80">
-                  OAuth2 setup pending for {connector.name}. Use the manual form below,
+                  Login setup is pending for {connector.name}. Use the manual fallback below,
                   or enter credentials directly in your MCP config.
                 </p>
               </div>
@@ -467,7 +468,7 @@ export default function ConnectPage() {
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-[#0A0A0A] px-2 text-[#E8E8E8]/40">
-                  or enter token manually
+                  manual fallback
                 </span>
               </div>
             </div>
@@ -475,25 +476,52 @@ export default function ConnectPage() {
         )}
 
         {/* Manual form (always shown for non-oauth2; shown as fallback for oauth2) */}
-        <form onSubmit={handleManualSubmit} className="space-y-4">
-          {connector.credentialFields.map((field) => (
-            <FieldInput
-              key={field.key}
-              field={field}
-              value={fieldValues[field.key] ?? ""}
-              onChange={(v) => handleFieldChange(field.key, v)}
-              disabled={false}
-            />
-          ))}
+        {isOAuth2 ? (
+          <details className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+            <summary className="cursor-pointer text-sm font-medium text-[#E8E8E8]">
+              Use a token instead
+            </summary>
+            <form onSubmit={handleManualSubmit} className="mt-4 space-y-4">
+              {connector.credentialFields.map((field) => (
+                <FieldInput
+                  key={field.key}
+                  field={field}
+                  value={fieldValues[field.key] ?? ""}
+                  onChange={(v) => handleFieldChange(field.key, v)}
+                  disabled={false}
+                />
+              ))}
 
-          <Button
-            type="submit"
-            className="w-full bg-[#E2B93B] hover:bg-[#E2B93B]/90 text-black font-semibold"
-            disabled={!apiKey.trim() || !allFieldsFilled}
-          >
-            Save credentials
-          </Button>
-        </form>
+              <Button
+                type="submit"
+                className="w-full bg-[#E2B93B] hover:bg-[#E2B93B]/90 text-black font-semibold"
+                disabled={!apiKey.trim() || !allFieldsFilled}
+              >
+                Save token fallback
+              </Button>
+            </form>
+          </details>
+        ) : (
+          <form onSubmit={handleManualSubmit} className="space-y-4">
+            {connector.credentialFields.map((field) => (
+              <FieldInput
+                key={field.key}
+                field={field}
+                value={fieldValues[field.key] ?? ""}
+                onChange={(v) => handleFieldChange(field.key, v)}
+                disabled={false}
+              />
+            ))}
+
+            <Button
+              type="submit"
+              className="w-full bg-[#E2B93B] hover:bg-[#E2B93B]/90 text-black font-semibold"
+              disabled={!apiKey.trim() || !allFieldsFilled}
+            >
+              Save credentials
+            </Button>
+          </form>
+        )}
 
         {connector.docsUrl && (
           <p className="text-center text-xs text-[#E8E8E8]/40">
