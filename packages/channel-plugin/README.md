@@ -25,6 +25,13 @@ It saves one external chat turn through
 the turn. If neither save path is available, the seat should say `UNTETHERED`
 with any partial receipt it captured instead of silently continuing.
 
+The plugin also exposes `unclick_orchestrator_context_read`. Call it
+immediately after saving the accepted turn and before deciding what the user
+meant. The required order is: Log -> Read -> Decide -> Reply -> Log reply.
+This stops a seat from treating a test cue, proof marker, or check phrase as a
+real operator request without reading nearby Orchestrator context first. If the
+read fails, say `CONTEXT_UNREAD` or `UNTETHERED` instead of guessing.
+
 The plugin also exposes `unclick_orchestrator_tether_check`. Call it on startup
 or heartbeat to save a harmless synthetic self-check turn and confirm
 `/admin/orchestrator` search can find it. The backup order is:
@@ -33,9 +40,10 @@ or heartbeat to save a harmless synthetic self-check turn and confirm
 2. use the UnClick MCP `save_conversation_turn` tool;
 3. use this channel plugin's `unclick_save_conversation_turn` tool;
 4. use the `admin_conversation_turn_ingest` API directly;
-5. run `unclick_orchestrator_tether_check`;
-6. save any safe partial status/proof still available;
-7. say `UNTETHERED` with the missing path and any captured receipt ids.
+5. read Orchestrator context before deciding what the saved turn means;
+6. run `unclick_orchestrator_tether_check`;
+7. save any safe partial status/proof still available;
+8. say `UNTETHERED` with the missing path and any captured receipt ids.
 
 Every 30 seconds the plugin POSTs a heartbeat to `admin_channel_heartbeat`
 so the admin UI knows the channel is online.

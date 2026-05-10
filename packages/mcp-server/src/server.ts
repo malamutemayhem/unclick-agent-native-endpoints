@@ -92,11 +92,16 @@ export const MCP_SERVER_INSTRUCTIONS = [
   "  3. Channel path: call `unclick_save_conversation_turn` if exposed.",
   "  4. API path: call `admin_conversation_turn_ingest` with the UnClick API",
   "     key in Authorization only. Never print or log secrets.",
-  "  5. Self-check path: save a harmless synthetic turn and verify",
+  "  5. Context-read path: call `read_orchestrator_context` or",
+  "     `unclick_orchestrator_context_read` before deciding what the saved",
+  "     turn means. Required order: Log -> Read -> Decide -> Reply -> Log reply.",
+  "  6. Self-check path: save a harmless synthetic turn and verify",
   "     Orchestrator search can find it.",
-  "  6. Partial capture path: save any safe status/proof you still can.",
-  "  7. Fail-loud path: say `UNTETHERED:` with captured receipt ids plus",
+  "  7. Partial capture path: save any safe status/proof you still can.",
+  "  8. Fail-loud path: say `UNTETHERED:` or `CONTEXT_UNREAD:` with captured receipt ids plus",
   "     the missing capability instead of silently continuing.",
+  "If the saved turn looks like a test, proof, check, or keyword cue, do not",
+  "treat the phrase as real operator state until the context read confirms it.",
   "First real Orchestrator receipt wins. Extra successful paths are duplicate",
   "proof to consolidate, not blockers.",
   "Skip or redact secrets, API keys, passwords, one-time codes, and private",
@@ -468,6 +473,31 @@ export const VISIBLE_TOOLS = [
         },
       },
       required: ["session_id", "role", "content"],
+    },
+  },
+  {
+    name: "read_orchestrator_context",
+    title: "Read Orchestrator context",
+    description:
+      "Reads current UnClick Orchestrator continuity so a seat can interpret a freshly saved turn before acting. " +
+      "Use immediately after save_conversation_turn in the required Log -> Read -> Decide -> Reply -> Log reply gate. " +
+      "If this read fails, say CONTEXT_UNREAD or UNTETHERED instead of guessing whether a phrase is a test cue, real request, blocker, proof, or status.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        q: {
+          type: "string",
+          description: "Optional search text from the saved turn. Do not include secrets.",
+        },
+        limit: {
+          type: "number",
+          minimum: 20,
+          maximum: 200,
+          default: 80,
+          description: "Maximum events to read.",
+        },
+      },
     },
   },
   {
@@ -1552,6 +1582,57 @@ export function createServer(): Server {
       if (name === "heartbeat_protocol") {
         return {
           content: [{ type: "text", text: JSON.stringify(getHeartbeatProtocol(), null, 2) }],
+        };
+      }
+
+      // ── Orchestrator context: mandatory read step after turn capture ──
+      if (name === "read_orchestrator_context") {
+        const apiKey = process.env.UNCLICK_API_KEY;
+        const base =
+          process.env.UNCLICK_MEMORY_BASE_URL ||
+          process.env.UNCLICK_SITE_URL ||
+          "https://unclick.world";
+        if (!apiKey) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: false,
+                  status: "CONTEXT_UNREAD",
+                  missing: "UNCLICK_API_KEY not configured",
+                  guidance:
+                    "The turn may be saved locally, but do not interpret or act until Orchestrator context is readable.",
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+        const q =
+          typeof args.q === "string"
+            ? args.q.replace(/\s+/g, " ").trim().slice(0, 100)
+            : "";
+        const requestedLimit = Number(args.limit ?? 80);
+        const limit = Math.min(
+          Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 80, 20),
+          q ? 200 : 120
+        );
+        const url = new URL(`${base.replace(/\/$/, "")}/api/memory-admin`);
+        url.searchParams.set("action", "orchestrator_context_read");
+        url.searchParams.set("limit", String(limit));
+        if (q) url.searchParams.set("q", q);
+        const resp = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+        });
+        const body = await resp.json().catch(() => ({}));
+        return {
+          content: [{ type: "text", text: JSON.stringify(body, null, 2) }],
+          isError: !resp.ok,
         };
       }
 

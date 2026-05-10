@@ -37,6 +37,8 @@ import { createHeartbeatGate } from "./heartbeat-gate.js";
 import { readTimingConfig } from "./config.js";
 import {
   getReceiptFirstTetherLadder,
+  orchestratorContextReadTool,
+  readOrchestratorContext,
   runTetherSelfCheck,
   saveConversationTurn,
   saveConversationTurnTool,
@@ -147,6 +149,7 @@ async function handleRpcLine(line) {
             },
           },
           saveConversationTurnTool,
+          orchestratorContextReadTool,
           tetherSelfCheckTool,
         ],
       },
@@ -209,6 +212,50 @@ async function handleRpcLine(line) {
               {
                 type: "text",
                 text: `UNTETHERED: could not save Orchestrator turn: ${message}`,
+              },
+            ],
+          },
+        });
+      }
+      return;
+    }
+    if (name === "unclick_orchestrator_context_read") {
+      try {
+        const result = await readOrchestratorContext(apiFetch, args);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ok: false,
+                    status: "CONTEXT_UNREAD",
+                    missing: message,
+                    guidance:
+                      "The turn may be saved, but do not interpret or act until Orchestrator context is readable. Treat test/proof/check wording as context until confirmed.",
+                    ladder: getReceiptFirstTetherLadder(),
+                  },
+                  null,
+                  2
+                ),
               },
             ],
           },

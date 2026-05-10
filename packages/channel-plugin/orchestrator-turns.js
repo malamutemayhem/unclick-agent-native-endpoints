@@ -8,9 +8,10 @@ export const RECEIPT_FIRST_TETHER_LADDER = [
   "2. MCP path: call save_conversation_turn when the UnClick MCP tool is available.",
   "3. Channel path: call unclick_save_conversation_turn when running through @unclick/channel.",
   "4. API path: call admin_conversation_turn_ingest with the UnClick API key in Authorization.",
-  "5. Self-check path: save a harmless synthetic turn and verify Orchestrator search can find it.",
-  "6. Partial capture path: save whatever safe status/proof you still can before declaring the missing link.",
-  "7. Fail-loud path: reply UNTETHERED with captured receipt ids plus the missing tool/path instead of silently continuing.",
+  "5. Context-read path: read Orchestrator context before deciding what the saved turn means.",
+  "6. Self-check path: save a harmless synthetic turn and verify Orchestrator search can find it.",
+  "7. Partial capture path: save whatever safe status/proof you still can before declaring the missing link.",
+  "8. Fail-loud path: reply UNTETHERED with captured receipt ids plus the missing tool/path instead of silently continuing.",
 ];
 
 export const saveConversationTurnTool = {
@@ -18,7 +19,8 @@ export const saveConversationTurnTool = {
   description:
     "Save an external or subscription chat turn into UnClick Orchestrator continuity. " +
     "Receipt-first rule: call this immediately after an accepted human wake/message when the normal UnClick MCP save_conversation_turn tool is unavailable, then keep the returned turn_id as proof. " +
-    "Use the backup ladder: MCP save tool, channel save tool, API ingest, tether self-check, partial safe capture, then UNTETHERED with captured receipts if any link is still missing. " +
+    "Then read Orchestrator context before deciding what the saved turn means. " +
+    "Use the backup ladder: MCP save tool, channel save tool, API ingest, context read, tether self-check, partial safe capture, then UNTETHERED with captured receipts if any link is still missing. " +
     "Do not store secrets, API keys, passwords, one-time codes, or private credentials. " +
     "If this tool is unavailable or fails, say UNTETHERED instead of silently continuing.",
   inputSchema: {
@@ -48,6 +50,32 @@ export const saveConversationTurnTool = {
       },
     },
     required: ["session_id", "role", "content"],
+  },
+};
+
+export const orchestratorContextReadTool = {
+  name: "unclick_orchestrator_context_read",
+  description:
+    "Read UnClick Orchestrator continuity after saving an accepted human turn and before interpreting or acting. " +
+    "This is the mandatory Log -> Read -> Decide gate: save the turn, read nearby context, then decide whether the text is a test cue, real request, blocker, proof, or status. " +
+    "Use q to narrow around words from the saved turn, or omit q for recent context. " +
+    "If context cannot be read, say CONTEXT_UNREAD or UNTETHERED instead of guessing what the user meant.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      q: {
+        type: "string",
+        description: "Optional search text from the saved turn. Do not use secrets.",
+      },
+      limit: {
+        type: "number",
+        minimum: 20,
+        maximum: 200,
+        default: 80,
+        description: "Maximum events to read.",
+      },
+    },
   },
 };
 
@@ -112,6 +140,23 @@ export async function saveConversationTurn(apiFetch, args) {
   });
 }
 
+export function buildOrchestratorContextReadQuery(args = {}) {
+  const q = String(args?.q ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+  const requestedLimit = Number(args?.limit ?? 80);
+  const maxLimit = q ? 200 : 120;
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 80, 20), maxLimit);
+  const query = { limit };
+  if (q) query.q = q;
+  return query;
+}
+
+export async function readOrchestratorContext(apiFetch, args = {}) {
+  return apiFetch("orchestrator_context_read", {
+    method: "GET",
+    query: buildOrchestratorContextReadQuery(args),
+  });
+}
+
 function defaultMarker() {
   const randomPart = Math.random().toString(36).slice(2, 10);
   return `unclick-tether-self-check-${Date.now().toString(36)}-${randomPart}`;
@@ -151,12 +196,9 @@ export async function runTetherSelfCheck(apiFetch, args = {}) {
     throw new Error("admin_conversation_turn_ingest returned no receipt turn_id");
   }
 
-  const contextRead = await apiFetch("orchestrator_context_read", {
-    method: "GET",
-    query: {
-      q: payload.marker,
-      limit: 20,
-    },
+  const contextRead = await readOrchestratorContext(apiFetch, {
+    q: payload.marker,
+    limit: 20,
   });
 
   if (!orchestratorContextContainsReceipt(contextRead, { marker: payload.marker, turnId })) {

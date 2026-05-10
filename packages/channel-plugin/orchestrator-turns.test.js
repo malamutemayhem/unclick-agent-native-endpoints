@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildOrchestratorContextReadQuery,
   buildTetherSelfCheckPayload,
   getReceiptFirstTetherLadder,
   orchestratorContextContainsReceipt,
+  orchestratorContextReadTool,
+  readOrchestratorContext,
   runTetherSelfCheck,
   buildConversationTurnPayload,
   saveConversationTurn,
@@ -16,6 +19,12 @@ test("saveConversationTurnTool advertises the explicit Orchestrator tether hook"
   assert.match(saveConversationTurnTool.description, /Orchestrator continuity/);
   assert.match(saveConversationTurnTool.description, /Receipt-first/);
   assert.match(saveConversationTurnTool.description, /UNTETHERED/);
+});
+
+test("orchestratorContextReadTool advertises the Log Read Decide gate", () => {
+  assert.equal(orchestratorContextReadTool.name, "unclick_orchestrator_context_read");
+  assert.match(orchestratorContextReadTool.description, /Log -> Read -> Decide/);
+  assert.match(orchestratorContextReadTool.description, /CONTEXT_UNREAD/);
 });
 
 test("tetherSelfCheckTool advertises startup and heartbeat proof", () => {
@@ -31,9 +40,10 @@ test("getReceiptFirstTetherLadder keeps reliable paths ordered with partial capt
   assert.match(ladder[1], /MCP path/);
   assert.match(ladder[2], /Channel path/);
   assert.match(ladder[3], /API path/);
-  assert.match(ladder[4], /Self-check path/);
-  assert.match(ladder[5], /Partial capture path/);
-  assert.match(ladder[6], /UNTETHERED/);
+  assert.match(ladder[4], /Context-read path/);
+  assert.match(ladder[5], /Self-check path/);
+  assert.match(ladder[6], /Partial capture path/);
+  assert.match(ladder[7], /UNTETHERED/);
 });
 
 test("buildConversationTurnPayload validates and defaults a safe API body", () => {
@@ -105,6 +115,39 @@ test("saveConversationTurn calls the existing admin ingest endpoint", async () =
           content: "saved",
           source_app: "test-client",
           client_session_id: "thread-1",
+        },
+      },
+    },
+  ]);
+});
+
+test("buildOrchestratorContextReadQuery normalizes search and clamps limits", () => {
+  assert.deepEqual(
+    buildOrchestratorContextReadQuery({ q: "  proof   check  ", limit: 500 }),
+    { limit: 200, q: "proof check" }
+  );
+  assert.deepEqual(buildOrchestratorContextReadQuery({ limit: 1 }), { limit: 20 });
+});
+
+test("readOrchestratorContext calls the read-only context endpoint", async () => {
+  const calls = [];
+  const result = await readOrchestratorContext(async (action, options) => {
+    calls.push({ action, options });
+    return { context: { continuity_events: [] } };
+  }, {
+    q: "status",
+    limit: 40,
+  });
+
+  assert.deepEqual(result, { context: { continuity_events: [] } });
+  assert.deepEqual(calls, [
+    {
+      action: "orchestrator_context_read",
+      options: {
+        method: "GET",
+        query: {
+          limit: 40,
+          q: "status",
         },
       },
     },
