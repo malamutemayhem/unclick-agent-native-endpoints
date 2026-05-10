@@ -43,6 +43,21 @@ Use these mappings:
 
 The UI should treat the nudge as a red-lane annotation: useful evidence, not the final answer.
 
+## Worker Nudges
+
+NudgeOnlyAPI can also help workers do their jobs, but only as a receipt reminder. It must not command workers, assign authority, or mark their work done.
+
+Use worker nudges for:
+
+- Continuous Improver: ask for the next tiny improvement candidate and proof.
+- Job Manager: ask for the owning job, next safe action, and expected receipt.
+- Reviewer: ask for review ACK or blocker receipt on stale PR/review handoffs.
+- Builder: ask for commit, PR, run ID, or blocker receipt when implementation lacks proof.
+- Heartbeat Seat: ask for the material diff or compact PASS/BLOCKER receipt.
+- Agent Observability: ask for trace ID, owner, decision, and reliability proof.
+
+The nudge shape should be: worker -> target -> painpoint -> expected receipt -> verifier.
+
 Do not use it for:
 
 - PR merges

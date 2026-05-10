@@ -42,6 +42,14 @@ describe("NudgeOnlyAPI policy", () => {
         expect.objectContaining({ bucket: "missing_proof" }),
         expect.objectContaining({ bucket: "stale_ack" }),
       ]),
+      worker_nudge_map: expect.arrayContaining([
+        expect.objectContaining({ worker: "Continuous Improver", bucket: "unclear_owner" }),
+        expect.objectContaining({ worker: "Job Manager", bucket: "unclear_owner" }),
+        expect.objectContaining({ worker: "Reviewer", bucket: "stale_ack" }),
+        expect.objectContaining({ worker: "Builder", bucket: "missing_proof" }),
+        expect.objectContaining({ worker: "Heartbeat Seat", bucket: "noisy_thread" }),
+        expect.objectContaining({ worker: "Agent Observability", bucket: "missing_proof" }),
+      ]),
     });
   });
 
