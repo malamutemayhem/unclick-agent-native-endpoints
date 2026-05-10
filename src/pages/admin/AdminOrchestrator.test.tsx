@@ -47,7 +47,18 @@ describe("AdminOrchestratorPage", () => {
                     conversation_turns: 1,
                   },
                 },
-                profile_cards: [],
+                profile_cards: [
+                  {
+                    agent_id: "codex-orchestrator-seat",
+                    label: "Codex Orchestrator Seat",
+                    role: "ai-seat",
+                    emoji: "🤖",
+                    source_app_label: "Codex",
+                    connection_label: "Connected",
+                    last_seen_at: "2026-05-10T05:55:00.000Z",
+                    freshness_label: "Live",
+                  },
+                ],
                 human_operator_time: null,
                 continuity_events: [
                   {
@@ -58,6 +69,15 @@ describe("AdminOrchestratorPage", () => {
                     role: "user",
                     summary: "user: Orchestrator context should show subscription messages.",
                     tags: ["conversation", "user"],
+                  },
+                  {
+                    source_kind: "boardroom_message",
+                    source_id: "msg-1",
+                    created_at: "2026-05-10T05:56:00.000Z",
+                    kind: "proof",
+                    actor_agent_id: "codex-orchestrator-seat",
+                    summary: "PASS: Orchestrator continuity proof landed.",
+                    tags: ["done"],
                   },
                 ],
                 library_snapshots: [],
@@ -110,6 +130,9 @@ describe("AdminOrchestratorPage", () => {
       (await screen.findAllByText("user: Orchestrator context should show subscription messages."))
         .length,
     ).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Codex Orchestrator Seat")).length).toBeGreaterThan(1);
+    expect((await screen.findAllByText("🤖")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Human").length).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText("Message the AI assistant...")).not.toBeInTheDocument();
     expect(screen.queryByText("Using AI Assistant")).not.toBeInTheDocument();
   });
