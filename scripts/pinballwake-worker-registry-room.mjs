@@ -25,6 +25,7 @@ const VALID_LANES = new Set([
 
 const VALID_ACK_VERDICTS = new Set(["PASS", "BLOCKER", "HOLD", "COMMENT"]);
 const TRUSTED_SIGNING_AUTHORITIES = new Set(["lane", "coordinator", "system"]);
+const VALID_ACTIVATION_MODES = new Set(["active", "bench", "fallback"]);
 const LEGACY_LANE_ALIASES = new Map([
   ["master", "coordinator"],
   ["🐺", "coordinator"],
@@ -97,9 +98,27 @@ function uniq(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function normalizeActivationMode(input = {}) {
+  const rawMode = normalize(input.activation_mode || input.activationMode || "");
+  if (VALID_ACTIVATION_MODES.has(rawMode)) return rawMode;
+  if (input.bench === true || normalize(input.status) === "bench") return "bench";
+  if (normalize(input.status) === "fallback") return "fallback";
+  return "active";
+}
+
+function normalizePromotionSignals(input = {}) {
+  return {
+    success_count: Number(input.success_count ?? input.successCount ?? 0),
+    failure_count: Number(input.failure_count ?? input.failureCount ?? 0),
+    last_promoted_at: input.last_promoted_at || input.lastPromotedAt || null,
+    promotion_threshold: Number(input.promotion_threshold ?? input.promotionThreshold ?? 3),
+  };
+}
+
 function normalizeWorker(input = {}) {
   const lane = normalizeLane(input.lane || input.role || input.worker);
   const workerId = compactText(input.worker_id || input.workerId || input.id || lane, 120);
+  const activationMode = normalizeActivationMode(input);
   return {
     worker_id: workerId,
     lane,
@@ -107,12 +126,29 @@ function normalizeWorker(input = {}) {
     provider: compactText(input.provider || "", 80),
     machine: compactText(input.machine || "", 80),
     status: normalize(input.status || "available"),
+    activation_mode: activationMode,
+    profile_slug: compactText(input.profile_slug || input.profileSlug || "", 120),
+    activation_reason: compactText(input.activation_reason || input.activationReason || "", 300),
     capabilities: uniq(safeList(input.capabilities || input.skills).map(normalize)),
+    promotion_signals: normalizePromotionSignals(input.promotion_signals || input.promotionSignals || input),
     signing_key_id: compactText(input.signing_key_id || input.signingKeyId || workerId, 160),
     signing_secret: compactText(input.signing_secret || input.signingSecret || "", 500),
     revoked_at: input.revoked_at || input.revokedAt || null,
     last_seen_at: input.last_seen_at || input.lastSeenAt || null,
   };
+}
+
+function isCallableWorker(worker = {}) {
+  return !worker.revoked_at && worker.activation_mode !== "bench";
+}
+
+function isBenchWorker(worker = {}) {
+  return !worker.revoked_at && worker.activation_mode === "bench";
+}
+
+function workerMatchesCapability(worker = {}, capability = "") {
+  const wanted = normalize(capability);
+  return !wanted || safeList(worker.capabilities).includes(wanted);
 }
 
 export function createWorkerRegistry(input = {}) {
@@ -131,6 +167,56 @@ export function findRegistryWorker(registry = {}, { workerId = "", lane = "" } =
     (wantedId && worker.worker_id === wantedId) ||
     (wantedLane && worker.lane === wantedLane)
   ) || null;
+}
+
+export function findSpecialistBenchWorkers(registry = {}, { capability = "", lane = "" } = {}) {
+  const wantedLane = normalizeLane(lane);
+  return safeList(registry.workers).filter((worker) =>
+    isBenchWorker(worker) &&
+    (!wantedLane || worker.lane === wantedLane) &&
+    workerMatchesCapability(worker, capability)
+  );
+}
+
+export function selectWorkerForCapability(registry = {}, { capability = "", lane = "" } = {}) {
+  const wantedLane = normalizeLane(lane);
+  const activeWorker = safeList(registry.workers).find((worker) =>
+    isCallableWorker(worker) &&
+    (!wantedLane || worker.lane === wantedLane) &&
+    workerMatchesCapability(worker, capability)
+  );
+
+  if (activeWorker) {
+    return {
+      ok: true,
+      worker: activeWorker,
+      activation: "active",
+      confidence: "high",
+      reason: "active_worker_match",
+      fallback_reason: "",
+    };
+  }
+
+  const benchWorker = findSpecialistBenchWorkers(registry, { capability, lane })[0] || null;
+  if (benchWorker) {
+    return {
+      ok: true,
+      worker: benchWorker,
+      activation: "bench",
+      confidence: "medium",
+      reason: "bench_specialist_match",
+      fallback_reason: "no_active_worker_match",
+    };
+  }
+
+  return {
+    ok: false,
+    worker: null,
+    activation: "none",
+    confidence: "low",
+    reason: "no_worker_match",
+    fallback_reason: "use_fungible_capacity",
+  };
 }
 
 function ackSigningPayload(input = {}) {
@@ -372,7 +458,11 @@ export function evaluateWorkerRegistryRoom({
     action: "worker_registry_room",
     result: verification ? verification.reason : "registry_ready",
     worker_count: safeList(safeRegistry.workers).length,
-    active_worker_count: safeList(safeRegistry.workers).filter((worker) => !worker.revoked_at).length,
+    active_worker_count: safeList(safeRegistry.workers).filter(isCallableWorker).length,
+    bench_worker_count: safeList(safeRegistry.workers).filter(isBenchWorker).length,
+    selection: expected.capability
+      ? selectWorkerForCapability(safeRegistry, { capability: expected.capability, lane: expected.lane })
+      : null,
     verification,
     event: verification && ack ? createAckDecisionEvent({ ack, verification }) : null,
   };

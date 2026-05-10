@@ -205,3 +205,19 @@ export const AGENT_CATEGORIES: { key: string; label: string; colour: string }[] 
   { key: "lifestyle", label: "Lifestyle",  colour: "crew-life"     },
   { key: "meta",      label: "Meta",       colour: "crew-meta"     },
 ];
+
+export const SPECIALIST_BENCH_AGENT_SLUGS = [
+  "seo-specialist",
+  "security-engineer",
+  "librarian",
+  "dba",
+  "devops",
+  "integration-engineer",
+  "copywriter",
+  "ui-designer",
+  "researcher",
+  "qa-engineer",
+  "observability-engineer",
+  "technical-writer",
+  "api-designer",
+] as const;

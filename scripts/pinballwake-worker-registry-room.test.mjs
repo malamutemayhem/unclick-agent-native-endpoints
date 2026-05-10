@@ -6,6 +6,8 @@ import {
   createSignedAckRecord,
   createWorkerRegistry,
   evaluateWorkerRegistryRoom,
+  findSpecialistBenchWorkers,
+  selectWorkerForCapability,
   verifySignedAckRecord,
 } from "./pinballwake-worker-registry-room.mjs";
 
@@ -39,6 +41,18 @@ function registryFixture(overrides = {}) {
         signing_secret: "builder-secret",
         ...overrides.builder,
       },
+      {
+        worker_id: "seo-specialist-bench-1",
+        lane: "researcher",
+        status: "bench",
+        activation_mode: "bench",
+        profile_slug: "seo-specialist",
+        capabilities: ["seo", "search"],
+        activation_reason: "Wake only for search and GEO jobs.",
+        success_count: 4,
+        promotion_threshold: 5,
+        ...overrides.seoBench,
+      },
     ],
   });
 }
@@ -63,9 +77,46 @@ describe("PinballWake Worker Registry Room", () => {
     const registry = registryFixture();
 
     assert.equal(registry.version, 1);
-    assert.equal(registry.workers.length, 2);
+    assert.equal(registry.workers.length, 3);
     assert.equal(registry.workers[0].lane, "safety-checker");
     assert.equal(registry.workers[0].seat_id, "lenovo-chatgpt-safety-checker");
+    assert.equal(registry.workers[2].activation_mode, "bench");
+    assert.equal(registry.workers[2].profile_slug, "seo-specialist");
+    assert.equal(registry.workers[2].promotion_signals.success_count, 4);
+  });
+
+  it("keeps bench specialists discoverable without counting them as active workers", () => {
+    const registry = registryFixture();
+    const bench = findSpecialistBenchWorkers(registry, { capability: "seo" });
+
+    assert.equal(bench.length, 1);
+    assert.equal(bench[0].worker_id, "seo-specialist-bench-1");
+
+    const result = evaluateWorkerRegistryRoom({
+      registry,
+      expected: { capability: "seo" },
+      now: NOW,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.worker_count, 3);
+    assert.equal(result.active_worker_count, 2);
+    assert.equal(result.bench_worker_count, 1);
+    assert.equal(result.selection.reason, "bench_specialist_match");
+    assert.equal(result.selection.fallback_reason, "no_active_worker_match");
+  });
+
+  it("prefers an active worker over a bench specialist for the same capability", () => {
+    const registry = registryFixture({
+      builder: { capabilities: ["implementation", "seo"] },
+    });
+
+    const selection = selectWorkerForCapability(registry, { capability: "seo" });
+
+    assert.equal(selection.ok, true);
+    assert.equal(selection.activation, "active");
+    assert.equal(selection.worker.worker_id, "builder-1");
+    assert.equal(selection.reason, "active_worker_match");
   });
 
   it("creates and verifies a signed lane ACK", () => {
@@ -298,7 +349,7 @@ describe("PinballWake Worker Registry Room", () => {
 
     assert.equal(result.ok, true);
     assert.equal(result.result, "trusted_signed_ack");
-    assert.equal(result.worker_count, 2);
+    assert.equal(result.worker_count, 3);
     assert.equal(result.event.authority, "lane");
   });
 });
