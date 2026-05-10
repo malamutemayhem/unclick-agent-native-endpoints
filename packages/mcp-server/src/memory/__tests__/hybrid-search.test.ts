@@ -90,6 +90,23 @@ describe("RRF scoring math", () => {
 // ─── 2. embedText returns null when key absent ────────────────────────────────
 
 describe("embedText", () => {
+  test("returns null unless OpenAI embeddings are explicitly enabled", async () => {
+    const savedKey = process.env.OPENAI_API_KEY;
+    const savedFlag = process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    process.env.OPENAI_API_KEY = "sk-test-no-fetch";
+    delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    try {
+      const { embedText } = await import("../embeddings.js");
+      const result = await embedText("a searchable memory query that is long enough");
+      assert.equal(result, null);
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = savedKey;
+      if (savedFlag === undefined) delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+      else process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = savedFlag;
+    }
+  });
+
   test("returns null when OPENAI_API_KEY is not set", async () => {
     // Ensure the env var is absent for this test
     const saved = process.env.OPENAI_API_KEY;
@@ -102,6 +119,58 @@ describe("embedText", () => {
     } finally {
       if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
     }
+  });
+});
+
+describe("local memory scoring", () => {
+  test("tokenizes proper nouns and identifiers without duplicates", async () => {
+    const { tokenizeLocalMemoryQuery } = await import("../supabase.js");
+    assert.deepEqual(
+      tokenizeLocalMemoryQuery("UnClick API, UnClick semantic-search v1"),
+      ["unclick", "api", "semantic-search", "v1"]
+    );
+  });
+
+  test("exact phrase scores above the same tokens split apart", async () => {
+    const { tokenizeLocalMemoryQuery, scoreLocalMemoryContent } = await import("../supabase.js");
+    const query = "semantic memory";
+    const tokens = tokenizeLocalMemoryQuery(query);
+    const phrase = scoreLocalMemoryContent({
+      query,
+      tokens,
+      text: "Chris wants semantic memory search to work locally",
+      confidence: 1,
+      source: "fact",
+    });
+    const split = scoreLocalMemoryContent({
+      query,
+      tokens,
+      text: "Chris wants semantic retrieval so memory works locally",
+      confidence: 1,
+      source: "fact",
+    });
+    assert.ok(phrase.finalScore > split.finalScore);
+  });
+
+  test("partial token overlap scores above unrelated text", async () => {
+    const { tokenizeLocalMemoryQuery, scoreLocalMemoryContent } = await import("../supabase.js");
+    const query = "open source memory search";
+    const tokens = tokenizeLocalMemoryQuery(query);
+    const partial = scoreLocalMemoryContent({
+      query,
+      tokens,
+      text: "The memory system should use local search when providers are unavailable",
+      confidence: 1,
+      source: "fact",
+    });
+    const unrelated = scoreLocalMemoryContent({
+      query,
+      tokens,
+      text: "Billing exports should stay separate from worker lane routing",
+      confidence: 1,
+      source: "fact",
+    });
+    assert.ok(partial.finalScore > unrelated.finalScore);
   });
 });
 
@@ -139,6 +208,31 @@ class FakeClient {
 
   from(table: string) {
     const query = new FakeQuery(table);
+    this.queries.push(query);
+    return query;
+  }
+}
+
+class FakeDataQuery extends FakeQuery {
+  constructor(table: string, private rows: unknown[]) {
+    super(table);
+  }
+
+  then<TResult1 = { data: unknown[] }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[] }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return Promise.resolve({ data: this.rows }).then(onfulfilled, onrejected);
+  }
+}
+
+class FakeDataClient {
+  queries: FakeDataQuery[] = [];
+
+  constructor(private rowsByTable: Record<string, unknown[]>) {}
+
+  from(table: string) {
+    const query = new FakeDataQuery(table, this.rowsByTable[table] ?? []);
     this.queries.push(query);
     return query;
   }
@@ -183,6 +277,50 @@ describe("keyword fallback asOf cutoff", () => {
       sessionQuery.calls.some((c) => c.method === "lte" && c.args[0] === "created_at" && c.args[1] === asOf),
       "session fallback should not return summaries created after asOf"
     );
+  });
+});
+
+describe("searchMemory local-first behavior", () => {
+  test("returns local keyword results before optional OpenAI hybrid", async () => {
+    const { SupabaseBackend } = await import("../supabase.js");
+    const client = new FakeDataClient({
+      extracted_facts: [
+        {
+          id: "fact-local-default",
+          fact: "Chris wants open source semantic search as the memory default",
+          category: "decision",
+          confidence: 0.95,
+          created_at: "2026-05-10T00:00:00Z",
+        },
+      ],
+      session_summaries: [],
+    });
+    const backend = Object.create(SupabaseBackend.prototype) as {
+      client: FakeDataClient;
+      tenancy: { mode: "byod" };
+      tables: { extracted_facts: string; session_summaries: string };
+      searchMemory: (query: string, maxResults: number, asOf?: string) => Promise<unknown[]>;
+    };
+    backend.client = client;
+    backend.tenancy = { mode: "byod" };
+    backend.tables = {
+      extracted_facts: "extracted_facts",
+      session_summaries: "session_summaries",
+    };
+
+    const savedKey = process.env.OPENAI_API_KEY;
+    const savedFlag = process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    process.env.OPENAI_API_KEY = "sk-test-no-fetch";
+    process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = "true";
+    try {
+      const results = await backend.searchMemory("open source semantic search", 5);
+      assert.equal((results[0] as { id: string }).id, "fact-local-default");
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = savedKey;
+      if (savedFlag === undefined) delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+      else process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = savedFlag;
+    }
   });
 });
 
@@ -366,6 +504,8 @@ describe("acceptance: hybrid search finds semantically similar fact", () => {
       return;
     }
 
+    const savedFlag = process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = "true";
     const { createClient } = await import("@supabase/supabase-js");
     const { embedText, EMBEDDING_MODEL } = await import("../embeddings.js");
 
@@ -425,6 +565,8 @@ describe("acceptance: hybrid search finds semantically similar fact", () => {
       );
       console.log(`    [passed] fact found at position ${ids.indexOf(factId) + 1} of ${ids.length}`);
     } finally {
+      if (savedFlag === undefined) delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+      else process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = savedFlag;
       // Clean up
       await supabase.from("extracted_facts").delete().eq("id", factId);
     }

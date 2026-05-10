@@ -37,8 +37,13 @@ function shouldSkipEmbedding(text: string): boolean {
   ].some((needle) => lower.includes(needle));
 }
 
+export function isOpenAIEmbeddingsEnabled(): boolean {
+  const raw = process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED ?? "";
+  return raw === "1" || raw.toLowerCase() === "true";
+}
+
 export async function embedText(text: string): Promise<number[] | null> {
-  if (process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED === "false") return null;
+  if (!isOpenAIEmbeddingsEnabled()) return null;
   if (shouldSkipEmbedding(text)) return null;
 
   const apiKey = process.env.OPENAI_API_KEY;

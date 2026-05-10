@@ -108,6 +108,68 @@ interface TableNames {
   code_dumps: string;
 }
 
+const LOCAL_SEARCH_STOP_WORDS = new Set([
+  "and",
+  "are",
+  "for",
+  "from",
+  "how",
+  "the",
+  "this",
+  "that",
+  "with",
+]);
+
+export function tokenizeLocalMemoryQuery(query: string): string[] {
+  const seen = new Set<string>();
+  const tokens = query
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9_-]*/g) ?? [];
+  return tokens.filter((token) => {
+    if (token.length < 2) return false;
+    if (LOCAL_SEARCH_STOP_WORDS.has(token)) return false;
+    if (seen.has(token)) return false;
+    seen.add(token);
+    return true;
+  });
+}
+
+function normalizeLocalMemoryText(text: string): string {
+  return (text.toLowerCase().match(/[a-z0-9][a-z0-9_-]*/g) ?? []).join(" ");
+}
+
+export function scoreLocalMemoryContent(input: {
+  query: string;
+  tokens: string[];
+  text: string;
+  confidence?: number | null;
+  source?: "fact" | "session";
+}): { finalScore: number; matchedTokenCount: number; exactPhrase: boolean } {
+  const { query, tokens, text } = input;
+  if (tokens.length === 0) {
+    return { finalScore: 0, matchedTokenCount: 0, exactPhrase: false };
+  }
+
+  const normalizedText = normalizeLocalMemoryText(text);
+  const normalizedQuery = normalizeLocalMemoryText(query);
+  const matchedTokenCount = tokens.reduce(
+    (count, token) => count + (normalizedText.includes(token) ? 1 : 0),
+    0
+  );
+  const exactPhrase =
+    normalizedQuery.length >= 4 &&
+    normalizedText.includes(normalizedQuery);
+  const phraseBonus = exactPhrase ? Math.max(1, tokens.length) : 0;
+  const coverage = (matchedTokenCount + phraseBonus) / (tokens.length * 2);
+  const confidence = Math.max(0, Math.min(1, input.confidence ?? 1));
+  const sourceWeight = input.source === "session" ? 0.5 : 1;
+  return {
+    finalScore: coverage * confidence * sourceWeight,
+    matchedTokenCount,
+    exactPhrase,
+  };
+}
+
 const BYOD_TABLES: TableNames = {
   business_context: "business_context",
   knowledge_library: "knowledge_library",
@@ -285,21 +347,11 @@ export class SupabaseBackend implements MemoryBackend {
   }
 
   async searchMemory(query: string, maxResults: number, asOf?: string): Promise<unknown> {
-    // Hybrid lane: BM25 + pgvector RRF over mc_extracted_facts and
-    // mc_session_summaries. Two well-known failure modes turn this into a
-    // black hole and force a fallback:
-    //
-    //   1. Per-row embeddings are NULL (legacy facts, BYOD installs without
-    //      backfill, or facts written before embedding wiring) so the vector
-    //      lane drops them.
-    //   2. plainto_tsquery('english', ...) tokenizes proper nouns and short
-    //      identifiers ("Chris", "Bailey", "UnClick") in ways that don't
-    //      align with the matching to_tsvector lexemes, so the keyword lane
-    //      misses too. Both branches fail, hybrid returns [].
-    //
-    // To stop returning [] when matching content exists, we run a robust
-    // ILIKE keyword fallback over the same tables whenever the hybrid call
-    // throws OR returns an empty result.
+    const localResults = await this.keywordFallback(query, maxResults, asOf);
+    if (localResults.length > 0) return localResults;
+
+    // Optional high-accuracy lane: BM25 + pgvector RRF over facts and
+    // sessions. This only runs when MEMORY_OPENAI_EMBEDDINGS_ENABLED is set.
     try {
       const { embedText } = await import("./embeddings.js");
       const embedding = await embedText(query);
@@ -313,9 +365,9 @@ export class SupabaseBackend implements MemoryBackend {
         if (Array.isArray(results) && results.length > 0) return results;
       }
     } catch (err) {
-      console.error("[search_memory] hybrid search failed, falling back to keyword:", err);
+      console.error("[search_memory] optional hybrid search failed:", err);
     }
-    return this.keywordFallback(query, maxResults, asOf);
+    return [];
   }
 
   /**
@@ -331,18 +383,9 @@ export class SupabaseBackend implements MemoryBackend {
    * many tokens they contain so partial matches at least surface something.
    */
   private async keywordFallback(query: string, maxResults: number, asOf?: string): Promise<unknown[]> {
-    const tokens = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((t) => t.length >= 2 && !/[,():]/.test(t));
+    const tokens = tokenizeLocalMemoryQuery(query);
     if (tokens.length === 0) return [];
     const patterns = tokens.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
-    const score = (text: string): number => {
-      const lower = text.toLowerCase();
-      let n = 0;
-      for (const t of tokens) if (lower.includes(t)) n++;
-      return n;
-    };
 
     const runScan = async (mode: "and" | "or"): Promise<unknown[]> => {
       let factQ = this.client
@@ -384,7 +427,13 @@ export class SupabaseBackend implements MemoryBackend {
       type FactRow = { id: string; fact: string; category: string; confidence: number; created_at: string };
       type SessRow = { id: string; summary: string; created_at: string };
       const facts = ((factsRes.data ?? []) as FactRow[]).map((r) => {
-        const s = score(r.fact);
+        const s = scoreLocalMemoryContent({
+          query,
+          tokens,
+          text: r.fact,
+          confidence: r.confidence,
+          source: "fact",
+        });
         return {
           id: r.id,
           source: "fact",
@@ -392,14 +441,20 @@ export class SupabaseBackend implements MemoryBackend {
           category: r.category,
           confidence: r.confidence,
           created_at: r.created_at,
-          final_score: (s / tokens.length) * (r.confidence ?? 0),
+          final_score: s.finalScore,
           rrf_score: 0,
-          kw_score: s,
+          kw_score: s.matchedTokenCount,
           cosine_score: 0,
         };
       });
       const sessions = ((sessRes.data ?? []) as SessRow[]).map((r) => {
-        const s = score(r.summary);
+        const s = scoreLocalMemoryContent({
+          query,
+          tokens,
+          text: r.summary,
+          confidence: 1,
+          source: "session",
+        });
         return {
           id: r.id,
           source: "session",
@@ -407,9 +462,9 @@ export class SupabaseBackend implements MemoryBackend {
           category: "session",
           confidence: 1,
           created_at: r.created_at,
-          final_score: (s / tokens.length) * 0.5,
+          final_score: s.finalScore,
           rrf_score: 0,
-          kw_score: s,
+          kw_score: s.matchedTokenCount,
           cosine_score: 0,
         };
       });
