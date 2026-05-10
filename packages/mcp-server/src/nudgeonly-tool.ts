@@ -7,6 +7,14 @@ const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "liquid/lfm-2.5-1.2b-instruct:free";
 const DEFAULT_MAX_TOKENS = 260;
 const MAX_INPUT_CHARS = 6000;
+const PAINPOINT_TYPES = [
+  "stale_ack",
+  "duplicate_wake",
+  "unclear_owner",
+  "noisy_thread",
+  "missing_proof",
+  "none",
+] as const;
 
 type OpenRouterRole = "system" | "user" | "assistant";
 
@@ -85,6 +93,11 @@ function asBoolean(value: unknown): boolean {
   return Boolean(value);
 }
 
+function normalisePainpointType(value: unknown): string {
+  const raw = String(value ?? "none").trim().toLowerCase();
+  return PAINPOINT_TYPES.find((type) => raw.includes(type)) ?? "none";
+}
+
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
@@ -110,7 +123,23 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
-function normaliseNudge(parsed: Record<string, unknown> | null, raw: string): Record<string, unknown> {
+function normaliseNudge(
+  parsed: Record<string, unknown> | null,
+  raw: string,
+  painpointHint: string,
+): Record<string, unknown> {
+  const parsedType = normalisePainpointType(parsed?.painpoint_type);
+  const hintedType = normalisePainpointType(painpointHint);
+  const explicitNoneHint = painpointHint.trim().length > 0 && hintedType === "none";
+  const requestedType = explicitNoneHint
+    ? "none"
+    : hintedType === "none" ? parsedType : hintedType;
+  const rawDetected = asBoolean(parsed?.painpoint_detected ?? false);
+  const painpointDetected = requestedType === "none"
+    ? false
+    : rawDetected || parsedType !== "none" || hintedType !== "none";
+  const painpointType = painpointDetected ? requestedType : "none";
+
   return {
     worker: NUDGEONLY_POLICY.worker_name,
     official_name: NUDGEONLY_POLICY.official_name,
@@ -118,8 +147,8 @@ function normaliseNudge(parsed: Record<string, unknown> | null, raw: string): Re
     ecosystem: NUDGEONLY_POLICY.ecosystem,
     lane: NUDGEONLY_POLICY.lane,
     authority: NUDGEONLY_POLICY.authority,
-    painpoint_detected: asBoolean(parsed?.painpoint_detected ?? false),
-    painpoint_type: String(parsed?.painpoint_type ?? "unknown"),
+    painpoint_detected: painpointDetected,
+    painpoint_type: painpointType,
     nudge: String(parsed?.nudge ?? raw).slice(0, 1200),
     suggested_check: String(parsed?.suggested_check ?? "Run a deterministic verifier before taking action.").slice(0, 600),
     confidence: String(parsed?.confidence ?? "low"),
@@ -178,6 +207,9 @@ export async function nudgeonlyApi(args: Record<string, unknown>): Promise<unkno
     "You are a red-lane, low-authority helper for painpoint hints only.",
     "You must never decide, approve, merge, close, mark done, assign ownership, or set truth.",
     "Do not use hidden reasoning. Spend tokens on the final JSON fields.",
+    "Use exactly one painpoint_type from: stale_ack, duplicate_wake, unclear_owner, noisy_thread, missing_proof, none.",
+    "If the event is healthy or completed and has no explicit stale, duplicate, unclear owner, noisy thread, or missing proof signal, return painpoint_detected=false and painpoint_type=none.",
+    "The suggested_check must be concrete and name the source type, such as WakePass, dispatch, PR, issue, proof pointer, or heartbeat count.",
     "Use only cautious language: possible, likely, suggest checking, may need.",
     "Return JSON only. Do not include markdown.",
   ].join(" ");
@@ -217,7 +249,7 @@ export async function nudgeonlyApi(args: Record<string, unknown>): Promise<unkno
   const parsed = extractJsonObject(raw);
 
   return {
-    ...normaliseNudge(parsed, raw),
+    ...normaliseNudge(parsed, raw, painpointHint),
     trace_id: traceId,
     source_id: sourceId || null,
     source_url: sourceUrl || null,
