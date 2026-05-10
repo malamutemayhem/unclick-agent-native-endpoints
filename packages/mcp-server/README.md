@@ -62,6 +62,8 @@ Scheduled AI Seats can call `heartbeat_protocol` with no arguments to fetch the 
 
 Tethered AI Seats should also treat `save_conversation_turn` as the receipt-first path for Orchestrator continuity: save the accepted turn, keep the returned receipt id, and fail loud with `UNTETHERED` plus any partial receipts when the save path is missing.
 
+After saving an accepted external turn, tethered seats should call `read_orchestrator_context` before deciding what the user meant. The safe order is Log -> Read -> Decide -> Reply -> Log reply, so a test cue or proof phrase is not mistaken for a real operator request.
+
 ## Configuration
 
 | Environment Variable | Default | Description |

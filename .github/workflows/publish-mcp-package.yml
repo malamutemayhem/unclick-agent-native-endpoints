@@ -139,7 +139,15 @@ jobs:
 
       - name: Push version bump
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
-        run: git push
+        run: |
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "Version bump push failed, rebasing on latest main before retry ${attempt}."
+            git pull --rebase origin main
+          done
+          git push
 
       - name: Publish to npm
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
