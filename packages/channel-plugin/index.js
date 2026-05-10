@@ -35,6 +35,7 @@ import readline from "node:readline";
 import { apiFetchJson } from "./http.js";
 import { createHeartbeatGate } from "./heartbeat-gate.js";
 import { readTimingConfig } from "./config.js";
+import { saveConversationTurn, saveConversationTurnTool } from "./orchestrator-turns.js";
 
 const API_BASE       = process.env.UNCLICK_API_BASE     || "https://unclick.world";
 const API_KEY        = process.env.UNCLICK_API_KEY      || "";
@@ -78,7 +79,7 @@ function waitForResponse(messageId) {
   });
 }
 
-function handleRpcLine(line) {
+async function handleRpcLine(line) {
   let msg;
   try {
     msg = JSON.parse(line);
@@ -139,6 +140,7 @@ function handleRpcLine(line) {
               required: ["message_id", "content"],
             },
           },
+          saveConversationTurnTool,
         ],
       },
     });
@@ -162,6 +164,49 @@ function handleRpcLine(line) {
           content: [{ type: "text", text: "ok" }],
         },
       });
+      return;
+    }
+    if (name === "unclick_save_conversation_turn") {
+      try {
+        const result = await saveConversationTurn(apiFetch, args);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ok: true,
+                    turn_id: result?.turn_id ?? null,
+                    session_id: result?.session_id ?? null,
+                    role: result?.role ?? null,
+                    redacted: Boolean(result?.redacted),
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `UNTETHERED: could not save Orchestrator turn: ${message}`,
+              },
+            ],
+          },
+        });
+      }
       return;
     }
     writeRpc({

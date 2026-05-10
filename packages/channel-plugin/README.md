@@ -15,6 +15,14 @@ your local Claude Code session so you do not need a separate AI API key.
    calls back via the `unclick_channel_respond` tool.
 5. The reply is written back to Supabase and streamed to the admin UI.
 
+The plugin also exposes `unclick_save_conversation_turn`, a small fallback
+tool for Orchestrator continuity. Use it when a seat is running through this
+channel but the normal UnClick MCP `save_conversation_turn` tool is not
+available. It saves one external chat turn through
+`admin_conversation_turn_ingest`, so `/admin/orchestrator` can show and search
+the turn. If neither save path is available, the seat should say `UNTETHERED`
+instead of silently continuing.
+
 Every 30 seconds the plugin POSTs a heartbeat to `admin_channel_heartbeat`
 so the admin UI knows the channel is online.
 
