@@ -60,6 +60,8 @@ Memory tools exposed at session level: `load_memory`, `save_session`, `save_fact
 
 Scheduled AI Seats can call `heartbeat_protocol` with no arguments to fetch the canonical UnClick heartbeat playbook. The response is versioned and includes the current procedure, alert format, throttle rules, and `watch_state_key`, so seat prompts can shrink to: "Call heartbeat_protocol on UnClick. Follow what it returns."
 
+Tethered AI Seats should also treat `save_conversation_turn` as the receipt-first path for Orchestrator continuity: save the accepted turn, keep the returned receipt id, and fail loud with `UNTETHERED` plus any partial receipts when the save path is missing.
+
 ## Configuration
 
 | Environment Variable | Default | Description |
