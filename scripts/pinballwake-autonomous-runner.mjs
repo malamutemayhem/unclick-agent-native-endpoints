@@ -14,6 +14,7 @@ import {
   createCodingRoomRunnerFromEnv,
   runCodingRoomRunnerCycle,
 } from "./pinballwake-coding-room-runner.mjs";
+import { evaluateOrchestratorProofWakeGate } from "./lib/autopilotkit-liveness.mjs";
 
 export const AUTONOMOUS_RUNNER_MODES = new Set(["dry-run", "claim", "execute"]);
 
@@ -504,7 +505,45 @@ export async function runOrchestratorSeatHandshakeProof({
   apiKey = "",
   limit = 80,
   fetchImpl = globalThis.fetch,
+  now = new Date().toISOString(),
+  proofSource = "",
+  lastScheduledProofAt = "",
+  trustedFallbackSource = "",
+  trustedFallbackAt = "",
+  trustedFallbackId = "",
+  expectedEveryMinutes = 15,
+  graceMinutes = 15,
+  trustedFallbackFreshMinutes = 10,
 } = {}) {
+  const gate = evaluateOrchestratorProofWakeGate({
+    now,
+    source: proofSource,
+    lastScheduledProofAt,
+    trustedFallbackSource,
+    trustedFallbackAt,
+    trustedFallbackId,
+    expectedEveryMinutes,
+    graceMinutes,
+    trustedFallbackFreshMinutes,
+  });
+  if (!gate.allow) {
+    return {
+      ok: false,
+      action: "blocked",
+      mode: "orchestrator-proof",
+      reason: gate.reason,
+      proof_line: `BLOCKER: ${gate.reason}; next: ${gate.next_action}.`,
+      orchestrator_proof: {
+        ok: false,
+        result: "BLOCKER",
+        reason: gate.reason,
+        proof_source: gate.proof_source,
+        wake_gate: gate,
+      },
+      wake_gate: gate,
+    };
+  }
+
   const fetched = await fetchUnClickOrchestratorContext({ mcpUrl, apiKey, limit, fetchImpl });
   if (!fetched.ok) {
     return {
@@ -515,6 +554,7 @@ export async function runOrchestratorSeatHandshakeProof({
       status: fetched.status ?? null,
       proof_line: `BLOCKER: ${fetched.reason}; next: make orchestrator_context_read available to PinballWake.`,
       orchestrator_proof: fetched,
+      wake_gate: gate,
     };
   }
 
@@ -526,6 +566,7 @@ export async function runOrchestratorSeatHandshakeProof({
     reason: proof.reason,
     proof_line: proof.proof_line,
     orchestrator_proof: proof,
+    wake_gate: gate,
   };
 }
 
@@ -1216,6 +1257,14 @@ export async function runAutonomousRunnerFile({
   leaseSeconds,
   wakeSource = "unknown",
   orchestratorProof = false,
+  orchestratorProofSource = "",
+  lastScheduledProofAt = "",
+  trustedFallbackSource = "",
+  trustedFallbackAt = "",
+  trustedFallbackId = "",
+  proofExpectedEveryMinutes = 15,
+  proofGraceMinutes = 15,
+  trustedFallbackFreshMinutes = 10,
 } = {}) {
   if (orchestratorProof) {
     return runOrchestratorSeatHandshakeProof({
@@ -1223,6 +1272,15 @@ export async function runAutonomousRunnerFile({
       apiKey: unclickApiKey,
       limit: todoLimit,
       fetchImpl,
+      now,
+      proofSource: orchestratorProofSource,
+      lastScheduledProofAt,
+      trustedFallbackSource,
+      trustedFallbackAt,
+      trustedFallbackId,
+      expectedEveryMinutes: proofExpectedEveryMinutes,
+      graceMinutes: proofGraceMinutes,
+      trustedFallbackFreshMinutes,
     });
   }
 
@@ -1400,6 +1458,38 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     leaseSeconds: parseIntOption(getArg("lease-seconds", process.env.CODING_ROOM_LEASE_SECONDS), undefined),
     wakeSource: getArg("wake-source", process.env.AUTONOMOUS_RUNNER_WAKE_SOURCE || process.env.GITHUB_EVENT_NAME || "unknown"),
     orchestratorProof: parseBoolean(getArg("orchestrator-proof", process.env.AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF)),
+    orchestratorProofSource: getArg(
+      "orchestrator-proof-source",
+      process.env.AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF_SOURCE || process.env.GITHUB_EVENT_NAME || "",
+    ),
+    lastScheduledProofAt: getArg(
+      "last-scheduled-proof-at",
+      process.env.AUTONOMOUS_RUNNER_LAST_SCHEDULED_PROOF_AT || "",
+    ),
+    trustedFallbackSource: getArg(
+      "trusted-fallback-source",
+      process.env.AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_SOURCE || "",
+    ),
+    trustedFallbackAt: getArg(
+      "trusted-fallback-at",
+      process.env.AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_AT || "",
+    ),
+    trustedFallbackId: getArg(
+      "trusted-fallback-id",
+      process.env.AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_ID || "",
+    ),
+    proofExpectedEveryMinutes: parseIntOption(
+      getArg("proof-expected-every-minutes", process.env.AUTONOMOUS_RUNNER_PROOF_EXPECTED_EVERY_MINUTES),
+      15,
+    ),
+    proofGraceMinutes: parseIntOption(
+      getArg("proof-grace-minutes", process.env.AUTONOMOUS_RUNNER_PROOF_GRACE_MINUTES),
+      15,
+    ),
+    trustedFallbackFreshMinutes: parseIntOption(
+      getArg("trusted-fallback-fresh-minutes", process.env.AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_FRESH_MINUTES),
+      10,
+    ),
     policy: createAutonomousRunnerPolicy({
       disabled: parseBoolean(process.env.AUTONOMOUS_RUNNER_DISABLED),
       allowProtectedSurfaces: parseBoolean(process.env.AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES),

@@ -56,6 +56,7 @@ jobs:
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule')
         env:
           AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF: "true"
+          AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF_SOURCE: ${{ github.event_name == 'workflow_run' && 'workflow_run_schedule' || 'github_schedule' }}
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
           UNCLICK_MCP_URL: ${{ vars.UNCLICK_MCP_URL || 'https://unclick.world/api/mcp' }}
           UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY || secrets.FISHBOWL_AUTOCLOSE_TOKEN || secrets.FISHBOWL_WAKE_TOKEN }}

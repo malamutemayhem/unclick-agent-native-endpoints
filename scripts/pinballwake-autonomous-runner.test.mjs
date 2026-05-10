@@ -464,6 +464,7 @@ describe("PinballWake autonomous Runner seat", () => {
     const calls = [];
     const result = await runAutonomousRunnerFile({
       orchestratorProof: true,
+      orchestratorProofSource: "github_schedule",
       unclickApiKey: "uc_test",
       unclickMcpUrl: "https://unclick.test/api/mcp",
       fetchImpl: async (url, init = {}) => {
@@ -497,6 +498,68 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.action, "orchestrator_proof_passed");
     assert.match(result.proof_line, /^PASS: Orchestrator seat_handshake readable/);
     assert.equal(result.orchestrator_proof.source_pointer_count, 1);
+    assert.equal(result.wake_gate.reason, "scheduled_proof_source");
+  });
+
+  it("blocks workflow_dispatch from counting as Orchestrator scheduled proof", async () => {
+    let called = false;
+    const result = await runAutonomousRunnerFile({
+      orchestratorProof: true,
+      orchestratorProofSource: "workflow_dispatch",
+      unclickApiKey: "uc_test",
+      unclickMcpUrl: "https://unclick.test/api/mcp",
+      fetchImpl: async () => {
+        called = true;
+        return { ok: false };
+      },
+    });
+
+    assert.equal(called, false);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "manual_dispatch_is_not_scheduled_proof");
+    assert.match(result.proof_line, /^BLOCKER: manual_dispatch_is_not_scheduled_proof/);
+    assert.equal(result.wake_gate.safe_mode.no_manual_dispatch_as_schedule, true);
+  });
+
+  it("allows a trusted UnClick fallback proof only when the schedule is stale and the heartbeat is fresh", async () => {
+    const calls = [];
+    const result = await runAutonomousRunnerFile({
+      orchestratorProof: true,
+      orchestratorProofSource: "trusted_unclick_fallback",
+      lastScheduledProofAt: "2026-05-10T01:24:03.000Z",
+      trustedFallbackSource: "unclick_heartbeat",
+      trustedFallbackAt: "2026-05-10T03:46:00.000Z",
+      trustedFallbackId: "heartbeat-03-46",
+      now: "2026-05-10T03:46:57.000Z",
+      unclickApiKey: "uc_test",
+      unclickMcpUrl: "https://unclick.test/api/mcp",
+      fetchImpl: async (url, init = {}) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return {
+          ok: true,
+          async json() {
+            return {
+              context: {
+                seat_handshake: {
+                  mode: "fresh-seat-pickup",
+                  active_decision: "Use trusted UnClick fallback if the schedule misses.",
+                  active_job: "Orchestrator proof via AutoPilotKit fallback.",
+                  recent_proof: "PASS: heartbeat fallback gate opened.",
+                  active_blocker: null,
+                  seat_freshness: ["PinballWake: Live"],
+                  source_pointers: [{ source_kind: "boardroom_message", source_id: "heartbeat-03-46" }],
+                },
+              },
+            };
+          },
+        };
+      },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(result.ok, true);
+    assert.equal(result.wake_gate.reason, "trusted_unclick_fallback_due");
+    assert.equal(result.wake_gate.scheduler_watchdog.action, "tap_orchestrator_with_trusted_unclick_fallback");
   });
 
   it("blocks empty or noisy Orchestrator seat_handshake proof packets", async () => {
@@ -1171,6 +1234,7 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.match(workflow, /github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_run' && github\.event\.workflow_run\.event == 'schedule'\)/);
     assert.doesNotMatch(workflow, /if:\s*github\.event_name == 'workflow_run'\s*$/m);
     assert.match(workflow, /AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF:\s*"true"/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF_SOURCE:.*workflow_run_schedule.*github_schedule/);
     assert.match(workflow, /node scripts\/pinballwake-autonomous-runner\.mjs/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_QUEUE_SOURCE:.*'unclick'/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_WAKE_SOURCE:.*queuepush/);
