@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: Prove Orchestrator seat handoff
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule')
         env:
           AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF: "true"
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
