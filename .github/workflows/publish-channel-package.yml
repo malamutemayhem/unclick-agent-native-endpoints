@@ -146,18 +146,27 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Force public npm access
+        if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
+        run: npm access public @unclick/channel
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Verify published version
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
         working-directory: packages/channel-plugin
         run: |
           local_ver=$(node -p "require('./package.json').version")
           echo "Published @unclick/channel@${local_ver}"
+          public_npmrc="$(mktemp)"
+          printf 'registry=https://registry.npmjs.org/\n' > "$public_npmrc"
           for i in 1 2 3 4 5; do
-            remote_ver=$(npm view @unclick/channel version 2>/dev/null || echo "")
+            remote_ver=$(NPM_CONFIG_USERCONFIG="$public_npmrc" NODE_AUTH_TOKEN= npm view @unclick/channel version --registry=https://registry.npmjs.org/ 2>/dev/null || echo "")
             if [ "$remote_ver" = "$local_ver" ]; then
-              echo "Confirmed on registry."
+              echo "Confirmed on public registry."
               exit 0
             fi
             sleep 4
           done
-          echo "Warning: registry still shows ${remote_ver}, expected ${local_ver}"
+          echo "Public registry still shows ${remote_ver:-<missing>}, expected ${local_ver}"
+          exit 1
