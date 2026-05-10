@@ -6,7 +6,8 @@
  *
  * Channel mode uses /api/memory-admin?action=admin_channel_send to queue the
  * user message, then polls admin_channel_poll until the assistant row appears.
- * Gemini mode uses admin_ai_chat which replies synchronously.
+ * AI assistant mode uses admin_ai_chat, then mirrors both turns into
+ * admin_conversation_turn_ingest so Orchestrator can search the thread.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -141,6 +142,28 @@ export default function AIChatPanel({ authToken = "" }: AIChatPanelProps) {
     return null;
   }
 
+  async function saveTurn(role: "user" | "assistant", content: string) {
+    if (!effectiveAuthToken || !sessionId || !content.trim()) return;
+    try {
+      await fetch("/api/memory-admin?action=admin_conversation_turn_ingest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${effectiveAuthToken}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          role,
+          content,
+          source_app: "orchestrator-admin-ai-chat",
+          client_session_id: sessionId,
+        }),
+      });
+    } catch {
+      // Orchestrator continuity should not block chat.
+    }
+  }
+
   // ── Send ─────────────────────────────────────────────────────────────────
   async function handleSend() {
     const text = input.trim();
@@ -186,6 +209,7 @@ export default function AIChatPanel({ authToken = "" }: AIChatPanelProps) {
         }
         setMessages((prev) => [...prev, reply]);
       } else {
+        void saveTurn("user", text);
         // admin_ai_chat expects UIMessage[] (AI SDK v6). Build the full
         // conversation as `parts`-shaped messages and stream the response.
         const history = [...messages, userMsg].filter(
@@ -283,6 +307,8 @@ export default function AIChatPanel({ authToken = "" }: AIChatPanelProps) {
               m.id === assistantId ? { ...m, content: "(no reply)" } : m,
             ),
           );
+        } else {
+          void saveTurn("assistant", acc);
         }
       }
     } catch (err) {
