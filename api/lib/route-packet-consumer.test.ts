@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { runRoutePacketConsumerDryRun, type RoutePacket } from "./route-packet-consumer";
+import {
+  normalizeRoutePacketLane,
+  runRoutePacketConsumerDryRun,
+  type RoutePacket,
+} from "./route-packet-consumer";
 
 const basePacket: RoutePacket = {
   experiment: true,
@@ -72,6 +76,43 @@ describe("route packet consumer dry run", () => {
       target_agent_id: "jobs-manager-live",
       reason: "live_worker_available",
     });
+  });
+
+  it("routes architecture health packets to Engineering Steward", () => {
+    const result = runRoutePacketConsumerDryRun({
+      packet: {
+        ...basePacket,
+        lane: "Engineering Steward",
+        item: {
+          id: "todo-engineering-steward",
+          title: "Architecture health review",
+        },
+        needed_action: "Check repo boundaries and automation reliability.",
+      },
+      visibleWorkers: [
+        { agent_id: "builder-live", lane: "Builder", status: "active" },
+        { agent_id: "engineering-steward-live", lane: "Engineering Steward", status: "active" },
+      ],
+      now: new Date("2026-05-09T00:05:00.000Z"),
+    });
+
+    expect(result.decision).toMatchObject({
+      status: "assigned",
+      target_agent_id: "engineering-steward-live",
+      reason: "live_worker_available",
+    });
+  });
+
+  it("normalizes Engineering Steward route aliases", () => {
+    expect(normalizeRoutePacketLane("Principal Engineer")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("architecture health")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("infrastructure-health")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("repo boundaries")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("data model health")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("automation reliability")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("onboarding clarity")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("cost traps")).toBe("Engineering Steward");
+    expect(normalizeRoutePacketLane("build velocity")).toBe("Engineering Steward");
   });
 
   it("holds expired packets instead of assigning stale work", () => {

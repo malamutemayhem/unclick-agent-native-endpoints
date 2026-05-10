@@ -79,6 +79,29 @@ describe("UnClick Connect worker discovery", () => {
     ]);
   });
 
+  it("maps Engineering Steward profiles into the Engineering Steward lane", () => {
+    const workers = fishbowlProfilesToVisibleWorkers(
+      [
+        {
+          agent_id: "engineering-steward-seat",
+          display_name: "Principal Engineer",
+          current_status: "Watching architecture health, repo boundaries, cost traps, and automation reliability",
+          last_seen_at: "2026-05-09T00:10:00.000Z",
+        },
+      ],
+      new Date("2026-05-09T00:30:00.000Z"),
+    );
+
+    expect(workers).toEqual([
+      {
+        agent_id: "engineering-steward-seat",
+        lane: "Engineering Steward",
+        status: "active",
+        live: true,
+      },
+    ]);
+  });
+
   it("does not treat unknown, stale, or blocked profiles as production workers", () => {
     const workers = fishbowlProfilesToVisibleWorkers(
       [

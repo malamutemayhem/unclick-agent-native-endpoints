@@ -12,4 +12,12 @@ describe("AdminWorkers", () => {
     expect(screen.getByText(/coordinator escalation/i)).toBeInTheDocument();
     expect(screen.getByText(/proof-to-done reconciliation/i)).toBeInTheDocument();
   });
+
+  it("shows Engineering Steward as an architecture health worker role", () => {
+    render(React.createElement(AdminWorkers));
+
+    expect(screen.getByText("🧱 Engineering Steward")).toBeInTheDocument();
+    expect(screen.getByText(/architecture health/i)).toBeInTheDocument();
+    expect(screen.getByText(/scaling risks/i)).toBeInTheDocument();
+  });
 });

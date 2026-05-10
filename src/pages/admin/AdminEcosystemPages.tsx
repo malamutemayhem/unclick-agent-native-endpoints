@@ -174,6 +174,7 @@ export function AdminWorkers() {
           { title: "📋 Planner", body: "Creates the exact work packet and ownership boundaries.", icon: FileText },
           { title: "📣 Messenger", body: "Sends worker packets and chases missing ACKs.", icon: MessagesSquare },
           { title: "👁️ Watcher", body: "Tracks status, proof, stale jobs, and visible changes.", icon: Eye },
+          { title: "🧱 Engineering Steward", body: "Checks architecture health, repo boundaries, data model shape, scaling risks, automation reliability, onboarding clarity, cost traps, and build velocity.", icon: Code2 },
           { title: "🚀 Publisher", body: "Confirms deployment and public release proof.", icon: Rocket },
           { title: "🩹 Repairer", body: "Fixes exact failed proof or broken workflow steps.", icon: Wrench },
           { title: "♻️ Improver", body: "Finds recurring friction and creates improvement jobs.", icon: RefreshCw },

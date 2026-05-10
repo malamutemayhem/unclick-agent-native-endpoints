@@ -98,6 +98,21 @@ function inferLaneFromText(text: string): RoutePacketLane | null {
   ) {
     return "Jobs Manager";
   }
+  if (
+    value.includes("engineering steward") ||
+    value.includes("principal engineer") ||
+    value.includes("architecture health") ||
+    value.includes("infrastructure health") ||
+    value.includes("scaling health") ||
+    value.includes("repo boundaries") ||
+    value.includes("data model health") ||
+    value.includes("automation reliability") ||
+    value.includes("onboarding clarity") ||
+    value.includes("cost traps") ||
+    value.includes("build velocity")
+  ) {
+    return "Engineering Steward";
+  }
   if (value.includes("watcher") || value.includes("relay")) {
     return "Watcher";
   }

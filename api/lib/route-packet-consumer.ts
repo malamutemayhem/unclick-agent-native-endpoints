@@ -5,7 +5,8 @@ export type RoutePacketLane =
   | "Safety"
   | "Coordinator"
   | "Jobs Manager"
-  | "Watcher";
+  | "Watcher"
+  | "Engineering Steward";
 
 export interface RoutePacket {
   experiment: boolean;
@@ -100,6 +101,29 @@ export function normalizeRoutePacketLane(input: unknown): RoutePacketLane {
     case "duplicate jobs":
     case "duplicate-jobs":
       return "Jobs Manager";
+    case "engineering steward":
+    case "engineering-steward":
+    case "principal engineer":
+    case "principal-engineer":
+    case "architecture health":
+    case "architecture-health":
+    case "infrastructure health":
+    case "infrastructure-health":
+    case "scaling health":
+    case "scaling-health":
+    case "repo boundaries":
+    case "repo-boundaries":
+    case "data model health":
+    case "data-model-health":
+    case "automation reliability":
+    case "automation-reliability":
+    case "onboarding clarity":
+    case "onboarding-clarity":
+    case "cost traps":
+    case "cost-traps":
+    case "build velocity":
+    case "build-velocity":
+      return "Engineering Steward";
     case "watcher":
     case "relay":
       return "Watcher";
