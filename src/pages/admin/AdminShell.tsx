@@ -152,7 +152,6 @@ function AutopilotNavGroup({ onLinkClick }: { onLinkClick?: () => void }) {
 const ADMIN_SUBMENU = [
   { path: "/admin/analytics",     label: "Analytics",             icon: BarChart3   },
   { path: "/admin/codebase",      label: "Codebase",              icon: Code2       },
-  { path: "/admin/orchestrator",  label: "Orchestrator",          icon: Terminal    },
   { path: "/admin/users",         label: "User Management",       icon: UsersIcon   },
   { path: "/admin/system-health", label: "System Health",         icon: HeartPulse  },
   { path: "/admin/pinballwake",   label: "PinballWake",           icon: BellRing    },
@@ -305,6 +304,7 @@ function SidebarNav({
       <SurfaceLink path="/admin/dashboard" label="Dashboard"               icon={LayoutDashboard} onClick={onLinkClick} />
       <SurfaceLink path="/admin/you"      label="You"                      icon={User}    onClick={onLinkClick} />
       <MemoryNavItem onClick={onLinkClick} />
+      <SurfaceLink path="/admin/orchestrator" label="Orchestrator"          icon={Terminal} onClick={onLinkClick} />
       <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
       <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
       <SeatsNavItem onClick={onLinkClick} />

@@ -184,10 +184,11 @@ const App = () => (
             <Route path="crews/runs"          element={<CrewsRuns />} />
             <Route path="crews/runs/:runId"  element={<CrewRun />} />
             <Route path="crews/settings"      element={<CrewsSettings />} />
+            {/* End-user visible read-only continuity surface */}
+            <Route path="orchestrator"   element={<AdminOrchestratorPage />} />
             {/* Admin-only surfaces (wrapped in RequireAdmin; also hidden from non-admin sidebar) */}
             <Route path="analytics"      element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
             <Route path="codebase"       element={<RequireAdmin><AdminCodebase /></RequireAdmin>} />
-            <Route path="orchestrator"   element={<RequireAdmin><AdminOrchestratorPage /></RequireAdmin>} />
             <Route path="users"          element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
             <Route path="system-health"  element={<RequireAdmin><AdminSystemHealth /></RequireAdmin>} />
             <Route path="pinballwake"    element={<RequireAdmin><AdminPinballWake /></RequireAdmin>} />
