@@ -642,6 +642,10 @@ import {
   groqChatCompletion, groqListModels,
 } from "./groq-tool.js";
 
+import {
+  nudgeonlyApi, nudgeonlyPolicy,
+} from "./nudgeonly-tool.js";
+
 // ─── Developer / Productivity ─────────────────────────────────────────────────
 import { githubAction } from "./github-tool.js";
 import { gitlabAction } from "./gitlab-tool.js";
@@ -9529,6 +9533,36 @@ export const ADDITIONAL_TOOLS = [
     },
   },
 
+  // ── nudgeonly-tool.ts ─────────────────────────────────────────────────────
+  {
+    name: "nudgeonly_policy",
+    description: "Return the PinballWake NudgeOnlyAPI guardrails. This is a red-lane, read-only policy for 👉Nudge: painpoint hints only, no writes, no decisions, no truth-setting.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: "nudgeonly_api",
+    description: "Run 👉Nudge, the PinballWake NudgeOnlyAPI worker, through OpenRouter free routing. Use only for painpoint hints and simple-English nudge summaries. It cannot merge, close, approve, assign ownership, mark done, or set source-of-truth state.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        api_key: { type: "string", description: "OpenRouter API key. Optional when OPENROUTER_API_KEY is set in the environment." },
+        event_text: { type: "string", description: "Noisy event, signal, handoff, or status text for 👉Nudge to classify." },
+        context: { type: "string", description: "Optional local context. Keep it small and non-secret." },
+        painpoint_hint: { type: "string", description: "Optional hint such as stale_ack, duplicate_wake, unclear_owner, noisy_thread, or missing_proof." },
+        source_id: { type: "string", description: "Optional upstream event, dispatch, PR, issue, or wake identifier for trace evidence." },
+        source_url: { type: "string", description: "Optional upstream URL for trace evidence." },
+        model: { type: "string", description: "OpenRouter model ID. Default: openrouter/free for free model routing." },
+        max_tokens: { type: "number", description: "Maximum output tokens. Hard capped at 500. Default: 260." },
+      },
+      required: ["event_text"],
+    },
+  },
+
   // ── kling-tool.ts ─────────────────────────────────────────────────────────────
   {
     name: "kling_generate_video",
@@ -13104,6 +13138,10 @@ export const ADDITIONAL_HANDLERS: Record<string, (args: Record<string, unknown>)
   // groq-tool.ts
   groq_chat_completion:    (args) => groqChatCompletion(args),
   groq_list_models:        (args) => groqListModels(args),
+
+  // nudgeonly-tool.ts
+  nudgeonly_policy:        (args) => nudgeonlyPolicy(args),
+  nudgeonly_api:           (args) => nudgeonlyApi(args),
 
   // neon-tool.ts
   neon_list_projects:      (args) => neonListProjects(args),
