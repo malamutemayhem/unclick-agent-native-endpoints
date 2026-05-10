@@ -9,6 +9,7 @@ import { test } from "node:test";
 
 import {
   resolveSweepTargets,
+  resolveSweepViewports,
   runUxPassSiteSweep,
   splitAllowedSweepTargets,
 } from "./uxpass-site-sweep.mjs";
@@ -31,6 +32,13 @@ test("resolves default site sweep targets from the public URL", () => {
   ]);
 });
 
+test("resolves desktop and mobile viewport evidence targets", () => {
+  assert.deepEqual(resolveSweepViewports(["desktop:1440x1000", "mobile:390x844"]), [
+    { name: "desktop", width: 1440, height: 1000 },
+    { name: "mobile", width: 390, height: 844 },
+  ]);
+});
+
 test("returns a blocked receipt when no token is available", async () => {
   const receipt = await runUxPassSiteSweep({
     publicUrl: "https://unclick.world",
@@ -45,6 +53,10 @@ test("returns a blocked receipt when no token is available", async () => {
   assert.equal(receipt.targets.length, 2);
   assert.equal(receipt.action_needed.length, 2);
   assert.match(receipt.summary, /no token/i);
+  assert.equal(receipt.xpass_gate_result.status, "blocked");
+  assert.equal(receipt.targets[0].proof.kind, "safe_fallback_receipt");
+  assert.equal(receipt.targets[0].evidence.viewports.length, 2);
+  assert.equal(receipt.targets[0].evidence.viewports[0].capture_status, "skipped_missing_credential");
 });
 
 test("runs every target through the UXPass API and writes scoped proof", async () => {
@@ -89,6 +101,9 @@ test("runs every target through the UXPass API and writes scoped proof", async (
       targetUrl: "https://unclick.world/",
       target_sha: "head-sha",
     });
+    assert.equal(receipt.xpass_gate_result.status, "passed");
+    assert.equal(receipt.targets[0].route_target.path, "/");
+    assert.equal(receipt.targets[0].evidence.viewports.length, 2);
   } finally {
     await close(server);
   }
@@ -213,6 +228,43 @@ test("fails the sweep when a target is below the UX score floor", async () => {
   }
 });
 
+test("fails the sweep when UXPass reports console or layout issues", async () => {
+  const server = http.createServer((_req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      run_id: "run-issues",
+      status: "complete",
+      ux_score: 95,
+      console_issues: [{ severity: "error", message: "Hydration mismatch", viewport: "desktop" }],
+      layout_issues: [{ type: "overflow", message: "Mobile header overflows", viewport: "mobile" }],
+    }));
+  });
+
+  try {
+    await listen(server);
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+
+    const receipt = await runUxPassSiteSweep({
+      apiBase: `http://127.0.0.1:${address.port}`,
+      publicUrl: "https://unclick.world",
+      urls: ["/"],
+      token: "ux-token",
+      allowedOrigins: ["https://unclick.world", `http://127.0.0.1:${address.port}`],
+    });
+
+    assert.equal(receipt.status, "failing");
+    assert.equal(receipt.xpass_gate_result.status, "failed");
+    assert.match(receipt.targets[0].summary, /console issue/i);
+    assert.equal(receipt.targets[0].evidence.console_issues.length, 1);
+    assert.equal(receipt.targets[0].evidence.layout_issues.length, 1);
+    assert.equal(receipt.targets[0].evidence.viewports[0].console_issues.length, 1);
+    assert.equal(receipt.targets[0].evidence.viewports[1].layout_issues.length, 1);
+  } finally {
+    await close(server);
+  }
+});
+
 test("CLI dry-run writes the sweep receipt to disk", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "uxpass-site-sweep-"));
   const output = path.join(dir, "receipt.json");
@@ -233,6 +285,7 @@ test("CLI dry-run writes the sweep receipt to disk", async () => {
     assert.equal(receipt.status, "passing");
     assert.equal(receipt.target_sha, "dry-sha");
     assert.equal(receipt.targets.length, 1);
+    assert.equal(receipt.xpass_gate_result.status, "passed");
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
