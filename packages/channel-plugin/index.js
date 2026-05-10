@@ -35,7 +35,13 @@ import readline from "node:readline";
 import { apiFetchJson } from "./http.js";
 import { createHeartbeatGate } from "./heartbeat-gate.js";
 import { readTimingConfig } from "./config.js";
-import { saveConversationTurn, saveConversationTurnTool } from "./orchestrator-turns.js";
+import {
+  getReceiptFirstTetherLadder,
+  runTetherSelfCheck,
+  saveConversationTurn,
+  saveConversationTurnTool,
+  tetherSelfCheckTool,
+} from "./orchestrator-turns.js";
 
 const API_BASE       = process.env.UNCLICK_API_BASE     || "https://unclick.world";
 const API_KEY        = process.env.UNCLICK_API_KEY      || "";
@@ -141,6 +147,7 @@ async function handleRpcLine(line) {
             },
           },
           saveConversationTurnTool,
+          tetherSelfCheckTool,
         ],
       },
     });
@@ -202,6 +209,50 @@ async function handleRpcLine(line) {
               {
                 type: "text",
                 text: `UNTETHERED: could not save Orchestrator turn: ${message}`,
+              },
+            ],
+          },
+        });
+      }
+      return;
+    }
+    if (name === "unclick_orchestrator_tether_check") {
+      try {
+        const result = await runTetherSelfCheck(apiFetch, args);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        writeRpc({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ok: false,
+                    status: "UNTETHERED",
+                    missing: message,
+                    guidance:
+                      "Partial capture still counts: save any safe status/proof you can, then reconnect or update the missing bridge.",
+                    ladder: getReceiptFirstTetherLadder(),
+                  },
+                  null,
+                  2
+                ),
               },
             ],
           },

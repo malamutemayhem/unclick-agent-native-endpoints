@@ -84,18 +84,20 @@ export const MCP_SERVER_INSTRUCTIONS = [
   "Never ask the user to 'catch you up' -- load first, then act.",
   "",
   "ORCHESTRATOR TETHER CONTRACT:",
-  "If you are a subscription or tethered AI seat, you must make each real",
-  "human/assistant turn land in Orchestrator continuity. Try the shortest",
-  "safe path that works, in this order:",
-  "  1. MCP tool path: call `save_conversation_turn` after accepted human",
-  "     turns and after assistant replies the client exposes.",
-  "  2. API path: call `admin_conversation_turn_ingest` with the UnClick API",
+  "Receipt-first rule: when a live chat message or heartbeat wakes you,",
+  "first save that accepted turn into Orchestrator continuity and keep the",
+  "returned receipt id. Work from most reliable to least:",
+  "  1. Live chat wake: save the accepted human turn immediately.",
+  "  2. MCP path: call `save_conversation_turn`.",
+  "  3. Channel path: call `unclick_save_conversation_turn` if exposed.",
+  "  4. API path: call `admin_conversation_turn_ingest` with the UnClick API",
   "     key in Authorization only. Never print or log secrets.",
-  "  3. Health path: if neither save path is available, say `UNTETHERED:`",
-  "     and name the missing capability instead of silently continuing.",
-  "  4. Builder path: if you can build, create the smallest safe turn-save",
-  "     hook for the client and prove it with Orchestrator search.",
-  "First real Orchestrator proof wins. Extra successful paths are duplicate",
+  "  5. Self-check path: save a harmless synthetic turn and verify",
+  "     Orchestrator search can find it.",
+  "  6. Partial capture path: save any safe status/proof you still can.",
+  "  7. Fail-loud path: say `UNTETHERED:` with captured receipt ids plus",
+  "     the missing capability instead of silently continuing.",
+  "First real Orchestrator receipt wins. Extra successful paths are duplicate",
   "proof to consolidate, not blockers.",
   "Skip or redact secrets, API keys, passwords, one-time codes, and private",
   "credentials before saving any turn.",
@@ -442,7 +444,7 @@ export const VISIBLE_TOOLS = [
     title: "Save conversation turn",
     description:
       "Saves one human, assistant, system, or tool turn into UnClick conversation history so Orchestrator continuity can show and search it. " +
-      "Tethered seats should treat this as the primary proof path after each accepted subscription chat human turn and after each assistant reply when the client can call tools. " +
+      "Tethered seats should treat this as the primary receipt path after each accepted subscription chat human turn and after each assistant reply when the client can call tools. " +
       "If this tool is unavailable, fail loud with UNTETHERED or use the documented API fallback instead of silently continuing. " +
       "Use a stable session_id for the thread. Do not store secrets, API keys, passwords, one-time codes, or private credentials.",
     inputSchema: {

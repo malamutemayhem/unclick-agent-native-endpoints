@@ -18,10 +18,24 @@ your local Claude Code session so you do not need a separate AI API key.
 The plugin also exposes `unclick_save_conversation_turn`, a small fallback
 tool for Orchestrator continuity. Use it when a seat is running through this
 channel but the normal UnClick MCP `save_conversation_turn` tool is not
-available. It saves one external chat turn through
+available. The receipt-first rule is: when a real chat message wakes the seat,
+save that accepted turn first and keep the returned `turn_id` as the receipt.
+It saves one external chat turn through
 `admin_conversation_turn_ingest`, so `/admin/orchestrator` can show and search
 the turn. If neither save path is available, the seat should say `UNTETHERED`
-instead of silently continuing.
+with any partial receipt it captured instead of silently continuing.
+
+The plugin also exposes `unclick_orchestrator_tether_check`. Call it on startup
+or heartbeat to save a harmless synthetic self-check turn and confirm
+`/admin/orchestrator` search can find it. The backup order is:
+
+1. save the live chat wake/message first;
+2. use the UnClick MCP `save_conversation_turn` tool;
+3. use this channel plugin's `unclick_save_conversation_turn` tool;
+4. use the `admin_conversation_turn_ingest` API directly;
+5. run `unclick_orchestrator_tether_check`;
+6. save any safe partial status/proof still available;
+7. say `UNTETHERED` with the missing path and any captured receipt ids.
 
 Every 30 seconds the plugin POSTs a heartbeat to `admin_channel_heartbeat`
 so the admin UI knows the channel is online.

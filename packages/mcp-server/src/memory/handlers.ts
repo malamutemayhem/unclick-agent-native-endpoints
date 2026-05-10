@@ -375,13 +375,13 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
 
   async log_conversation(args) {
     const db = await getBackend();
-    await db.logConversation({
+    const receipt = await db.logConversation({
       session_id: str(args.session_id),
       role: str(args.role),
       content: str(args.content),
       has_code: bool(args.has_code),
     });
-    return { logged: true };
+    return receipt;
   },
 
   async get_conversation_detail(args) {

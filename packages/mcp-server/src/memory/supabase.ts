@@ -686,9 +686,9 @@ export class SupabaseBackend implements MemoryBackend {
     return String(data);
   }
 
-  async logConversation(data: ConversationInput): Promise<void> {
+  async logConversation(data: ConversationInput) {
     await this.enforceCaps("general");
-    const { error } = await this.client
+    const { data: row, error } = await this.client
       .from(this.tables.conversation_log)
       .insert(
         this.withTenancy({
@@ -697,8 +697,16 @@ export class SupabaseBackend implements MemoryBackend {
           content: truncate(data.content),
           has_code: data.has_code,
         })
-      );
+      )
+      .select("id, session_id, role")
+      .single();
     if (error) throw pgError("logConversation insert", error);
+    return {
+      logged: true as const,
+      session_id: String(row.session_id),
+      role: String(row.role),
+      receipt_id: String(row.id),
+    };
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {

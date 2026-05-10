@@ -330,10 +330,11 @@ export class LocalBackend implements MemoryBackend {
     return newId;
   }
 
-  async logConversation(data: ConversationInput): Promise<void> {
+  async logConversation(data: ConversationInput) {
     const rows = readTable<ConversationRow>("conversation_log");
+    const id = uuid();
     rows.push({
-      id: uuid(),
+      id,
       session_id: data.session_id,
       role: data.role,
       content: data.content,
@@ -341,6 +342,12 @@ export class LocalBackend implements MemoryBackend {
       created_at: now(),
     });
     writeTable("conversation_log", rows);
+    return {
+      logged: true as const,
+      session_id: data.session_id,
+      role: data.role,
+      receipt_id: id,
+    };
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {

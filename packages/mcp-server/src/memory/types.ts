@@ -44,6 +44,13 @@ export interface ConversationInput {
   has_code: boolean;
 }
 
+export interface ConversationReceipt {
+  logged: true;
+  session_id: string;
+  role: string;
+  receipt_id: string;
+}
+
 export interface CodeInput {
   session_id: string;
   language: string;
@@ -89,7 +96,7 @@ export interface MemoryBackend {
   supersedeFact(oldId: string, newText: string, category?: string, confidence?: number): Promise<string>;
 
   /** Log a conversation message. */
-  logConversation(data: ConversationInput): Promise<void>;
+  logConversation(data: ConversationInput): Promise<ConversationReceipt>;
 
   /** Get full conversation log for a session. */
   getConversationDetail(sessionId: string): Promise<unknown>;
