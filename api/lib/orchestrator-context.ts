@@ -638,6 +638,9 @@ function uniqueSourcePointers(items: OrchestratorRollingSnapshotItem[]): Orchest
 function isSnapshotNoise(event: OrchestratorContinuityEvent): boolean {
   const summary = event.summary.toLowerCase();
   const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  if (event.kind === "decision" && !tags.includes("heartbeat")) {
+    return false;
+  }
   if (event.kind === "proof" && !tags.includes("heartbeat") && !summary.startsWith("heartbeat result:")) {
     return false;
   }
@@ -791,16 +794,44 @@ function signalToEvent(signal: OrchestratorSignalRow): OrchestratorContinuityEve
 }
 
 function sessionToEvent(session: OrchestratorSessionRow): OrchestratorContinuityEvent {
+  const decisionSummary = sessionDecisionSummary(session.decisions);
+  const summary = decisionSummary
+    ? compactText(`Decision memory: ${decisionSummary}. Session: ${session.summary}`, 240)
+    : compactText(session.summary, 240);
+
   return {
     source_kind: "session_summary",
     source_id: session.session_id,
     deep_link: `/admin/memory?session_id=${encodeURIComponent(session.session_id)}`,
     created_at: session.created_at,
-    kind: "context",
+    kind: decisionSummary ? "decision" : "context",
     role: session.platform ?? null,
-    summary: compactText(session.summary, 240),
+    summary,
     tags: ["session", ...(session.topics ?? []).slice(0, 4)],
   };
+}
+
+function sessionDecisionSummary(decisions: unknown): string {
+  const values = Array.isArray(decisions)
+    ? decisions
+    : typeof decisions === "string" && decisions.trim().startsWith("[")
+      ? parseJsonArray(decisions)
+      : [];
+
+  return values
+    .map((value) => compactText(typeof value === "string" ? value : safeJson(value), 140))
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("; ");
+}
+
+function parseJsonArray(value: string): unknown[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function conversationTurnToEvent(turn: OrchestratorConversationTurnRow): OrchestratorContinuityEvent {

@@ -438,4 +438,57 @@ describe("orchestrator context", () => {
       expect.arrayContaining(["msg-decision", "todo-orchestrator-proof", "msg-proof", "signal-blocker"]),
     );
   });
+
+  it("uses saved session decisions when recent boardroom chatter has no decision event", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-10T04:15:00.000Z",
+      profiles: [],
+      messages: [
+        {
+          id: "msg-proof",
+          author_agent_id: "pinballwake-autonomous-runner",
+          text: "PASS: AutoPilotKit fallback gate shipped; proof: PR #659.",
+          tags: ["proof"],
+          created_at: "2026-05-10T04:00:00.000Z",
+        },
+      ],
+      todos: [
+        {
+          id: "todo-active",
+          title: "Orchestrator scheduled proof",
+          description: "Keep compact handoff proof readable.",
+          status: "open",
+          priority: "urgent",
+          created_by_agent_id: "chatgpt-codex-seat",
+          created_at: "2026-05-10T03:50:00.000Z",
+          updated_at: "2026-05-10T04:10:00.000Z",
+        },
+      ],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [
+        {
+          id: "session-row",
+          session_id: "session-orchestrator-fallback",
+          platform: "codex",
+          summary: "AutoPilotKit scheduler fallback shipped and awaits scheduled proof.",
+          decisions: [
+            "Use UTC for proof math and allow trusted UnClick heartbeat fallback only when GitHub schedule evidence is stale.",
+          ],
+          topics: ["orchestrator", "autopilotkit"],
+          created_at: "2026-05-10T04:01:00.000Z",
+        },
+      ],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.rolling_snapshot.promoted_decisions[0].source_id).toBe("session-orchestrator-fallback");
+    expect(context.seat_handshake.active_decision).toContain("Use UTC for proof math");
+    expect(context.seat_handshake.source_pointers.map((pointer) => pointer.source_id)).toEqual(
+      expect.arrayContaining(["session-orchestrator-fallback", "todo-active", "msg-proof"]),
+    );
+  });
 });
