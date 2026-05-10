@@ -1,6 +1,6 @@
 {
   "name": "@unclick/channel",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "UnClick Channel plugin for Claude Code - routes admin chat through your Claude Code session so no separate AI key is needed.",
   "license": "MIT",
   "type": "module",
