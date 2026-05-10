@@ -32,6 +32,20 @@ Memory belongs to the user, not the harness. It should survive model upgrades, h
 6. **Tier-based caps and decay.** Free tier: 50 MB and 5,000 facts with basic layers. Pro tier removes caps and enables nightly extraction plus hot/warm/cold decay.
 7. **Data portability as a first-class feature.** `admin_export_all` returns the user's full memory in a portable shape. "Bring your own database anytime" is the trust anchor.
 
+## 2026-05 next-generation direction
+
+The next Memory phase keeps Postgres and Supabase as the durable state layer, then adds compact, source-linked context above it. See [Memory Direction Next-Gen Brief](../research/memory-direction-next-gen.md).
+
+Build priorities:
+
+- Profile Card: compact current-state context for fresh AI Seats.
+- Library Snapshots: taxonomy shelves that summarize canonical docs while linking back to raw sources.
+- Provenance Trail: receipts for facts, summaries, documents, conversation chunks, code snapshots, and exports.
+- Cheap-First Retrieval: business context and deterministic summaries before semantic or graph retrieval.
+- Data Island Export: portable memory packages with snapshots, receipts, raw-source manifests, and redaction reports.
+
+The guiding rule is that Memory is product state with provenance. Vector and graph features can improve retrieval, but they should not become an uninspectable storage layer.
+
 ## Success metrics
 
 - **Session-two recall rate.** Percentage of users whose second session calls `load_memory`. Ceiling: 100% via auto-load in supported harnesses.
