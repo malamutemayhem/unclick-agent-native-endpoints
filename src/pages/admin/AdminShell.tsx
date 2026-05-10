@@ -9,7 +9,7 @@
  * Each surface is extractable as a native app later.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentType, type SVGProps } from "react";
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
 import AdminSearchBar from "@/components/admin/AdminSearchBar";
@@ -63,7 +63,7 @@ import {
 function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
   path: string;
   label: string;
-  icon: typeof User;
+  icon: ComponentType<{ className?: string }>;
   onClick?: () => void;
   badge?: number;
 }) {
@@ -87,6 +87,31 @@ function SurfaceLink({ path, label, icon: Icon, onClick, badge }: {
         </span>
       )}
     </NavLink>
+  );
+}
+
+function SeatsCascadeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="7" y="4" width="13" height="10" rx="2" />
+      <path d="M11 14v2" />
+      <path d="M9 16h6" />
+      <rect x="3" y="8" width="13" height="10" rx="2" />
+      <path d="M7.5 12.5h.01" />
+      <path d="M11.5 12.5h.01" />
+      <path d="M8 15h3" />
+      <path d="M8 18v2" />
+      <path d="M6 20h6" />
+    </svg>
   );
 }
 
@@ -245,7 +270,7 @@ function SeatsNavItem({ onClick }: { onClick?: () => void }) {
 
   return (
     <div>
-      <SurfaceLink path="/admin/agents" label="Seats" icon={Bot} onClick={onClick} />
+      <SurfaceLink path="/admin/agents" label="Seats" icon={SeatsCascadeIcon} onClick={onClick} />
       {isSeats && (
         <div className="ml-7 mt-0.5 flex flex-col gap-0.5">
           <Link
