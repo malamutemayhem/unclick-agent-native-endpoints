@@ -7926,7 +7926,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               ? req.query.q
               : "";
         const searchQuery = rawSearch.replace(/\s+/g, " ").trim().slice(0, 100);
-        const searchPattern = searchQuery ? `%${searchQuery.replace(/[%_]/g, "\\$&")}%` : "";
+        const searchPattern = searchQuery ? `%${searchQuery.replace(/[%_\\]/g, "\\$&")}%` : "";
+        const searchUuid = searchQuery.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] ?? null;
+        const turnSearchFilter = searchPattern
+          ? [
+              `content.ilike.${searchPattern}`,
+              `session_id.ilike.${searchPattern}`,
+              ...(searchUuid ? [`id.eq.${searchUuid}`] : []),
+            ].join(",")
+          : "";
         const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), searchQuery ? 200 : 120);
         const smallerLimit = searchQuery ? limit : Math.min(limit, 40);
 
@@ -7979,7 +7987,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", apiKeyHash)
           .order("created_at", { ascending: false })
           .limit(smallerLimit);
-        if (searchPattern) conversationTurnsQuery = conversationTurnsQuery.ilike("content", searchPattern);
+        if (turnSearchFilter) conversationTurnsQuery = conversationTurnsQuery.or(turnSearchFilter);
 
         let chatMessagesQuery = supabase
           .from("chat_messages")
@@ -7987,7 +7995,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("api_key_hash", apiKeyHash)
           .order("created_at", { ascending: false })
           .limit(smallerLimit);
-        if (searchPattern) chatMessagesQuery = chatMessagesQuery.ilike("content", searchPattern);
+        if (turnSearchFilter) chatMessagesQuery = chatMessagesQuery.or(turnSearchFilter);
 
         const [
           profilesResult,
