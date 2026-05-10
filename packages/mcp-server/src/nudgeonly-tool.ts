@@ -127,6 +127,51 @@ const ORCHESTRATOR_ISSUE_MAP = [
   },
 ] as const;
 
+const WORKER_NUDGE_MAP = [
+  {
+    worker: "Continuous Improver",
+    watches: ["quiet improvement loop", "no recent improvement proposal", "repeated same bottleneck"],
+    bucket: "unclear_owner",
+    nudge: "Ask for the next tiny improvement candidate and expected proof, not a broad redesign.",
+    verifier: "Check for a recent improvement proposal, experiment result, or shipped follow-up.",
+  },
+  {
+    worker: "Job Manager",
+    watches: ["blockers without active jobs", "jobs without next action", "orphaned todos"],
+    bucket: "unclear_owner",
+    nudge: "Ask for the owning job, next safe action, and expected receipt.",
+    verifier: "Compare active blockers against active jobs and assigned owner fields.",
+  },
+  {
+    worker: "Reviewer",
+    watches: ["ready PRs without review ACK", "stale review handoff", "review requested but no receipt"],
+    bucket: "stale_ack",
+    nudge: "Ask for review ACK or a clear blocker receipt.",
+    verifier: "Run WakePass ACK check against the PR/review dispatch.",
+  },
+  {
+    worker: "Builder",
+    watches: ["implementation started but no commit", "claimed done without proof", "missing PR"],
+    bucket: "missing_proof",
+    nudge: "Ask for commit, PR, run ID, or blocker receipt.",
+    verifier: "Check linked commit, branch, PR, or test result.",
+  },
+  {
+    worker: "Heartbeat Seat",
+    watches: ["repeated healthy pulses", "heartbeat noise", "missing PASS/BLOCKER receipt"],
+    bucket: "noisy_thread",
+    nudge: "Ask for only the material diff or a compact PASS/BLOCKER receipt.",
+    verifier: "Compare latest heartbeat content against prior state and count material changes.",
+  },
+  {
+    worker: "Agent Observability",
+    watches: ["unexplained worker silence", "missing decision trace", "no reliability trend"],
+    bucket: "missing_proof",
+    nudge: "Ask for the trace ID, owner, decision, and reliability proof.",
+    verifier: "Check observability logs for decision trace, receipt, and worker status.",
+  },
+] as const;
+
 type OpenRouterRole = "system" | "user" | "assistant";
 
 interface OpenRouterMessage {
@@ -159,6 +204,7 @@ export const NUDGEONLY_POLICY = {
   painpoint_catalog: PAINPOINT_CATALOG,
   rollout_surfaces: ROLLOUT_SURFACES,
   orchestrator_issue_map: ORCHESTRATOR_ISSUE_MAP,
+  worker_nudge_map: WORKER_NUDGE_MAP,
   tested_proof: {
     live_sweep: "12 cases, 0 API errors, 12 useful traceable outputs, 12/12 signal matches, 12/12 painpoint bucket matches, 0 false positives on healthy control.",
     commits: ["8116ae9", "1221b7a", "6d35130"],
