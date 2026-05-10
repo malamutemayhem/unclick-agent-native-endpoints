@@ -16,6 +16,32 @@ describe("NudgeOnlyAPI policy", () => {
       lane: "red_nudge",
       authority: "nudge_only_no_write_no_truth",
       default_model: "liquid/lfm-2.5-1.2b-instruct:free",
+      rollout_status: "official",
+    });
+  });
+
+  it("publishes the official system rollout surfaces and painpoint catalogue", async () => {
+    await expect(nudgeonlyPolicy({})).resolves.toMatchObject({
+      rollout_surfaces: expect.arrayContaining([
+        expect.objectContaining({ surface: "PinballWake/WakePass" }),
+        expect.objectContaining({ surface: "Orchestrator state cards" }),
+        expect.objectContaining({ surface: "Heartbeat and Signals" }),
+        expect.objectContaining({ surface: "Agent Observability" }),
+      ]),
+      painpoint_catalog: expect.arrayContaining([
+        expect.objectContaining({ type: "stale_ack" }),
+        expect.objectContaining({ type: "duplicate_wake" }),
+        expect.objectContaining({ type: "unclear_owner" }),
+        expect.objectContaining({ type: "missing_proof" }),
+        expect.objectContaining({ type: "noisy_thread" }),
+        expect.objectContaining({ type: "none" }),
+      ]),
+      orchestrator_issue_map: expect.arrayContaining([
+        expect.objectContaining({ bucket: "noisy_thread" }),
+        expect.objectContaining({ bucket: "unclear_owner" }),
+        expect.objectContaining({ bucket: "missing_proof" }),
+        expect.objectContaining({ bucket: "stale_ack" }),
+      ]),
     });
   });
 

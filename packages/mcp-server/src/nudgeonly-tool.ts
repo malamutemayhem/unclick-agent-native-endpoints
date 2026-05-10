@@ -16,6 +16,117 @@ const PAINPOINT_TYPES = [
   "none",
 ] as const;
 
+const PAINPOINT_CATALOG = [
+  {
+    type: "stale_ack",
+    label: "Stale ACK",
+    watch: ["WakePass", "dispatches", "PR review handoffs", "quiet seats"],
+    cue: "A wake, handoff, or review is visible but the expected acknowledgement is stale or absent.",
+    verifier: "Run the WakePass ACK verifier against the source dispatch or PR.",
+  },
+  {
+    type: "duplicate_wake",
+    label: "Duplicate Wake",
+    watch: ["WakePass", "dispatches", "issues", "PRs"],
+    cue: "Two or more wake records point at the same target, owner, and unresolved action.",
+    verifier: "Compare source IDs, target URLs, owners, and timestamps before consolidating.",
+  },
+  {
+    type: "unclear_owner",
+    label: "Unclear Owner",
+    watch: ["Orchestrator handoff", "active jobs", "seat status", "Fishbowl"],
+    cue: "The system can see a blocker, but the next owner or next receipt is not obvious.",
+    verifier: "Run an owner resolver or inspect the latest promoted handoff receipt.",
+  },
+  {
+    type: "missing_proof",
+    label: "Missing Proof",
+    watch: ["completed WakePass", "done messages", "PR closure", "session summaries"],
+    cue: "A task claims done/completed, but the compact state lacks a proof pointer.",
+    verifier: "Check for a linked PR, commit, receipt ID, run ID, or source pointer.",
+  },
+  {
+    type: "noisy_thread",
+    label: "Noisy Thread",
+    watch: ["heartbeats", "admin Orchestrator", "conversation turns", "Fishbowl"],
+    cue: "Repeated low-signal messages hide the actual current state or next action.",
+    verifier: "Count repeated heartbeats or near-duplicate turns, then collapse to the latest material state.",
+  },
+  {
+    type: "none",
+    label: "Healthy Control",
+    watch: ["completed events", "fresh receipts"],
+    cue: "The event is healthy, completed, or informational and has no explicit painpoint signal.",
+    verifier: "Do not alert. Keep it as a control case for false-positive checks.",
+  },
+] as const;
+
+const ROLLOUT_SURFACES = [
+  {
+    surface: "PinballWake/WakePass",
+    use: "Flag stale ACKs, duplicate wakes, and missing proof before they become invisible queue drag.",
+  },
+  {
+    surface: "Orchestrator state cards",
+    use: "Turn blocker summaries into plain-English painpoint nudges with trace IDs.",
+  },
+  {
+    surface: "Heartbeat and Signals",
+    use: "Separate info-only pulse noise from action-needed painpoints.",
+  },
+  {
+    surface: "Fishbowl and Boardroom handoffs",
+    use: "Spot unclear owners, repeated asks, and handoff loops without assigning authority.",
+  },
+  {
+    surface: "Agent Observability",
+    use: "Feed trend counts for stale ACKs, duplicate wakes, missing proof, and noisy threads.",
+  },
+  {
+    surface: "Admin Orchestrator UX",
+    use: "Show the nudge as red-lane evidence below the source message, not as source-of-truth state.",
+  },
+] as const;
+
+const ORCHESTRATOR_ISSUE_MAP = [
+  {
+    issue: "Properties overload or hard-to-read status blocks",
+    bucket: "noisy_thread",
+    nudge: "Collapse secondary metadata and keep the main chat message as the first read.",
+    verifier: "Count visible metadata fields per message and compare against the primary message length.",
+  },
+  {
+    issue: "Simple-English summary is too short and loses context",
+    bucket: "missing_proof",
+    nudge: "Ask for the source receipt, PR, commit, or dispatch pointer to stay visible with the summary.",
+    verifier: "Check that every short summary carries a source pointer or proof ID.",
+  },
+  {
+    issue: "Blockers visible but no active owning job",
+    bucket: "unclear_owner",
+    nudge: "Surface the next owner and next expected receipt beside the blocker.",
+    verifier: "Compare active blocker count against active job and owner fields.",
+  },
+  {
+    issue: "Repeated heartbeat noise hides useful work",
+    bucket: "noisy_thread",
+    nudge: "Collapse repeated heartbeat receipts into a latest-state line unless action is needed.",
+    verifier: "Count repeated heartbeat turns without a material status change.",
+  },
+  {
+    issue: "WakePass or review handoff is stale",
+    bucket: "stale_ack",
+    nudge: "Flag the stale handoff as a painpoint, then run the WakePass ACK verifier.",
+    verifier: "Check latest ACK timestamp against the handoff TTL.",
+  },
+  {
+    issue: "Done/completed state lacks proof",
+    bucket: "missing_proof",
+    nudge: "Keep the done state visually quiet until a proof pointer exists.",
+    verifier: "Check for a commit, PR, run ID, receipt ID, or source pointer.",
+  },
+] as const;
+
 type OpenRouterRole = "system" | "user" | "assistant";
 
 interface OpenRouterMessage {
@@ -43,6 +154,15 @@ export const NUDGEONLY_POLICY = {
   lane: "red_nudge",
   authority: "nudge_only_no_write_no_truth",
   default_model: DEFAULT_MODEL,
+  rollout_status: "official",
+  rollout_rule: "Run on candidate painpoints only; never run as a decision maker or completion source.",
+  painpoint_catalog: PAINPOINT_CATALOG,
+  rollout_surfaces: ROLLOUT_SURFACES,
+  orchestrator_issue_map: ORCHESTRATOR_ISSUE_MAP,
+  tested_proof: {
+    live_sweep: "12 cases, 0 API errors, 12 useful traceable outputs, 12/12 signal matches, 12/12 painpoint bucket matches, 0 false positives on healthy control.",
+    commits: ["8116ae9", "1221b7a", "6d35130"],
+  },
   allowed_actions: [
     "summarise noisy events",
     "flag possible painpoints",

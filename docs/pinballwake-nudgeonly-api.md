@@ -4,6 +4,8 @@ NudgeOnlyAPI is the red nudge lane inside the PinballWake ecosystem.
 
 Its worker label is `👉Nudge`. Its code name is `NudgeOnly`.
 
+Rollout status: official.
+
 ## Purpose
 
 `👉Nudge` uses cheap/free OpenRouter routing for painpoint hints only. It is designed to make stuck or noisy handoffs stand out without giving the model authority over important work.
@@ -16,6 +18,30 @@ Use it for:
 - missing proof hints
 - noisy thread summaries
 - simple-English status rewrites
+
+Official rollout surfaces:
+
+- PinballWake/WakePass: stale ACKs, duplicate wakes, missing proof.
+- Orchestrator state cards: blocker summaries and active state mismatch.
+- Heartbeat and Signals: info-only pulse noise versus action-needed pain.
+- Fishbowl and Boardroom handoffs: unclear owner and repeated ask loops.
+- Agent Observability: trend counts for stuck handoffs and proof debt.
+- Admin Orchestrator UX: show red-lane nudge evidence below the source message.
+
+## Orchestrator Issues
+
+NudgeOnlyAPI should help with Orchestrator issues by marking the painpoint on the source message or state card. It should not rewrite truth, decide ownership, or hide evidence.
+
+Use these mappings:
+
+- Properties overload or hard-to-read status blocks -> `noisy_thread`.
+- Simple-English summary is too short and loses context -> `missing_proof`.
+- Blockers visible but no active owning job -> `unclear_owner`.
+- Repeated heartbeat noise hides useful work -> `noisy_thread`.
+- WakePass or review handoff is stale -> `stale_ack`.
+- Done/completed state lacks proof -> `missing_proof`.
+
+The UI should treat the nudge as a red-lane annotation: useful evidence, not the final answer.
 
 Do not use it for:
 
@@ -45,6 +71,17 @@ Every nudge result includes trace evidence so the lane can prove whether it is h
 - `evidence.verifier_rule`: the rule that a deterministic check or trusted lane must confirm before action.
 
 Working means fewer stale ACKs, duplicate wakes, unclear owner handoffs, and missing proof loops. A nudge is not considered a win until a trusted verifier or lane confirms the suggested check.
+
+Live proof from rollout testing:
+
+- 12 system-wide painpoint cases.
+- 0 OpenRouter/API errors.
+- 12 useful traceable outputs.
+- 12/12 signal matches.
+- 12/12 painpoint bucket matches.
+- 0 false positives on the healthy completed control.
+
+The first catalogue is based on the prior bottlenecks Chris called out: stale WakePass ACKs, duplicate wakes, unclear ownership, missing proof, heartbeat noise, quiet/liveness drift, and blockers visible without an active owning job.
 
 ## MCP Tools
 
