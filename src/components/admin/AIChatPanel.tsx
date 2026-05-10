@@ -29,8 +29,12 @@ interface PendingNotice {
   message: string;
 }
 
-export default function AIChatPanel() {
-  const [apiKey, setApiKey] = useState<string>("");
+interface AIChatPanelProps {
+  authToken?: string;
+}
+
+export default function AIChatPanel({ authToken = "" }: AIChatPanelProps) {
+  const [storedApiKey, setStoredApiKey] = useState<string>("");
   const [sessionId, setSessionId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>("");
@@ -42,10 +46,14 @@ export default function AIChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const channelActive = channelInfo?.channel_active === true;
+  const effectiveAuthToken = authToken || storedApiKey;
+  const rawApiKey = storedApiKey.startsWith("uc_") || storedApiKey.startsWith("agt_")
+    ? storedApiKey
+    : "";
 
   useEffect(() => {
     try {
-      setApiKey(localStorage.getItem(API_KEY_STORAGE) ?? "");
+      setStoredApiKey(localStorage.getItem(API_KEY_STORAGE) ?? "");
       const existing = localStorage.getItem(SESSION_STORAGE_KEY);
       if (existing) {
         setSessionId(existing);
@@ -61,10 +69,10 @@ export default function AIChatPanel() {
 
   // ── Channel presence polling ─────────────────────────────────────────────
   const checkChannel = useCallback(async () => {
-    if (!apiKey) return;
+    if (!effectiveAuthToken) return;
     try {
       const res = await fetch("/api/memory-admin?action=admin_channel_status", {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { Authorization: `Bearer ${effectiveAuthToken}` },
       });
       if (!res.ok) return;
       const data = (await res.json()) as ChannelStatus;
@@ -90,14 +98,14 @@ export default function AIChatPanel() {
     } catch {
       // network hiccup, ignore
     }
-  }, [apiKey]);
+  }, [effectiveAuthToken]);
 
   useEffect(() => {
-    if (!apiKey) return;
+    if (!effectiveAuthToken) return;
     checkChannel();
     const id = window.setInterval(checkChannel, CHANNEL_STATUS_POLL_MS);
     return () => window.clearInterval(id);
-  }, [apiKey, checkChannel]);
+  }, [effectiveAuthToken, checkChannel]);
 
   // ── Scroll on new messages ───────────────────────────────────────────────
   useEffect(() => {
@@ -118,7 +126,7 @@ export default function AIChatPanel() {
           after: afterIso,
         }).toString();
         const res = await fetch(`/api/memory-admin?${qs}`, {
-          headers: { Authorization: `Bearer ${apiKey}` },
+          headers: { Authorization: `Bearer ${effectiveAuthToken}` },
         });
         if (!res.ok) continue;
         const body = (await res.json()) as { data: ChatMessage[] };
@@ -136,7 +144,7 @@ export default function AIChatPanel() {
   // ── Send ─────────────────────────────────────────────────────────────────
   async function handleSend() {
     const text = input.trim();
-    if (!text || sending || !apiKey || !sessionId) return;
+    if (!text || sending || !effectiveAuthToken || !sessionId) return;
     setSending(true);
     setInput("");
 
@@ -155,7 +163,7 @@ export default function AIChatPanel() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${effectiveAuthToken}`,
           },
           body: JSON.stringify({ session_id: sessionId, content: text }),
         });
@@ -193,9 +201,12 @@ export default function AIChatPanel() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${effectiveAuthToken}`,
           },
-          body: JSON.stringify({ messages: uiMessages, api_key: apiKey }),
+          body: JSON.stringify({
+            messages: uiMessages,
+            ...(rawApiKey ? { api_key: rawApiKey } : {}),
+          }),
         });
 
         if (!res.ok) {
@@ -313,10 +324,10 @@ export default function AIChatPanel() {
     };
   }, [channelActive]);
 
-  if (!apiKey) {
+  if (!effectiveAuthToken) {
     return (
       <div className="rounded-xl border border-border/40 bg-card/20 p-6 text-xs text-muted-foreground">
-        Sign in with your UnClick API key to use the admin chat.
+        Sign in to use the Orchestrator chat.
       </div>
     );
   }

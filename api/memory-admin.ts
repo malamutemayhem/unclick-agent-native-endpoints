@@ -1689,22 +1689,28 @@ function buildAdminChatTools(supabase: SupabaseClient, apiKeyHash: string | null
   };
 }
 
-async function buildAdminChatSystemPrompt(supabase: SupabaseClient): Promise<string> {
+async function buildAdminChatSystemPrompt(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+): Promise<string> {
   const [bcRes, sessRes, factsRes] = await Promise.all([
     supabase
-      .from("business_context")
+      .from("mc_business_context")
       .select("category, key, value, priority")
+      .eq("api_key_hash", apiKeyHash)
       .in("decay_tier", ["hot", "warm"])
       .order("priority", { ascending: false })
       .limit(40),
     supabase
-      .from("session_summaries")
+      .from("mc_session_summaries")
       .select("session_id, platform, summary, topics, created_at")
+      .eq("api_key_hash", apiKeyHash)
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
-      .from("extracted_facts")
+      .from("mc_extracted_facts")
       .select("fact, category, confidence")
+      .eq("api_key_hash", apiKeyHash)
       .eq("status", "active")
       .in("decay_tier", ["hot", "warm"])
       .order("confidence", { ascending: false })
@@ -5952,10 +5958,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: "messages array is required" });
         }
 
-        const rawApiKey = (body?.api_key ?? bearerFrom(req)).trim();
-        const apiKeyHash = rawApiKey ? sha256hex(rawApiKey) : null;
+        const rawApiKey = (body?.api_key ?? "").trim();
+        const apiKeyHash =
+          (await resolveApiKeyHash(req, supabaseUrl, supabaseKey)) ||
+          (rawApiKey ? sha256hex(rawApiKey) : null);
+        if (!apiKeyHash) {
+          return res.status(401).json({ error: "Authorization header required" });
+        }
 
-        const systemPrompt = await buildAdminChatSystemPrompt(supabase);
+        const systemPrompt = await buildAdminChatSystemPrompt(supabase, apiKeyHash);
         const tools = buildAdminChatTools(supabase, apiKeyHash, req);
 
         const modelMessages = await convertToModelMessages(messages);

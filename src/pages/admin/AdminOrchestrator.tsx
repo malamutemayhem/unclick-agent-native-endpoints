@@ -239,7 +239,7 @@ export default function AdminOrchestratorPage() {
               {chatDisabledReason}
             </div>
           ) : (
-            <AIChatPanel />
+            <AIChatPanel authToken={authToken} />
           )}
         </div>
 
