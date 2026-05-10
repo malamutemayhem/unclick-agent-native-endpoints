@@ -14,6 +14,38 @@ function safeList(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function firstArray(...values) {
+  return values.find((value) => Array.isArray(value)) || [];
+}
+
+function livenessSnapshotFrom(input = {}) {
+  const source = input.liveness || input.autopilotKit || input.autopilotkit_liveness || input.autopilotKitLiveness || {};
+  const profiles = firstArray(
+    source.profiles,
+    source.worker_profiles,
+    source.workerProfiles,
+    input.livenessProfiles,
+    input.worker_profiles,
+    input.workerProfiles,
+  );
+  const messages = firstArray(
+    source.messages,
+    source.fishbowlMessages,
+    source.fishbowl_messages,
+    input.livenessMessages,
+    input.liveness_messages,
+  );
+
+  if (profiles.length === 0 && messages.length === 0) return null;
+
+  return {
+    ...source,
+    now: source.now || input.now,
+    profiles,
+    messages,
+  };
+}
+
 function normalize(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -233,35 +265,32 @@ function latestClaimsByReviewer(claims = []) {
   return latest;
 }
 
-function evaluateAutoPilotKitSnapshot({
-  autopilotKit,
-  workerProfiles = [],
-  livenessMessages = [],
-  now,
-} = {}) {
-  const profiles = safeList(autopilotKit?.profiles ?? workerProfiles);
-  const messages = safeList(autopilotKit?.messages ?? livenessMessages);
-  if (profiles.length === 0 && messages.length === 0) return null;
-  return evaluateAutoPilotKitLiveness({
-    ...(autopilotKit || {}),
-    now: autopilotKit?.now || now,
-    profiles,
-    messages,
-  });
-}
+function reviewCoordinatorAdvisory(input = {}, output = {}) {
+  const snapshot = livenessSnapshotFrom(input);
+  if (!snapshot || output.result !== "missing_ack") return null;
 
-function reviewAdviceFromSnapshot(snapshot) {
-  const advice = snapshot?.adapter_examples?.review_coordinator;
-  if (!advice || safeList(advice.reason_codes).length === 0) return null;
+  const liveness = evaluateAutoPilotKitLiveness(snapshot);
+  const review = liveness.adapter_examples.review_coordinator;
+
   return {
-    ...advice,
-    safe_mode: snapshot.safe_mode,
-    generated_at: snapshot.generated_at,
+    ...review,
+    execute: false,
+    source: "autopilotkit_liveness",
+    ack_ledger_result: output.result,
+    missing_reviewers: output.missing_reviewers,
+    reason_codes: Array.from(new Set(["required_ack_missing", ...safeList(review.reason_codes)])).sort(),
+    generated_at: liveness.generated_at,
+    safe_mode: liveness.safe_mode,
   };
 }
 
-function withReviewAdvice(result, advice) {
-  return advice ? { ...result, autopilotkit_review_advice: advice } : result;
+function withReviewAdvisory(output, advisory) {
+  if (!advisory) return output;
+  return {
+    ...output,
+    autopilotkit_review_advisory: advisory,
+    autopilotkit_review_advice: advisory,
+  };
 }
 
 export function evaluateAckLedgerRoom({
@@ -272,10 +301,28 @@ export function evaluateAckLedgerRoom({
   reviews = [],
   requiredReviewers = ["gatekeeper", "popcorn", "forge"],
   autopilotKit = null,
-  workerProfiles = [],
-  livenessMessages = [],
+  liveness,
+  autopilotkit_liveness,
+  autopilotKitLiveness,
+  livenessProfiles,
+  livenessMessages,
+  worker_profiles,
+  workerProfiles,
+  liveness_messages,
   now,
 } = {}) {
+  const input = {
+    autopilotKit,
+    liveness,
+    autopilotkit_liveness,
+    autopilotKitLiveness,
+    livenessProfiles,
+    livenessMessages,
+    worker_profiles,
+    workerProfiles,
+    liveness_messages,
+    now,
+  };
   const number = prNumber(pr);
   if (!number) {
     return {
@@ -295,11 +342,9 @@ export function evaluateAckLedgerRoom({
     .filter((claim) => claim?.verdict === "BLOCKER");
   const missing_reviewers = required.filter((reviewer) => latest_by_reviewer[reviewer]?.verdict !== "PASS");
   const full_ack_set = blockers.length === 0 && missing_reviewers.length === 0;
-  const autopilotKitSnapshot = evaluateAutoPilotKitSnapshot({ autopilotKit, workerProfiles, livenessMessages, now });
-  const autopilotKitReviewAdvice = reviewAdviceFromSnapshot(autopilotKitSnapshot);
 
   if (blockers.length > 0) {
-    return withReviewAdvice({
+    return {
       ok: false,
       action: "ack_ledger_room",
       result: "blocked",
@@ -310,11 +355,11 @@ export function evaluateAckLedgerRoom({
       blockers,
       missing_reviewers,
       latest_by_reviewer,
-    }, autopilotKitReviewAdvice);
+    };
   }
 
   if (!full_ack_set) {
-    return withReviewAdvice({
+    const output = {
       ok: true,
       action: "ack_ledger_room",
       result: "missing_ack",
@@ -332,7 +377,9 @@ export function evaluateAckLedgerRoom({
         deadline: "next heartbeat",
         ack: "done/blocker",
       },
-    }, autopilotKitReviewAdvice);
+    };
+    const advisory = reviewCoordinatorAdvisory(input, output);
+    return withReviewAdvisory(output, advisory);
   }
 
   return {
