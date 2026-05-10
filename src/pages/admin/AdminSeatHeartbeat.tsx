@@ -7,13 +7,13 @@ Use UnClick as the source of truth first. Load memory and search active jobs whe
 
 Pick one clear, safe, useful live task. Do the smallest meaningful step. For code work: use a fresh branch, focused tests, a PR, and wait for checks. Use production state only when the task already requires it. Never print secrets. Clean up temporary rows, leases, proof agents, and one-time schedules.
 
-Output one line only. Do not repeat this prompt.
+Output one short line only. Do not repeat this prompt. Do not reply with only "tick", "PASS", or "BLOCKER"; include a brief progress summary.
 PASS: <changed>; proof: <link/id>; cleanup: done.
-BLOCKER: <safe reason>; next: <fix>.
-If no safe task is available: BLOCKER: no clear safe task available; next: add a scoped job.`;
+BLOCKER: <safe reason>; progress: <what was checked>; next: <fix>.
+If no safe task is available: BLOCKER: no clear safe task available; progress: checked live queue; next: add a scoped job.`;
 
 export const HEARTBEAT_CONNECTION_PROMPT =
-  "Run UnClick Heartbeat. Use the Seats > Heartbeat policy, do one safe useful step, and reply with PASS or BLOCKER only.";
+  "Run UnClick Heartbeat. Use the Seats > Heartbeat policy, do one safe useful step, and reply with PASS/BLOCKER plus a brief progress summary.";
 
 export default function AdminSeatHeartbeatPage() {
   const [copied, setCopied] = useState(false);
