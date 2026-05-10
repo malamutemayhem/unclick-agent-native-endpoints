@@ -158,6 +158,45 @@ describe("orchestrator context", () => {
     expect(context.rolling_snapshot.source_pointers.some((pointer) => pointer.source_id === "todo-1")).toBe(true);
   });
 
+  it("adds human operator timezone context to compact handoffs", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-10T01:00:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [
+        {
+          id: "bc-timezone",
+          category: "preference",
+          key: "operator_timezone",
+          value: {
+            timezone: "Australia/Sydney",
+            source: "manual",
+            updated_at: "2026-05-10T00:50:00.000Z",
+            privacy: "timezone-only",
+          },
+          priority: 98,
+          updated_at: "2026-05-10T00:50:00.000Z",
+        },
+      ],
+      conversationTurns: [],
+    });
+
+    expect(context.human_operator_time?.timezone).toBe("Australia/Sydney");
+    expect(context.human_operator_time?.source).toBe("manual");
+    expect(context.human_operator_time?.local_date).toBe("2026-05-10");
+    expect(context.human_operator_time?.local_time).toBe("11:00");
+    expect(context.human_operator_time?.privacy).toBe("timezone-only");
+    expect(context.human_operator_time?.summary).toContain("manual override");
+    expect(context.seat_handshake.next_prompt).toContain("Human operator local time");
+    expect(context.seat_handshake.next_prompt).toContain("Australia/Sydney");
+  });
+
   it("labels profile-card check-in freshness for AI seats", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T12:00:00.000Z",

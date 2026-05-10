@@ -156,6 +156,17 @@ interface ProfileData {
   } | null;
 }
 
+type OperatorTimezoneSource = "browser" | "manual";
+
+interface OperatorTimeContext {
+  timezone: string;
+  source: OperatorTimezoneSource;
+  detected_at?: string | null;
+  manual_override_at?: string | null;
+  updated_at?: string | null;
+  privacy: "timezone-only";
+}
+
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "never";
   const diff = Date.now() - new Date(iso).getTime();
@@ -166,6 +177,27 @@ function timeAgo(iso: string | null | undefined): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+}
+
+function getBrowserTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function formatOperatorLocalTime(timezone: string | null | undefined): string {
+  if (!timezone) return "Unknown";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: timezone,
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date());
+  } catch {
+    return "Invalid timezone";
+  }
 }
 
 export default function AdminYou() {
@@ -189,7 +221,16 @@ export default function AdminYou() {
   const revealTimerRef = useRef<number | null>(null);
   const [reissuing, setReissuing] = useState(false);
   const [reissueError, setReissueError] = useState<string | null>(null);
+  const [operatorTime, setOperatorTime] = useState<OperatorTimeContext | null>(null);
+  const [detectedTimezone, setDetectedTimezone] = useState<string | null>(null);
+  const [timezoneInput, setTimezoneInput] = useState("");
+  const [timezoneSaving, setTimezoneSaving] = useState(false);
+  const [timezoneError, setTimezoneError] = useState<string | null>(null);
+  const timezoneAutoSyncRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    setDetectedTimezone(getBrowserTimezone());
+  }, []);
 
   useEffect(() => {
     // Wait for Supabase to confirm the session state before firing
@@ -214,6 +255,7 @@ export default function AdminYou() {
         if (!cancelled && profileRes.ok) {
           const body = (await profileRes.json()) as ProfileData & {
             generated_api_key?: string | null;
+            operator_time?: OperatorTimeContext | null;
           };
           setProfile({
             user_id:   body.user_id,
@@ -222,6 +264,8 @@ export default function AdminYou() {
             needs_key: body.needs_key,
             api_key:   body.api_key,
           });
+          setOperatorTime(body.operator_time ?? null);
+          setTimezoneInput(body.operator_time?.timezone ?? "");
           // Two paths land here.
           //
           // 1. Fresh auto-provision on first visit: the backend returns the
@@ -271,6 +315,16 @@ export default function AdminYou() {
 
     return () => { cancelled = true; };
   }, [session, sessionLoading]);
+
+  useEffect(() => {
+    if (sessionLoading || loading || !session || !detectedTimezone) return;
+    if (operatorTime?.source === "manual") return;
+    if (operatorTime?.timezone === detectedTimezone) return;
+    const syncKey = `${detectedTimezone}:${operatorTime?.timezone ?? "none"}:${operatorTime?.source ?? "none"}`;
+    if (timezoneAutoSyncRef.current === syncKey) return;
+    timezoneAutoSyncRef.current = syncKey;
+    void saveOperatorTimezone(detectedTimezone, "browser", { quiet: true });
+  }, [detectedTimezone, loading, operatorTime?.source, operatorTime?.timezone, session, sessionLoading]);
 
   // Re-mask the api_key 60 seconds after the user reveals it. The raw
   // value stays in generatedKey state (and in localStorage) so the user
@@ -328,6 +382,47 @@ export default function AdminYou() {
     }
   }
 
+  async function saveOperatorTimezone(
+    timezone: string,
+    source: OperatorTimezoneSource,
+    options: { quiet?: boolean } = {},
+  ) {
+    if (!session) return;
+    const trimmed = timezone.trim();
+    if (!trimmed) {
+      setTimezoneError("Enter a timezone like Australia/Sydney.");
+      return;
+    }
+    if (!options.quiet) setTimezoneSaving(true);
+    setTimezoneError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=operator_timezone_update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ timezone: trimmed, source }),
+      });
+      const body = await res.json() as {
+        operator_time?: OperatorTimeContext;
+        error?: string;
+      };
+      if (!res.ok) {
+        setTimezoneError(body.error ?? "Could not save timezone.");
+        return;
+      }
+      if (body.operator_time) {
+        setOperatorTime(body.operator_time);
+        setTimezoneInput(body.operator_time.timezone);
+      }
+    } catch (e) {
+      setTimezoneError((e as Error).message);
+    } finally {
+      if (!options.quiet) setTimezoneSaving(false);
+    }
+  }
+
   async function handleLogout() {
     await signOut();
     navigate("/login", { replace: true });
@@ -352,6 +447,12 @@ export default function AdminYou() {
     provider === "azure" ? "Microsoft" :
     provider === "email" ? "Magic link" :
     provider;
+  const timezonePreview = formatOperatorLocalTime(operatorTime?.timezone ?? detectedTimezone);
+  const timezoneSourceLabel =
+    operatorTime?.source === "manual" ? "Manual override" :
+    operatorTime?.source === "browser" ? "Browser detected" :
+    detectedTimezone ? "Browser available" :
+    "Not detected";
 
   return (
     <div>
@@ -430,6 +531,65 @@ export default function AdminYou() {
               <LogOut className="h-4 w-4" />
               Sign out
             </button>
+          </div>
+
+          {/* Local time card */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Clock className="h-4 w-4 text-[#E2B93B]" />
+              Local Time
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#888]">
+              Used by Orchestrator so AI seats understand your working hours. Only timezone context is saved.
+            </p>
+            <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.03] p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-[#888]">Current local time</span>
+                <span className="text-right text-xs font-semibold text-white">{timezonePreview}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                <span className="text-[#888]">Timezone</span>
+                <span className="text-right font-mono text-xs text-white">
+                  {operatorTime?.timezone ?? detectedTimezone ?? "Unknown"}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                <span className="text-[#888]">Source</span>
+                <span className="text-right text-xs text-white">{timezoneSourceLabel}</span>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Manual timezone
+              </label>
+              <input
+                value={timezoneInput}
+                onChange={(event) => setTimezoneInput(event.target.value)}
+                placeholder={detectedTimezone ?? "Australia/Sydney"}
+                className="w-full rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 font-mono text-xs text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/50"
+              />
+              {timezoneError && <p className="text-[11px] text-red-400">{timezoneError}</p>}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveOperatorTimezone(timezoneInput, "manual")}
+                  disabled={timezoneSaving || !timezoneInput.trim()}
+                  className="rounded-md bg-[#61C1C4] px-3 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {timezoneSaving ? "Saving..." : "Save override"}
+                </button>
+                {detectedTimezone && (
+                  <button
+                    type="button"
+                    onClick={() => saveOperatorTimezone(detectedTimezone, "manual")}
+                    disabled={timezoneSaving}
+                    className="rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/[0.08] disabled:opacity-50"
+                  >
+                    Use detected
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* AI Style card */}

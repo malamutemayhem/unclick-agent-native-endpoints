@@ -78,6 +78,16 @@ interface OrchestratorContext {
     current_status?: string | null;
     next_checkin_at?: string | null;
   }>;
+  human_operator_time?: {
+    timezone: string;
+    source: "browser" | "manual" | "unknown";
+    local_date: string;
+    local_time: string;
+    utc_offset: string | null;
+    updated_at?: string | null;
+    privacy: "timezone-only";
+    summary: string;
+  } | null;
   continuity_events: Array<{
     source_kind: string;
     source_id: string;
@@ -313,6 +323,25 @@ function OrchestratorContextCard({
       </div>
 
       <div className="mt-4 space-y-3">
+        {context.human_operator_time && (
+          <ContextSection title="Human Time" icon={Clock}>
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-white/75">
+                  {context.human_operator_time.local_time}
+                </span>
+                <span className="text-[10px] text-white/35">
+                  {context.human_operator_time.source === "manual" ? "Manual" : "Browser"}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] leading-4 text-white/45">
+                {context.human_operator_time.local_date} {context.human_operator_time.timezone}
+                {context.human_operator_time.utc_offset ? ` ${context.human_operator_time.utc_offset}` : ""}
+              </p>
+            </div>
+          </ContextSection>
+        )}
+
         <ContextSection title="Next" icon={ArrowRight}>
           {state.next_actions.length > 0 ? (
             state.next_actions.slice(0, 4).map((action) => (

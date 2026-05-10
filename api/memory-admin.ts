@@ -203,6 +203,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+type OperatorTimeSource = "browser" | "manual";
+
+interface OperatorTimeContextValue {
+  timezone: string;
+  source: OperatorTimeSource;
+  detected_at?: string | null;
+  manual_override_at?: string | null;
+  updated_at: string;
+  privacy: "timezone-only";
+}
+
+const OPERATOR_TIME_CATEGORY = "preference";
+const OPERATOR_TIME_KEY = "operator_timezone";
+
+function isValidTimeZoneName(timezone: string): boolean {
+  if (!timezone || timezone.length > 80) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseOperatorTimeValue(value: unknown, updatedAt?: string | null): OperatorTimeContextValue | null {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!isRecord(parsed)) return null;
+  const timezone = typeof parsed.timezone === "string" ? parsed.timezone.trim() : "";
+  if (!isValidTimeZoneName(timezone)) return null;
+  const source = parsed.source === "manual" || parsed.source === "browser" ? parsed.source : "browser";
+  return {
+    timezone,
+    source,
+    detected_at: typeof parsed.detected_at === "string" ? parsed.detected_at : null,
+    manual_override_at: typeof parsed.manual_override_at === "string" ? parsed.manual_override_at : null,
+    updated_at: typeof parsed.updated_at === "string" ? parsed.updated_at : updatedAt ?? new Date().toISOString(),
+    privacy: "timezone-only",
+  };
+}
+
+async function readOperatorTimeContext(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+): Promise<OperatorTimeContextValue | null> {
+  const { data, error } = await supabase
+    .from("mc_business_context")
+    .select("value, updated_at")
+    .eq("api_key_hash", apiKeyHash)
+    .eq("category", OPERATOR_TIME_CATEGORY)
+    .eq("key", OPERATOR_TIME_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? parseOperatorTimeValue(data.value, data.updated_at as string | null) : null;
+}
+
 const RELIABILITY_SOURCES = [
   "fishbowl",
   "connectors",
@@ -3746,11 +3808,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Look up an existing api_keys row for this user.
         let keyRow = (await supabase
           .from("api_keys")
-          .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+          .select("id, key_hash, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
           .eq("user_id", user.id)
           .maybeSingle()).data as
           | {
               id: string;
+              key_hash: string | null;
               key_prefix: string | null;
               label: string | null;
               tier: string | null;
@@ -3784,7 +3847,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               is_active: true,
               usage_count: 0,
             })
-            .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+            .select("id, key_hash, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
             .maybeSingle();
 
           if (insertRes.error) {
@@ -3792,7 +3855,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // user_id), re-read instead of failing.
             const retry = await supabase
               .from("api_keys")
-              .select("id, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
+              .select("id, key_hash, key_prefix, label, tier, is_active, usage_count, last_used_at, created_at")
               .eq("user_id", user.id)
               .maybeSingle();
             keyRow = retry.data as typeof keyRow;
@@ -3827,6 +3890,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const isAdmin = user.email
           ? adminEmails.includes(user.email.toLowerCase())
           : false;
+        const operatorTime = keyRow?.key_hash
+          ? await readOperatorTimeContext(supabase, keyRow.key_hash)
+          : null;
 
         return res.status(200).json({
           user_id: user.id,
@@ -3837,7 +3903,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           generated_api_key: generatedApiKey,
           is_admin: isAdmin,
           memory_quota_exempt: isMemoryQuotaExemptEmail(user.email),
+          operator_time: operatorTime,
         });
+      }
+
+      case "operator_timezone_update": {
+        if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
+        const user = await resolveSessionUser(req, supabaseUrl, supabaseKey);
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+        const keyRow = (await supabase
+          .from("api_keys")
+          .select("key_hash")
+          .eq("user_id", user.id)
+          .maybeSingle()).data as { key_hash: string | null } | null;
+        if (!keyRow?.key_hash) {
+          return res.status(404).json({ error: "No active UnClick key found for this user" });
+        }
+
+        const timezone = String(req.body?.timezone ?? "").trim();
+        if (!isValidTimeZoneName(timezone)) {
+          return res.status(400).json({ error: "timezone must be a valid IANA timezone" });
+        }
+        const source: OperatorTimeSource = req.body?.source === "manual" ? "manual" : "browser";
+        const nowIso = new Date().toISOString();
+        const existing = await readOperatorTimeContext(supabase, keyRow.key_hash);
+        if (existing?.source === "manual" && source === "browser") {
+          return res.status(200).json({ success: true, operator_time: existing, manual_override_preserved: true });
+        }
+
+        const value: OperatorTimeContextValue = {
+          timezone,
+          source,
+          detected_at: source === "browser" ? nowIso : existing?.detected_at ?? null,
+          manual_override_at: source === "manual" ? nowIso : existing?.manual_override_at ?? null,
+          updated_at: nowIso,
+          privacy: "timezone-only",
+        };
+
+        const { error } = await supabase
+          .from("mc_business_context")
+          .upsert(
+            {
+              api_key_hash: keyRow.key_hash,
+              category: OPERATOR_TIME_CATEGORY,
+              key: OPERATOR_TIME_KEY,
+              value,
+              priority: 98,
+              decay_tier: "hot",
+              updated_at: nowIso,
+              last_accessed: nowIso,
+            },
+            { onConflict: "api_key_hash,category,key" },
+          );
+        if (error) throw error;
+        return res.status(200).json({ success: true, operator_time: value });
       }
 
       case "generate_api_key": {

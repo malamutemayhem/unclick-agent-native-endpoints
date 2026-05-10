@@ -109,6 +109,19 @@ export interface OrchestratorConversationTurnRow {
   created_at: string;
 }
 
+export type OrchestratorOperatorTimeSource = "browser" | "manual" | "unknown";
+
+export interface OrchestratorOperatorTimeContext {
+  timezone: string;
+  source: OrchestratorOperatorTimeSource;
+  local_date: string;
+  local_time: string;
+  utc_offset: string | null;
+  updated_at?: string | null;
+  privacy: "timezone-only";
+  summary: string;
+}
+
 export interface BuildOrchestratorContextInput {
   generatedAt: string;
   profiles: OrchestratorProfileRow[];
@@ -240,6 +253,7 @@ export interface OrchestratorContext {
     blockers: string[];
   };
   profile_cards: OrchestratorProfileCard[];
+  human_operator_time: OrchestratorOperatorTimeContext | null;
   continuity_events: OrchestratorContinuityEvent[];
   library_snapshots: OrchestratorLibrarySnapshot[];
   rolling_snapshot: OrchestratorRollingSnapshot;
@@ -309,6 +323,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     .map((profile) => buildProfileCard(profile, nowMs))
     .sort((a, b) => compareIsoDesc(a.last_seen_at, b.last_seen_at));
   const activeSeatCount = profiles.filter((profile) => isFresh(profile.last_seen_at, nowMs)).length;
+  const humanOperatorTime = buildOperatorTimeContext(input.businessContext, input.generatedAt);
 
   const activeTodos = input.todos
     .filter((todo) => todo.status === "open" || todo.status === "in_progress")
@@ -377,6 +392,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     profiles,
     continuityEvents,
     rollingSnapshot,
+    humanOperatorTime,
   });
 
   return {
@@ -390,7 +406,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     },
     current_state_card: {
       summary: compactText(
-        `${activeTodos.length} active job${activeTodos.length === 1 ? "" : "s"}, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.`,
+        `${activeTodos.length} active job${activeTodos.length === 1 ? "" : "s"}, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.${humanOperatorTime ? ` Operator time: ${humanOperatorTime.summary}.` : ""}`,
         180,
       ),
       newest_activity_at: newestActivityAt,
@@ -414,6 +430,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
       blockers,
     },
     profile_cards: profiles,
+    human_operator_time: humanOperatorTime,
     continuity_events: continuityEvents,
     library_snapshots: librarySnapshots,
     rolling_snapshot: rollingSnapshot,
@@ -425,10 +442,12 @@ function buildSeatHandshake({
   profiles,
   continuityEvents,
   rollingSnapshot,
+  humanOperatorTime,
 }: {
   profiles: OrchestratorProfileCard[];
   continuityEvents: OrchestratorContinuityEvent[];
   rollingSnapshot: OrchestratorRollingSnapshot;
+  humanOperatorTime: OrchestratorOperatorTimeContext | null;
 }): OrchestratorSeatHandshake {
   const usefulEvents = continuityEvents.filter((event) => !isSnapshotNoise(event));
   const recentProof = usefulEvents.find((event) => event.kind === "proof") ?? null;
@@ -467,8 +486,50 @@ function buildSeatHandshake({
     recent_proof: recentProof?.summary ?? null,
     active_blocker: blocker?.summary ?? null,
     seat_freshness: seatFreshness,
-    next_prompt: "Use this compact handoff, inspect source pointers only as needed, do one safe useful step, then reply PASS or BLOCKER.",
+    next_prompt: humanOperatorTime
+      ? `Use this compact handoff. Human operator local time is ${humanOperatorTime.summary}. Inspect source pointers only as needed, do one safe useful step, then reply PASS or BLOCKER.`
+      : "Use this compact handoff, inspect source pointers only as needed, do one safe useful step, then reply PASS or BLOCKER.",
     source_pointers: sourcePointers,
+  };
+}
+
+function buildOperatorTimeContext(
+  rows: OrchestratorBusinessContextRow[],
+  generatedAt: string,
+): OrchestratorOperatorTimeContext | null {
+  const row = rows.find((item) => item.category === "preference" && item.key === "operator_timezone");
+  if (!row) return null;
+  const value = parseBusinessContextValue(row.value);
+  const timezone = typeof value.timezone === "string" ? value.timezone.trim() : "";
+  if (!isValidTimeZone(timezone)) return null;
+
+  const source = value.source === "manual" || value.source === "browser" ? value.source : "unknown";
+  const date = new Date(generatedAt);
+  const localDate = formatInTimeZone(date, timezone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const localTime = formatInTimeZone(date, timezone, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const utcOffset = formatUtcOffset(date, timezone);
+  const summary = compactText(
+    `${localTime} on ${localDate} ${timezone}${utcOffset ? ` (${utcOffset})` : ""}${source === "manual" ? ", manual override" : ""}`,
+    180,
+  );
+
+  return {
+    timezone,
+    source,
+    local_date: localDate,
+    local_time: localTime,
+    utc_offset: utcOffset,
+    updated_at: row.updated_at ?? (typeof value.updated_at === "string" ? value.updated_at : null),
+    privacy: "timezone-only",
+    summary,
   };
 }
 
@@ -849,6 +910,60 @@ function prettifyAgentId(agentId: string): string {
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (match) => match.toUpperCase())
     .replace(/\bAi\b/g, "AI");
+}
+
+function parseBusinessContextValue(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function isValidTimeZone(timezone: string): boolean {
+  if (!timezone || timezone.length > 80) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatInTimeZone(
+  date: Date,
+  timezone: string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    ...options,
+    timeZone: timezone,
+  }).formatToParts(date);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  if (options.hour) {
+    return `${byType.get("hour") ?? "00"}:${byType.get("minute") ?? "00"}`;
+  }
+  return `${byType.get("year") ?? "0000"}-${byType.get("month") ?? "00"}-${byType.get("day") ?? "00"}`;
+}
+
+function formatUtcOffset(date: Date, timezone: string): string | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "shortOffset",
+    }).formatToParts(date);
+    const name = parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+    return name ? name.replace(/^GMT/, "UTC") : null;
+  } catch {
+    return null;
+  }
 }
 
 function safeJson(value: unknown): string {
