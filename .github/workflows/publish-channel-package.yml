@@ -148,7 +148,7 @@ jobs:
 
       - name: Force public npm access
         if: steps.scope.outputs.should_publish == 'true' && steps.skip_check.outputs.skip == 'false'
-        run: npm access public @unclick/channel
+        run: npm access set status=public @unclick/channel
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
