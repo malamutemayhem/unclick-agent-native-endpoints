@@ -32,6 +32,133 @@ describe("NudgeOnlyAPI policy", () => {
     );
   });
 
+  it("normalises model output to the allowed painpoint labels", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "or-nudge-label-test",
+        model: "liquid/lfm-2.5-1.2b-instruct:free",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              painpoint_detected: "stale_ack, unclear_owner",
+              painpoint_type: "stale_ack, unclear_owner",
+              nudge: "Possible stale ACK plus unclear ownership.",
+              suggested_check: "Run the WakePass ACK verifier and owner resolver for the source dispatch.",
+              confidence: "low",
+            }),
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "wakepass stale ack with unclear owner",
+    })).resolves.toMatchObject({
+      painpoint_detected: true,
+      painpoint_type: "stale_ack",
+    });
+  });
+
+  it("trusts a concrete hinted painpoint label over a weak detected flag", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "or-nudge-hint-test",
+        model: "liquid/lfm-2.5-1.2b-instruct:free",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              painpoint_detected: false,
+              painpoint_type: "missing_proof",
+              nudge: "Possible missing proof pointer.",
+              suggested_check: "Check the proof pointer in the compact Orchestrator state.",
+              confidence: "low",
+            }),
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "proof pointer is missing",
+      painpoint_hint: "missing_proof",
+    })).resolves.toMatchObject({
+      painpoint_detected: true,
+      painpoint_type: "missing_proof",
+    });
+  });
+
+  it("uses a supplied painpoint hint as the stable dashboard bucket", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "or-nudge-bucket-test",
+        model: "liquid/lfm-2.5-1.2b-instruct:free",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              painpoint_detected: true,
+              painpoint_type: "stale_ack",
+              nudge: "Possible ownership confusion around a stale WakePass handoff.",
+              suggested_check: "Run the owner resolver against the source dispatch.",
+              confidence: "low",
+            }),
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "no clear next owner is named",
+      painpoint_hint: "unclear_owner",
+    })).resolves.toMatchObject({
+      painpoint_detected: true,
+      painpoint_type: "unclear_owner",
+    });
+  });
+
+  it("keeps an unhinted healthy control quiet when the detected flag is false", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "or-nudge-quiet-test",
+        model: "liquid/lfm-2.5-1.2b-instruct:free",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              painpoint_detected: false,
+              painpoint_type: "stale_ack",
+              nudge: "Possible wakepass issue.",
+              suggested_check: "Verify WakePass status before taking action.",
+              confidence: "low",
+            }),
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "wakepass completed and healthy",
+      painpoint_hint: "none",
+    })).resolves.toMatchObject({
+      painpoint_detected: false,
+      painpoint_type: "none",
+    });
+  });
+
   it("does not run without an OpenRouter key", async () => {
     const previous = process.env.OPENROUTER_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
