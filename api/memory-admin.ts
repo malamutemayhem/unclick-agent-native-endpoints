@@ -5801,7 +5801,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const apiKeyHash = await resolveApiKeyHash(req, supabaseUrl, supabaseKey);
         if (!apiKeyHash) return res.status(401).json({ error: "Authorization header required" });
         const hash = apiKeyHash;
-        const envEnabled = process.env.AI_CHAT_ENABLED === "true";
+        const envEnabled = isAdminChatEnabled();
 
         if (req.method === "POST") {
           if (!envEnabled) return res.status(404).end();
@@ -5878,7 +5878,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           env_enabled: envEnabled,
           settings: {
-            ai_chat_enabled: row?.ai_chat_enabled ?? false,
+            ai_chat_enabled: row?.ai_chat_enabled ?? true,
             ai_chat_provider: row?.ai_chat_provider ?? "google",
             ai_chat_model: row?.ai_chat_model ?? "gemini-2.5-flash-lite",
             ai_chat_system_prompt: row?.ai_chat_system_prompt ?? null,
