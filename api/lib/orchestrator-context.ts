@@ -196,6 +196,18 @@ export interface OrchestratorRollingSnapshot {
   source_pointers: OrchestratorSourceLink[];
 }
 
+export interface OrchestratorSeatHandshake {
+  mode: "fresh-seat-pickup";
+  summary: string;
+  active_decision: string | null;
+  active_job: string | null;
+  recent_proof: string | null;
+  active_blocker: string | null;
+  seat_freshness: string[];
+  next_prompt: string;
+  source_pointers: OrchestratorSourceLink[];
+}
+
 export interface OrchestratorContext {
   version: "orchestrator-context-v1";
   generated_at: string;
@@ -231,6 +243,7 @@ export interface OrchestratorContext {
   continuity_events: OrchestratorContinuityEvent[];
   library_snapshots: OrchestratorLibrarySnapshot[];
   rolling_snapshot: OrchestratorRollingSnapshot;
+  seat_handshake: OrchestratorSeatHandshake;
 }
 
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
@@ -280,9 +293,10 @@ export function isHeartbeatAutomationText(input: unknown): boolean {
   return false;
 }
 
-function compactContinuityText(input: unknown, maxChars = 240): string {
+function compactContinuityText(input: unknown, maxChars = 240, options: { heartbeatHint?: boolean } = {}): string {
   const clean = compactText(input, maxChars);
   if (!isHeartbeatAutomationText(clean)) return clean;
+  if (!options.heartbeatHint && (/^pass:/i.test(clean) || /^blocker:/i.test(clean))) return clean;
   if (/^pass:/i.test(clean)) return compactText(`Heartbeat result: ${clean}`, maxChars);
   if (/^blocker:/i.test(clean)) return compactText(`Heartbeat result: ${clean}`, maxChars);
   if (/^dont_notify:|^notify:/i.test(clean)) return "Heartbeat notification state: compact status only.";
@@ -359,6 +373,11 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     continuityEvents,
     blockers,
   });
+  const seatHandshake = buildSeatHandshake({
+    profiles,
+    continuityEvents,
+    rollingSnapshot,
+  });
 
   return {
     version: "orchestrator-context-v1",
@@ -398,6 +417,58 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     continuity_events: continuityEvents,
     library_snapshots: librarySnapshots,
     rolling_snapshot: rollingSnapshot,
+    seat_handshake: seatHandshake,
+  };
+}
+
+function buildSeatHandshake({
+  profiles,
+  continuityEvents,
+  rollingSnapshot,
+}: {
+  profiles: OrchestratorProfileCard[];
+  continuityEvents: OrchestratorContinuityEvent[];
+  rollingSnapshot: OrchestratorRollingSnapshot;
+}): OrchestratorSeatHandshake {
+  const usefulEvents = continuityEvents.filter((event) => !isSnapshotNoise(event));
+  const recentProof = usefulEvents.find((event) => event.kind === "proof") ?? null;
+  const decision = rollingSnapshot.promoted_decisions[0] ?? null;
+  const job = rollingSnapshot.active_jobs[0] ?? null;
+  const blocker = rollingSnapshot.active_blockers[0] ?? null;
+  const seatFreshness = profiles
+    .slice(0, 6)
+    .map((profile) => `${profile.label}: ${profile.freshness_label}`)
+    .filter(Boolean);
+
+  const proofPointer = recentProof ? eventToSnapshotItem(recentProof, "continuity") : null;
+  const sourcePointers = uniqueSourcePointers([
+    ...(decision ? [decision] : []),
+    ...(job ? [job] : []),
+    ...(blocker ? [blocker] : []),
+    ...(proofPointer ? [proofPointer] : []),
+    ...rollingSnapshot.recent_continuity.slice(0, 4),
+  ]);
+
+  return {
+    mode: "fresh-seat-pickup",
+    summary: compactText(
+      [
+        decision ? `Decision: ${decision.summary}` : "",
+        job ? `Job: ${job.summary}` : "",
+        recentProof ? `Proof: ${recentProof.summary}` : "",
+        blocker ? `Blocker: ${blocker.summary}` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      320,
+    ),
+    active_decision: decision?.summary ?? null,
+    active_job: job?.summary ?? null,
+    recent_proof: recentProof?.summary ?? null,
+    active_blocker: blocker?.summary ?? null,
+    seat_freshness: seatFreshness,
+    next_prompt: "Use this compact handoff, inspect source pointers only as needed, do one safe useful step, then reply PASS or BLOCKER.",
+    source_pointers: sourcePointers,
   };
 }
 
@@ -504,7 +575,12 @@ function uniqueSourcePointers(items: OrchestratorRollingSnapshotItem[]): Orchest
 }
 
 function isSnapshotNoise(event: OrchestratorContinuityEvent): boolean {
-  const text = `${event.summary} ${(event.tags ?? []).join(" ")}`.toLowerCase();
+  const summary = event.summary.toLowerCase();
+  const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  if (event.kind === "proof" && !tags.includes("heartbeat") && !summary.startsWith("heartbeat result:")) {
+    return false;
+  }
+  const text = `${summary} ${tags.join(" ")}`;
   return isHeartbeatAutomationText(text) || /heartbeat|quiet-status|dont_notify|don't notify|no user action needed|unchanged ack|raw transcript/.test(text);
 }
 
@@ -579,7 +655,9 @@ function getConnectionLabel(
 
 function messageToEvent(message: OrchestratorMessageRow): OrchestratorContinuityEvent {
   const tags = normalizeTags(message.tags);
-  const summary = compactContinuityText(message.text, 260);
+  const summary = compactContinuityText(message.text, 260, {
+    heartbeatHint: tags.some((tag) => tag.toLowerCase() === "heartbeat"),
+  });
   return {
     source_kind: "boardroom_message",
     source_id: message.id,
@@ -665,7 +743,9 @@ function sessionToEvent(session: OrchestratorSessionRow): OrchestratorContinuity
 }
 
 function conversationTurnToEvent(turn: OrchestratorConversationTurnRow): OrchestratorContinuityEvent {
-  const content = compactContinuityText(turn.content, 220);
+  const content = compactContinuityText(turn.content, 220, {
+    heartbeatHint: /<heartbeat\b|unclick-heartbeat|current_time_iso/i.test(String(turn.content ?? "")),
+  });
   return {
     source_kind: "conversation_turn",
     source_id: turn.id,

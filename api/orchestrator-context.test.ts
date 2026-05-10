@@ -304,4 +304,99 @@ describe("orchestrator context", () => {
     expect(continuityText).toContain("Please keep Orchestrator context readable");
     expect(context.rolling_snapshot.source_pointers.some((pointer) => pointer.source_id === "turn-heartbeat")).toBe(false);
   });
+
+  it("builds a fresh-seat handshake from compact rolling context only", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-10T00:20:00.000Z",
+      profiles: [
+        {
+          agent_id: "pinballwake-autonomous-runner",
+          display_name: "PinballWake",
+          user_agent_hint: "github-action scheduled heartbeat",
+          last_seen_at: "2026-05-10T00:18:00.000Z",
+        },
+        {
+          agent_id: "master-coordinator",
+          display_name: "Master Coordinator",
+          user_agent_hint: "orchestrator coordinator",
+          last_seen_at: "2026-05-09T20:00:00.000Z",
+          next_checkin_at: "2026-05-09T22:00:00.000Z",
+        },
+      ],
+      messages: [
+        {
+          id: "msg-decision",
+          author_agent_id: "human-chris",
+          text: "Chris greenlit Orchestrator V1 proof with AutoPilotKit and PinballWake.",
+          tags: ["decision"],
+          created_at: "2026-05-10T00:11:00.000Z",
+        },
+        {
+          id: "msg-proof",
+          author_agent_id: "pinballwake-autonomous-runner",
+          text: "PASS: scheduled cold-seat proof completed; proof: run 123; cleanup: done.",
+          tags: ["proof"],
+          created_at: "2026-05-10T00:12:00.000Z",
+        },
+        {
+          id: "msg-noise",
+          author_agent_id: "heartbeat-seat",
+          text: "DONT_NOTIFY: quiet-status heartbeat, no user action needed.",
+          tags: ["heartbeat"],
+          created_at: "2026-05-10T00:19:00.000Z",
+        },
+      ],
+      todos: [
+        {
+          id: "todo-orchestrator-proof",
+          title: "Orchestrator chip: prove handshake-to-rolling-snapshot pickup",
+          description: "Fresh seat reads compact context without transcript paste.",
+          status: "open",
+          priority: "urgent",
+          created_by_agent_id: "codex",
+          created_at: "2026-05-10T00:00:00.000Z",
+          updated_at: "2026-05-10T00:16:00.000Z",
+        },
+      ],
+      comments: [],
+      dispatches: [],
+      signals: [
+        {
+          id: "signal-blocker",
+          tool: "orchestrator",
+          action: "proof_needed",
+          severity: "action_needed",
+          summary: "Fresh-seat pickup still needs a scheduled proof.",
+          created_at: "2026-05-10T00:13:00.000Z",
+        },
+      ],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [
+        {
+          id: "turn-heartbeat",
+          session_id: "heartbeat-session",
+          role: "user",
+          content:
+            "Run UnClick Heartbeat. Use the Seats > Heartbeat policy, do one safe useful step, and reply with PASS or BLOCKER only.",
+          created_at: "2026-05-10T00:19:30.000Z",
+        },
+      ],
+    });
+
+    expect(context.seat_handshake.mode).toBe("fresh-seat-pickup");
+    expect(context.seat_handshake.active_decision).toContain("AutoPilotKit and PinballWake");
+    expect(context.seat_handshake.active_job).toContain("handshake-to-rolling-snapshot");
+    expect(context.seat_handshake.recent_proof).toContain("scheduled cold-seat proof completed");
+    expect(context.seat_handshake.active_blocker).toContain("Fresh-seat pickup still needs");
+    expect(context.seat_handshake.seat_freshness).toEqual(
+      expect.arrayContaining(["PinballWake: Live", "Master Coordinator: Missed check-in"]),
+    );
+    expect(JSON.stringify(context.seat_handshake)).not.toContain("DONT_NOTIFY");
+    expect(JSON.stringify(context.seat_handshake)).not.toContain("Run UnClick Heartbeat");
+    expect(context.seat_handshake.source_pointers.map((pointer) => pointer.source_id)).toEqual(
+      expect.arrayContaining(["msg-decision", "todo-orchestrator-proof", "msg-proof", "signal-blocker"]),
+    );
+  });
 });
