@@ -103,6 +103,7 @@ jobs:
           const fs = require("fs");
           const remote = process.argv[2] || "";
           const pkgPath = "package.json";
+          const manifestPath = "server.json";
           const lockPath = "../../package-lock.json";
           const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
           const parts = (version) => version.split(".").map((part) => Number(part));
@@ -119,6 +120,12 @@ jobs:
           next[2] = (next[2] || 0) + 1;
           pkg.version = next.join(".");
           fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          manifest.version = pkg.version;
+          for (const entry of manifest.packages || []) {
+            if (entry.identifier === pkg.name) entry.version = pkg.version;
+          }
+          fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
           const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
           if (lock.packages?.["packages/mcp-server"]) {
             lock.packages["packages/mcp-server"].version = pkg.version;
@@ -127,7 +134,7 @@ jobs:
           console.log(pkg.version);
           NODE
           )
-          git add package.json ../../package-lock.json
+          git add package.json server.json ../../package-lock.json
           git commit -m "chore: bump mcp-server to v${new_ver} [skip ci]"
 
       - name: Push version bump
