@@ -23,7 +23,7 @@ function seat(patch: Partial<AISeat>): AISeat {
     provider: "Codex Desktop",
     device: "Chris laptop",
     status: "Ready",
-    state: "Manual slot",
+    state: "Cycle-share capacity",
     load: 25,
     assigned: "General capacity",
     issue: "",
@@ -52,8 +52,12 @@ describe("AdminAgents seat check-ins", () => {
 
     expect(screen.getByRole("heading", { name: "Seats" })).toBeInTheDocument();
     expect(screen.getByText("AI Seats")).toBeInTheDocument();
+    expect(screen.getByText("Cycle share")).toBeInTheDocument();
+    expect(screen.getByText("Fungible mode")).toBeInTheDocument();
     expect(screen.queryByText("UnClick Workers")).not.toBeInTheDocument();
     expect(screen.queryByText("New Worker")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manual mode")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manual load")).not.toBeInTheDocument();
   });
 
   it("matches a live profile to a named physical seat", () => {

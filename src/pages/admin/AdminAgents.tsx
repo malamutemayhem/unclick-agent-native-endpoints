@@ -113,7 +113,7 @@ const AI_SEATS: AISeat[] = [
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
-    state: "Manual slot",
+    state: "Cycle-share capacity",
     load: 25,
     assigned: "General capacity",
     issue: "",
@@ -125,7 +125,7 @@ const AI_SEATS: AISeat[] = [
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
-    state: "Manual slot",
+    state: "Cycle-share capacity",
     load: 25,
     assigned: "General capacity",
     issue: "",
@@ -137,7 +137,7 @@ const AI_SEATS: AISeat[] = [
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
-    state: "Manual slot",
+    state: "Cycle-share capacity",
     load: 25,
     assigned: "General capacity",
     issue: "",
@@ -149,7 +149,7 @@ const AI_SEATS: AISeat[] = [
     provider: "Unknown AI",
     device: "Unknown device",
     status: "Ready",
-    state: "Manual slot",
+    state: "Cycle-share capacity",
     load: 25,
     assigned: "General capacity",
     issue: "",
@@ -353,7 +353,7 @@ function AISeatsPanel() {
           <div>
             <h2 className="text-sm font-semibold text-heading">AI Seats</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Connected AI capacity with the newest live check-in shown in each row. Manual load is a planning guide.
+              Connected AI capacity with the newest live check-in shown in each row. Cycle-share is a planning guide.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -377,7 +377,7 @@ function AISeatsPanel() {
               {profilesLoading ? "Checking..." : "Refresh"}
             </button>
             <span className="inline-flex w-fit items-center rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Manual mode
+              Fungible mode
             </span>
           </div>
         </div>
@@ -385,7 +385,7 @@ function AISeatsPanel() {
           <span>Seat</span>
           <span>Status</span>
           <span className="flex items-center justify-between gap-2">
-            <span>Manual load</span>
+            <span>Cycle share</span>
             <button
               type="button"
               onClick={spreadEvenly}
