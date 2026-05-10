@@ -7918,9 +7918,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
 
-        const body = (req.body ?? {}) as { limit?: number };
-        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), 120);
-        const smallerLimit = Math.min(limit, 40);
+        const body = (req.body ?? {}) as { limit?: number; q?: string };
+        const rawSearch =
+          typeof body.q === "string"
+            ? body.q
+            : typeof req.query.q === "string"
+              ? req.query.q
+              : "";
+        const searchQuery = rawSearch.replace(/\s+/g, " ").trim().slice(0, 100);
+        const searchPattern = searchQuery ? `%${searchQuery.replace(/[%_]/g, "\\$&")}%` : "";
+        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), searchQuery ? 200 : 120);
+        const smallerLimit = searchQuery ? limit : Math.min(limit, 40);
+
+        let messagesQuery = supabase
+          .from("mc_fishbowl_messages")
+          .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (searchPattern) messagesQuery = messagesQuery.ilike("text", searchPattern);
+
+        let todosQuery = supabase
+          .from("mc_fishbowl_todos")
+          .select("id, title, description, status, priority, created_by_agent_id, assigned_to_agent_id, source_idea_id, created_at, updated_at, completed_at")
+          .eq("api_key_hash", apiKeyHash)
+          .neq("status", "dropped")
+          .order("updated_at", { ascending: false })
+          .limit(smallerLimit);
+        if (searchPattern) {
+          todosQuery = todosQuery.or(`title.ilike.${searchPattern},description.ilike.${searchPattern}`);
+        }
+
+        let commentsQuery = supabase
+          .from("mc_fishbowl_comments")
+          .select("id, target_kind, target_id, author_agent_id, text, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(smallerLimit);
+        if (searchPattern) commentsQuery = commentsQuery.ilike("text", searchPattern);
+
+        let signalsQuery = supabase
+          .from("mc_signals")
+          .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(smallerLimit);
+        if (searchPattern) signalsQuery = signalsQuery.ilike("summary", searchPattern);
+
+        let sessionsQuery = supabase
+          .from("mc_session_summaries")
+          .select("id, session_id, platform, summary, decisions, open_loops, topics, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(searchQuery ? 40 : 12);
+        if (searchPattern) sessionsQuery = sessionsQuery.ilike("summary", searchPattern);
+
+        let conversationTurnsQuery = supabase
+          .from("mc_conversation_log")
+          .select("id, session_id, role, content, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(smallerLimit);
+        if (searchPattern) conversationTurnsQuery = conversationTurnsQuery.ilike("content", searchPattern);
+
+        let chatMessagesQuery = supabase
+          .from("chat_messages")
+          .select("id, session_id, role, content, created_at")
+          .eq("api_key_hash", apiKeyHash)
+          .order("created_at", { ascending: false })
+          .limit(smallerLimit);
+        if (searchPattern) chatMessagesQuery = chatMessagesQuery.ilike("content", searchPattern);
 
         const [
           profilesResult,
@@ -7941,43 +8008,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .eq("api_key_hash", apiKeyHash)
             .order("last_seen_at", { ascending: false, nullsFirst: false })
             .limit(smallerLimit),
-          supabase
-            .from("mc_fishbowl_messages")
-            .select("id, author_emoji, author_name, author_agent_id, recipients, text, tags, thread_id, created_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(limit),
-          supabase
-            .from("mc_fishbowl_todos")
-            .select("id, title, description, status, priority, created_by_agent_id, assigned_to_agent_id, source_idea_id, created_at, updated_at, completed_at")
-            .eq("api_key_hash", apiKeyHash)
-            .neq("status", "dropped")
-            .order("updated_at", { ascending: false })
-            .limit(smallerLimit),
-          supabase
-            .from("mc_fishbowl_comments")
-            .select("id, target_kind, target_id, author_agent_id, text, created_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(smallerLimit),
+          messagesQuery,
+          todosQuery,
+          commentsQuery,
           supabase
             .from("mc_agent_dispatches")
             .select("dispatch_id, source, target_agent_id, task_ref, status, lease_owner, lease_expires_at, last_real_action_at, payload, created_at, updated_at")
             .eq("api_key_hash", apiKeyHash)
             .order("updated_at", { ascending: false })
             .limit(smallerLimit),
-          supabase
-            .from("mc_signals")
-            .select("id, tool, action, severity, summary, deep_link, payload, created_at, read_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(smallerLimit),
-          supabase
-            .from("mc_session_summaries")
-            .select("id, session_id, platform, summary, decisions, open_loops, topics, created_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(12),
+          signalsQuery,
+          sessionsQuery,
           supabase
             .from("mc_knowledge_library")
             .select("slug, title, category, tags, version, updated_at, created_at")
@@ -7990,18 +8031,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .eq("api_key_hash", apiKeyHash)
             .order("priority", { ascending: false })
             .limit(16),
-          supabase
-            .from("mc_conversation_log")
-            .select("id, session_id, role, content, created_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(smallerLimit),
-          supabase
-            .from("chat_messages")
-            .select("id, session_id, role, content, created_at")
-            .eq("api_key_hash", apiKeyHash)
-            .order("created_at", { ascending: false })
-            .limit(smallerLimit),
+          conversationTurnsQuery,
+          chatMessagesQuery,
         ]);
 
         const errors = [

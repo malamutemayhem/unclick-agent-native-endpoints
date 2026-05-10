@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminOrchestratorPage from "./AdminOrchestrator";
@@ -19,6 +19,66 @@ describe("AdminOrchestratorPage", () => {
       "fetch",
       vi.fn(async (url: RequestInfo | URL) => {
         const textUrl = String(url);
+        if (textUrl.includes("orchestrator_context_read") && textUrl.includes("q=dog20")) {
+          return {
+            ok: true,
+            json: async () => ({
+              context: {
+                version: "orchestrator-context-v1",
+                generated_at: "2026-05-10T06:05:00.000Z",
+                current_state_card: {
+                  summary: "1 matching continuity event.",
+                  newest_activity_at: "2026-05-10T06:04:00.000Z",
+                  newest_checkin_at: "2026-05-10T05:55:00.000Z",
+                  active_todo_count: 0,
+                  blocker_count: 0,
+                  active_seat_count: 1,
+                  next_actions: [],
+                  blockers: [],
+                  live_sources: {
+                    profiles: 1,
+                    boardroom_messages: 0,
+                    todos: 0,
+                    comments: 1,
+                    dispatches: 0,
+                    signals: 0,
+                    sessions: 0,
+                    library: 0,
+                    business_context: 0,
+                    conversation_turns: 0,
+                  },
+                },
+                profile_cards: [
+                  {
+                    agent_id: "codex-orchestrator-seat",
+                    label: "Codex Orchestrator Seat",
+                    role: "ai-seat",
+                    emoji: "🤖",
+                    source_app_label: "Codex",
+                    connection_label: "Connected",
+                    last_seen_at: "2026-05-10T05:55:00.000Z",
+                    freshness_label: "Live",
+                  },
+                ],
+                human_operator_time: null,
+                continuity_events: [
+                  {
+                    source_kind: "todo_comment",
+                    source_id: "comment-dog20",
+                    created_at: "2026-05-10T06:04:00.000Z",
+                    kind: "context",
+                    actor_agent_id: "codex-orchestrator-seat",
+                    summary: "Manual Orchestrator note from this Codex chat: dog20 reached UnClick.",
+                    tags: ["todo", "comment"],
+                    deep_link: "/admin/jobs#todo-1",
+                  },
+                ],
+                library_snapshots: [],
+              },
+            }),
+          } as Response;
+        }
+
         if (textUrl.includes("orchestrator_context_read")) {
           return {
             ok: true,
@@ -154,9 +214,30 @@ describe("AdminOrchestratorPage", () => {
     const filter = await screen.findByPlaceholderText("Filter Orchestrator feed");
     fireEvent.change(filter, { target: { value: "proof" } });
 
-    expect(screen.getByText("1 of 2 events match")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 2 events match")).toBeInTheDocument();
     expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
     expect(document.querySelector("mark")?.textContent?.toLowerCase()).toContain("proof");
+  });
+
+  it("asks the server for deeper Orchestrator keyword matches", async () => {
+    render(
+      <MemoryRouter>
+        <AdminOrchestratorPage />
+      </MemoryRouter>,
+    );
+
+    const filter = await screen.findByPlaceholderText("Filter Orchestrator feed");
+    fireEvent.change(filter, { target: { value: "dog20" } });
+
+    expect(await screen.findByText(/dog20 reached UnClick/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("q=dog20"),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+        }),
+      ),
+    );
   });
 
   it("uses explicit controls for long continuity rows", async () => {

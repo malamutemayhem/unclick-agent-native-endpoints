@@ -525,6 +525,7 @@ export default function AdminOrchestratorPage() {
             context={orchestratorContext}
             loading={loading || sessionLoading}
             chatStatusLabel={chatDisabledReason ? "Chat disabled" : tier === "channel" ? "Claude Code bridge available" : "AI chat available"}
+            authToken={authToken}
           />
         </div>
 
@@ -553,24 +554,65 @@ function OrchestratorContinuityPanel({
   context,
   loading,
   chatStatusLabel,
+  authToken,
 }: {
   context: OrchestratorContext | null;
   loading: boolean;
   chatStatusLabel: string;
+  authToken: string;
 }) {
-  const events = useMemo(
-    () => context?.continuity_events ?? [],
-    [context?.continuity_events],
-  );
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchContext, setServerSearchContext] = useState<OrchestratorContext | null>(null);
+  const [serverSearchLoading, setServerSearchLoading] = useState(false);
+  const trimmedSearchQuery = searchQuery.trim();
+  useEffect(() => {
+    if (!authToken || trimmedSearchQuery.length === 0) {
+      setServerSearchContext(null);
+      setServerSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setServerSearchLoading(true);
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/memory-admin?action=orchestrator_context_read&limit=120&q=${encodeURIComponent(trimmedSearchQuery)}`,
+            { headers: { Authorization: `Bearer ${authToken}` } },
+          );
+          if (cancelled) return;
+          if (res.ok) {
+            const body = (await res.json()) as { context?: OrchestratorContext };
+            setServerSearchContext(body.context ?? null);
+          } else {
+            setServerSearchContext(null);
+          }
+        } finally {
+          if (!cancelled) setServerSearchLoading(false);
+        }
+      })();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [authToken, trimmedSearchQuery]);
+
+  const feedContext = trimmedSearchQuery && serverSearchContext ? serverSearchContext : context;
+  const events = useMemo(
+    () => feedContext?.continuity_events ?? [],
+    [feedContext?.continuity_events],
+  );
   const [easyRead, setEasyRead] = useState(() => readStoredBoolean(EASY_READ_STORAGE_KEY, true));
   const [dripfeedEducation, setDripfeedEducation] = useState(() =>
     readStoredBoolean(DRIPFEED_EDUCATION_STORAGE_KEY, true),
   );
   const [analogies, setAnalogies] = useState(() => readStoredBoolean(ANALOGY_STORAGE_KEY, true));
   const profileByAgentId = useMemo(
-    () => buildProfileLookup(context?.profile_cards),
-    [context?.profile_cards],
+    () => buildProfileLookup(feedContext?.profile_cards),
+    [feedContext?.profile_cards],
   );
   const eventViews = useMemo(
     () =>
@@ -629,7 +671,9 @@ function OrchestratorContinuityPanel({
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3 text-[11px] text-white/40">
         <span>{chatStatusLabel}</span>
         <span>
-          {searchQuery.trim()
+          {serverSearchLoading
+            ? "Searching all continuity..."
+            : searchQuery.trim()
             ? `${filteredEventViews.length} of ${events.length} events match`
             : `${events.length} loaded event${events.length === 1 ? "" : "s"}`}
         </span>
