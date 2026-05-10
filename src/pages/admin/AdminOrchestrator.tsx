@@ -142,6 +142,8 @@ const ACTOR_TONE_STYLES: Record<ActorTone, string> = {
 const EASY_READ_STORAGE_KEY = "unclick_orchestrator_easy_read_v1";
 const DRIPFEED_EDUCATION_STORAGE_KEY = "unclick_orchestrator_dripfeed_education_v1";
 const ANALOGY_STORAGE_KEY = "unclick_orchestrator_analogy_v1";
+const EVENT_PREVIEW_CHARS = 520;
+const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
 
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -258,31 +260,43 @@ function actorIdentityForEvent(
 
 function easyReadForEvent(event: OrchestratorContinuityEvent, actor: ActorIdentity): string {
   const summary = event.summary.trim();
+  const cleanSummary = summary
+    .replace(/^PASS:\s*/i, "")
+    .replace(/^BLOCKER:\s*/i, "")
+    .replace(/^(user|assistant):\s*/i, "")
+    .trim();
+
+  if (/scopepack|turn-ingest|subscription seats|mc_conversation_log|chat_messages/i.test(summary)) {
+    return `${actor.emoji} ${actor.label} wrote the next small build step. It is about getting subscription chat messages to show inside Orchestrator.`;
+  }
+  if (/PR\s*#?\d+|merged|deployed|checks? (are )?green|production checks/i.test(summary)) {
+    return `${actor.emoji} ${actor.label} shipped a change and left proof that the checks passed.`;
+  }
   if (/^PASS:/i.test(summary)) {
-    return `${actor.emoji} ${actor.label} made progress. ${summary.replace(/^PASS:\s*/i, "")}`;
+    return `${actor.emoji} ${actor.label} moved one useful step forward. ${cleanSummary}`;
   }
   if (/^BLOCKER:/i.test(summary)) {
-    return `Needs help: ${actor.label} hit a blocker. ${summary.replace(/^BLOCKER:\s*/i, "")}`;
+    return `Needs help: ${actor.label} stopped safely and says what is blocking it. ${cleanSummary}`;
   }
   if (event.kind === "proof") {
-    return `${actor.emoji} ${actor.label} posted proof. ${summary}`;
+    return `${actor.emoji} ${actor.label} left a proof note so the work can be trusted.`;
   }
   if (event.kind === "decision" || event.tags?.includes("decision")) {
-    return `${actor.emoji} Decision from ${actor.label}: ${summary}`;
+    return `${actor.emoji} Decision from ${actor.label}. This should guide what seats do next.`;
   }
   if (event.source_kind === "todo") {
-    return `Job update: ${summary}`;
+    return "Job update: this work card changed.";
   }
   if (event.source_kind === "signal") {
-    return `Signal to notice: ${summary}`;
+    return "Signal to notice: something needs attention.";
   }
   if (event.role === "user") {
-    return `Chris said: ${summary.replace(/^user:\s*/i, "")}`;
+    return `Chris said: ${cleanSummary}`;
   }
   if (event.role === "assistant") {
-    return `AI replied: ${summary.replace(/^assistant:\s*/i, "")}`;
+    return `AI replied: ${cleanSummary}`;
   }
-  return `${actor.emoji} ${actor.label}: ${summary}`;
+  return `${actor.emoji} ${actor.label} added a short update.`;
 }
 
 function educationHintForEvent(event: OrchestratorContinuityEvent): string {
@@ -396,6 +410,15 @@ function matchesEventSearch(
     if (compactText.includes(compactToken)) return true;
     return words.some((word) => word.startsWith(token) || word.includes(token) || isSubsequence(compactToken, word));
   });
+}
+
+function truncateText(value: string, maxChars: number): { text: string; truncated: boolean } {
+  if (value.length <= maxChars) return { text: value, truncated: false };
+  const sliced = value.slice(0, maxChars).trimEnd();
+  return {
+    text: `${sliced.replace(/[,.:\s]+$/, "")}...`,
+    truncated: true,
+  };
 }
 
 export default function AdminOrchestratorPage() {
@@ -735,7 +758,14 @@ function ContinuityFeedRow({
   analogies: boolean;
   searchQuery: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const showFriendlyExtras = easyRead && shouldShowDrip(index, event);
+  const mainText = easyRead ? easySummary : event.summary;
+  const mainPreview = truncateText(mainText, EVENT_PREVIEW_CHARS);
+  const naturalPreview = truncateText(event.summary, NATURAL_CONTEXT_PREVIEW_CHARS);
+  const visibleMainText = expanded || !mainPreview.truncated ? mainText : mainPreview.text;
+  const visibleNaturalText = expanded || !naturalPreview.truncated ? event.summary : naturalPreview.text;
+  const canExpand = mainPreview.truncated || (easyRead && naturalPreview.truncated);
   const content = (
     <article className="rounded-xl border border-white/[0.06] bg-[#111111] px-4 py-3">
       <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -771,11 +801,20 @@ function ContinuityFeedRow({
         <p className="sr-only">AI-native natural context: {event.summary}</p>
       )}
       <p className="text-sm leading-6 text-white/70">
-        {highlightSearchText(easyRead ? easySummary : event.summary, searchQuery)}
+        {highlightSearchText(visibleMainText, searchQuery)}
       </p>
+      {canExpand && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-2 rounded-md border border-[#61C1C4]/20 bg-[#61C1C4]/5 px-2 py-1 text-[11px] font-medium text-[#A9EEF0] hover:border-[#61C1C4]/35 hover:bg-[#61C1C4]/10"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
       {easyRead && (
         <p className="mt-2 rounded-lg border border-white/[0.05] bg-black/20 px-2 py-1.5 text-[11px] leading-4 text-white/35">
-          Natural context for AI: {highlightSearchText(event.summary, searchQuery)}
+          Natural context for AI: {highlightSearchText(visibleNaturalText, searchQuery)}
         </p>
       )}
       {showFriendlyExtras && dripfeedEducation && (
@@ -797,12 +836,18 @@ function ContinuityFeedRow({
           ))}
         </div>
       )}
+      {event.deep_link?.startsWith("/") && (
+        <div className="mt-3">
+          <Link
+            to={event.deep_link}
+            className="inline-flex items-center rounded-md border border-white/[0.08] px-2 py-1 text-[11px] font-medium text-white/45 hover:border-[#61C1C4]/30 hover:text-[#A9EEF0]"
+          >
+            Open source
+          </Link>
+        </div>
+      )}
     </article>
   );
-
-  if (event.deep_link?.startsWith("/")) {
-    return <Link to={event.deep_link}>{content}</Link>;
-  }
 
   return content;
 }

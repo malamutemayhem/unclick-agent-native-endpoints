@@ -77,8 +77,10 @@ describe("AdminOrchestratorPage", () => {
                     created_at: "2026-05-10T05:56:00.000Z",
                     kind: "proof",
                     actor_agent_id: "codex-orchestrator-seat",
-                    summary: "PASS: Orchestrator continuity proof landed.",
+                    summary:
+                      "PASS: Orchestrator continuity proof landed. This deliberately long proof explains that the feed should be readable without hiding the source text forever, and it keeps going so the Show more button appears for humans who want the full detail instead of a clipped preview. The change should make the first sentence friendly, keep the AI natural context available, and avoid making the whole row a surprise hyperlink when someone is only trying to select or read text.",
                     tags: ["done"],
+                    deep_link: "/admin/jobs#todo-1",
                   },
                 ],
                 library_snapshots: [],
@@ -155,5 +157,18 @@ describe("AdminOrchestratorPage", () => {
     expect(screen.getByText("1 of 2 events match")).toBeInTheDocument();
     expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
     expect(document.querySelector("mark")?.textContent?.toLowerCase()).toContain("proof");
+  });
+
+  it("uses explicit controls for long continuity rows", async () => {
+    render(
+      <MemoryRouter>
+        <AdminOrchestratorPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Show more")).toBeInTheDocument();
+    expect(screen.getByText("Open source")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show more"));
+    expect(screen.getByText("Show less")).toBeInTheDocument();
   });
 });
