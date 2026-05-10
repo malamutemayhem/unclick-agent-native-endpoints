@@ -7875,6 +7875,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           libraryResult,
           businessContextResult,
           conversationTurnsResult,
+          chatMessagesResult,
         ] = await Promise.all([
           supabase
             .from("mc_fishbowl_profiles")
@@ -7937,6 +7938,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .eq("api_key_hash", apiKeyHash)
             .order("created_at", { ascending: false })
             .limit(smallerLimit),
+          supabase
+            .from("chat_messages")
+            .select("id, session_id, role, content, created_at")
+            .eq("api_key_hash", apiKeyHash)
+            .order("created_at", { ascending: false })
+            .limit(smallerLimit),
         ]);
 
         const errors = [
@@ -7950,8 +7957,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           libraryResult.error,
           businessContextResult.error,
           conversationTurnsResult.error,
+          chatMessagesResult.error,
         ].filter(Boolean);
         if (errors.length > 0) throw errors[0];
+
+        const directChatTurns = (
+          (chatMessagesResult.data ?? []) as Array<{
+            id: string;
+            session_id: string;
+            role: string;
+            content: string;
+            created_at: string;
+          }>
+        )
+          .filter((row) => row.content.trim().length > 0)
+          .map(
+            (row): OrchestratorConversationTurnRow => ({
+              id: `chat_message:${row.id}`,
+              session_id: row.session_id,
+              role: row.role,
+              content: row.content,
+              created_at: row.created_at,
+            }),
+          );
+        const conversationTurns = [
+          ...((conversationTurnsResult.data ?? []) as OrchestratorConversationTurnRow[]),
+          ...directChatTurns,
+        ]
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+          .slice(0, smallerLimit);
 
         return res.status(200).json({
           context: buildOrchestratorContext({
@@ -7965,7 +7999,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             sessions: (sessionsResult.data ?? []) as OrchestratorSessionRow[],
             library: (libraryResult.data ?? []) as OrchestratorLibraryRow[],
             businessContext: (businessContextResult.data ?? []) as OrchestratorBusinessContextRow[],
-            conversationTurns: (conversationTurnsResult.data ?? []) as OrchestratorConversationTurnRow[],
+            conversationTurns,
           }),
         });
       }
