@@ -17,6 +17,7 @@ import {
 import { useSession } from "@/lib/auth";
 import Comments from "./fishbowl/Comments";
 import { buildJobGithubSyncSignal, type JobGithubSyncSignal } from "./jobsGithubSync";
+import { highlightSearchText } from "./searchHighlight";
 
 interface FishbowlProfile {
   agent_id: string;
@@ -135,9 +136,9 @@ function trimSentence(value: string, maxChars: number): string {
 
 function stripNoisyLead(value: string): string {
   return value
-    .replace(/^\s*(urgent|bug|fix|feat|chore|docs|test|refactor|experiment|blocked|blocker)\s*[:\-]\s*/i, "")
+    .replace(/^\s*(urgent|bug|fix|feat|chore|docs|test|refactor|experiment|blocked|blocker)\s*[:-]\s*/i, "")
     .replace(/^\s*(fix|feat|chore|docs|test|refactor)\([^)]+\)\s*:\s*/i, "")
-    .replace(/^\s*(pr|pull request)\s*#?\d+\s*[:\-]\s*/i, "")
+    .replace(/^\s*(pr|pull request)\s*#?\d+\s*[:-]\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -592,6 +593,7 @@ function JobRow({
   onDragStart,
   onDragEnd,
   onDrop,
+  searchQuery,
 }: {
   todo: JobTodo;
   queueRank: number;
@@ -603,6 +605,7 @@ function JobRow({
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onDrop: (id: string) => void;
+  searchQuery: string;
 }) {
   const attention = needsAttention(todo);
   const description = todo.description?.trim();
@@ -676,10 +679,10 @@ function JobRow({
           title={todo.title}
         >
           <p className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}>
-            {displayCopy.title}
+            {highlightSearchText(displayCopy.title, searchQuery)}
           </p>
           <p className="truncate text-[10px] leading-4 text-white/35">
-            {displayCopy.summary}
+            {highlightSearchText(displayCopy.summary, searchQuery)}
           </p>
         </div>
 
@@ -699,7 +702,7 @@ function JobRow({
               {emoji ?? "AI"}
             </span>
             <span className="max-w-[130px] truncate" title={ownerLabel(todo)}>
-              {ownerLabel(todo)}
+              {highlightSearchText(ownerLabel(todo), searchQuery)}
             </span>
           </span>
           <span className="flex items-center gap-1 text-[11px] text-white/45">
@@ -784,16 +787,16 @@ function JobRow({
               </button>
             </div>
             <div className="mt-2 space-y-1.5">
-              <p className="text-xs font-medium text-white/70">{displayCopy.title}</p>
-              <p className="text-xs leading-5 text-white/50">{displayCopy.context}</p>
+              <p className="text-xs font-medium text-white/70">{highlightSearchText(displayCopy.title, searchQuery)}</p>
+              <p className="text-xs leading-5 text-white/50">{highlightSearchText(displayCopy.context, searchQuery)}</p>
             </div>
             {showDetails && (
               <div className="mt-3 rounded-[5px] border border-white/[0.05] bg-black/20 p-2">
                 <p className="text-[10px] uppercase tracking-wide text-white/25">Original source</p>
-                <p className="mt-1 text-xs font-medium leading-5 text-white/60">{todo.title}</p>
+                <p className="mt-1 text-xs font-medium leading-5 text-white/60">{highlightSearchText(todo.title, searchQuery)}</p>
                 {description ? (
                   <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-white/45">
-                    {description}
+                    {highlightSearchText(description, searchQuery)}
                   </p>
                 ) : (
                   <p className="mt-2 text-xs italic text-white/30">No original description.</p>
@@ -854,6 +857,7 @@ function JobSection({
   hasMoreRemote,
   showMoreLoading,
   loading,
+  searchQuery,
 }: {
   sectionKey: JobSectionKey;
   jobs: JobTodo[];
@@ -870,6 +874,7 @@ function JobSection({
   hasMoreRemote?: boolean;
   showMoreLoading?: boolean;
   loading?: boolean;
+  searchQuery: string;
 }) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("queue");
@@ -976,6 +981,7 @@ function JobSection({
                 }
                 setDraggedId(null);
               }}
+              searchQuery={searchQuery}
             />
           ))}
           {canShowMore && (
@@ -1305,6 +1311,7 @@ export default function AdminJobs() {
           onToggleSection={() => toggleSection("active")}
           onShowMore={() => showMore("active")}
           loading={initialLoading}
+          searchQuery={searchQuery}
         />
         <JobSection
           sectionKey="next"
@@ -1320,6 +1327,7 @@ export default function AdminJobs() {
           onToggleSection={() => toggleSection("next")}
           onShowMore={() => showMore("next")}
           loading={initialLoading}
+          searchQuery={searchQuery}
         />
         <JobSection
           sectionKey="inline"
@@ -1335,6 +1343,7 @@ export default function AdminJobs() {
           onToggleSection={() => toggleSection("inline")}
           onShowMore={() => showMore("inline")}
           loading={initialLoading}
+          searchQuery={searchQuery}
         />
         <JobSection
           sectionKey="done"
@@ -1352,6 +1361,7 @@ export default function AdminJobs() {
           hasMoreRemote={!completedHistoryLoaded}
           showMoreLoading={completedHistoryLoading}
           loading={initialLoading}
+          searchQuery={searchQuery}
         />
       </div>
 

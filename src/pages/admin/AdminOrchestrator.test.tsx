@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminOrchestratorPage from "./AdminOrchestrator";
@@ -13,6 +13,7 @@ vi.mock("@/lib/auth", () => ({
 
 describe("AdminOrchestratorPage", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.stubEnv("VITE_AI_CHAT_ENABLED", "true");
     vi.stubGlobal(
       "fetch",
@@ -126,6 +127,10 @@ describe("AdminOrchestratorPage", () => {
     );
 
     expect(await screen.findByText("Continuity Feed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Easy reading for humans")).toBeChecked();
+    expect(screen.getByLabelText("Dripfeed Education")).toBeChecked();
+    expect(screen.getByLabelText("Analogies")).toBeChecked();
+    expect(screen.getByPlaceholderText("Filter Orchestrator feed")).toBeInTheDocument();
     expect(
       (await screen.findAllByText("user: Orchestrator context should show subscription messages."))
         .length,
@@ -135,5 +140,20 @@ describe("AdminOrchestratorPage", () => {
     expect(screen.getAllByText("Human").length).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText("Message the AI assistant...")).not.toBeInTheDocument();
     expect(screen.queryByText("Using AI Assistant")).not.toBeInTheDocument();
+  });
+
+  it("filters the Orchestrator feed as the user types", async () => {
+    render(
+      <MemoryRouter>
+        <AdminOrchestratorPage />
+      </MemoryRouter>,
+    );
+
+    const filter = await screen.findByPlaceholderText("Filter Orchestrator feed");
+    fireEvent.change(filter, { target: { value: "proof" } });
+
+    expect(screen.getByText("1 of 2 events match")).toBeInTheDocument();
+    expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
+    expect(document.querySelector("mark")?.textContent?.toLowerCase()).toContain("proof");
   });
 });

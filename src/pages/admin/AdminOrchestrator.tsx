@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Users,
   MessageSquareText,
+  X,
 } from "lucide-react";
 import {
   aiChatEnvEnabled,
@@ -31,6 +32,7 @@ import {
   type ChannelStatus,
 } from "@/components/admin/aiChatConfig";
 import { useSession } from "@/lib/auth";
+import { highlightSearchText } from "./searchHighlight";
 
 interface MemoryStats {
   business_context?: number;
@@ -137,6 +139,10 @@ const ACTOR_TONE_STYLES: Record<ActorTone, string> = {
   work: "border-[#8EC5FF]/25 bg-[#8EC5FF]/10 text-[#8EC5FF]",
 };
 
+const EASY_READ_STORAGE_KEY = "unclick_orchestrator_easy_read_v1";
+const DRIPFEED_EDUCATION_STORAGE_KEY = "unclick_orchestrator_dripfeed_education_v1";
+const ANALOGY_STORAGE_KEY = "unclick_orchestrator_analogy_v1";
+
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "never";
   const ts = new Date(iso).getTime();
@@ -148,6 +154,38 @@ function formatRelative(iso: string | null | undefined): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+}
+
+function formatAbsolute(iso: string | null | undefined): string {
+  if (!iso) return "No date";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "No date";
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+function normalizeSearch(value: string): string {
+  return value.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function compactSearch(value: string): string {
+  return normalizeSearch(value).replace(/[\s:_-]+/g, "");
+}
+
+function isSubsequence(needle: string, haystack: string): boolean {
+  if (!needle) return true;
+  let index = 0;
+  for (const char of haystack) {
+    if (char === needle[index]) index += 1;
+    if (index === needle.length) return true;
+  }
+  return false;
 }
 
 function buildProfileLookup(profiles: OrchestratorProfileCard[] | undefined): Map<string, OrchestratorProfileCard> {
@@ -216,6 +254,148 @@ function actorIdentityForEvent(
     };
   }
   return sourceFallbackIdentity(event);
+}
+
+function easyReadForEvent(event: OrchestratorContinuityEvent, actor: ActorIdentity): string {
+  const summary = event.summary.trim();
+  if (/^PASS:/i.test(summary)) {
+    return `${actor.emoji} ${actor.label} made progress. ${summary.replace(/^PASS:\s*/i, "")}`;
+  }
+  if (/^BLOCKER:/i.test(summary)) {
+    return `Needs help: ${actor.label} hit a blocker. ${summary.replace(/^BLOCKER:\s*/i, "")}`;
+  }
+  if (event.kind === "proof") {
+    return `${actor.emoji} ${actor.label} posted proof. ${summary}`;
+  }
+  if (event.kind === "decision" || event.tags?.includes("decision")) {
+    return `${actor.emoji} Decision from ${actor.label}: ${summary}`;
+  }
+  if (event.source_kind === "todo") {
+    return `Job update: ${summary}`;
+  }
+  if (event.source_kind === "signal") {
+    return `Signal to notice: ${summary}`;
+  }
+  if (event.role === "user") {
+    return `Chris said: ${summary.replace(/^user:\s*/i, "")}`;
+  }
+  if (event.role === "assistant") {
+    return `AI replied: ${summary.replace(/^assistant:\s*/i, "")}`;
+  }
+  return `${actor.emoji} ${actor.label}: ${summary}`;
+}
+
+function educationHintForEvent(event: OrchestratorContinuityEvent): string {
+  if (/^PASS:/i.test(event.summary)) {
+    return "Hint: PASS means something useful moved forward and there should be proof nearby.";
+  }
+  if (/^BLOCKER:/i.test(event.summary)) {
+    return "Hint: BLOCKER means a seat stopped safely instead of guessing.";
+  }
+  if (event.kind === "proof") {
+    return "Hint: proof is the receipt that tells you why a change can be trusted.";
+  }
+  if (event.kind === "decision" || event.tags?.includes("decision")) {
+    return "Hint: decision means this should guide future seats until Chris changes it.";
+  }
+  if (event.source_kind === "signal") {
+    return "Hint: signals are attention lights. They point to things worth checking.";
+  }
+  if (event.source_kind === "todo") {
+    return "Hint: jobs are the work cards seats can claim, prove, and close.";
+  }
+  if (event.source_kind === "boardroom_message") {
+    return "Hint: Boardroom is where seats leave short shared work updates.";
+  }
+  if (event.source_kind === "conversation_turn") {
+    return "Hint: chat turns are context breadcrumbs from the human or AI conversation.";
+  }
+  return "Hint: keywords like proof, blocker, decision, and signal tell Orchestrator what kind of update this is.";
+}
+
+function analogyForEvent(event: OrchestratorContinuityEvent): string {
+  if (/^PASS:/i.test(event.summary) || event.kind === "proof") {
+    return "Analogy: like a worker leaving a signed receipt after finishing a small job.";
+  }
+  if (/^BLOCKER:/i.test(event.summary) || event.source_kind === "signal") {
+    return "Analogy: like a warning light on the dashboard asking for a quick look.";
+  }
+  if (event.kind === "decision" || event.tags?.includes("decision")) {
+    return "Analogy: like putting a sticky note on the control panel so everyone steers the same way.";
+  }
+  if (event.source_kind === "todo") {
+    return "Analogy: like a card on the work board moving from waiting to doing to done.";
+  }
+  if (event.source_kind === "conversation_turn") {
+    return "Analogy: like adding a fresh line to the shared notebook everyone reads from.";
+  }
+  return "Analogy: like one more breadcrumb in the trail Orchestrator follows.";
+}
+
+function shouldShowDrip(index: number, event: OrchestratorContinuityEvent): boolean {
+  return index === 0 || event.kind === "decision" || event.kind === "proof" || /^BLOCKER:/i.test(event.summary) || index % 4 === 0;
+}
+
+function readStoredBoolean(key: string, defaultValue: boolean): boolean {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? saved === "true" : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeStoredBoolean(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Local storage can be unavailable in private browsing; the UI still works for this session.
+  }
+}
+
+function eventSearchText(
+  event: OrchestratorContinuityEvent,
+  actor: ActorIdentity,
+  absoluteDate: string,
+): string {
+  return [
+    actor.emoji,
+    actor.label,
+    actor.detail,
+    event.kind,
+    event.source_kind,
+    event.actor_agent_id,
+    event.role,
+    event.summary,
+    easyReadForEvent(event, actor),
+    educationHintForEvent(event),
+    analogyForEvent(event),
+    absoluteDate,
+    ...(event.tags ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function matchesEventSearch(
+  event: OrchestratorContinuityEvent,
+  actor: ActorIdentity,
+  query: string,
+): boolean {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) return true;
+
+  const text = normalizeSearch(eventSearchText(event, actor, formatAbsolute(event.created_at)));
+  const compactText = text.replace(/\s+/g, "");
+  const words = text.split(/\s+/).filter(Boolean);
+
+  return normalizedQuery.split(/\s+/).every((token) => {
+    const compactToken = compactSearch(token);
+    if (!compactToken) return true;
+    if (text.includes(token)) return true;
+    if (compactText.includes(compactToken)) return true;
+    return words.some((word) => word.startsWith(token) || word.includes(token) || isSubsequence(compactToken, word));
+  });
 }
 
 export default function AdminOrchestratorPage() {
@@ -355,11 +535,55 @@ function OrchestratorContinuityPanel({
   loading: boolean;
   chatStatusLabel: string;
 }) {
-  const events = context?.continuity_events ?? [];
+  const events = useMemo(
+    () => context?.continuity_events ?? [],
+    [context?.continuity_events],
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [easyRead, setEasyRead] = useState(() => readStoredBoolean(EASY_READ_STORAGE_KEY, true));
+  const [dripfeedEducation, setDripfeedEducation] = useState(() =>
+    readStoredBoolean(DRIPFEED_EDUCATION_STORAGE_KEY, true),
+  );
+  const [analogies, setAnalogies] = useState(() => readStoredBoolean(ANALOGY_STORAGE_KEY, true));
   const profileByAgentId = useMemo(
     () => buildProfileLookup(context?.profile_cards),
     [context?.profile_cards],
   );
+  const eventViews = useMemo(
+    () =>
+      events.map((event, index) => {
+        const actor = actorIdentityForEvent(event, profileByAgentId);
+        const absoluteDate = formatAbsolute(event.created_at);
+        return {
+          event,
+          actor,
+          index,
+          absoluteDate,
+          easySummary: easyReadForEvent(event, actor),
+        };
+      }),
+    [events, profileByAgentId],
+  );
+  const filteredEventViews = useMemo(
+    () =>
+      eventViews.filter(({ event, actor }) => matchesEventSearch(event, actor, searchQuery)),
+    [eventViews, searchQuery],
+  );
+
+  function toggleEasyRead(nextValue: boolean) {
+    setEasyRead(nextValue);
+    writeStoredBoolean(EASY_READ_STORAGE_KEY, nextValue);
+  }
+
+  function toggleDripfeedEducation(nextValue: boolean) {
+    setDripfeedEducation(nextValue);
+    writeStoredBoolean(DRIPFEED_EDUCATION_STORAGE_KEY, nextValue);
+  }
+
+  function toggleAnalogies(nextValue: boolean) {
+    setAnalogies(nextValue);
+    writeStoredBoolean(ANALOGY_STORAGE_KEY, nextValue);
+  }
 
   return (
     <section className="flex min-h-[620px] flex-col rounded-2xl border border-white/[0.08] bg-[#0d0d0d]">
@@ -381,7 +605,79 @@ function OrchestratorContinuityPanel({
 
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3 text-[11px] text-white/40">
         <span>{chatStatusLabel}</span>
-        <span>{events.length} loaded event{events.length === 1 ? "" : "s"}</span>
+        <span>
+          {searchQuery.trim()
+            ? `${filteredEventViews.length} of ${events.length} events match`
+            : `${events.length} loaded event${events.length === 1 ? "" : "s"}`}
+        </span>
+      </div>
+
+      <div className="grid gap-3 border-b border-white/[0.06] px-5 py-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-white/30" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Filter Orchestrator feed"
+            className="w-full rounded-md border border-white/[0.06] bg-black/20 py-2 pl-8 pr-8 text-sm text-white/80 outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/35"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-2 rounded-[5px] p-1 text-white/35 hover:bg-white/[0.06] hover:text-white/65"
+              aria-label="Clear Orchestrator feed filter"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+          <span>
+            <span className="block text-xs font-medium text-white/75">Easy reading for humans</span>
+            <span className="block text-[10px] text-white/35">
+              {easyRead ? "Friendly layer on" : "Natural context view"}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            aria-label="Easy reading for humans"
+            checked={easyRead}
+            onChange={(event) => toggleEasyRead(event.target.checked)}
+            className="sr-only"
+          />
+          <span className={`relative h-6 w-11 rounded-full border transition ${easyRead ? "border-[#61C1C4]/40 bg-[#61C1C4]/25" : "border-white/[0.08] bg-white/[0.08]"}`}>
+            <span className={`absolute top-1 h-4 w-4 rounded-full transition ${easyRead ? "left-6 bg-[#61C1C4]" : "left-1 bg-white/55"}`} />
+          </span>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] px-5 py-3 text-xs text-white/55">
+        <label className="inline-flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            aria-label="Dripfeed Education"
+            checked={dripfeedEducation}
+            onChange={(event) => toggleDripfeedEducation(event.target.checked)}
+            className="h-4 w-4 rounded border-white/[0.12] bg-black/30 accent-[#61C1C4]"
+          />
+          <span>Dripfeed Education</span>
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            aria-label="Analogies"
+            checked={analogies}
+            onChange={(event) => toggleAnalogies(event.target.checked)}
+            className="h-4 w-4 rounded border-white/[0.12] bg-black/30 accent-[#61C1C4]"
+          />
+          <span>Analogies</span>
+        </label>
+        <span className="text-[11px] text-white/30">
+          These only add friendly hints in Easy reading mode.
+        </span>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
@@ -394,11 +690,23 @@ function OrchestratorContinuityPanel({
             or run the UnClick heartbeat so Orchestrator has something to show.
           </div>
         )}
-        {!loading && events.slice(0, 24).map((event) => (
+        {!loading && events.length > 0 && filteredEventViews.length === 0 && (
+          <div className="rounded-xl border border-white/[0.08] bg-black/20 p-5 text-sm leading-6 text-white/55">
+            No Orchestrator events match that filter.
+          </div>
+        )}
+        {!loading && filteredEventViews.slice(0, 24).map(({ event, actor, index, absoluteDate, easySummary }) => (
           <ContinuityFeedRow
             key={`${event.source_kind}:${event.source_id}`}
             event={event}
-            profileByAgentId={profileByAgentId}
+            actor={actor}
+            index={index}
+            absoluteDate={absoluteDate}
+            easySummary={easySummary}
+            easyRead={easyRead}
+            dripfeedEducation={dripfeedEducation}
+            analogies={analogies}
+            searchQuery={searchQuery}
           />
         ))}
       </div>
@@ -408,12 +716,26 @@ function OrchestratorContinuityPanel({
 
 function ContinuityFeedRow({
   event,
-  profileByAgentId,
+  actor,
+  index,
+  absoluteDate,
+  easySummary,
+  easyRead,
+  dripfeedEducation,
+  analogies,
+  searchQuery,
 }: {
   event: OrchestratorContinuityEvent;
-  profileByAgentId: Map<string, OrchestratorProfileCard>;
+  actor: ActorIdentity;
+  index: number;
+  absoluteDate: string;
+  easySummary: string;
+  easyRead: boolean;
+  dripfeedEducation: boolean;
+  analogies: boolean;
+  searchQuery: string;
 }) {
-  const actor = actorIdentityForEvent(event, profileByAgentId);
+  const showFriendlyExtras = easyRead && shouldShowDrip(index, event);
   const content = (
     <article className="rounded-xl border border-white/[0.06] bg-[#111111] px-4 py-3">
       <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -423,7 +745,9 @@ function ContinuityFeedRow({
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="min-w-0 truncate text-sm font-semibold text-white/85">{actor.label}</span>
+              <span className="min-w-0 truncate text-sm font-semibold text-white/85">
+                {highlightSearchText(actor.label, searchQuery)}
+              </span>
               <span className="rounded-md border border-[#61C1C4]/20 bg-[#61C1C4]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[#61C1C4]">
                 {event.kind}
               </span>
@@ -438,9 +762,32 @@ function ContinuityFeedRow({
             </div>
           </div>
         </div>
-        <span className="text-[10px] text-white/30">{formatRelative(event.created_at)}</span>
+        <div className="text-left sm:text-right">
+          <span className="block text-[10px] text-white/40">{formatRelative(event.created_at)}</span>
+          <span className="block text-[10px] text-white/25">{highlightSearchText(absoluteDate, searchQuery)}</span>
+        </div>
       </div>
-      <p className="text-sm leading-6 text-white/70">{event.summary}</p>
+      {easyRead && (
+        <p className="sr-only">AI-native natural context: {event.summary}</p>
+      )}
+      <p className="text-sm leading-6 text-white/70">
+        {highlightSearchText(easyRead ? easySummary : event.summary, searchQuery)}
+      </p>
+      {easyRead && (
+        <p className="mt-2 rounded-lg border border-white/[0.05] bg-black/20 px-2 py-1.5 text-[11px] leading-4 text-white/35">
+          Natural context for AI: {highlightSearchText(event.summary, searchQuery)}
+        </p>
+      )}
+      {showFriendlyExtras && dripfeedEducation && (
+        <p className="mt-2 rounded-lg border border-[#61C1C4]/15 bg-[#61C1C4]/5 px-2 py-1.5 text-[11px] leading-4 text-[#A9EEF0]/80">
+          {highlightSearchText(educationHintForEvent(event), searchQuery)}
+        </p>
+      )}
+      {showFriendlyExtras && analogies && (
+        <p className="mt-2 rounded-lg border border-[#E2B93B]/15 bg-[#E2B93B]/5 px-2 py-1.5 text-[11px] leading-4 text-[#F1D982]/80">
+          {highlightSearchText(analogyForEvent(event), searchQuery)}
+        </p>
+      )}
       {event.tags && event.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {event.tags.slice(0, 5).map((tag) => (
