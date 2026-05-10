@@ -112,12 +112,29 @@ interface OrchestratorContext {
 
 type ConnectionTier = "channel" | "gemini" | "unconfigured";
 type SeatFreshnessLabel = "Live" | "Recent" | "Missed check-in" | "Quiet";
+type OrchestratorProfileCard = OrchestratorContext["profile_cards"][number];
+type OrchestratorContinuityEvent = OrchestratorContext["continuity_events"][number];
+type ActorTone = "human" | "seat" | "system" | "work";
+
+interface ActorIdentity {
+  emoji: string;
+  label: string;
+  detail: string;
+  tone: ActorTone;
+}
 
 const FRESHNESS_STYLES: Record<SeatFreshnessLabel, string> = {
   Live: "border-[#61C1C4]/35 bg-[#61C1C4]/10 text-[#61C1C4]",
   Recent: "border-white/[0.08] bg-white/[0.04] text-white/60",
   "Missed check-in": "border-[#E2B93B]/35 bg-[#E2B93B]/10 text-[#E2B93B]",
   Quiet: "border-white/[0.06] bg-black/20 text-white/35",
+};
+
+const ACTOR_TONE_STYLES: Record<ActorTone, string> = {
+  human: "border-[#E2B93B]/30 bg-[#E2B93B]/10 text-[#E2B93B]",
+  seat: "border-[#61C1C4]/30 bg-[#61C1C4]/10 text-[#61C1C4]",
+  system: "border-white/[0.08] bg-white/[0.04] text-white/65",
+  work: "border-[#8EC5FF]/25 bg-[#8EC5FF]/10 text-[#8EC5FF]",
 };
 
 function formatRelative(iso: string | null | undefined): string {
@@ -131,6 +148,74 @@ function formatRelative(iso: string | null | undefined): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+}
+
+function buildProfileLookup(profiles: OrchestratorProfileCard[] | undefined): Map<string, OrchestratorProfileCard> {
+  return new Map((profiles ?? []).map((profile) => [profile.agent_id, profile]));
+}
+
+function humanizeAgentId(agentId: string): string {
+  return agentId
+    .replace(/^human[-_]/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .slice(0, 44);
+}
+
+function sourceLabel(sourceKind: string): string {
+  return sourceKind.replace(/_/g, " ");
+}
+
+function sourceFallbackIdentity(event: OrchestratorContinuityEvent): ActorIdentity {
+  const source = sourceLabel(event.source_kind);
+  if (event.role === "user") {
+    return { emoji: "👤", label: "Human", detail: source, tone: "human" };
+  }
+  if (event.role === "assistant") {
+    return { emoji: "🤖", label: "AI Assistant", detail: source, tone: "seat" };
+  }
+  if (event.source_kind === "todo") {
+    return { emoji: "📋", label: "Job", detail: event.kind, tone: "work" };
+  }
+  if (event.source_kind === "todo_comment" || event.source_kind === "boardroom_message") {
+    return { emoji: "💬", label: "Boardroom", detail: event.kind, tone: "work" };
+  }
+  if (event.source_kind === "signal") {
+    return { emoji: "⚠️", label: "Signal", detail: event.kind, tone: "work" };
+  }
+  if (event.source_kind === "session_summary") {
+    return { emoji: "🧠", label: "Session", detail: event.kind, tone: "system" };
+  }
+  if (event.source_kind === "library") {
+    return { emoji: "📚", label: "Library", detail: event.kind, tone: "system" };
+  }
+  return { emoji: "•", label: source, detail: event.kind, tone: "system" };
+}
+
+function actorIdentityForEvent(
+  event: OrchestratorContinuityEvent,
+  profileByAgentId: Map<string, OrchestratorProfileCard>,
+): ActorIdentity {
+  if (event.actor_agent_id) {
+    const profile = profileByAgentId.get(event.actor_agent_id);
+    if (profile) {
+      const fallbackEmoji = profile.role === "human" ? "👤" : "🤖";
+      return {
+        emoji: profile.emoji ?? fallbackEmoji,
+        label: profile.label,
+        detail: profile.source_app_label ?? (profile.role === "human" ? "Human" : "AI Seat"),
+        tone: profile.role === "human" ? "human" : "seat",
+      };
+    }
+    const isHuman = event.actor_agent_id.startsWith("human-");
+    return {
+      emoji: isHuman ? "👤" : "🤖",
+      label: humanizeAgentId(event.actor_agent_id),
+      detail: sourceLabel(event.source_kind),
+      tone: isHuman ? "human" : "seat",
+    };
+  }
+  return sourceFallbackIdentity(event);
 }
 
 export default function AdminOrchestratorPage() {
@@ -271,6 +356,10 @@ function OrchestratorContinuityPanel({
   chatStatusLabel: string;
 }) {
   const events = context?.continuity_events ?? [];
+  const profileByAgentId = useMemo(
+    () => buildProfileLookup(context?.profile_cards),
+    [context?.profile_cards],
+  );
 
   return (
     <section className="flex min-h-[620px] flex-col rounded-2xl border border-white/[0.08] bg-[#0d0d0d]">
@@ -306,24 +395,50 @@ function OrchestratorContinuityPanel({
           </div>
         )}
         {!loading && events.slice(0, 24).map((event) => (
-          <ContinuityFeedRow key={`${event.source_kind}:${event.source_id}`} event={event} />
+          <ContinuityFeedRow
+            key={`${event.source_kind}:${event.source_id}`}
+            event={event}
+            profileByAgentId={profileByAgentId}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function ContinuityFeedRow({ event }: { event: OrchestratorContext["continuity_events"][number] }) {
+function ContinuityFeedRow({
+  event,
+  profileByAgentId,
+}: {
+  event: OrchestratorContinuityEvent;
+  profileByAgentId: Map<string, OrchestratorProfileCard>;
+}) {
+  const actor = actorIdentityForEvent(event, profileByAgentId);
   const content = (
     <article className="rounded-xl border border-white/[0.06] bg-[#111111] px-4 py-3">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider">
-        <span className="rounded-md border border-[#61C1C4]/20 bg-[#61C1C4]/10 px-1.5 py-0.5 font-semibold text-[#61C1C4]">
-          {event.kind}
-        </span>
-        <span className="text-white/35">{event.source_kind.replace(/_/g, " ")}</span>
-        {event.role && <span className="text-white/30">{event.role}</span>}
-        {event.actor_agent_id && <span className="max-w-[260px] truncate font-mono text-white/30">{event.actor_agent_id}</span>}
-        <span className="ml-auto text-white/30">{formatRelative(event.created_at)}</span>
+      <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-base ${ACTOR_TONE_STYLES[actor.tone]}`}>
+            {actor.emoji}
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 truncate text-sm font-semibold text-white/85">{actor.label}</span>
+              <span className="rounded-md border border-[#61C1C4]/20 bg-[#61C1C4]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[#61C1C4]">
+                {event.kind}
+              </span>
+            </div>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/35">
+              <span>{actor.detail}</span>
+              <span>{sourceLabel(event.source_kind)}</span>
+              {event.role && <span>{event.role}</span>}
+              {event.actor_agent_id && (
+                <span className="max-w-[260px] truncate font-mono text-white/25">{event.actor_agent_id}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <span className="text-[10px] text-white/30">{formatRelative(event.created_at)}</span>
       </div>
       <p className="text-sm leading-6 text-white/70">{event.summary}</p>
       {event.tags && event.tags.length > 0 && (
@@ -377,6 +492,7 @@ function OrchestratorContextCard({
     );
   }
 
+  const profileByAgentId = buildProfileLookup(context.profile_cards);
   const state = context.current_state_card;
   const topSources = Object.entries(state.live_sources)
     .filter(([, value]) => value > 0)
@@ -437,7 +553,11 @@ function OrchestratorContextCard({
 
         <ContextSection title="Continuity" icon={GitBranch}>
           {context.continuity_events.slice(0, 5).map((event) => (
-            <ContinuityRow key={`${event.source_kind}:${event.source_id}`} event={event} />
+            <ContinuityRow
+              key={`${event.source_kind}:${event.source_id}`}
+              event={event}
+              profileByAgentId={profileByAgentId}
+            />
           ))}
           {context.continuity_events.length === 0 && (
             <p className="text-xs text-white/35">No continuity events loaded.</p>
@@ -529,14 +649,28 @@ function MiniMetric({
   );
 }
 
-function ContinuityRow({ event }: { event: OrchestratorContext["continuity_events"][number] }) {
+function ContinuityRow({
+  event,
+  profileByAgentId,
+}: {
+  event: OrchestratorContinuityEvent;
+  profileByAgentId: Map<string, OrchestratorProfileCard>;
+}) {
+  const actor = actorIdentityForEvent(event, profileByAgentId);
   const content = (
     <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#61C1C4]">
-          {event.kind}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs ${ACTOR_TONE_STYLES[actor.tone]}`}>
+            {actor.emoji}
+          </span>
+          <span className="min-w-0 truncate text-[11px] font-semibold text-white/75">{actor.label}</span>
+        </div>
         <span className="shrink-0 text-[10px] text-white/30">{formatRelative(event.created_at)}</span>
+      </div>
+      <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[10px] text-white/35">
+        <span className="font-semibold uppercase text-[#61C1C4]">{event.kind}</span>
+        <span>{sourceLabel(event.source_kind)}</span>
       </div>
       <p className="line-clamp-2 text-xs leading-5 text-white/65">{event.summary}</p>
     </div>
