@@ -103,6 +103,26 @@ describe("AutoPilotKit liveness helpers", () => {
     assert.equal(result.safe_mode.no_manual_dispatch_as_schedule, true);
   });
 
+  it("turns stale scheduler evidence plus a fresh trusted chat message into a safe fallback tap", () => {
+    const gate = evaluateOrchestratorProofWakeGate({
+      now: "2026-05-10T05:03:59.000Z",
+      source: "trusted_unclick_fallback",
+      lastScheduledProofAt: "2026-05-10T04:09:24.000Z",
+      trustedFallbackSource: "trusted_chat_message",
+      trustedFallbackAt: "2026-05-10T05:03:20.000Z",
+      trustedFallbackId: "chat-message-fallback-probe-1",
+      expectedEveryMinutes: 1,
+      graceMinutes: 0,
+      trustedFallbackFreshMinutes: 2,
+    });
+
+    assert.equal(gate.allow, true);
+    assert.equal(gate.reason, "trusted_unclick_fallback_due");
+    assert.equal(gate.scheduler_watchdog.trusted_fallback.source_token, "trusted_chat_message");
+    assert.equal(gate.scheduler_watchdog.trusted_fallback.trusted, true);
+    assert.equal(gate.safe_mode.no_manual_dispatch_as_schedule, true);
+  });
+
   it("keeps fresh schedules in watch mode", () => {
     const result = evaluateAutoPilotKitSchedulerWatchdog({
       now: "2026-05-10T03:46:57.000Z",

@@ -27,6 +27,10 @@ const TRUSTED_UNCLICK_FALLBACK_SOURCES = new Set([
   "unclick-seat-heartbeat",
   "boardroom_heartbeat",
   "boardroom-heartbeat",
+  "trusted_chat_message",
+  "trusted-chat-message",
+  "chat_message_pulse",
+  "chat-message-pulse",
 ]);
 
 function safeList(value) {
