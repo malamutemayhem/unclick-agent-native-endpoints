@@ -115,6 +115,14 @@ function compactMultiline(value, max = 12000) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function memoryAdminActionUrlFromMcpUrl(mcpUrl = DEFAULT_UNCLICK_MCP_URL, action = "") {
+  const url = new URL(mcpUrl || DEFAULT_UNCLICK_MCP_URL);
+  url.pathname = "/api/memory-admin";
+  url.search = "";
+  url.searchParams.set("action", action);
+  return url.toString();
+}
+
 function stableTodoJobId(todo = {}) {
   return `boardroom-todo:${String(todo.id || todo.todo_id || "unknown").trim()}`;
 }
@@ -402,6 +410,122 @@ async function callUnClickMcpTool({
   return {
     ok: true,
     data: extractMcpTextJson(payload),
+  };
+}
+
+export async function fetchUnClickOrchestratorContext({
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  limit = 80,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!apiKey) {
+    return { ok: false, reason: "missing_unclick_api_key" };
+  }
+  if (typeof fetchImpl !== "function") {
+    return { ok: false, reason: "missing_fetch_impl" };
+  }
+
+  const response = await fetchImpl(memoryAdminActionUrlFromMcpUrl(mcpUrl, "orchestrator_context_read"), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ limit }),
+  });
+
+  if (!response?.ok) {
+    return {
+      ok: false,
+      reason: "orchestrator_context_http_error",
+      status: response?.status ?? null,
+    };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return {
+    ok: true,
+    context: payload?.context ?? null,
+  };
+}
+
+export function evaluateOrchestratorSeatHandshakeProof(context = {}) {
+  const handshake = context?.seat_handshake;
+  if (!handshake || typeof handshake !== "object") {
+    return {
+      ok: false,
+      result: "BLOCKER",
+      reason: "missing_seat_handshake",
+      proof_line: "BLOCKER: missing Orchestrator seat_handshake; next: deploy PR #653 or expose orchestrator_context_read.",
+    };
+  }
+
+  const handoffText = JSON.stringify(handshake);
+  const noisy = /<heartbeat\b|current_time_iso|unclick-heartbeat|run unclick heartbeat|dont_notify/i.test(handoffText);
+  const sourcePointers = Array.isArray(handshake.source_pointers) ? handshake.source_pointers : [];
+  const seatFreshness = Array.isArray(handshake.seat_freshness) ? handshake.seat_freshness : [];
+  const missing = [];
+  if (!String(handshake.active_decision || "").trim()) missing.push("active_decision");
+  if (!String(handshake.active_job || "").trim()) missing.push("active_job");
+  if (!String(handshake.recent_proof || "").trim()) missing.push("recent_proof");
+  if (sourcePointers.length === 0) missing.push("source_pointers");
+  if (seatFreshness.length === 0) missing.push("seat_freshness");
+  if (noisy) missing.push("noise_free_handoff");
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      result: "BLOCKER",
+      reason: "seat_handshake_incomplete",
+      missing,
+      proof_line: `BLOCKER: Orchestrator seat_handshake incomplete (${missing.join(", ")}); next: fix compact context proof source.`,
+    };
+  }
+
+  const proofIds = sourcePointers
+    .map((pointer) => String(pointer?.source_id || "").trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(",");
+
+  return {
+    ok: true,
+    result: "PASS",
+    reason: "seat_handshake_ready",
+    source_pointer_count: sourcePointers.length,
+    seat_freshness_count: seatFreshness.length,
+    proof_line: `PASS: Orchestrator seat_handshake readable; proof: ${proofIds || "source_pointers"}; cleanup: done.`,
+  };
+}
+
+export async function runOrchestratorSeatHandshakeProof({
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  limit = 80,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const fetched = await fetchUnClickOrchestratorContext({ mcpUrl, apiKey, limit, fetchImpl });
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      action: "blocked",
+      mode: "orchestrator-proof",
+      reason: fetched.reason,
+      status: fetched.status ?? null,
+      proof_line: `BLOCKER: ${fetched.reason}; next: make orchestrator_context_read available to PinballWake.`,
+      orchestrator_proof: fetched,
+    };
+  }
+
+  const proof = evaluateOrchestratorSeatHandshakeProof(fetched.context);
+  return {
+    ok: proof.ok,
+    action: proof.ok ? "orchestrator_proof_passed" : "blocked",
+    mode: "orchestrator-proof",
+    reason: proof.reason,
+    proof_line: proof.proof_line,
+    orchestrator_proof: proof,
   };
 }
 
@@ -1091,7 +1215,17 @@ export async function runAutonomousRunnerFile({
   now = new Date().toISOString(),
   leaseSeconds,
   wakeSource = "unknown",
+  orchestratorProof = false,
 } = {}) {
+  if (orchestratorProof) {
+    return runOrchestratorSeatHandshakeProof({
+      mcpUrl: unclickMcpUrl,
+      apiKey: unclickApiKey,
+      limit: todoLimit,
+      fetchImpl,
+    });
+  }
+
   if (!ledgerPath) {
     return { ok: false, reason: "missing_ledger_path" };
   }
@@ -1265,6 +1399,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     todoLimit: parseIntOption(getArg("todo-limit", process.env.AUTONOMOUS_RUNNER_TODO_LIMIT), 10),
     leaseSeconds: parseIntOption(getArg("lease-seconds", process.env.CODING_ROOM_LEASE_SECONDS), undefined),
     wakeSource: getArg("wake-source", process.env.AUTONOMOUS_RUNNER_WAKE_SOURCE || process.env.GITHUB_EVENT_NAME || "unknown"),
+    orchestratorProof: parseBoolean(getArg("orchestrator-proof", process.env.AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF)),
     policy: createAutonomousRunnerPolicy({
       disabled: parseBoolean(process.env.AUTONOMOUS_RUNNER_DISABLED),
       allowProtectedSurfaces: parseBoolean(process.env.AUTONOMOUS_RUNNER_ALLOW_PROTECTED_SURFACES),

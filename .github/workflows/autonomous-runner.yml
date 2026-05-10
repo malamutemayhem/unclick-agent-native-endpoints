@@ -52,6 +52,15 @@ jobs:
             printf '{"version":1,"updated_at":"%s","jobs":[]}\n' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" > "${CODING_ROOM_LEDGER_PATH}"
           fi
 
+      - name: Prove Orchestrator seat handoff
+        if: github.event_name == 'schedule'
+        env:
+          AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF: "true"
+          AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
+          UNCLICK_MCP_URL: ${{ vars.UNCLICK_MCP_URL || 'https://unclick.world/api/mcp' }}
+          UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY || secrets.FISHBOWL_AUTOCLOSE_TOKEN || secrets.FISHBOWL_WAKE_TOKEN }}
+        run: node scripts/pinballwake-autonomous-runner.mjs
+
       - name: Run autonomous Runner
         env:
           CODING_ROOM_LEDGER_PATH: ${{ vars.CODING_ROOM_LEDGER_PATH || '.pinballwake/coding-room-ledger.json' }}

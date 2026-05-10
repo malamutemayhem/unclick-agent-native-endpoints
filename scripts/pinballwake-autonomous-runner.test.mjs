@@ -13,8 +13,10 @@ import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
   evaluateBoardroomTodoAutoClaimEligibility,
+  evaluateOrchestratorSeatHandshakeProof,
   extractBoardroomTodoIdFromCodingRoomJob,
   fetchUnClickActionableTodos,
+  fetchUnClickOrchestratorContext,
   inspectAutonomousRunnerJobSafety,
   markUnsafeJobsBlockedForAutonomousRunner,
   normalizeAutonomousRunnerMode,
@@ -456,6 +458,87 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.ok, true);
     assert.equal(result.todos.length, 1);
     assert.equal(result.todos[0].id, "todo-sse");
+  });
+
+  it("reads Orchestrator context for a scheduled seat_handshake proof", async () => {
+    const calls = [];
+    const result = await runAutonomousRunnerFile({
+      orchestratorProof: true,
+      unclickApiKey: "uc_test",
+      unclickMcpUrl: "https://unclick.test/api/mcp",
+      fetchImpl: async (url, init = {}) => {
+        calls.push({ url, body: JSON.parse(init.body), auth: init.headers.authorization });
+        return {
+          ok: true,
+          async json() {
+            return {
+              context: {
+                seat_handshake: {
+                  mode: "fresh-seat-pickup",
+                  active_decision: "Chris greenlit Orchestrator V1 proof with AutoPilotKit and PinballWake.",
+                  active_job: "urgent open: Orchestrator chip: PinballWake scheduled proof reads seat_handshake.",
+                  recent_proof: "PASS: PR #653 shipped seat_handshake.",
+                  active_blocker: null,
+                  seat_freshness: ["PinballWake: Live"],
+                  source_pointers: [{ source_kind: "todo", source_id: "fa3801d1" }],
+                },
+              },
+            };
+          },
+        };
+      },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://unclick.test/api/memory-admin?action=orchestrator_context_read");
+    assert.equal(calls[0].body.limit, 10);
+    assert.equal(calls[0].auth, "Bearer uc_test");
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "orchestrator_proof_passed");
+    assert.match(result.proof_line, /^PASS: Orchestrator seat_handshake readable/);
+    assert.equal(result.orchestrator_proof.source_pointer_count, 1);
+  });
+
+  it("blocks empty or noisy Orchestrator seat_handshake proof packets", async () => {
+    const direct = evaluateOrchestratorSeatHandshakeProof({
+      seat_handshake: {
+        active_decision: "Chris greenlit Orchestrator V1.",
+        active_job: "",
+        recent_proof: "PASS: proof exists.",
+        seat_freshness: ["PinballWake: Live"],
+        source_pointers: [{ source_id: "todo-1" }],
+      },
+    });
+
+    assert.equal(direct.ok, false);
+    assert(direct.missing.includes("active_job"));
+
+    const fetched = await fetchUnClickOrchestratorContext({
+      apiKey: "uc_test",
+      mcpUrl: "https://unclick.test/api/mcp",
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            context: {
+              seat_handshake: {
+                active_decision: "Chris greenlit Orchestrator V1.",
+                active_job: "Orchestrator proof",
+                recent_proof: "PASS: proof exists.",
+                seat_freshness: ["PinballWake: Live"],
+                source_pointers: [{ source_id: "todo-1" }],
+                next_prompt: "Run UnClick Heartbeat. Use the Seats > Heartbeat policy.",
+              },
+            },
+          };
+        },
+      }),
+    });
+    const noisy = evaluateOrchestratorSeatHandshakeProof(fetched.context);
+
+    assert.equal(noisy.ok, false);
+    assert(noisy.missing.includes("noise_free_handoff"));
+    assert.match(noisy.proof_line, /^BLOCKER:/);
   });
 
   it("extracts Boardroom todo ids only from imported UnClick jobs", () => {
@@ -1084,6 +1167,8 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.match(workflow, /cron:\s*"3,13,23,33,43,53 \* \* \* \*"/);
     assert.match(workflow, /workflow_run:/);
     assert.match(workflow, /Fleet Throughput Watch/);
+    assert.match(workflow, /Prove Orchestrator seat handoff/);
+    assert.match(workflow, /AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF:\s*"true"/);
     assert.match(workflow, /node scripts\/pinballwake-autonomous-runner\.mjs/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_QUEUE_SOURCE:.*'unclick'/);
     assert.match(workflow, /AUTONOMOUS_RUNNER_WAKE_SOURCE:.*queuepush/);
