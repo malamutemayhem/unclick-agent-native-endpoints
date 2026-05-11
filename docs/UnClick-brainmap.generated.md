@@ -6,81 +6,82 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 
 | Source | Hash | Bytes |
 | --- | --- | --- |
-| AUTOPILOT.md | 1183ec7b66ca | 16591 |
-| FLEET_SYNC.md | a0bbe1c49b60 | 13517 |
-| docs/unclick-context-boot-packet.md | 513173ecd757 | 4910 |
-| docs/agent-observability.md | 4614ea97481d | 3114 |
-| docs/pinballwake-nudgeonly-api.md | f414abc72f91 | 7056 |
-| docs/fleet-worker-roles.md | 46758e20b953 | 3757 |
-| docs/adr/0005-two-layer-admin-gating.md | 928a93930df6 | 2213 |
-| docs/adr/0006-orchestrator-is-user-chat.md | f9b527b76e69 | 2195 |
-| src/App.tsx | f68b6213c740 | 12938 |
-| src/pages/admin/AdminShell.tsx | 0a10956e5222 | 17947 |
-| .github/workflows/ci.yml | 274c6cfc5ca8 | 1661 |
+| AUTOPILOT.md | 562ec208aa54 | 16311 |
+| FLEET_SYNC.md | 41ebcbca94b0 | 13200 |
+| docs/unclick-context-boot-packet.md | 7cf131cf22e0 | 4785 |
+| docs/agent-observability.md | 88a4c8391ee3 | 3046 |
+| docs/pinballwake-nudgeonly-api.md | 901e39017aa9 | 6910 |
+| docs/pinballwake-igniteonly-api.md | ba632ad8bce3 | 4292 |
+| docs/fleet-worker-roles.md | de6d70d0d55a | 3662 |
+| docs/adr/0005-two-layer-admin-gating.md | cefe739796f2 | 2186 |
+| docs/adr/0006-orchestrator-is-user-chat.md | bf91808d2d8d | 2169 |
+| src/App.tsx | 5a1598baa2a8 | 12717 |
+| src/pages/admin/AdminShell.tsx | 9cb148b69bc1 | 17456 |
+| .github/workflows/ci.yml | 79e43dd8e26c | 1608 |
 | .github/workflows/brainmap-auto-update.yml | 7e8b08eb16aa | 1137 |
-| package.json | 75e54cc0969e | 4292 |
-| scripts/pinballwake-ack-ledger-room.mjs | 9b189b79d2aa | 13139 |
-| scripts/pinballwake-close-supersede-room.mjs | 053ed54576d3 | 4019 |
-| scripts/pinballwake-coding-room.mjs | a364fd4620de | 26334 |
-| scripts/pinballwake-continuous-improvement-room.mjs | 345e292456e4 | 9093 |
-| scripts/pinballwake-dogfood-room.mjs | 4cdc2ce23e94 | 2865 |
-| scripts/pinballwake-event-ledger-room.mjs | 068a276d4314 | 16600 |
-| scripts/pinballwake-jobs-room.mjs | be5f80f6f5b9 | 12265 |
-| scripts/pinballwake-launchpad-room.mjs | aadc787a2a39 | 13024 |
-| scripts/pinballwake-merge-room.mjs | 8a8a1ffb4789 | 8762 |
-| scripts/pinballwake-overlap-resolver-room.mjs | bc15491c5662 | 7007 |
-| scripts/pinballwake-personality-room.mjs | 2da4ce09fac4 | 9928 |
-| scripts/pinballwake-planning-room.mjs | 25b8110ce4f9 | 9997 |
-| scripts/pinballwake-post-merge-watch-room.mjs | 8c7f0c3c5f1b | 5642 |
-| scripts/pinballwake-publish-room.mjs | 4204e788d834 | 7737 |
-| scripts/pinballwake-queue-health-room.mjs | 4cde05855108 | 2921 |
-| scripts/pinballwake-release-notes-room.mjs | 8d29cf325087 | 2677 |
-| scripts/pinballwake-repair-room.mjs | 042026b476f8 | 3665 |
-| scripts/pinballwake-research-room.mjs | b66f6f472d33 | 7860 |
-| scripts/pinballwake-rollback-room.mjs | 77a05b0bbe6a | 4287 |
-| scripts/pinballwake-stale-room.mjs | f283068a64da | 4004 |
-| scripts/pinballwake-worker-registry-room.mjs | 591b4d3dae0f | 16688 |
-| scripts/pinballwake-xpass-gate-room.mjs | 198e6e087e0a | 14879 |
-| packages/mcp-server/src/abn-tool.ts | 5a99641b1c53 | 3784 |
-| packages/mcp-server/src/abuseipdb-tool.ts | 25918fdf5b44 | 4800 |
-| packages/mcp-server/src/airtable-tool.ts | 8af9e9f48331 | 7292 |
-| packages/mcp-server/src/algolia-tool.ts | 9a00f054791c | 5048 |
-| packages/mcp-server/src/alphavantage-tool.ts | 7c30fef805d5 | 7822 |
-| packages/mcp-server/src/amazon-tool.ts | 356a4d6956dc | 15279 |
-| packages/mcp-server/src/amber-tool.ts | 2209eb5a73c5 | 4255 |
-| packages/mcp-server/src/anthropic-tool.ts | 35d2f8f564bd | 5469 |
-| packages/mcp-server/src/asana-tool.ts | 63c7ad0204ce | 8281 |
-| packages/mcp-server/src/assemblyai-tool.ts | b27e9f288768 | 6194 |
-| packages/mcp-server/src/australiapost-tool.ts | 5457f4f106db | 5282 |
-| packages/mcp-server/src/bandsintown-tool.ts | 2511ad072df5 | 3266 |
-| packages/mcp-server/src/bgg-tool.ts | 9e9da1c7dc51 | 10752 |
-| packages/mcp-server/src/bluesky-tool.ts | 2ee3d7248e91 | 14692 |
-| packages/mcp-server/src/bungie-tool.ts | 662abcc0d373 | 6838 |
-| packages/mcp-server/src/calculator-tool.ts | 5e2923a36738 | 7464 |
-| packages/mcp-server/src/calendly-tool.ts | e1f3d3e61c22 | 6566 |
-| packages/mcp-server/src/carboninterface-tool.ts | 267e879e2c79 | 6900 |
-| packages/mcp-server/src/chessdotcom-tool.ts | 5ac956210a8e | 7073 |
-| packages/mcp-server/src/circleci-tool.ts | 7995e408ce85 | 5090 |
-| packages/mcp-server/src/clickup-tool.ts | 99869c2eb359 | 6469 |
-| packages/mcp-server/src/clockify-tool.ts | 36c40b339239 | 6954 |
-| packages/mcp-server/src/cohere-tool.ts | 4925ac1d87f2 | 9488 |
-| packages/mcp-server/src/coingecko-tool.ts | 992219483e17 | 7022 |
-| packages/mcp-server/src/coinmarketcap-tool.ts | a7aeebfb21dd | 7080 |
-| packages/mcp-server/src/color-tool.ts | 8d5544aebb09 | 14005 |
-| packages/mcp-server/src/convertkit-tool.ts | f1d95417df2d | 8768 |
-| packages/mcp-server/src/copypass-tool.ts | 8a2fb30ff964 | 5920 |
-| packages/mcp-server/src/crews-tool.ts | b8c82fc0d59a | 5895 |
-| packages/mcp-server/src/csuite-tool.ts | 3d2bffa207c7 | 71272 |
-| packages/mcp-server/src/datadog-tool.ts | 0532d8c68cf6 | 5675 |
-| packages/mcp-server/src/datetime-tool.ts | c6ec64101b48 | 10902 |
-| packages/mcp-server/src/deepl-tool.ts | 25ae400acbc2 | 5829 |
-| packages/mcp-server/src/deezer-tool.ts | a6b31ea1a334 | 7493 |
-| packages/mcp-server/src/discogs-tool.ts | 7d8a9830ade7 | 5084 |
-| packages/mcp-server/src/discord-tool.ts | 1fd1f375bb11 | 8456 |
-| packages/mcp-server/src/domain-tool.ts | f18a499e01ef | 6234 |
-| packages/mcp-server/src/ebay-tool.ts | 6cfa2d126469 | 7794 |
-| packages/mcp-server/src/ebird-tool.ts | 41cf6c211b88 | 6471 |
-| packages/mcp-server/src/elevenlabs-tool.ts | 2c6f2e966a50 | 7919 |
+| package.json | 9b0180a6b2f9 | 4175 |
+| scripts/pinballwake-ack-ledger-room.mjs | e7dcb642bc75 | 12719 |
+| scripts/pinballwake-close-supersede-room.mjs | 4d31f6a6a8c2 | 3891 |
+| scripts/pinballwake-coding-room.mjs | 4a48ded33a31 | 25453 |
+| scripts/pinballwake-continuous-improvement-room.mjs | 4cbb389faf56 | 8822 |
+| scripts/pinballwake-dogfood-room.mjs | d161028d1382 | 2782 |
+| scripts/pinballwake-event-ledger-room.mjs | e8f8f9f84123 | 16104 |
+| scripts/pinballwake-jobs-room.mjs | 26160afdb6c7 | 11859 |
+| scripts/pinballwake-launchpad-room.mjs | 64cc89cd3253 | 12693 |
+| scripts/pinballwake-merge-room.mjs | 3645da5c0c93 | 8431 |
+| scripts/pinballwake-overlap-resolver-room.mjs | 14d03ef6acd3 | 6787 |
+| scripts/pinballwake-personality-room.mjs | c1ca769346f1 | 9644 |
+| scripts/pinballwake-planning-room.mjs | 080c2946a794 | 9714 |
+| scripts/pinballwake-post-merge-watch-room.mjs | 144227650844 | 5462 |
+| scripts/pinballwake-publish-room.mjs | ec1dbd36ed22 | 7526 |
+| scripts/pinballwake-queue-health-room.mjs | ddefab91d886 | 2842 |
+| scripts/pinballwake-release-notes-room.mjs | b13cc2fdf23f | 2598 |
+| scripts/pinballwake-repair-room.mjs | 6404e2b40642 | 3567 |
+| scripts/pinballwake-research-room.mjs | 8307356c93c4 | 7651 |
+| scripts/pinballwake-rollback-room.mjs | c63e73fd2716 | 4158 |
+| scripts/pinballwake-stale-room.mjs | 8927de850588 | 3880 |
+| scripts/pinballwake-worker-registry-room.mjs | 5911ee03a039 | 16190 |
+| scripts/pinballwake-xpass-gate-room.mjs | 44b7d10cddc2 | 14430 |
+| packages/mcp-server/src/abn-tool.ts | 5105de2d357d | 3682 |
+| packages/mcp-server/src/abuseipdb-tool.ts | 21d5283c8dba | 4673 |
+| packages/mcp-server/src/airtable-tool.ts | cca3eed693da | 7132 |
+| packages/mcp-server/src/algolia-tool.ts | 8eb0992500f1 | 4924 |
+| packages/mcp-server/src/alphavantage-tool.ts | 98a37153078d | 7591 |
+| packages/mcp-server/src/amazon-tool.ts | fb1e936b7c9a | 14913 |
+| packages/mcp-server/src/amber-tool.ts | 6d020b798469 | 4138 |
+| packages/mcp-server/src/anthropic-tool.ts | 84db1d498f00 | 5308 |
+| packages/mcp-server/src/asana-tool.ts | 3f5d880c119d | 8078 |
+| packages/mcp-server/src/assemblyai-tool.ts | 8eaea963f072 | 6080 |
+| packages/mcp-server/src/australiapost-tool.ts | 6fc5a927873d | 5148 |
+| packages/mcp-server/src/bandsintown-tool.ts | a77399b666e2 | 3170 |
+| packages/mcp-server/src/bgg-tool.ts | 5078cb1ae404 | 10461 |
+| packages/mcp-server/src/bluesky-tool.ts | 89b5739acca5 | 14208 |
+| packages/mcp-server/src/bungie-tool.ts | e88c304b23f0 | 6643 |
+| packages/mcp-server/src/calculator-tool.ts | 941b010bc4f9 | 7255 |
+| packages/mcp-server/src/calendly-tool.ts | 52eb1f5b2bf2 | 6392 |
+| packages/mcp-server/src/carboninterface-tool.ts | 75827e943e9f | 6705 |
+| packages/mcp-server/src/chessdotcom-tool.ts | 56425dde5729 | 6852 |
+| packages/mcp-server/src/circleci-tool.ts | 14729ddbb6ce | 4949 |
+| packages/mcp-server/src/clickup-tool.ts | 3f9127777b87 | 6316 |
+| packages/mcp-server/src/clockify-tool.ts | 058798077459 | 6790 |
+| packages/mcp-server/src/cohere-tool.ts | 9ca27e0737f8 | 9207 |
+| packages/mcp-server/src/coingecko-tool.ts | e7d8c7535112 | 6827 |
+| packages/mcp-server/src/coinmarketcap-tool.ts | b1c5fd280acb | 6892 |
+| packages/mcp-server/src/color-tool.ts | f9aa9c0fec6e | 13643 |
+| packages/mcp-server/src/convertkit-tool.ts | 2f77303a3441 | 8498 |
+| packages/mcp-server/src/copypass-tool.ts | 58487357de03 | 5744 |
+| packages/mcp-server/src/crews-tool.ts | 18a489d3ab94 | 5750 |
+| packages/mcp-server/src/csuite-tool.ts | 0ab5af89bb49 | 70236 |
+| packages/mcp-server/src/datadog-tool.ts | 802b808614cd | 5556 |
+| packages/mcp-server/src/datetime-tool.ts | 19075fddbc55 | 10618 |
+| packages/mcp-server/src/deepl-tool.ts | 3c88cc9c44bf | 5695 |
+| packages/mcp-server/src/deezer-tool.ts | 227805914d67 | 7257 |
+| packages/mcp-server/src/discogs-tool.ts | 547892efce07 | 4956 |
+| packages/mcp-server/src/discord-tool.ts | c70b8ac42f28 | 8191 |
+| packages/mcp-server/src/domain-tool.ts | 1beecc106e80 | 6076 |
+| packages/mcp-server/src/ebay-tool.ts | 10dffe36315f | 7595 |
+| packages/mcp-server/src/ebird-tool.ts | 3deedf3fde19 | 6262 |
+| packages/mcp-server/src/elevenlabs-tool.ts | dcb54be4833d | 7692 |
 
 ## UnClick Structure
 
@@ -254,6 +255,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | higgsfield | higgsfield MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/higgsfield-tool.ts |
 | hunter | hunter MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/hunter-tool.ts |
 | igdb | igdb MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/igdb-tool.ts |
+| IgniteOnly | IgniteOnly verified worker wake packet bridge. | packages/mcp-server/src/igniteonly-tool.ts |
 | instapaper | instapaper MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/instapaper-tool.ts |
 | ipapi | ipapi MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/ipapi-tool.ts |
 | ipaustralia | ipaustralia MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/ipaustralia-tool.ts |
@@ -381,6 +383,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | To-Do List | Jobs | Task queue language maps to the current admin Jobs surface. |
 | Heartbeat | Heartbeat Master | The copy policy that teaches scheduled seats how to pulse. |
 | NudgeOnlyAPI | NudgeOnly | Low-risk receipt nudges, never source-of-truth mutation. |
+| IgniteOnlyAPI | IgniteOnly | Verified worker wake packets, never build, merge, or completion state. |
 
 ## Rooms List
 
@@ -426,6 +429,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 
 - Admin-only surfaces use `RequireAdmin` and must also be hidden from non-admin sidebar navigation.
 - NudgeOnly can request receipt or escalation only. Trusted lanes verify before action.
+- IgniteOnly can request worker wake packets only. Trusted lanes still build, review, merge, and record proof.
 - Heartbeats must never print keys or credentials.
 - Generated Brainmap changes must come from source updates plus a regenerated artifact, not hand editing the generated file.
 - Proof should include TestPass, Reviewer, Safety Checker, and Ledger-style evidence where applicable.

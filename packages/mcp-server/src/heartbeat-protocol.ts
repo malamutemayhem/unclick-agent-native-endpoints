@@ -23,7 +23,7 @@ export type HeartbeatProtocol = {
 };
 
 export const HEARTBEAT_PROTOCOL_DATE = "2026-05-07";
-export const HEARTBEAT_PROTOCOL_REVISION = 6;
+export const HEARTBEAT_PROTOCOL_REVISION = 7;
 
 export function formatHeartbeatProtocolVersion(revision: number): string {
   return `${HEARTBEAT_PROTOCOL_DATE}.v${revision}`;
@@ -40,13 +40,14 @@ const HEARTBEAT_PROTOCOL: HeartbeatProtocol = {
     "When UnClick returns action_needed, blocker, stale ACK, missing proof, duplicate wake, or unclear owner items, call nudgeonly_receipt_bridge if available using compact public fields only: source_id, source_url, target, owner, painpoint_type, status, created_at, and ttl_minutes.",
     "Prefer deterministic painpoint labels from UnClick. Call nudgeonly_api only when no deterministic bucket exists, and only for the smallest safe source text needed to classify the painpoint.",
     "If nudgeonly_receipt_bridge returns receipt_request or escalation_request, save its bridge_id and receipt_line in the continuity receipt and alert line. If it returns quiet or advisory_only, do not notify.",
+    "If a verified bridge request needs a dormant worker, call igniteonly_receipt_consumer if available using the bridge result and compact public fields only. Save ignite_id and wake_packet.receipt_line when it returns wake_request or escalation_wake_request.",
     "If save_conversation_turn is unavailable, use unclick_save_conversation_turn. If no UnClick connector exists but an UnClick API key is already available, POST the same turn to https://unclick.world/api/memory-admin?action=admin_conversation_turn_ingest. Never print the key. Do not POST to /admin/orchestrator because it is the read UI.",
     'For admin_conversation_turn_ingest, send Authorization: Bearer <redacted> and body { "session_id": "unclick-heartbeat-seat", "role": "assistant", "content": "<safe redacted heartbeat text>", "source_app": "scheduled-heartbeat", "client_session_id": "<local run id>" }.',
     "Compare against prior tether state from local automation state first, then heartbeat_last_state search_memory only if no transient state is available. The diff is the only thing worth surfacing.",
     'If no change, send nothing or exactly: "UnClick healthy." If UnClick surfaces action_needed, blocker, failed check, stale ACK, or approval-required items, send only the alert format.',
     "Keep healthy heartbeat state transient. Do not save recurring healthy or no-change heartbeats as Memory facts; use save_fact only for actionable diffs, tether errors, or explicit user-relevant state changes.",
     "If every UnClick write path, tool, and context path is missing, reply with a concise BLOCKER that names the missing capability and the next packaging fix.",
-    "Do not build, merge, edit code, assign ownership, mark done, or perform mutation actions outside this heartbeat procedure. NudgeOnly may request a receipt or escalation only; trusted lanes must verify before action.",
+    "Do not build, merge, edit code, assign ownership, mark done, or perform mutation actions outside this heartbeat procedure. NudgeOnly may request a receipt or escalation only. IgniteOnly may request a worker wake only. Trusted lanes must verify before action.",
   ],
   alert_format: {
     heading: "UnClick alert",

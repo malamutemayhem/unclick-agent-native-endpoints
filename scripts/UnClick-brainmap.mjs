@@ -15,6 +15,7 @@ const CORE_SOURCES = [
   "docs/unclick-context-boot-packet.md",
   "docs/agent-observability.md",
   "docs/pinballwake-nudgeonly-api.md",
+  "docs/pinballwake-igniteonly-api.md",
   "docs/fleet-worker-roles.md",
   "docs/adr/0005-two-layer-admin-gating.md",
   "docs/adr/0006-orchestrator-is-user-chat.md",
@@ -32,6 +33,7 @@ const ALIASES = [
   ["To-Do List", "Jobs", "Task queue language maps to the current admin Jobs surface."],
   ["Heartbeat", "Heartbeat Master", "The copy policy that teaches scheduled seats how to pulse."],
   ["NudgeOnlyAPI", "NudgeOnly", "Low-risk receipt nudges, never source-of-truth mutation."],
+  ["IgniteOnlyAPI", "IgniteOnly", "Verified worker wake packets, never build, merge, or completion state."],
 ];
 
 const WORKERS = [
@@ -116,6 +118,7 @@ function meaningForTool(file) {
   const base = path.basename(file, ".ts").replace(/-tool$/, "");
   const name = titleFromName(base);
   if (base === "nudgeonly") return "NudgeOnly low-token receipt bridge and advisory classifier.";
+  if (base === "igniteonly") return "IgniteOnly verified worker wake packet bridge.";
   if (base === "heartbeat-protocol") return "Canonical heartbeat policy served to scheduled seats.";
   if (base.includes("testpass")) return "TestPass proof and test orchestration capability.";
   if (base.includes("uxpass")) return "UXPass experience verification capability.";
@@ -125,6 +128,7 @@ function meaningForTool(file) {
 function displayToolName(file) {
   const base = path.basename(file, ".ts").replace(/-tool$/, "");
   if (base === "nudgeonly") return "NudgeOnly";
+  if (base === "igniteonly") return "IgniteOnly";
   if (base === "heartbeat-protocol") return "Heartbeat Protocol";
   return titleFromName(base);
 }
@@ -149,7 +153,7 @@ async function walk(root, start, predicate) {
 
 async function readText(root, rel) {
   try {
-    return await readFile(path.join(root, rel), "utf8");
+    return (await readFile(path.join(root, rel), "utf8")).replace(/\r\n/g, "\n");
   } catch {
     return "";
   }
@@ -265,6 +269,7 @@ export async function generateBrainmap({ root = process.cwd() } = {}) {
     "",
     "- Admin-only surfaces use `RequireAdmin` and must also be hidden from non-admin sidebar navigation.",
     "- NudgeOnly can request receipt or escalation only. Trusted lanes verify before action.",
+    "- IgniteOnly can request worker wake packets only. Trusted lanes still build, review, merge, and record proof.",
     "- Heartbeats must never print keys or credentials.",
     "- Generated Brainmap changes must come from source updates plus a regenerated artifact, not hand editing the generated file.",
     "- Proof should include TestPass, Reviewer, Safety Checker, and Ledger-style evidence where applicable.",

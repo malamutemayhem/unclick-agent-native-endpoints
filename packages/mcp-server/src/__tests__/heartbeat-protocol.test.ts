@@ -17,7 +17,8 @@ describe("heartbeat_protocol payload", () => {
     expect(getHeartbeatProtocol().procedure[0]).toContain("full heartbeat policy");
     expect(getHeartbeatProtocol().procedure[4]).toContain("save_conversation_turn");
     expect(getHeartbeatProtocol().procedure[5]).toContain("nudgeonly_receipt_bridge");
-    expect(getHeartbeatProtocol().procedure[8]).toContain("admin_conversation_turn_ingest");
+    expect(getHeartbeatProtocol().procedure[8]).toContain("igniteonly_receipt_consumer");
+    expect(getHeartbeatProtocol().procedure[9]).toContain("admin_conversation_turn_ingest");
   });
 
   it("keeps the public payload schema stable", () => {
@@ -31,7 +32,7 @@ describe("heartbeat_protocol payload", () => {
       "watch_state_key",
     ]);
     expect(protocol.version).toMatch(/^\d{4}-\d{2}-\d{2}\.v\d+$/);
-    expect(protocol.procedure).toHaveLength(15);
+    expect(protocol.procedure).toHaveLength(16);
     expect(protocol.procedure[0]).toContain("full heartbeat policy");
     expect(protocol.procedure[1]).toContain("continuity receipts");
     expect(protocol.procedure[2]).toContain("unclick-heartbeat-seat");
@@ -40,8 +41,9 @@ describe("heartbeat_protocol payload", () => {
     expect(protocol.procedure[5]).toContain("compact public fields");
     expect(protocol.procedure[6]).toContain("smallest safe source text");
     expect(protocol.procedure[7]).toContain("receipt_line");
-    expect(protocol.procedure[8]).toContain("read UI");
-    expect(protocol.procedure[13]).toContain("missing capability");
+    expect(protocol.procedure[8]).toContain("ignite_id");
+    expect(protocol.procedure[9]).toContain("read UI");
+    expect(protocol.procedure[14]).toContain("missing capability");
     expect(protocol.alert_format).toEqual({
       heading: "UnClick alert",
       line_template: "owner -- target -- status -- next safe action",
@@ -65,9 +67,9 @@ describe("heartbeat_protocol payload", () => {
       procedure: [...protocol.procedure, "new instruction"],
     };
 
-    expect(formatHeartbeatProtocolVersion(7)).toBe("2026-05-07.v7");
-    expect(protocol.version).toBe("2026-05-07.v6");
-    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("1e53f880db46d36f");
+    expect(formatHeartbeatProtocolVersion(8)).toBe("2026-05-07.v8");
+    expect(protocol.version).toBe("2026-05-07.v7");
+    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("fcb381a2d3052ee5");
     expect(heartbeatProtocolContentFingerprint(changed)).not.toBe(
       heartbeatProtocolContentFingerprint(protocol),
     );

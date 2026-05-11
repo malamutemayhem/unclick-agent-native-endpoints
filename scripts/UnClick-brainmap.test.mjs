@@ -36,8 +36,10 @@ describe("UnClick ecosystem Brainmap", () => {
     assert.match(generated, /\| \/admin\/brainmap \| Admin Brainmap \| Generated ecosystem map/);
     assert.match(generated, /\| \/admin\/agents\/heartbeat \| Admin Seat Heartbeat \| Master heartbeat copy policy/);
     assert.match(generated, /\| NudgeOnly \| NudgeOnly low-token receipt bridge/);
+    assert.match(generated, /\| IgniteOnly \| IgniteOnly verified worker wake packet bridge/);
     assert.match(generated, /\| Coordinator \| Routes work/);
     assert.match(generated, /Admin-only surfaces use `RequireAdmin`/);
+    assert.match(generated, /IgniteOnly can request worker wake packets only/);
   });
 
   it("records generated Brainmap guardrails for CI", async () => {
