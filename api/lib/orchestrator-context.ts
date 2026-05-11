@@ -352,7 +352,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     .slice(0, 36);
 
   const blockers = continuityEvents
-    .filter((event) => event.kind === "blocker")
+    .filter((event) => isActiveBlockerEvent(event, activeTodos, nowMs))
     .map((event) => event.summary)
     .slice(0, 5);
 
@@ -383,6 +383,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
   const newestCheckinAt = newestIso(input.profiles.map((row) => row.last_seen_at));
   const rollingSnapshot = buildRollingSnapshot({
     generatedAt: input.generatedAt,
+    nowMs,
     newestActivityAt,
     activeTodos,
     continuityEvents,
@@ -544,12 +545,14 @@ function buildOperatorTimeContext(
 
 function buildRollingSnapshot({
   generatedAt,
+  nowMs,
   newestActivityAt,
   activeTodos,
   continuityEvents,
   blockers,
 }: {
   generatedAt: string;
+  nowMs: number;
   newestActivityAt: string | null;
   activeTodos: OrchestratorTodoRow[];
   continuityEvents: OrchestratorContinuityEvent[];
@@ -561,7 +564,7 @@ function buildRollingSnapshot({
     .slice(0, 5)
     .map((event) => eventToSnapshotItem(event, "decision"));
   const activeBlockers = snapshotEvents
-    .filter((event) => event.kind === "blocker")
+    .filter((event) => isActiveBlockerEvent(event, activeTodos, nowMs))
     .slice(0, 5)
     .map((event) => eventToSnapshotItem(event, "blocker"));
   const activeJobs = activeTodos.slice(0, 6).map((todo) => ({
@@ -609,6 +612,38 @@ function buildRollingSnapshot({
     recent_continuity: recentContinuity,
     source_pointers: sourcePointers,
   };
+}
+
+function isActiveBlockerEvent(
+  event: OrchestratorContinuityEvent,
+  activeTodos: OrchestratorTodoRow[],
+  nowMs: number,
+): boolean {
+  if (event.kind !== "blocker") return false;
+  if (!isHistoricalWakeOrFishbowlStale(event, activeTodos, nowMs)) return true;
+  return false;
+}
+
+function isHistoricalWakeOrFishbowlStale(
+  event: OrchestratorContinuityEvent,
+  activeTodos: OrchestratorTodoRow[],
+  nowMs: number,
+): boolean {
+  if (event.source_kind !== "dispatch") return false;
+  if (activeTodos.length > 0) return false;
+
+  const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  const summary = event.summary.toLowerCase();
+  const isWakeOrFishbowl =
+    tags.includes("wakepass") ||
+    tags.includes("fishbowl") ||
+    /\b(wakepass|fishbowl)\b/.test(summary);
+  const isStale = tags.includes("stale") || /\bstale\b/.test(summary);
+  if (!isWakeOrFishbowl || !isStale) return false;
+
+  const createdMs = event.created_at ? Date.parse(event.created_at) : NaN;
+  if (!Number.isFinite(createdMs) || !Number.isFinite(nowMs)) return false;
+  return nowMs - createdMs >= 60 * 60 * 1000;
 }
 
 function eventToSnapshotItem(

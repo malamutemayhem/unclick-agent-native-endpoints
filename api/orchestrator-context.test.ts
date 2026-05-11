@@ -295,6 +295,56 @@ describe("orchestrator context", () => {
     expect(context.rolling_snapshot.persistence_plan.raw_transcript_policy).toContain("Do not persist raw transcripts");
   });
 
+  it("does not count old WakePass or Fishbowl stale rows as active blockers when no jobs remain", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-11T06:30:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-stale-wakepass",
+          source: "wakepass",
+          target_agent_id: "master",
+          task_ref: null,
+          status: "stale",
+          payload: {
+            title: "LaunchOnly worker renamed to IgniteOnly and PR merged",
+            source_url: "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/706",
+          },
+          created_at: "2026-05-11T04:00:00.000Z",
+          updated_at: "2026-05-11T04:10:00.000Z",
+        },
+        {
+          dispatch_id: "dispatch-stale-fishbowl",
+          source: "fishbowl",
+          target_agent_id: "master",
+          task_ref: null,
+          status: "stale",
+          payload: {
+            title: "Old todo assignment that no longer has an active todo",
+          },
+          created_at: "2026-05-11T04:05:00.000Z",
+          updated_at: "2026-05-11T04:15:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.continuity_events.filter((event) => event.kind === "blocker")).toHaveLength(2);
+    expect(context.current_state_card.active_todo_count).toBe(0);
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.current_state_card.blockers).toHaveLength(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.rolling_snapshot.summary).toContain("0 blocker signals");
+    expect(context.seat_handshake.active_blocker).toBeNull();
+  });
+
   it("keeps heartbeat prompt bodies out of continuity summaries", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T23:45:00.000Z",
