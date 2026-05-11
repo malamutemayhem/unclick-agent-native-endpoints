@@ -73,7 +73,7 @@ import AdminSystemHealth from "./pages/admin/AdminSystemHealth.tsx";
 import AdminPinballWake from "./pages/admin/AdminPinballWake.tsx";
 import AdminModeration from "./pages/admin/AdminModeration.tsx";
 import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
-import BrainMap from "./pages/admin/BrainMap.tsx";
+import AdminBrainmap from "./pages/admin/AdminBrainmap.tsx";
 import AdminJobs from "./pages/admin/AdminJobs.tsx";
 import {
   AdminAutopilot,
@@ -194,7 +194,7 @@ const App = () => (
             <Route path="pinballwake"    element={<RequireAdmin><AdminPinballWake /></RequireAdmin>} />
             <Route path="moderation"     element={<RequireAdmin><AdminModeration /></RequireAdmin>} />
             <Route path="audit-log"      element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
-            <Route path="brainmap"       element={<RequireAdmin><BrainMap /></RequireAdmin>} />
+            <Route path="brainmap"       element={<RequireAdmin><AdminBrainmap /></RequireAdmin>} />
             <Route path="signals"          element={<SignalsCatalog />} />
             <Route path="signals/settings" element={<SignalsSettings />} />
             <Route path="boardroom"        element={<Fishbowl />} />

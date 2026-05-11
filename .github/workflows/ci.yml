@@ -29,6 +29,10 @@ jobs:
         continue-on-error: true
       - name: Build
         run: npm run build
+      - name: Brainmap stale guard
+        run: |
+          npm run brainmap:check
+          npm run test:brainmap
       - name: Tests
         run: npm test --if-present
         continue-on-error: true

@@ -157,7 +157,7 @@ const ADMIN_SUBMENU = [
   { path: "/admin/pinballwake",   label: "PinballWake",           icon: BellRing    },
   { path: "/admin/moderation",    label: "Marketplace Moderation", icon: ShieldCheck },
   { path: "/admin/audit-log",     label: "Audit Log",             icon: ScrollText  },
-  { path: "/admin/brainmap",      label: "Brainmap",              icon: Sparkles    },
+  { path: "/admin/brainmap",      label: "Ecosystem Brainmap",    icon: Sparkles    },
 ] as const;
 
 function AdminSubmenu({ onLinkClick }: { onLinkClick?: () => void }) {

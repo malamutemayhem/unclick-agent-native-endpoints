@@ -18,7 +18,10 @@
     "test:enterprisepass-receipt": "node --test scripts/enterprisepass-receipt-guard.test.mjs",
     "test:rotatepass-redaction": "node --test scripts/rotatepass-redaction-guard.test.mjs",
     "test:watch": "vitest",
-    "test:api": "npm run test --workspace=apps/api"
+    "test:api": "npm run test --workspace=apps/api",
+    "brainmap:generate": "node scripts/UnClick-brainmap.mjs",
+    "brainmap:check": "node scripts/UnClick-brainmap.mjs --check",
+    "test:brainmap": "node --test scripts/UnClick-brainmap.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
