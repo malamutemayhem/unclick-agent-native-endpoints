@@ -60,6 +60,7 @@ const queuepushRunnerRoster = resolveQueuePushRunnerRoster(process.env.QUEUEPUSH
 
 const STATES = new Set([
   "draft_green_needs_owner_lift",
+  "missing_review_safety_ack",
   "missing_final_qc_ack",
   "hold_overlap",
   "dirty_branch",
@@ -254,7 +255,13 @@ export function latestCommentSignals(comments = []) {
       (/^(?:\W+\s*)?(pass|merge-ok|qc pass)\b/.test(text) ||
         /\b(safe next action|safe to merge)\b/.test(text)) &&
       !/\b(please keep draft|stay draft|do not merge|do not lift)\b/.test(text);
-    if (clearPass) {
+    const proofComment =
+      !["github-actions", "vercel"].includes(authorLogin) &&
+      /\bproof\b/.test(text) &&
+      /\bverification\b/.test(text) &&
+      /\bpass\b/.test(text) &&
+      !/\b(hold|blocker|blocked|fail|failed|failing|red)\b/.test(text);
+    if (clearPass || proofComment) {
       lastPass = index;
       hasProof = true;
     }
@@ -336,6 +343,7 @@ export function jobKindForState(state) {
       return "implementation";
     case "missing_final_qc_ack":
     case "ready_for_qc":
+    case "missing_review_safety_ack":
       return "qc_review";
     case "blocked_chris_only":
     case "draft_green_needs_owner_lift":
@@ -429,6 +437,12 @@ export function classifyPullRequest(input) {
       reason: "Safety and builder PASS are visible; final QC ACK is missing.",
     };
   }
+  if (pr.draft && green && clean && signals.hasProof && (!signals.hasSafetyPass || !signals.hasReviewerPass)) {
+    return {
+      state: "missing_review_safety_ack",
+      reason: "Draft PR is green and clean with proof; Reviewer/Safety PASS is missing.",
+    };
+  }
   if (pr.draft && green && clean) {
     return {
       state: "draft_green_needs_owner_lift",
@@ -445,6 +459,8 @@ export function expectedProofForState(state, pr) {
   switch (state) {
     case "draft_green_needs_owner_lift":
       return "Update PR body with owner/non-overlap/status/tests, then lift draft or state exact HOLD.";
+    case "missing_review_safety_ack":
+      return "Reviewer/Safety latest head only; reply PASS/BLOCKER with exact boundary evidence, then hand back for draft lift.";
     case "missing_final_qc_ack":
       return "QC latest head only; reply PASS/BLOCKER, then hand back to Master for lift/merge.";
     case "hold_overlap":
@@ -466,6 +482,8 @@ export function directActionForState(state) {
   switch (state) {
     case "draft_green_needs_owner_lift":
       return "Claim it, refresh proof, then lift draft or reply with the exact HOLD.";
+    case "missing_review_safety_ack":
+      return "Claim review, check latest head for safety and authority boundaries, then PASS/BLOCKER with evidence.";
     case "missing_final_qc_ack":
       return "Claim final QC, second-read latest head, then PASS/BLOCKER with exact evidence.";
     case "hold_overlap":
@@ -685,9 +703,10 @@ function prioritizePackets(packets) {
     hold_overlap: 1,
     failed_targeted_proof: 2,
     blocked_chris_only: 3,
-    missing_final_qc_ack: 4,
-    ready_for_qc: 5,
-    draft_green_needs_owner_lift: 6,
+    missing_review_safety_ack: 4,
+    missing_final_qc_ack: 5,
+    ready_for_qc: 6,
+    draft_green_needs_owner_lift: 7,
   };
   return [...packets].sort((a, b) => {
     const stateDiff = (priority[a.state] ?? 99) - (priority[b.state] ?? 99);

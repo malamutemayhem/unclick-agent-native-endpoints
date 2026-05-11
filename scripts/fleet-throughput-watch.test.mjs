@@ -37,7 +37,7 @@ const greenChecks = [
 const greenStatus = [{ state: "success" }];
 
 describe("QueuePush PR classifier", () => {
-  it("classifies green clean draft PRs as owner-lift packets", () => {
+  it("keeps green clean draft PRs with only Safety PASS as owner-lift packets", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 506, draft: true }),
       files: [{ filename: "docs/connectors/system-credentials-health-panel.md" }],
@@ -47,6 +47,41 @@ describe("QueuePush PR classifier", () => {
     });
 
     assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("keeps green clean draft PRs without proof as owner-lift packets", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 506, draft: true }),
+      files: [{ filename: "docs/connectors/system-credentials-health-panel.md" }],
+      comments: [{ body: "Owner refreshed context. Waiting on proof.", created_at: "2026-05-03T01:00:00Z" }],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "draft_green_needs_owner_lift");
+  });
+
+  it("routes green clean draft PRs with proof comment to review", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 714, draft: true, title: "fix(runner): tolerate heartbeat log summaries" }),
+      files: [{ filename: "scripts/pinballwake-autonomous-runner.mjs" }],
+      comments: [
+        {
+          body: [
+            "Runner handoff filter proof from Codex:",
+            "",
+            "Verification:",
+            "- `node --test scripts\\pinballwake-autonomous-runner.test.mjs` PASS, 31/31",
+            "- `git diff --check` PASS",
+          ].join("\n"),
+          created_at: "2026-05-11T23:05:29Z",
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_review_safety_ack");
   });
 
   it("routes draft PRs with Safety and Builder PASS but missing QC to final QC", () => {
@@ -480,12 +515,31 @@ describe("QueuePush routing and packets", () => {
 
   it("maps process states to job kinds and code requirements", () => {
     assert.equal(jobKindForState("draft_green_needs_owner_lift"), "owner_decision");
+    assert.equal(jobKindForState("missing_review_safety_ack"), "qc_review");
     assert.equal(jobKindForState("missing_final_qc_ack"), "qc_review");
     assert.equal(jobKindForState("ready_for_qc"), "qc_review");
     assert.equal(jobKindForState("failed_targeted_proof"), "implementation");
     assert.equal(stateRequiresCode("failed_targeted_proof"), true);
     assert.equal(stateRequiresCode("missing_final_qc_ack"), false);
+    assert.equal(stateRequiresCode("missing_review_safety_ack"), false);
     assert.equal(stateRequiresCode("draft_green_needs_owner_lift"), false);
+  });
+
+  it("builds compact review packets for green draft PRs missing review and safety PASS", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 714, title: "fix(runner): tolerate heartbeat log summaries" }),
+      state: "missing_review_safety_ack",
+      reason: "Draft PR is green and clean with proof; Reviewer/Safety PASS is missing.",
+      files: [{ filename: "scripts/pinballwake-autonomous-runner.mjs" }],
+    });
+
+    assert.equal(packet.worker, "🔍");
+    assert.equal(packet.jobKind, "qc_review");
+    assert.equal(packet.requiresCode, false);
+    assert.match(packet.packetId, /^queuepush:v3:pr-714:missing_review_safety_ack:abcdef1:[a-f0-9]{10}$/);
+    assert.match(packet.text, /DIRECT QC PACKET/);
+    assert.match(packet.text, /Reviewer\/Safety latest head only/);
+    assert.match(packet.text, /requires code: no/);
   });
 
   it("builds compact final QC packets with deterministic id", () => {
