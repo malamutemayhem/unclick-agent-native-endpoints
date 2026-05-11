@@ -148,7 +148,8 @@ function safeText(value: unknown): string | null {
   return text
     .replace(/Authorization\s*[:=]\s*Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Authorization: Bearer <redacted>")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer <redacted>")
-    .replace(/\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*[^,\s]+/gi, "$1=<redacted>")
+    .replace(/([?&](?:api[_-]?key|key|access_token|refresh_token|client_secret|token|secret|password)=)[^&#\s]+/gi, "$1<redacted>")
+    .replace(/\b(api[_-]?key|key|access_token|refresh_token|client_secret|token|secret|password)\b\s*[:=]\s*[^,\s&]+/gi, "$1=<redacted>")
     .slice(0, 500);
 }
 
@@ -172,19 +173,9 @@ function routeFor(painpointType: string) {
 function workerFrom(request: Record<string, unknown>, painpointType: string): string | null {
   const explicit = safeText(request.worker);
   const route = routeFor(painpointType);
-  const worker = explicit ?? route?.worker ?? null;
-  if (!worker) return null;
-  const known = new Set<string>([
-    ...WORKER_ROUTES.map((entry) => entry.worker),
-    "Builder",
-    "Tester",
-    "Reviewer",
-    "Safety Checker",
-    "Ledger",
-    "Continuous Improver",
-    "Agent Observability",
-  ]);
-  return known.has(worker) ? worker : null;
+  if (!route) return null;
+  if (explicit && explicit !== route.worker) return null;
+  return route.worker;
 }
 
 function targetFrom(args: Record<string, unknown>, bridge: Record<string, unknown>, request: Record<string, unknown>): string | null {

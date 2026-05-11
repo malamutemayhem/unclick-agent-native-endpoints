@@ -159,6 +159,26 @@ describe("IgniteOnlyAPI policy", () => {
     });
   });
 
+  it("blocks mismatched worker overrides instead of routing to the wrong lane", async () => {
+    await expect(igniteonlyReceiptConsumer({
+      bridge_id: "nudgebridge_wrong_worker",
+      bridge_status: "receipt_request",
+      painpoint_detected: true,
+      painpoint_type: "missing_proof",
+      source_id: "wake-issues-issue-706",
+      target: "PR #706",
+      verified: true,
+      request: {
+        worker: "Safety Checker",
+        expected_receipt: "Commit or blocker receipt.",
+        verifier: "Check linked proof pointer.",
+      },
+    })).resolves.toMatchObject({
+      ignite_status: "blocked_verification_required",
+      reason: "Target, known worker lane, or painpoint route is missing.",
+    });
+  });
+
   it("redacts secret-shaped fields from public wake packets", async () => {
     const result = await igniteonlyApi({
       bridge_id: "nudgebridge_secret",
@@ -166,6 +186,7 @@ describe("IgniteOnlyAPI policy", () => {
       painpoint_detected: true,
       painpoint_type: "missing_proof",
       source_id: "api_key=super-secret",
+      source_url: "https://unclick.world/api/mcp?key=url-secret&access_token=token-secret",
       target: "Authorization: Bearer abc123.secret",
       verified: true,
       request: {
@@ -175,11 +196,14 @@ describe("IgniteOnlyAPI policy", () => {
     });
 
     expect(JSON.stringify(result)).not.toContain("super-secret");
+    expect(JSON.stringify(result)).not.toContain("url-secret");
+    expect(JSON.stringify(result)).not.toContain("token-secret");
     expect(JSON.stringify(result)).not.toContain("abc123.secret");
     expect(result).toMatchObject({
       ignite_status: "wake_request",
       wake_packet: {
         source_id: "api_key=<redacted>",
+        source_url: "https://unclick.world/api/mcp?key=<redacted>&access_token=<redacted>",
         target: "Authorization: Bearer <redacted>",
       },
     });
