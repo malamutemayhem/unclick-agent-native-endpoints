@@ -102,9 +102,18 @@ jobs:
           UUID_RE='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
           fail_count=0
           close_count=0
+          wakepass_ack_count=0
+          wakepass_complete_count=0
 
           for pr_number in "${PR_NUMBERS[@]}"; do
             pr_text="${PR_BODY:-}"
+            pr_url=$(gh pr view "${pr_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json url,mergedAt \
+              --jq 'if .mergedAt == null then "" else .url end' 2>/tmp/gh-pr-url.err) || {
+                echo "::warning::Could not read PR #${pr_number} URL for WakePass cleanup: $(cat /tmp/gh-pr-url.err)"
+                pr_url=""
+              }
             if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
               pr_text=$(gh pr view "${pr_number}" \
                 --repo "${GITHUB_REPOSITORY}" \
@@ -123,6 +132,71 @@ jobs:
                   pr_commits=""
                 }
               pr_text="${pr_text}"$'\n'"${pr_commits}"
+            fi
+
+            if [ -n "${pr_url:-}" ]; then
+              dispatch_payload=$(jq -n '{method: "list", source: "wakepass", limit: 200}')
+              dispatch_http=$(curl -sS -o wakepass-dispatches.json -w "%{http_code}" \
+                --connect-timeout 10 --max-time 30 \
+                -X POST "${API_URL}?action=reliability_dispatches" \
+                -H "Authorization: Bearer ${UNCLICK_API_KEY}" \
+                -H "Content-Type: application/json" \
+                -d "$dispatch_payload") || dispatch_http="000"
+
+              if [ "$dispatch_http" -ge 400 ] 2>/dev/null || [ "$dispatch_http" = "000" ]; then
+                echo "::warning::Could not list WakePass dispatches for PR #${pr_number} (HTTP ${dispatch_http})."
+                fail_count=$((fail_count + 1))
+              else
+                mapfile -t WAKE_DISPATCHES < <(jq -r \
+                  --arg pr_url "$pr_url" \
+                  --arg pr_ref "pr-${pr_number}" \
+                  '.dispatches[]?
+                    | select((.status != "completed") and (.status != "cancelled"))
+                    | select(((.payload.source_url // "") == $pr_url) or ((.task_ref // "") | contains($pr_ref)))
+                    | [.dispatch_id, (.task_ref // ""), (.status // ""), (.lease_owner // "")]
+                    | @tsv' wakepass-dispatches.json | sort -u)
+
+                for dispatch_row in "${WAKE_DISPATCHES[@]}"; do
+                  IFS=$'\t' read -r dispatch_id task_ref dispatch_status lease_owner <<< "$dispatch_row"
+                  if [ -n "${task_ref:-}" ]; then
+                    ack_payload=$(jq -n \
+                      --arg agent_id "$AGENT_ID" \
+                      --arg text "ACK ${task_ref} merged PR #${pr_number}; WakePass handoff complete." \
+                      '{agent_id: $agent_id, text: $text, tags: ["wakepass", "ack"], recipients: ["all"]}')
+                    ack_http=$(curl -sS -o wakepass-ack.json -w "%{http_code}" \
+                      --connect-timeout 10 --max-time 30 \
+                      -X POST "${API_URL}?action=fishbowl_post" \
+                      -H "Authorization: Bearer ${UNCLICK_API_KEY}" \
+                      -H "Content-Type: application/json" \
+                      -d "$ack_payload") || ack_http="000"
+                    if [ "$ack_http" -ge 400 ] 2>/dev/null || [ "$ack_http" = "000" ]; then
+                      echo "::warning::Could not post WakePass ACK for ${dispatch_id} on PR #${pr_number} (HTTP ${ack_http})."
+                      fail_count=$((fail_count + 1))
+                    else
+                      wakepass_ack_count=$((wakepass_ack_count + 1))
+                    fi
+                  fi
+
+                  if [ "${dispatch_status}" != "leased" ] || [ -z "${lease_owner:-}" ]; then
+                    release_payload=$(jq -n \
+                      --arg agent_id "$AGENT_ID" \
+                      --arg dispatch_id "$dispatch_id" \
+                      '{method: "release", agent_id: $agent_id, dispatch_id: $dispatch_id, status: "completed"}')
+                    release_http=$(curl -sS -o wakepass-release.json -w "%{http_code}" \
+                      --connect-timeout 10 --max-time 30 \
+                      -X POST "${API_URL}?action=reliability_dispatches" \
+                      -H "Authorization: Bearer ${UNCLICK_API_KEY}" \
+                      -H "Content-Type: application/json" \
+                      -d "$release_payload") || release_http="000"
+                    if [ "$release_http" -ge 400 ] 2>/dev/null || [ "$release_http" = "000" ]; then
+                      echo "::warning::Could not complete WakePass dispatch ${dispatch_id} for PR #${pr_number} (HTTP ${release_http})."
+                      fail_count=$((fail_count + 1))
+                    else
+                      wakepass_complete_count=$((wakepass_complete_count + 1))
+                    fi
+                  fi
+                done
+              fi
             fi
 
             if [ -z "${pr_text:-}" ]; then
@@ -167,6 +241,8 @@ jobs:
           # Always succeed - a Fishbowl outage must not paint a red X on a
           # cleanly merged PR. Surface failures via warnings only.
           echo "Closed ${close_count} Fishbowl todo(s)."
+          echo "Posted ${wakepass_ack_count} WakePass ACK(s)."
+          echo "Completed ${wakepass_complete_count} stale WakePass dispatch(es)."
           if [ "$fail_count" -gt 0 ]; then
             echo "::warning::${fail_count} reconciliation call(s) failed."
           fi
