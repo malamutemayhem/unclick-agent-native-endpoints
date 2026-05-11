@@ -18,6 +18,7 @@ describe("heartbeat_protocol payload", () => {
     expect(getHeartbeatProtocol().procedure[6]).toContain("save_conversation_turn");
     expect(getHeartbeatProtocol().procedure[7]).toContain("nudgeonly_receipt_bridge");
     expect(getHeartbeatProtocol().procedure[10]).toContain("igniteonly_receipt_consumer");
+    expect(getHeartbeatProtocol().procedure[10]).toContain("pushonly_wake_pusher");
     expect(getHeartbeatProtocol().procedure[11]).toContain("admin_conversation_turn_ingest");
   });
 
@@ -42,12 +43,14 @@ describe("heartbeat_protocol payload", () => {
     expect(protocol.procedure[5]).toContain("PinballWake JobHunt Mirror");
     expect(protocol.procedure[5]).toContain("Job Worker");
     expect(protocol.procedure[5]).toContain("free API classifiers may only classify or nudge");
+    expect(protocol.procedure[5]).toContain("PushOnly");
     expect(protocol.procedure[5]).toContain("must not create duplicate jobs");
     expect(protocol.procedure[6]).toContain("After check_signals");
     expect(protocol.procedure[7]).toContain("compact public fields");
     expect(protocol.procedure[8]).toContain("smallest safe source text");
     expect(protocol.procedure[9]).toContain("receipt_line");
     expect(protocol.procedure[10]).toContain("ignite_id");
+    expect(protocol.procedure[10]).toContain("push_id");
     expect(protocol.procedure[11]).toContain("read UI");
     expect(protocol.procedure[16]).toContain("missing capability");
     expect(protocol.alert_format).toEqual({
@@ -74,8 +77,8 @@ describe("heartbeat_protocol payload", () => {
     };
 
     expect(formatHeartbeatProtocolVersion(9)).toBe("2026-05-07.v9");
-    expect(protocol.version).toBe("2026-05-07.v8");
-    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("6b9c4578f36695d5");
+    expect(protocol.version).toBe("2026-05-07.v9");
+    expect(heartbeatProtocolContentFingerprint(protocol)).toBe("2fffabe70d5b31e2");
     expect(heartbeatProtocolContentFingerprint(changed)).not.toBe(
       heartbeatProtocolContentFingerprint(protocol),
     );

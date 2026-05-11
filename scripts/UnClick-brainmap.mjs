@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import crypto from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -315,7 +315,22 @@ async function main() {
   console.log(`Wrote ${GENERATED_PATH}`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+function sameExecutablePath(left, right) {
+  const normalize = (value) => {
+    const resolved = path.resolve(value);
+    let real = resolved;
+    try {
+      real = realpathSync.native(resolved);
+    } catch {
+      real = resolved;
+    }
+    return process.platform === "win32" ? real.toLowerCase() : real;
+  };
+
+  return normalize(left) === normalize(right);
+}
+
+if (process.argv[1] && sameExecutablePath(fileURLToPath(import.meta.url), process.argv[1])) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;

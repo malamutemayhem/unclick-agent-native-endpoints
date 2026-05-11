@@ -26,7 +26,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | scripts/pinballwake-continuous-improvement-room.mjs | 4cbb389faf56 | 8822 |
 | scripts/pinballwake-dogfood-room.mjs | d161028d1382 | 2782 |
 | scripts/pinballwake-event-ledger-room.mjs | e8f8f9f84123 | 16104 |
-| scripts/pinballwake-jobs-room.mjs | 26160afdb6c7 | 11859 |
+| scripts/pinballwake-jobs-room.mjs | c77c394081c2 | 14217 |
 | scripts/pinballwake-launchpad-room.mjs | 64cc89cd3253 | 12693 |
 | scripts/pinballwake-merge-room.mjs | 3645da5c0c93 | 8431 |
 | scripts/pinballwake-overlap-resolver-room.mjs | 14d03ef6acd3 | 6787 |
@@ -304,6 +304,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | postman | postman MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/postman-tool.ts |
 | postmark | postmark MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/postmark-tool.ts |
 | ptv | ptv MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/ptv-tool.ts |
+| pushonly | pushonly MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/pushonly-tool.ts |
 | pushover | pushover MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/pushover-tool.ts |
 | qc | qc MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/qc-tool.ts |
 | quickbooks | quickbooks MCP capability, available through the UnClick tool gateway. | packages/mcp-server/src/quickbooks-tool.ts |

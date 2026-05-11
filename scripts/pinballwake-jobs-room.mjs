@@ -37,6 +37,18 @@ function firstArray(...values) {
   return values.find((value) => Array.isArray(value)) || [];
 }
 
+function pushPacketsFrom(input = {}) {
+  const source = input.pushonly || input.pushOnly || input.push || {};
+  return firstArray(
+    input.pushPackets,
+    input.push_packets,
+    input.pushonly_packets,
+    source.push_packets,
+    source.pushPackets,
+    source.packets,
+  );
+}
+
 function livenessSnapshotFrom(input = {}) {
   const source = input.liveness || input.autopilotKit || input.autopilotkit_liveness || input.autopilotKitLiveness || {};
   const profiles = firstArray(
@@ -128,6 +140,50 @@ function jobsWorkerPacketFor(job, nextAction, reason, deadline = "next heartbeat
     deadline,
     DEFAULT_JOBS_WORKER.id,
   );
+}
+
+function jobsWorkerDecisionFromPushPacket(packet = {}) {
+  if (normalize(packet.worker) !== DEFAULT_JOBS_WORKER.id) return null;
+  if (packet.public_fields_only !== true) return null;
+
+  const pushId = compactText(packet.push_id || packet.ignite_id || packet.source_id || "unknown-push", 120);
+  const target = compactText(packet.target || "worker wake", 160);
+  const painpoint = compactText(packet.painpoint_type || "unknown_painpoint", 80);
+  const source = compactText(packet.source_id || packet.source_url || packet.bridge_id || packet.ignite_id || "", 180);
+  const receipt = compactText(
+    packet.expected_receipt || "ACK with backlog hydrated/scoped/routed or a clear blocker.",
+    220,
+  );
+  const verifier = compactText(packet.verifier || "trusted IgniteOnly and PushOnly packet checks", 180);
+  const nextAction = painpoint === "queue_hydration_failure"
+    ? "hydrate_queue_from_push"
+    : "ack_push_packet";
+
+  return {
+    job_id: `pushonly:${pushId}`,
+    status: "pushed",
+    job_type: "queue",
+    next_action: nextAction,
+    priority: painpoint === "queue_hydration_failure" ? 89 : 82,
+    reason: "pushonly_wake_packet",
+    packet: {
+      worker: DEFAULT_JOBS_WORKER.id,
+      chip: `PushOnly wake: ${target}`,
+      context: compactText(
+        [
+          `PushOnly delivered a verified ${painpoint} wake for ${target}.`,
+          source ? `Source: ${source}.` : "",
+          "Hydrate, scope, or route the backlog without editing product code.",
+        ].join(" "),
+      ),
+      expected_proof: `${receipt} Verifier: ${verifier}`,
+      deadline: "next Jobs Worker pulse",
+      ack: "done/blocker",
+      push_id: packet.push_id || null,
+      ignite_id: packet.ignite_id || null,
+      source_id: packet.source_id || null,
+    },
+  };
 }
 
 function classifyJob({ job, ledger, runner, now }) {
@@ -346,6 +402,11 @@ export function evaluateJobsRoom({
   worker_profiles,
   workerProfiles,
   liveness_messages,
+  pushPackets,
+  push_packets,
+  pushonly,
+  pushOnly,
+  push,
 } = {}) {
   const input = {
     now,
@@ -358,14 +419,24 @@ export function evaluateJobsRoom({
     worker_profiles,
     workerProfiles,
     liveness_messages,
+    pushPackets,
+    push_packets,
+    pushonly,
+    pushOnly,
+    push,
   };
   const safeLedger = createCodingRoomJobLedger({
     jobs: jobs || ledger?.jobs || [],
     updatedAt: ledger?.updated_at || now,
   });
   const safeRunner = createCodingRoomRunner(runner);
-  const decisions = safeLedger.jobs
-    .map((job) => classifyJob({ job, ledger: safeLedger, runner: safeRunner, now }))
+  const pushDecisions = pushPacketsFrom(input)
+    .map((packet) => jobsWorkerDecisionFromPushPacket(packet))
+    .filter(Boolean);
+  const decisions = [
+    ...safeLedger.jobs.map((job) => classifyJob({ job, ledger: safeLedger, runner: safeRunner, now })),
+    ...pushDecisions,
+  ]
     .sort((a, b) => b.priority - a.priority || String(a.job_id).localeCompare(String(b.job_id)));
 
   const actionable = decisions.filter((decision) => decision.priority > 0 && decision.next_action !== "none");

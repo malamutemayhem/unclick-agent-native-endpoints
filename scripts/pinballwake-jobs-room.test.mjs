@@ -138,6 +138,60 @@ describe("PinballWake Jobs Room", () => {
     assert.match(result.packets[0].context, /Overlap: scripts\/pinballwake-jobs-room\.mjs/);
   });
 
+  it("turns PushOnly queue hydration packets into Jobs Worker actions", () => {
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({ jobs: [] }),
+      pushPackets: [
+        {
+          push_id: "pushonly_queue",
+          ignite_id: "igniteonly_queue",
+          worker: "pinballwake-jobs-worker",
+          target: "Boardroom backlog",
+          painpoint_type: "queue_hydration_failure",
+          expected_receipt: "Backlog counted, scoped, mirrored, or routed.",
+          verifier: "Compare active jobs against actionable todos.",
+          source_id: "orchestrator-current-state",
+          public_fields_only: true,
+        },
+      ],
+    });
+
+    assert.equal(result.result, "todos");
+    assert.equal(result.next.next_action, "hydrate_queue_from_push");
+    assert.equal(result.next.priority, 89);
+    assert.equal(result.packets[0].worker, "pinballwake-jobs-worker");
+    assert.match(result.packets[0].chip, /PushOnly wake/);
+    assert.match(result.packets[0].context, /queue_hydration_failure/);
+    assert.match(result.packets[0].expected_proof, /Backlog counted/);
+  });
+
+  it("ignores PushOnly packets that are not public Jobs Worker pushes", () => {
+    const result = evaluateJobsRoom({
+      ledger: createCodingRoomJobLedger({ jobs: [] }),
+      pushPackets: [
+        {
+          push_id: "pushonly_wrong_worker",
+          worker: "Builder",
+          target: "Boardroom backlog",
+          painpoint_type: "queue_hydration_failure",
+          source_id: "orchestrator-current-state",
+          public_fields_only: true,
+        },
+        {
+          push_id: "pushonly_private",
+          worker: "pinballwake-jobs-worker",
+          target: "Boardroom backlog",
+          painpoint_type: "queue_hydration_failure",
+          source_id: "orchestrator-current-state",
+          public_fields_only: false,
+        },
+      ],
+    });
+
+    assert.equal(result.result, "idle");
+    assert.equal(result.packets.length, 0);
+  });
+
   it("turns queued review jobs into reviewer todos only for matching reviewer", () => {
     const result = evaluateJobsRoom({
       ledger: createCodingRoomJobLedger({ jobs: [createCodingRoomQcJob({ prNumber: 528 })] }),

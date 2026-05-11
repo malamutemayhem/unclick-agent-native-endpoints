@@ -16,6 +16,7 @@ describe("AdminSeatHeartbeatPage", () => {
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Run UnClick Heartbeat");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("unclick-heartbeat-seat");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("nudgeonly_receipt_bridge");
+    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("PushOnly");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("compact public fields");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("0 active jobs is PASS only if backlog is also 0");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Target existing Job Worker first");
@@ -26,6 +27,7 @@ describe("AdminSeatHeartbeatPage", () => {
     expect(HEARTBEAT_MASTER_PROMPT).toContain("PinballWake JobHunt Mirror");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("Target the existing Job Worker");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("nudgeonly_receipt_bridge");
+    expect(HEARTBEAT_MASTER_PROMPT).toContain("pushonly_wake_pusher");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("bridge_id and receipt_line");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("Do not POST to /admin/orchestrator");
     expect(HEARTBEAT_CONNECTION_PROMPT.length).toBeLessThan(HEARTBEAT_MASTER_PROMPT.length / 2);
