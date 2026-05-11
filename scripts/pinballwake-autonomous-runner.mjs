@@ -463,8 +463,7 @@ export function evaluateOrchestratorSeatHandshakeProof(context = {}) {
   }
 
   const { next_prompt: _nextPrompt, ...handoffEnvelope } = handshake;
-  const handoffText = JSON.stringify(handoffEnvelope);
-  const noisy = /<heartbeat\b|current_time_iso|unclick-heartbeat|run unclick heartbeat|dont_notify/i.test(handoffText);
+  const noisy = containsRawHeartbeatPayload(handoffEnvelope);
   const sourcePointers = Array.isArray(handshake.source_pointers) ? handshake.source_pointers : [];
   const seatFreshness = Array.isArray(handshake.seat_freshness) ? handshake.seat_freshness : [];
   const missing = [];
@@ -496,6 +495,27 @@ export function evaluateOrchestratorSeatHandshakeProof(context = {}) {
     seat_freshness_count: seatFreshness.length,
     proof_line: `PASS: Orchestrator seat_handshake readable; proof: ${proofIds || "source_pointers"}; cleanup: done.`,
   };
+}
+
+function containsRawHeartbeatPayload(value, key = "") {
+  if (value == null) return false;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (/<heartbeat\b|<\/heartbeat>|<current_time_iso\b|<automation_id\b/i.test(text)) {
+      return true;
+    }
+    if (/^raw_/i.test(key) && /current_time_iso|unclick-heartbeat|run unclick heartbeat|dont_notify/i.test(text)) {
+      return true;
+    }
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsRawHeartbeatPayload(item, key));
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).some(([childKey, childValue]) => containsRawHeartbeatPayload(childValue, childKey));
+  }
+  return false;
 }
 
 export async function runOrchestratorSeatHandshakeProof({

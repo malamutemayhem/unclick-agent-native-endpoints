@@ -622,6 +622,38 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(proof.reason, "seat_handshake_ready");
   });
 
+  it("allows compact Orchestrator log summaries that mention heartbeat", () => {
+    const proof = evaluateOrchestratorSeatHandshakeProof({
+      seat_handshake: {
+        mode: "fresh-seat-pickup",
+        active_decision: "Continue from latest heartbeat proof.",
+        active_job: null,
+        recent_proof: "UnClick heartbeat result: PASS, job hunt checked.",
+        active_blocker: "Runner has no fresh run after unclick-heartbeat.",
+        seat_freshness: ["QueuePush: Live"],
+        source_pointers: [{ source_kind: "conversation_turn", source_id: "receipt-1" }],
+      },
+    });
+
+    assert.equal(proof.ok, true);
+    assert.equal(proof.reason, "seat_handshake_ready");
+  });
+
+  it("blocks raw heartbeat payload text without blocking compact summaries", () => {
+    const proof = evaluateOrchestratorSeatHandshakeProof({
+      seat_handshake: {
+        mode: "fresh-seat-pickup",
+        recent_proof: "UnClick heartbeat result: PASS, compact summary only.",
+        raw_turn: "Run UnClick Heartbeat. Use the Seats > Heartbeat policy.",
+        seat_freshness: ["QueuePush: Live"],
+        source_pointers: [{ source_kind: "conversation_turn", source_id: "receipt-1" }],
+      },
+    });
+
+    assert.equal(proof.ok, false);
+    assert(proof.missing.includes("noise_free_handoff"));
+  });
+
   it("extracts Boardroom todo ids only from imported UnClick jobs", () => {
     const job = createCodingRoomJobFromBoardroomTodo({
       id: "todo-claim-1",
