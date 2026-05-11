@@ -562,19 +562,19 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(result.wake_gate.scheduler_watchdog.action, "tap_orchestrator_with_trusted_unclick_fallback");
   });
 
-  it("blocks empty or noisy Orchestrator seat_handshake proof packets", async () => {
+  it("accepts empty active work but blocks noisy Orchestrator seat_handshake proof packets", async () => {
     const direct = evaluateOrchestratorSeatHandshakeProof({
       seat_handshake: {
-        active_decision: "Chris greenlit Orchestrator V1.",
+        active_decision: null,
         active_job: "",
-        recent_proof: "PASS: proof exists.",
+        recent_proof: null,
         seat_freshness: ["PinballWake: Live"],
         source_pointers: [{ source_id: "todo-1" }],
       },
     });
 
-    assert.equal(direct.ok, false);
-    assert(direct.missing.includes("active_job"));
+    assert.equal(direct.ok, true);
+    assert.equal(direct.reason, "seat_handshake_ready");
 
     const fetched = await fetchUnClickOrchestratorContext({
       apiKey: "uc_test",
@@ -591,6 +591,7 @@ describe("PinballWake autonomous Runner seat", () => {
                 seat_freshness: ["PinballWake: Live"],
                 source_pointers: [{ source_id: "todo-1" }],
                 next_prompt: "Run UnClick Heartbeat. Use the Seats > Heartbeat policy.",
+                raw_wake: "<heartbeat><current_time_iso>2026-05-11T09:00:00Z</current_time_iso></heartbeat>",
               },
             },
           };
@@ -602,6 +603,23 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.equal(noisy.ok, false);
     assert(noisy.missing.includes("noise_free_handoff"));
     assert.match(noisy.proof_line, /^BLOCKER:/);
+  });
+
+  it("allows safe heartbeat wording inside seat_handshake next_prompt", () => {
+    const proof = evaluateOrchestratorSeatHandshakeProof({
+      seat_handshake: {
+        mode: "fresh-seat-pickup",
+        active_decision: null,
+        active_job: null,
+        recent_proof: null,
+        seat_freshness: ["QueuePush: Live"],
+        source_pointers: [{ source_id: "dispatch-1" }],
+        next_prompt: "Run UnClick Heartbeat. Use the Seats > Heartbeat policy.",
+      },
+    });
+
+    assert.equal(proof.ok, true);
+    assert.equal(proof.reason, "seat_handshake_ready");
   });
 
   it("extracts Boardroom todo ids only from imported UnClick jobs", () => {

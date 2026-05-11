@@ -462,14 +462,12 @@ export function evaluateOrchestratorSeatHandshakeProof(context = {}) {
     };
   }
 
-  const handoffText = JSON.stringify(handshake);
+  const { next_prompt: _nextPrompt, ...handoffEnvelope } = handshake;
+  const handoffText = JSON.stringify(handoffEnvelope);
   const noisy = /<heartbeat\b|current_time_iso|unclick-heartbeat|run unclick heartbeat|dont_notify/i.test(handoffText);
   const sourcePointers = Array.isArray(handshake.source_pointers) ? handshake.source_pointers : [];
   const seatFreshness = Array.isArray(handshake.seat_freshness) ? handshake.seat_freshness : [];
   const missing = [];
-  if (!String(handshake.active_decision || "").trim()) missing.push("active_decision");
-  if (!String(handshake.active_job || "").trim()) missing.push("active_job");
-  if (!String(handshake.recent_proof || "").trim()) missing.push("recent_proof");
   if (sourcePointers.length === 0) missing.push("source_pointers");
   if (seatFreshness.length === 0) missing.push("seat_freshness");
   if (noisy) missing.push("noise_free_handoff");
