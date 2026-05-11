@@ -157,6 +157,8 @@ export default function ConnectPage() {
   const [mintingKey, setMintingKey]   = useState(false);
   const [mintError, setMintError]     = useState<string | null>(null);
   const [showManualPaste, setShowManualPaste] = useState(false);
+  const [alreadyProvisioned, setAlreadyProvisioned] = useState(false);
+  const [resettingKey, setResettingKey] = useState(false);
   const callbackFired                 = useRef(false);
 
   const { session } = useSession();
@@ -184,18 +186,40 @@ export default function ConnectPage() {
         setApiKey(body.api_key);
         return;
       }
-      // No raw key returned: user already has one on file. Open the manual
-      // paste card so they can supply the existing key (or reset from the
-      // dashboard, which we surface as a link).
-      setShowManualPaste(true);
-      setMintError(
-        "You already have a Passport key. Paste it below, or reset it from your dashboard."
-      );
+      // No raw key returned: user already has one on file. Surface the
+      // reset path inline so they can finish in one more click, plus the
+      // manual paste option for users who have their key saved.
+      setAlreadyProvisioned(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Network error.";
       setMintError(message);
     } finally {
       setMintingKey(false);
+    }
+  }
+
+  async function handleResetKey() {
+    if (!session) return;
+    setResettingKey(true);
+    setMintError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=reset_api_key", {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const body = (await res.json()) as { api_key?: string; error?: string };
+      if (!res.ok || !body.api_key) {
+        setMintError(body.error ?? "Could not reset your Passport key.");
+        return;
+      }
+      try { localStorage.setItem("unclick_api_key", body.api_key); } catch { /* ignore */ }
+      setApiKey(body.api_key);
+      setAlreadyProvisioned(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Network error.";
+      setMintError(message);
+    } finally {
+      setResettingKey(false);
     }
   }
 
@@ -454,44 +478,100 @@ export default function ConnectPage() {
               your saved credentials. Only you can.
             </p>
 
-            {/* Option 1: mint inline */}
-            <button
-              type="button"
-              onClick={() => void handleMintKey()}
-              disabled={mintingKey}
-              className="w-full flex items-center gap-3 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 px-4 py-3 text-left hover:bg-[#E2B93B]/10 transition-colors disabled:opacity-50"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2B93B] text-black font-bold text-sm">
-                1
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-semibold text-[#E8E8E8]">
-                  {mintingKey ? "Getting your key..." : "Get my Passport key"}
-                </span>
-                <span className="block text-xs text-[#E8E8E8]/50">
-                  Fresh key, saved to this browser.
-                </span>
-              </span>
-            </button>
+            {alreadyProvisioned ? (
+              <>
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                  <p className="text-sm text-[#E8E8E8]">
+                    You already have a Passport key on file.
+                  </p>
+                  <p className="text-xs text-[#E8E8E8]/60 leading-relaxed">
+                    Since the key lives only in your browser and you do not
+                    have it here, you can either mint a fresh one now or
+                    paste the existing one if you saved it elsewhere.
+                  </p>
+                </div>
 
-            {/* Option 2: paste an existing key */}
-            <button
-              type="button"
-              onClick={() => setShowManualPaste((v) => !v)}
-              className="w-full flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-left hover:bg-white/[0.04] transition-colors"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#E8E8E8] font-bold text-sm">
-                2
-              </span>
-              <span className="flex-1">
-                <span className="block text-sm font-semibold text-[#E8E8E8]">
-                  I have one already
-                </span>
-                <span className="block text-xs text-[#E8E8E8]/50">
-                  Paste your existing uc_ or agt_live_ key.
-                </span>
-              </span>
-            </button>
+                {/* Reset path: mint fresh, invalidates old key */}
+                <button
+                  type="button"
+                  onClick={() => void handleResetKey()}
+                  disabled={resettingKey}
+                  className="w-full flex items-center gap-3 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 px-4 py-3 text-left hover:bg-[#E2B93B]/10 transition-colors disabled:opacity-50"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2B93B] text-black font-bold text-sm">
+                    1
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-semibold text-[#E8E8E8]">
+                      {resettingKey ? "Minting fresh key..." : "Mint a fresh key"}
+                    </span>
+                    <span className="block text-xs text-[#E8E8E8]/50">
+                      Replaces the old key. Any other devices using it will need the new one.
+                    </span>
+                  </span>
+                </button>
+
+                {/* Paste existing key */}
+                <button
+                  type="button"
+                  onClick={() => setShowManualPaste((v) => !v)}
+                  className="w-full flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-left hover:bg-white/[0.04] transition-colors"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#E8E8E8] font-bold text-sm">
+                    2
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-semibold text-[#E8E8E8]">
+                      Paste my existing key
+                    </span>
+                    <span className="block text-xs text-[#E8E8E8]/50">
+                      Keeps your existing key, no other devices break.
+                    </span>
+                  </span>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Option 1: mint inline */}
+                <button
+                  type="button"
+                  onClick={() => void handleMintKey()}
+                  disabled={mintingKey}
+                  className="w-full flex items-center gap-3 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/5 px-4 py-3 text-left hover:bg-[#E2B93B]/10 transition-colors disabled:opacity-50"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2B93B] text-black font-bold text-sm">
+                    1
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-semibold text-[#E8E8E8]">
+                      {mintingKey ? "Getting your key..." : "Get my Passport key"}
+                    </span>
+                    <span className="block text-xs text-[#E8E8E8]/50">
+                      Fresh key, saved to this browser.
+                    </span>
+                  </span>
+                </button>
+
+                {/* Option 2: paste an existing key */}
+                <button
+                  type="button"
+                  onClick={() => setShowManualPaste((v) => !v)}
+                  className="w-full flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-left hover:bg-white/[0.04] transition-colors"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#E8E8E8] font-bold text-sm">
+                    2
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-semibold text-[#E8E8E8]">
+                      I have one already
+                    </span>
+                    <span className="block text-xs text-[#E8E8E8]/50">
+                      Paste your existing uc_ or agt_live_ key.
+                    </span>
+                  </span>
+                </button>
+              </>
+            )}
 
             {showManualPaste && (
               <div className="space-y-1.5 border border-white/10 rounded-lg p-4 bg-white/[0.02]">
