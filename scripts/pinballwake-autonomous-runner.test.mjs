@@ -997,6 +997,14 @@ describe("PinballWake autonomous Runner seat", () => {
       assert.equal(result.reason, "boardroom_todo_reopened_for_scoping");
       assert.equal(result.queue_source.imported, 1);
       assert.equal(result.skipped[0].reason, "boardroom_todo_missing_scopepack");
+      assert.equal(result.claimability_scorecard.imported_claimable, 1);
+      assert.equal(result.claimability_scorecard.claim_attemptable_after_safety, 0);
+      assert.equal(result.claimability_scorecard.scoping_requested, 1);
+      assert.equal(result.claimability_scorecard.protected_blocked, 0);
+      assert.equal(result.claimability_scorecard.last_action, "scoping_requested");
+      assert.equal(result.claimability_scorecard.last_reason, "boardroom_todo_reopened_for_scoping");
+      assert.equal(result.claimability_scorecard.final_action, "scoping_requested");
+      assert.equal(result.claimability_scorecard.final_reason, "boardroom_todo_reopened_for_scoping");
       assert.equal(result.todo_scoping_sync.todo_id, "todo-orchestrator-scope");
       assert.equal(result.todo_scoping_sync.comment_ok, true);
 

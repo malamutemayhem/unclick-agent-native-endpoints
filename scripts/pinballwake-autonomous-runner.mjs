@@ -842,19 +842,37 @@ function buildClaimabilityScorecard({
   };
 }
 
-function buildRunClaimabilityScorecard({ queueSourceResult = {}, results = [], lastResult = {} } = {}) {
+function buildRunClaimabilityScorecard({
+  queueSourceResult = {},
+  results = [],
+  lastResult = {},
+  finalAction = lastResult.action || null,
+  finalReason = lastResult.reason || null,
+  scopingRequested = 0,
+} = {}) {
   const base = queueSourceResult.claimability_scorecard || buildClaimabilityScorecard({
     seen: queueSourceResult.seen || 0,
     claimable: queueSourceResult.imported || 0,
     imported: queueSourceResult.imported || 0,
     skipped: queueSourceResult.skipped || [],
   });
+  const protectedBlocked = results.reduce(
+    (sum, result) => sum + (Array.isArray(result?.safety_blocked) ? result.safety_blocked.length : 0),
+    0,
+  );
+  const importedClaimable = Number.isFinite(base.claimable) ? base.claimable : queueSourceResult.imported || 0;
 
   return {
     ...base,
+    imported_claimable: importedClaimable,
+    claim_attemptable_after_safety: Math.max(0, importedClaimable - protectedBlocked - scopingRequested),
+    scoping_requested: scopingRequested,
+    protected_blocked: protectedBlocked,
     claimed: results.filter((result) => result?.action === "claimed").length,
-    last_action: lastResult.action || null,
-    last_reason: lastResult.reason || null,
+    last_action: finalAction,
+    last_reason: finalReason,
+    final_action: finalAction,
+    final_reason: finalReason,
   };
 }
 
@@ -1473,13 +1491,19 @@ export async function runAutonomousRunnerFile({
   const executeBlocked = safeMode === "execute" && !safePolicy.allowExecute;
   const shouldPersist = safeMode !== "dry-run" && !safePolicy.disabled && !executeBlocked;
   const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
+  let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
+  let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
+  const todoForScoping = selectBoardroomTodoForScoping({ queueSourceResult, lastResult: last });
+  const finalAction = todoForScoping && shouldPersist ? "scoping_requested" : last.action;
+  const finalReason = todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason;
   const claimabilityScorecard = buildRunClaimabilityScorecard({
     queueSourceResult,
     results,
     lastResult: last,
+    finalAction,
+    finalReason,
+    scopingRequested: todoForScoping && shouldPersist ? 1 : 0,
   });
-  let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
-  let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
 
   if (
     shouldPersist &&
@@ -1514,7 +1538,6 @@ export async function runAutonomousRunnerFile({
     }
   }
 
-  const todoForScoping = selectBoardroomTodoForScoping({ queueSourceResult, lastResult: last });
   if (shouldPersist && todoForScoping) {
     todoScopingSync = await syncBoardroomTodoScopingRequestToUnClick({
       todo: todoForScoping,
@@ -1551,8 +1574,8 @@ export async function runAutonomousRunnerFile({
   return {
     ...last,
     ok: results.every((result) => result.ok) && todoClaimSync.ok && todoScopingSync.ok,
-    action: todoForScoping && shouldPersist ? "scoping_requested" : last.action,
-    reason: todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason,
+    action: finalAction,
+    reason: finalReason,
     mode: safeMode,
     dry_run: safeMode === "dry-run",
     persisted: shouldPersist,
