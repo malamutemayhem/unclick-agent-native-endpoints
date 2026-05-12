@@ -227,6 +227,14 @@ function latestRun(runs = []) {
   return [...runs].sort((a, b) => (parseTime(runCreatedAt(b)) || 0) - (parseTime(runCreatedAt(a)) || 0))[0] || null;
 }
 
+function isAutomaticRunnerRun(run) {
+  return run?.event === "schedule" || run?.event === "workflow_run";
+}
+
+function isSuccessfulRun(run) {
+  return run?.conclusion === "success" && run?.status === "completed";
+}
+
 function formatRun(run) {
   if (!run) return "none";
   const id = runDatabaseId(run) || "unknown";
@@ -271,24 +279,24 @@ export function evaluateRunnerFreshnessWatchdog(input = {}) {
   const graceMinutes = parseBoundedInt(input.graceMinutes, runnerFreshnessGraceMinutes, 5, 180);
   const graceMs = graceMinutes * 60 * 1000;
   const runs = Array.isArray(input.runs) ? input.runs : [];
-  const scheduledRuns = runs.filter((run) => run?.event === "schedule");
+  const automaticRuns = runs.filter(isAutomaticRunnerRun);
   const manualRuns = runs.filter((run) => run?.event === "workflow_dispatch");
-  const latestScheduledRun = latestRun(scheduledRuns);
+  const latestAutomaticRun = latestRun(automaticRuns);
   const latestManualRun = latestRun(manualRuns);
-  const freshScheduledRun = scheduledRuns.find((run) => runHeadSha(run) === mainSha);
+  const freshSuccessfulAutomaticRun = automaticRuns.find((run) => runHeadSha(run) === mainSha && isSuccessfulRun(run));
 
-  if (!mainSha || !mainTime || freshScheduledRun || now - mainTime < graceMs) {
+  if (!mainSha || !mainTime || freshSuccessfulAutomaticRun || now - mainTime < graceMs) {
     return null;
   }
 
-  const packetId = runnerFreshnessPacketId(mainSha, latestScheduledRun);
+  const packetId = runnerFreshnessPacketId(mainSha, latestAutomaticRun);
   const source = `${serverUrl}/${repository}/actions/workflows/${runnerWorkflowPath}`;
   const context = compactText(
     [
       `main_sha=${shortSha(mainSha)}`,
       `main_committed_at=${mainCommittedAt}`,
       `grace_minutes=${graceMinutes}`,
-      `latest_scheduled=${formatRun(latestScheduledRun)}`,
+      `latest_automatic=${formatRun(latestAutomaticRun)}`,
       `latest_manual=${formatRun(latestManualRun)}`,
     ].join("; "),
     420,
@@ -320,7 +328,7 @@ export function evaluateRunnerFreshnessWatchdog(input = {}) {
     text,
     sourceUrl: source,
     mainSha,
-    latestScheduledRun: compactRunSummary(latestScheduledRun),
+    latestAutomaticRun: compactRunSummary(latestAutomaticRun),
     latestManualRun: compactRunSummary(latestManualRun),
   };
 }

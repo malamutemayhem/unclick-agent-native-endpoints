@@ -786,6 +786,44 @@ describe("Runner freshness watchdog", () => {
     assert.equal(packet, null);
   });
 
+  it("stays quiet when a scheduled-chain workflow_run proof exists on current main", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun(),
+        runnerRun({
+          id: 25709000000,
+          event: "workflow_run",
+          head_sha: currentMainRef.sha,
+          created_at: "2026-05-12T02:33:00Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:44:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet, null);
+  });
+
+  it("does not treat a failed automatic Runner run as fresh proof", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun({
+          id: 25709000001,
+          head_sha: currentMainRef.sha,
+          conclusion: "failure",
+          created_at: "2026-05-12T02:33:00Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:44:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet?.state, "runner_scheduled_proof_overdue");
+    assert.match(packet?.text || "", /latest_automatic=25709000001 schedule e12ef89 failure/);
+  });
+
   it("stays quiet while current main is still inside the grace window", () => {
     const packet = evaluateRunnerFreshnessWatchdog({
       mainRef: currentMainRef,
@@ -819,7 +857,7 @@ describe("Runner freshness watchdog", () => {
     assert.match(packet?.packetId || "", /^queuepush:v1:runner-freshness:e12ef89:[a-f0-9]{10}$/);
     assert.match(packet?.text || "", /RUNNER FRESHNESS WATCHDOG/);
     assert.match(packet?.text || "", /main_sha=e12ef89/);
-    assert.match(packet?.text || "", /latest_scheduled=25705095770 schedule eec0aa2 success/);
+    assert.match(packet?.text || "", /latest_automatic=25705095770 schedule eec0aa2 success/);
     assert.match(packet?.text || "", /latest_manual=25707410505 workflow_dispatch e12ef89 success/);
     assert.match(packet?.text || "", /do not mark automation healthy from workflow_dispatch only/);
   });
