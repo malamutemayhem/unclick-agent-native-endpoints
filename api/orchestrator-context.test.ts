@@ -533,6 +533,53 @@ describe("orchestrator context", () => {
     expect(context.continuity_events.find((event) => event.source_id === "turn-zero-metric-summary")?.kind).toBe("status");
   });
 
+  it("does not promote heartbeat schedule and protocol chatter as live blockers", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-12T12:45:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [
+        {
+          id: "turn-heartbeat-request",
+          session_id: "unclick-heartbeat",
+          role: "user",
+          content:
+            '<heartbeat><automation_id>unclick-heartbeat</automation_id><instructions>Run UnClick Heartbeat and reply with PASS/BLOCKER plus progress.</instructions></heartbeat>',
+          created_at: "2026-05-12T12:41:56.000Z",
+        },
+        {
+          id: "turn-heartbeat-protocol-pass",
+          session_id: "unclick-heartbeat-seat",
+          role: "assistant",
+          content:
+            "UnClick healthy. PASS. heartbeat_protocol=v10. check_signals=2 info-only; no action_needed/blocker signals.",
+          created_at: "2026-05-12T12:42:56.000Z",
+        },
+        {
+          id: "turn-heartbeat-pass-at",
+          session_id: "unclick-heartbeat-seat",
+          role: "assistant",
+          content:
+            "UnClick Heartbeat PASS @ 2026-05-12T12:31Z. check_signals=1 info-only; list_todos in_progress=9 unchanged.",
+          created_at: "2026-05-12T12:43:56.000Z",
+        },
+      ],
+    });
+
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-request")?.kind).toBe("status");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-protocol-pass")?.kind).toBe("proof");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-pass-at")?.kind).toBe("proof");
+  });
+
   it("keeps fresh-seat active_decision populated from active work when no decision event is live", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-10T04:16:00.000Z",

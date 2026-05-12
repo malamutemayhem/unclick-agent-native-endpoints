@@ -315,6 +315,10 @@ export function isHeartbeatAutomationText(input: unknown): boolean {
   if (lower.includes("current_time_iso") && lower.includes("instructions") && lower.includes("heartbeat")) return true;
   if (lower.startsWith("run unclick heartbeat.")) return true;
   if (lower.startsWith("load unclick seats > heartbeat")) return true;
+  if (lower.startsWith("heartbeat schedule request:") || lower.includes("run embedded unclick heartbeat instructions")) return true;
+  if (lower.startsWith("unclick heartbeat pass") || lower.startsWith("unclick healthy. pass")) return true;
+  if (lower.includes("heartbeat_protocol=")) return true;
+  if (lower.startsWith("unclick heartbeat ") && lower.includes("check_signals=")) return true;
   if (/^(pass|blocker):\s*heartbeat\b/i.test(text)) return true;
   if (/^pass:\s*.+;\s*proof:\s*.+;\s*cleanup:\s*/i.test(text)) return true;
   if (/^blocker:\s*.+;\s*next:\s*/i.test(text)) return true;
@@ -960,6 +964,7 @@ function sessionToSnapshot(row: OrchestratorSessionRow): OrchestratorLibrarySnap
 function classify(tags: string[], text: string): OrchestratorContinuityEvent["kind"] {
   const tagSet = new Set(tags.map((tag) => tag.toLowerCase()));
   const lower = text.toLowerCase();
+  if (isHeartbeatAutomationText(text)) return classifyHeartbeatAutomationText(lower);
   if (/^heartbeat\b.*\bproof\b/.test(lower)) return "proof";
   if (lower.startsWith("pass: heartbeat")) return "proof";
   if (lower.startsWith("blocker: heartbeat")) return "status";
@@ -972,6 +977,14 @@ function classify(tags: string[], text: string): OrchestratorContinuityEvent["ki
   if (tagSet.has("ack") || lower.startsWith("ack ") || lower.includes(" ack ")) return "ack";
   if (lower.includes("claimed") || lower.includes("claiming") || lower.includes("in_progress")) return "claim";
   if (tagSet.has("decision") || lower.includes("decided") || lower.includes("greenlit")) return "decision";
+  return "status";
+}
+
+function classifyHeartbeatAutomationText(lower: string): OrchestratorContinuityEvent["kind"] {
+  if (/^heartbeat\b.*\bproof\b/.test(lower)) return "proof";
+  if (lower.startsWith("pass: heartbeat")) return "proof";
+  if (lower.startsWith("pass:")) return "proof";
+  if (lower.startsWith("unclick heartbeat pass") || lower.startsWith("unclick healthy. pass")) return "proof";
   return "status";
 }
 
