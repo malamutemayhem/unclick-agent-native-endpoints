@@ -965,13 +965,18 @@ function classify(tags: string[], text: string): OrchestratorContinuityEvent["ki
   if (lower.startsWith("blocker: heartbeat")) return "status";
   if (tagSet.has("info")) return "status";
   if ((tagSet.has("done") || tagSet.has("fyi")) && !lower.startsWith("blocker:")) return "status";
-  if (tagSet.has("blocker") || lower.startsWith("blocker:") || lower.includes(" blocked") || lower.includes(" blocker")) return "blocker";
   if (tagSet.has("proof") || lower.startsWith("pass:") || lower.includes("proof:") || lower.includes(" pr #")) return "proof";
+  if (isZeroBlockerMetricStatus(lower)) return "status";
+  if (tagSet.has("blocker") || lower.startsWith("blocker:") || /\bblocked\b/.test(lower) || /\bblocker\b/.test(lower)) return "blocker";
   if (tagSet.has("handoff") || lower.includes("handoff") || lower.includes("assigned to")) return "handoff";
   if (tagSet.has("ack") || lower.startsWith("ack ") || lower.includes(" ack ")) return "ack";
   if (lower.includes("claimed") || lower.includes("claiming") || lower.includes("in_progress")) return "claim";
   if (tagSet.has("decision") || lower.includes("decided") || lower.includes("greenlit")) return "decision";
   return "status";
+}
+
+function isZeroBlockerMetricStatus(lower: string): boolean {
+  return /\bblocker_count\s*[=:]\s*0\b/.test(lower) || /\b0\s+blocker signals?\b/.test(lower);
 }
 
 function normalizeTags(tags?: string[] | null): string[] {

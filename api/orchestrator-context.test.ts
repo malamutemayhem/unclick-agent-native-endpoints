@@ -496,6 +496,43 @@ describe("orchestrator context", () => {
     expect(context.continuity_events.find((event) => event.source_id === "signal-message-posted")?.kind).toBe("status");
   });
 
+  it("does not promote zero blocker metric chatter as a live blocker", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-12T12:35:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [
+        {
+          id: "turn-zero-metric-pass",
+          session_id: "unclick-heartbeat",
+          role: "assistant",
+          content:
+            "PASS: Verified Orchestrator after PR #737. Current state card now reports active_jobs=0, active_todo_count=0, blocker_count=0.",
+          created_at: "2026-05-12T12:21:46.000Z",
+        },
+        {
+          id: "turn-zero-metric-summary",
+          session_id: "unclick-heartbeat",
+          role: "assistant",
+          content: "Current state card summary: 0 active jobs, 1 active seat, 0 blocker signals.",
+          created_at: "2026-05-12T12:22:46.000Z",
+        },
+      ],
+    });
+
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.continuity_events.find((event) => event.source_id === "turn-zero-metric-pass")?.kind).toBe("proof");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-zero-metric-summary")?.kind).toBe("status");
+  });
+
   it("keeps fresh-seat active_decision populated from active work when no decision event is live", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-10T04:16:00.000Z",
