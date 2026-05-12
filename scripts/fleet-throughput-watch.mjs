@@ -206,6 +206,27 @@ function shortSha(sha) {
   return String(sha || "").slice(0, 7);
 }
 
+function headShaTokens(sha) {
+  const normalized = normalizeText(sha);
+  if (!normalized) return [];
+  return [...new Set([normalized, normalized.slice(0, 12), normalized.slice(0, 7)].filter((token) => token.length >= 7))];
+}
+
+function mentionsHeadSha(text, sha) {
+  const tokens = headShaTokens(sha);
+  return tokens.length > 0 && tokens.some((token) => text.includes(token));
+}
+
+function isReviewerSafetyHeadPassText(text) {
+  const reviewerSafetyPair =
+    /\b(reviewer\/safety|reviewer\s+(?:and|&)\s+safety|safety\s+(?:and|&)\s+reviewer|reviewer\s*\+\s*safety|safety\s*\+\s*reviewer)\b/.test(
+      text,
+    );
+  const gateCheck = /\bgate check\b/.test(text) && /\b(reviewer|safety|safe to lift|safe to merge)\b/.test(text);
+  const safeDecision = /\bsafe to (?:lift|merge)\b/.test(text) && /\b(reviewer|safety|qc)\b/.test(text);
+  return reviewerSafetyPair || gateCheck || safeDecision;
+}
+
 function parseTime(value) {
   const time = Date.parse(String(value || ""));
   return Number.isFinite(time) ? time : null;
@@ -363,7 +384,7 @@ export function checksAreGreen(checkRuns = [], statuses = []) {
   return runsOk && statusesOk;
 }
 
-export function latestCommentSignals(comments = []) {
+export function latestCommentSignals(comments = [], { headSha = "" } = {}) {
   const sorted = [...comments].sort((a, b) =>
     String(a.created_at || "").localeCompare(String(b.created_at || "")),
   );
@@ -375,6 +396,7 @@ export function latestCommentSignals(comments = []) {
   let lastSafetyPass = -1;
   let lastBuilderPass = -1;
   let lastReviewerPass = -1;
+  let lastReviewerSafetyHeadPass = -1;
   let lastMissingFinalQcAck = -1;
   let hasChrisOnly = false;
   let hasProof = false;
@@ -412,6 +434,9 @@ export function latestCommentSignals(comments = []) {
     }
     if (lanePass && /\b(qc|reviewer|tester)\b|🔍|🧪/.test(text)) {
       lastReviewerPass = index;
+    }
+    if (lanePass && mentionsHeadSha(text, headSha) && isReviewerSafetyHeadPassText(text)) {
+      lastReviewerSafetyHeadPass = index;
     }
     const qcWaitOnlyHold = isQcWaitOnlyHold(text);
     if (
@@ -451,6 +476,7 @@ export function latestCommentSignals(comments = []) {
     hasSafetyPass: lastSafetyPass >= 0 && lastSafetyPass > lastHold,
     hasBuilderPass: lastBuilderPass >= 0 && lastBuilderPass > lastHold,
     hasReviewerPass: lastReviewerPass >= 0 && lastReviewerPass > lastHold,
+    hasReviewerSafetyHeadPass: lastReviewerSafetyHeadPass >= 0 && lastReviewerSafetyHeadPass > lastHold,
     hasMissingFinalQcAck: lastMissingFinalQcAck > lastReviewerPass,
     hasChrisOnly,
     hasProof,
@@ -552,7 +578,15 @@ function packetInstructionForJobKind(jobKind) {
 
 export function classifyPullRequest(input) {
   const { pr, files = [], comments = [], reviews = [], checkRuns = [], statuses = [] } = input;
-  const signals = latestCommentSignals([...comments, ...reviews.map((review) => ({ body: review.body, created_at: review.submitted_at }))]);
+  const prState = normalizeText(pr.state);
+  if (pr.merged || pr.merged_at || (prState && prState !== "open")) {
+    return { state: null, reason: "PR is closed or merged; no QueuePush action needed." };
+  }
+  const headSha = pr.head?.sha || pr.headRefOid || "";
+  const signals = latestCommentSignals(
+    [...comments, ...reviews.map((review) => ({ body: review.body, created_at: review.submitted_at }))],
+    { headSha },
+  );
   const green = checksAreGreen(checkRuns, statuses);
   const mergeState = String(pr.mergeable_state || pr.mergeStateStatus || "").toLowerCase();
   const clean = ["clean", "has_hooks", "unstable"].includes(mergeState) || mergeState === "";
@@ -563,6 +597,9 @@ export function classifyPullRequest(input) {
   if (signals.hasFailedProof) return { state: "failed_targeted_proof", reason: "Targeted proof was reported as failing." };
   if (signals.hasOverlap) return { state: "hold_overlap", reason: "Overlap or anti-stomp blocker is present." };
   if (signals.hasActiveHold) return { state: "blocked_chris_only", reason: "Active HOLD/blocker comment remains." };
+  if (green && clean && signals.hasReviewerSafetyHeadPass) {
+    return { state: null, reason: "Reviewer/Safety PASS already exists on this head; no duplicate QueuePush action needed." };
+  }
   if (
     pr.draft &&
     green &&

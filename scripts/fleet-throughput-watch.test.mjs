@@ -79,6 +79,74 @@ describe("QueuePush PR classifier", () => {
     assert.equal(result.state, "draft_green_needs_owner_lift");
   });
 
+  it("does not wake closed or merged PRs", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 724, draft: false, state: "closed", merged: true, merged_at: "2026-05-12T04:00:00Z" }),
+      files: [{ filename: "src/pages/admin/OrchestratorStory.tsx" }],
+      comments: [{ body: "PASS: Reviewer/Safety gate check on abcdef1234567890.", created_at: "2026-05-12T03:40:00Z" }],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, null);
+    assert.match(result.reason, /closed or merged/);
+  });
+
+  it("does not re-wake when Reviewer/Safety PASS already exists on the same head", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 724, draft: true, head: { sha: "e6389f6151ef6ee53e8ea10570932fe6c960c0a5" } }),
+      files: [{ filename: "src/pages/admin/OrchestratorStory.tsx" }],
+      comments: [
+        {
+          body: "PASS: Reviewer/Safety gate check on e6389f6151ef6ee53e8ea10570932fe6c960c0a5. Safe to lift and merge.",
+          created_at: "2026-05-12T03:40:00Z",
+          user: { login: "reviewer-seat" },
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, null);
+    assert.match(result.reason, /Reviewer\/Safety PASS already exists/);
+  });
+
+  it("keeps routing when Reviewer/Safety PASS is for an older head", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 724, draft: true, head: { sha: "e6389f6151ef6ee53e8ea10570932fe6c960c0a5" } }),
+      files: [{ filename: "src/pages/admin/OrchestratorStory.tsx" }],
+      comments: [
+        {
+          body: "PASS: Reviewer/Safety gate check on 1111111151ef6ee53e8ea10570932fe6c960c0a5. Safe to lift and merge.",
+          created_at: "2026-05-12T03:40:00Z",
+          user: { login: "reviewer-seat" },
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_review_safety_ack");
+  });
+
+  it("does not treat bot same-head PASS text as Reviewer/Safety duplicate proof", () => {
+    const result = classifyPullRequest({
+      pr: pr({ number: 724, draft: true, head: { sha: "e6389f6151ef6ee53e8ea10570932fe6c960c0a5" } }),
+      files: [{ filename: "src/pages/admin/OrchestratorStory.tsx" }],
+      comments: [
+        {
+          body: "PASS: Reviewer/Safety gate check on e6389f6151ef6ee53e8ea10570932fe6c960c0a5. Safe to lift and merge.",
+          created_at: "2026-05-12T03:40:00Z",
+          user: { login: "github-actions" },
+        },
+      ],
+      checkRuns: greenChecks,
+      statuses: greenStatus,
+    });
+
+    assert.equal(result.state, "missing_review_safety_ack");
+  });
+
   it("routes green clean draft PRs with proof comment to review", () => {
     const result = classifyPullRequest({
       pr: pr({ number: 714, draft: true, title: "fix(runner): tolerate heartbeat log summaries" }),
