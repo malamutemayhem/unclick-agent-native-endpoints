@@ -872,6 +872,130 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("reopens scoped Boardroom todos for file-level scoping when owned files are missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const calls = [];
+      const fetchImpl = async (url, init = {}) => {
+        calls.push({ url, init, body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-orchestrator-scope",
+                            title: "Orchestrator continuity wiring",
+                            status: "open",
+                            priority: "urgent",
+                            assigned_to_agent_id: null,
+                            actionability_reason: "unassigned_open",
+                            scope_pack: {
+                              lane: "orchestrator",
+                              owner_hint: "live_builder_or_orchestrator_seat",
+                              owned_surfaces: [
+                                "Orchestrator pointer-index hooks",
+                                "read_orchestrator_context filtering",
+                              ],
+                              tests: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
+                            },
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-orchestrator-scope",
+                          status: "open",
+                          assigned_to_agent_id: null,
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "comment_on") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ comment: { id: "comment-scope-1" } }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-12T00:40:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "scoping_requested");
+      assert.equal(result.reason, "boardroom_todo_reopened_for_scoping");
+      assert.equal(result.queue_source.imported, 1);
+      assert.equal(result.skipped[0].reason, "boardroom_todo_missing_scopepack");
+      assert.equal(result.todo_scoping_sync.todo_id, "todo-orchestrator-scope");
+      assert.equal(result.todo_scoping_sync.comment_ok, true);
+
+      const updateCall = calls.find((call) => call.body.params.name === "update_todo");
+      assert.equal(updateCall.body.params.arguments.todo_id, "todo-orchestrator-scope");
+      assert.equal(updateCall.body.params.arguments.assigned_to_agent_id, "");
+
+      const commentCall = calls.find((call) => call.body.params.name === "comment_on");
+      assert.match(commentCall.body.params.arguments.text, /file-level ScopePack/);
+      assert.match(commentCall.body.params.arguments.text, /exact owned files/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("quietly skips stale assigned UnClick todo claims before syncing ownership", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
