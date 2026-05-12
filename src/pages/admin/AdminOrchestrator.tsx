@@ -6,7 +6,7 @@
  *        counts. Stacks vertically on mobile.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Sparkles,
@@ -148,7 +148,10 @@ const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
 const INITIAL_CONTEXT_LIMIT = 80;
 const MAX_CONTEXT_LIMIT = 200;
 const CONTINUITY_VISIBLE_STEP = 24;
-const STORY_CHAPTER_VISIBLE_STEP = 6;
+const STORY_CHAPTER_VISIBLE_STEP = 8;
+const STORY_CHAPTER_SPLIT_MS = 45 * 60_000;
+const STORY_CHAPTER_MAX_TOTAL = 14;
+const STORY_CHAPTER_MAX_PER_BEAT = 2;
 const STORY_CHAPTER_PREVIEW_CHARS = 1_450;
 const STORY_NATIVE_PREVIEW_COUNT = 5;
 const STORY_NATIVE_STORAGE_KEY = "unclick_orchestrator_story_native_v1";
@@ -658,7 +661,7 @@ function storyBeatNarrative(
       return [
         "Chris pulled the thread back to the real one today: is Story mode actually fixed after the translator patch in PR #728?",
         "That was not just a status check. It was a push to turn vague reassurance into something Chris could read and judge on the page.",
-        "The useful move from here is simple: make the Story surface prove itself in plain English, with the receipts still available underneath. ✅",
+        "The useful move from here is simple: make the Story surface prove itself in plain English, keep enough detail to feel alive, and leave the receipts underneath for anyone who wants to inspect the raw trail. ✅",
       ].join(" ");
     }
     return [
@@ -674,7 +677,7 @@ function storyBeatNarrative(
       focus
         ? `The thread to pull was ${focus}, with proof kept nearby so the next seat can trust the decision.`
         : "The important part was not another alert. It was a clear steer that stays in place until Chris changes course.",
-      "That gave the pack something steadier to follow than a pile of minute-by-minute signals. ✅",
+      "That gave the pack something steadier to follow than a pile of minute-by-minute signals, and it keeps the next worker from having to rediscover the point of the work. ✅",
     ].join(" ");
   }
 
@@ -682,7 +685,7 @@ function storyBeatNarrative(
     return [
       prMatches ? `The Orchestrator Story work moved forward around ${prMatches}.` : "The Orchestrator Story work moved forward.",
       "Story is becoming the friendly front door, with Timeline holding the raw receipts underneath for anyone who needs the exact trail.",
-      "The shape is clearer now: Chris should be able to read the day like a running account, while the machine notes stay tucked away for proof. ✅",
+      "The shape is clearer now: Chris should be able to read the day like a running account, with enough context to understand why each moment mattered, while the machine notes stay tucked away for proof. ✅",
     ].join(" ");
   }
 
@@ -690,7 +693,7 @@ function storyBeatNarrative(
     return [
       prMatches ? `The autopilot work kept tightening around ${prMatches}.` : "The autopilot work kept tightening.",
       "QueuePush had been repeating itself without always getting a clean answer back, so the fix is less noise and more closure.",
-      "See the job, pick the lane, wake the right worker, leave proof. That is the difference between a clever traffic light and a system that gets work over the line. 🚀",
+      "The useful pattern is still the same: see the job, pick the lane, wake the right worker, get a clear answer, then leave proof. That is the difference between a clever traffic light and a system that gets work over the line. 🚀",
     ].join(" ");
   }
 
@@ -699,7 +702,7 @@ function storyBeatNarrative(
       "Worker2 is still the pressure point.",
       "Work is visible against it, but it is not moving cleanly through the lane yet, and the scheduled runner behind it has been quiet longer than it should be.",
       blockerCount > 0
-        ? "The calm plan is to keep the blocker visible, watch for the next scheduled wake-up, and hand it one small test job once it shows signs of life. ⚠️"
+        ? "The calm plan is to keep the blocker visible, watch for the next scheduled wake-up, and hand it one small test job once it shows signs of life. If that one job moves, the stuck stack behind it has a path again. ⚠️"
         : "The plan is calm rather than panicked: prove one small job can move, then let the waiting stack start to clear. ⚠️",
     ].join(" ");
   }
@@ -710,7 +713,7 @@ function storyBeatNarrative(
       passCount > 1
         ? "Several seats left receipts close together, which means the work was not just talked about, it was checked and recorded."
         : "A seat left the little mark that matters: this can be trusted later.",
-      "Good, steady movement. ✅",
+      "That proof matters because it lets the next seat continue from evidence instead of guessing what happened. Good, steady movement. ✅",
     ].join(" ");
   }
 
@@ -727,7 +730,7 @@ function storyBeatNarrative(
     activeThreads.length > 0
       ? `${activeThreads.join(", ")}, and the receipts are still landing where the next seat can find them.`
       : "The shared context stayed warm, the next useful piece of work stayed visible, and nothing important fell out of view.",
-    "Nothing dramatic, nothing lost.",
+    "Nothing dramatic, nothing lost, and enough shape now to keep the work moving without turning Story back into a raw feed.",
   ].join(" ");
 }
 
@@ -747,67 +750,98 @@ function nativeNoteForChapter(
   return `${formatRelative(event.created_at)} · ${actor.label} · ${source} · ${cleanStoryText(event.summary)}`;
 }
 
+function eventTimeMs(event: OrchestratorContinuityEvent): number {
+  return event.created_at ? new Date(event.created_at).getTime() : 0;
+}
+
+function chapterLatestTimeMs(chapter: StoryChapter): number {
+  return chapter.endedAt ? new Date(chapter.endedAt).getTime() : 0;
+}
+
 function buildStoryChapters(
   events: OrchestratorContinuityEvent[],
   profileByAgentId: Map<string, OrchestratorProfileCard>,
 ): StoryChapter[] {
-  const sorted = [...events].sort((a, b) => {
-    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-    return bTime - aTime;
-  });
+  const sorted = [...events].sort((a, b) => eventTimeMs(b) - eventTimeMs(a));
 
-  const groups = new Map<StoryBeat, OrchestratorContinuityEvent[]>();
+  const groups: Array<{ beat: StoryBeat; events: OrchestratorContinuityEvent[] }> = [];
   for (const event of sorted) {
     const beat = storyBeatForEvent(event);
     if (!beat) continue;
-    const group = groups.get(beat) ?? [];
-    if (group.length < 40) group.push(event);
-    groups.set(beat, group);
+
+    const eventTime = eventTimeMs(event);
+    const beatGroups = groups.filter((group) => group.beat === beat);
+    if (beatGroups.length >= STORY_CHAPTER_MAX_PER_BEAT) {
+      const lastGroup = beatGroups[beatGroups.length - 1];
+      if (lastGroup.events.length < 24) lastGroup.events.push(event);
+      continue;
+    }
+
+    const latestGroup = beatGroups[beatGroups.length - 1];
+    const latestGroupTime = latestGroup?.events[0] ? eventTimeMs(latestGroup.events[0]) : 0;
+    if (latestGroup && latestGroupTime - eventTime <= STORY_CHAPTER_SPLIT_MS && latestGroup.events.length < 24) {
+      latestGroup.events.push(event);
+    } else {
+      groups.push({ beat, events: [event] });
+    }
   }
 
-  if (groups.size > 1 && groups.has("shipping")) {
-    const shipping = groups.get("shipping") ?? [];
-    const usefulProof = shipping.filter((event) => !/signal to notice|alert/.test(chapterSourceText([event])));
-    if (usefulProof.length < 2) groups.delete("shipping");
-    else groups.set("shipping", usefulProof);
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const group = groups[index];
+    if (groups.length <= 1 || group.beat !== "shipping") continue;
+    const usefulProof = group.events.filter((event) => !/signal to notice|alert/.test(chapterSourceText([event])));
+    if (usefulProof.length < 2) groups.splice(index, 1);
+    else group.events = usefulProof;
   }
 
-  if (groups.size === 0 && sorted.length > 0) {
-    groups.set("where-we-are", sorted.slice(0, 10));
-  } else if (groups.size > 0) {
-    groups.set("where-we-are", sorted.slice(0, 18));
+  if (sorted.length > 0) {
+    groups.push({ beat: "where-we-are", events: sorted.slice(0, 18) });
   }
 
-  const order: StoryBeat[] = [
-    "big-question",
-    "session-direction",
-    "orchestrator-story",
-    "queuepush",
-    "worker2",
-    "shipping",
-    "where-we-are",
-  ];
+  return groups
+    .map(({ beat, events: chapterEvents }) => {
+      const title = storyBeatTitle(beat);
+      const newest = chapterEvents[0]?.created_at ?? null;
+      return {
+        key: `story:${beat}:${newest ?? "unknown"}`,
+        theme: title.theme,
+        title: title.title,
+        emoji: title.emoji,
+        events: chapterEvents,
+        startedAt: chapterEvents[chapterEvents.length - 1]?.created_at ?? null,
+        endedAt: newest,
+        narrative: storyBeatNarrative(beat, chapterEvents, sorted),
+        nativeNotes: chapterEvents
+          .slice(0, STORY_NATIVE_PREVIEW_COUNT)
+          .map((event) => nativeNoteForChapter(event, profileByAgentId)),
+      };
+    })
+    .sort((a, b) => chapterLatestTimeMs(b) - chapterLatestTimeMs(a))
+    .slice(0, STORY_CHAPTER_MAX_TOTAL);
+}
 
-  return order.flatMap((beat) => {
-    const chapterEvents = groups.get(beat);
-    if (!chapterEvents?.length) return [];
-    const title = storyBeatTitle(beat);
-    const newest = chapterEvents[0]?.created_at ?? null;
-    return {
-      key: `story:${beat}:${newest ?? "unknown"}`,
-      theme: title.theme,
-      title: title.title,
-      emoji: title.emoji,
-      events: chapterEvents,
-      startedAt: chapterEvents[chapterEvents.length - 1]?.created_at ?? null,
-      endedAt: newest,
-      narrative: storyBeatNarrative(beat, chapterEvents, sorted),
-      nativeNotes: chapterEvents
-        .slice(0, STORY_NATIVE_PREVIEW_COUNT)
-        .map((event) => nativeNoteForChapter(event, profileByAgentId)),
-    };
+function usePagePositionHold() {
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const pendingAnchorTopRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (pendingAnchorTopRef.current === null) return;
+    const previousTop = pendingAnchorTopRef.current;
+    window.requestAnimationFrame(() => {
+      const nextTop = anchorRef.current?.getBoundingClientRect().top;
+      if (typeof nextTop === "number") {
+        window.scrollBy({ top: nextTop - previousTop });
+      }
+      pendingAnchorTopRef.current = null;
+    });
   });
+
+  function holdPagePosition(action: () => void) {
+    pendingAnchorTopRef.current = anchorRef.current?.getBoundingClientRect().top ?? null;
+    action();
+  }
+
+  return { anchorRef, holdPagePosition };
 }
 
 export default function AdminOrchestratorPage() {
@@ -1013,6 +1047,7 @@ function OrchestratorStoryPanel({
   const visibleChapters = chapters.slice(0, visibleChapterCount);
   const hasMoreLoaded = visibleChapterCount < chapters.length;
   const canLoadFromServer = contextLimit < maxContextLimit;
+  const { anchorRef: readMoreRef, holdPagePosition } = usePagePositionHold();
 
   const toggleNativeNotes = (value: boolean) => {
     setNativeNotes(value);
@@ -1123,13 +1158,16 @@ function OrchestratorStoryPanel({
             {(hasMoreLoaded || canLoadFromServer) && (
               <button
                 type="button"
+                ref={readMoreRef}
                 onClick={() => {
-                  if (hasMoreLoaded) {
-                    setVisibleChapterCount((value) => Math.min(chapters.length, value + STORY_CHAPTER_VISIBLE_STEP));
-                  } else {
-                    onLoadDeeperHistory();
-                    setVisibleChapterCount((value) => value + STORY_CHAPTER_VISIBLE_STEP);
-                  }
+                  holdPagePosition(() => {
+                    if (hasMoreLoaded) {
+                      setVisibleChapterCount((value) => Math.min(chapters.length, value + STORY_CHAPTER_VISIBLE_STEP));
+                    } else {
+                      onLoadDeeperHistory();
+                      setVisibleChapterCount((value) => value + STORY_CHAPTER_VISIBLE_STEP);
+                    }
+                  });
                 }}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#61C1C4]/25 bg-[#61C1C4]/10 px-3 py-2 text-sm font-medium text-[#61C1C4] transition-colors hover:bg-[#61C1C4]/15"
               >
@@ -1243,6 +1281,7 @@ function OrchestratorContinuityPanel({
     !serverSearchLoading &&
     contextLimit < maxContextLimit &&
     events.length >= contextLimit;
+  const { anchorRef: viewMoreRef, holdPagePosition } = usePagePositionHold();
 
   useEffect(() => {
     setVisibleEventCount(CONTINUITY_VISIBLE_STEP);
@@ -1394,12 +1433,15 @@ function OrchestratorContinuityPanel({
             {(canRevealLoadedHistory || canLoadDeeperHistory) ? (
               <button
                 type="button"
+                ref={viewMoreRef}
                 onClick={() => {
-                  if (canRevealLoadedHistory) {
-                    setVisibleEventCount((value) => value + CONTINUITY_VISIBLE_STEP);
-                    return;
-                  }
-                  onLoadDeeperHistory();
+                  holdPagePosition(() => {
+                    if (canRevealLoadedHistory) {
+                      setVisibleEventCount((value) => value + CONTINUITY_VISIBLE_STEP);
+                      return;
+                    }
+                    onLoadDeeperHistory();
+                  });
                 }}
                 className="rounded-md border border-[#61C1C4]/25 bg-[#61C1C4]/10 px-3 py-2 text-xs font-semibold text-[#A9EEF0] hover:border-[#61C1C4]/40 hover:bg-[#61C1C4]/15"
               >
