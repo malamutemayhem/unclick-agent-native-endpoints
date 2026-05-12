@@ -12,6 +12,18 @@ const dryRun = parseBooleanFlag(process.env.QUEUEPUSH_DRY_RUN) || process.argv.i
 const maxPackets = parseBoundedInt(process.env.QUEUEPUSH_MAX_PACKETS, 10, 1, 12);
 const recentFishbowlLimit = parseBoundedInt(process.env.QUEUEPUSH_FISHBOWL_LIMIT, 100, 20, 100);
 const packetRetryMinutes = parseBoundedInt(process.env.QUEUEPUSH_PACKET_RETRY_MINUTES, 180, 15, 1440);
+const defaultBranch = process.env.QUEUEPUSH_DEFAULT_BRANCH || "main";
+const runnerWorkflowPath = process.env.QUEUEPUSH_RUNNER_WORKFLOW_PATH || "autonomous-runner.yml";
+const runnerFreshnessWatchdogDisabled = parseBooleanFlag(
+  process.env.QUEUEPUSH_RUNNER_FRESHNESS_WATCHDOG_DISABLED,
+);
+const runnerFreshnessGraceMinutes = parseBoundedInt(
+  process.env.QUEUEPUSH_RUNNER_FRESHNESS_GRACE_MINUTES,
+  30,
+  5,
+  180,
+);
+const runnerFreshnessRunLimit = parseBoundedInt(process.env.QUEUEPUSH_RUNNER_RUN_LIMIT, 20, 5, 100);
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -192,6 +204,133 @@ function sourceUrl(pr) {
 
 function shortSha(sha) {
   return String(sha || "").slice(0, 7);
+}
+
+function parseTime(value) {
+  const time = Date.parse(String(value || ""));
+  return Number.isFinite(time) ? time : null;
+}
+
+function runHeadSha(run) {
+  return String(run?.head_sha || run?.headSha || "").trim();
+}
+
+function runCreatedAt(run) {
+  return run?.created_at || run?.createdAt || "";
+}
+
+function runDatabaseId(run) {
+  return run?.id || run?.databaseId || run?.database_id || "";
+}
+
+function latestRun(runs = []) {
+  return [...runs].sort((a, b) => (parseTime(runCreatedAt(b)) || 0) - (parseTime(runCreatedAt(a)) || 0))[0] || null;
+}
+
+function isAutomaticRunnerRun(run) {
+  return run?.event === "schedule" || run?.event === "workflow_run";
+}
+
+function isSuccessfulRun(run) {
+  return run?.conclusion === "success" && run?.status === "completed";
+}
+
+function formatRun(run) {
+  if (!run) return "none";
+  const id = runDatabaseId(run) || "unknown";
+  const sha = shortSha(runHeadSha(run)) || "unknown";
+  const event = run.event || "unknown";
+  const created = runCreatedAt(run) || "unknown";
+  const conclusion = run.conclusion || run.status || "unknown";
+  return `${id} ${event} ${sha} ${conclusion} ${created}`;
+}
+
+function compactRunSummary(run) {
+  if (!run) return null;
+  return {
+    id: runDatabaseId(run) || null,
+    event: run.event || null,
+    head_sha: runHeadSha(run) || null,
+    conclusion: run.conclusion || null,
+    status: run.status || null,
+    created_at: runCreatedAt(run) || null,
+    url: run.html_url || run.url || null,
+  };
+}
+
+function runnerFreshnessPacketId(mainSha, latestScheduledRun) {
+  const digest = createHash("sha256")
+    .update(`${repository}|runner-freshness|${mainSha}|${runDatabaseId(latestScheduledRun) || "none"}`)
+    .digest("hex")
+    .slice(0, 10);
+  return `queuepush:v1:runner-freshness:${shortSha(mainSha)}:${digest}`;
+}
+
+export function evaluateRunnerFreshnessWatchdog(input = {}) {
+  const mainSha = String(input.mainSha || input.mainRef?.sha || input.mainRef?.commit?.sha || "").trim();
+  const mainCommittedAt =
+    input.mainCommittedAt ||
+    input.mainRef?.committedAt ||
+    input.mainRef?.commit?.commit?.committer?.date ||
+    input.mainRef?.commit?.commit?.author?.date ||
+    "";
+  const mainTime = parseTime(mainCommittedAt);
+  const now = typeof input.now === "number" ? input.now : parseTime(input.now) ?? Date.now();
+  const graceMinutes = parseBoundedInt(input.graceMinutes, runnerFreshnessGraceMinutes, 5, 180);
+  const graceMs = graceMinutes * 60 * 1000;
+  const runs = Array.isArray(input.runs) ? input.runs : [];
+  const automaticRuns = runs.filter(isAutomaticRunnerRun);
+  const manualRuns = runs.filter((run) => run?.event === "workflow_dispatch");
+  const latestAutomaticRun = latestRun(automaticRuns);
+  const latestManualRun = latestRun(manualRuns);
+  const freshSuccessfulAutomaticRun = automaticRuns.find((run) => runHeadSha(run) === mainSha && isSuccessfulRun(run));
+
+  if (!mainSha || !mainTime || freshSuccessfulAutomaticRun || now - mainTime < graceMs) {
+    return null;
+  }
+
+  const packetId = runnerFreshnessPacketId(mainSha, latestAutomaticRun);
+  const source = `${serverUrl}/${repository}/actions/workflows/${runnerWorkflowPath}`;
+  const context = compactText(
+    [
+      `main_sha=${shortSha(mainSha)}`,
+      `main_committed_at=${mainCommittedAt}`,
+      `grace_minutes=${graceMinutes}`,
+      `latest_automatic=${formatRun(latestAutomaticRun)}`,
+      `latest_manual=${formatRun(latestManualRun)}`,
+    ].join("; "),
+    420,
+  );
+  const text = [
+    `QueuePush ID: ${packetId}`,
+    "RUNNER FRESHNESS WATCHDOG",
+    "worker: 🧭",
+    "job kind: status_relay",
+    "requires code: no",
+    "chip: scheduled Runner proof gap",
+    `context: ${context}`,
+    "do: verify GitHub schedule delivery or add a read-only Runner freshness canary.",
+    "expected proof: event=schedule Runner run on current main SHA, with run id and claimability result.",
+    "deadline: next Fleet pulse",
+    "fallback: do not mark automation healthy from workflow_dispatch only.",
+    "ack: pass/blocker",
+    `source: ${source}`,
+  ].join("\n");
+
+  return {
+    packetId,
+    worker: "🧭",
+    jobKind: "status_relay",
+    requiresCode: false,
+    recipient: agentMap["🧭"] || "🧭",
+    state: "runner_scheduled_proof_overdue",
+    pr: "runner",
+    text,
+    sourceUrl: source,
+    mainSha,
+    latestAutomaticRun: compactRunSummary(latestAutomaticRun),
+    latestManualRun: compactRunSummary(latestManualRun),
+  };
 }
 
 export function queuepushPacketId(pr, state) {
@@ -624,6 +763,39 @@ async function fetchOpenPrInputs() {
   return inputs;
 }
 
+async function fetchDefaultBranchRef() {
+  const branch = await githubJson(`/repos/${repository}/branches/${encodeURIComponent(defaultBranch)}`);
+  return {
+    sha: branch?.commit?.sha || "",
+    committedAt: branch?.commit?.commit?.committer?.date || branch?.commit?.commit?.author?.date || "",
+  };
+}
+
+async function fetchRunnerWorkflowRuns() {
+  const workflow = encodeURIComponent(runnerWorkflowPath);
+  const branch = encodeURIComponent(defaultBranch);
+  const result = await githubJson(
+    `/repos/${repository}/actions/workflows/${workflow}/runs?branch=${branch}&per_page=${runnerFreshnessRunLimit}`,
+  );
+  return result?.workflow_runs || [];
+}
+
+async function buildRunnerFreshnessPackets() {
+  if (runnerFreshnessWatchdogDisabled) return [];
+  try {
+    const [mainRef, runs] = await Promise.all([fetchDefaultBranchRef(), fetchRunnerWorkflowRuns()]);
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef,
+      runs,
+      graceMinutes: runnerFreshnessGraceMinutes,
+    });
+    return packet ? [packet] : [];
+  } catch (error) {
+    console.log(`Runner freshness watchdog skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
 async function postMemoryAdmin(action, body) {
   if (!unclickApiKey) {
     throw new Error("FISHBOWL_WAKE_TOKEN or FISHBOWL_AUTOCLOSE_TOKEN is required.");
@@ -699,6 +871,7 @@ export async function buildPacketsFromInputs(inputs) {
 
 function prioritizePackets(packets) {
   const priority = {
+    runner_scheduled_proof_overdue: 0,
     dirty_branch: 0,
     hold_overlap: 1,
     failed_targeted_proof: 2,
@@ -716,8 +889,9 @@ function prioritizePackets(packets) {
 }
 
 export async function main() {
-  const inputs = await fetchOpenPrInputs();
-  const rawPackets = await buildPacketsFromInputs(inputs);
+  const [inputs, runnerFreshnessPackets] = await Promise.all([fetchOpenPrInputs(), buildRunnerFreshnessPackets()]);
+  const prPackets = await buildPacketsFromInputs(inputs);
+  const rawPackets = prioritizePackets([...runnerFreshnessPackets, ...prPackets]);
   const boundedPackets = rawPackets.slice(0, maxPackets);
 
   if (dryRun) {

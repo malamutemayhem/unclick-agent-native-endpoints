@@ -6,6 +6,7 @@ import {
   buildPacketsFromInputs,
   checksAreGreen,
   chooseQueuePushRunner,
+  evaluateRunnerFreshnessWatchdog,
   classifyPullRequest,
   filterDuplicatePackets,
   jobKindForState,
@@ -35,6 +36,23 @@ const greenChecks = [
 ];
 
 const greenStatus = [{ state: "success" }];
+
+function runnerRun(overrides = {}) {
+  return {
+    id: 25705095770,
+    event: "schedule",
+    head_sha: "eec0aa24c5dd024cca858746a24f4444be405493",
+    conclusion: "success",
+    status: "completed",
+    created_at: "2026-05-12T00:14:56Z",
+    ...overrides,
+  };
+}
+
+const currentMainRef = {
+  sha: "e12ef89c1560e0ddc842e225ce646c929844b2e5",
+  committedAt: "2026-05-12T01:07:03Z",
+};
 
 describe("QueuePush PR classifier", () => {
   it("keeps green clean draft PRs with only Safety PASS as owner-lift packets", () => {
@@ -747,5 +765,100 @@ describe("QueuePush signal helpers", () => {
 
     assert.equal(signals.hasDirtyBranch, true);
     assert.equal(signals.hasOverlap, true);
+  });
+});
+
+describe("Runner freshness watchdog", () => {
+  it("stays quiet when a scheduled Runner proof exists on current main", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun({
+          id: 25708000000,
+          head_sha: currentMainRef.sha,
+          created_at: "2026-05-12T01:33:00Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:14:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet, null);
+  });
+
+  it("stays quiet when a scheduled-chain workflow_run proof exists on current main", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun(),
+        runnerRun({
+          id: 25709000000,
+          event: "workflow_run",
+          head_sha: currentMainRef.sha,
+          created_at: "2026-05-12T02:33:00Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:44:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet, null);
+  });
+
+  it("does not treat a failed automatic Runner run as fresh proof", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun({
+          id: 25709000001,
+          head_sha: currentMainRef.sha,
+          conclusion: "failure",
+          created_at: "2026-05-12T02:33:00Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:44:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet?.state, "runner_scheduled_proof_overdue");
+    assert.match(packet?.text || "", /latest_automatic=25709000001 schedule e12ef89 failure/);
+  });
+
+  it("stays quiet while current main is still inside the grace window", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [runnerRun()],
+      now: Date.parse("2026-05-12T01:20:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet, null);
+  });
+
+  it("emits one compact status packet when current main has only manual Runner proof", () => {
+    const packet = evaluateRunnerFreshnessWatchdog({
+      mainRef: currentMainRef,
+      runs: [
+        runnerRun(),
+        runnerRun({
+          id: 25707410505,
+          event: "workflow_dispatch",
+          head_sha: currentMainRef.sha,
+          created_at: "2026-05-12T01:22:37Z",
+        }),
+      ],
+      now: Date.parse("2026-05-12T02:14:00Z"),
+      graceMinutes: 30,
+    });
+
+    assert.equal(packet?.state, "runner_scheduled_proof_overdue");
+    assert.equal(packet?.recipient, "🧭");
+    assert.equal(packet?.requiresCode, false);
+    assert.match(packet?.packetId || "", /^queuepush:v1:runner-freshness:e12ef89:[a-f0-9]{10}$/);
+    assert.match(packet?.text || "", /RUNNER FRESHNESS WATCHDOG/);
+    assert.match(packet?.text || "", /main_sha=e12ef89/);
+    assert.match(packet?.text || "", /latest_automatic=25705095770 schedule eec0aa2 success/);
+    assert.match(packet?.text || "", /latest_manual=25707410505 workflow_dispatch e12ef89 success/);
+    assert.match(packet?.text || "", /do not mark automation healthy from workflow_dispatch only/);
   });
 });
