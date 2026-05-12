@@ -6,6 +6,7 @@ on:
   workflow_run:
     workflows:
       - Fleet Throughput Watch
+      - TestPass Scheduled Smoke
     types: [completed]
   workflow_dispatch:
     inputs:
