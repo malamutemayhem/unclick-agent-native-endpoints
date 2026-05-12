@@ -145,10 +145,10 @@ const DRIPFEED_EDUCATION_STORAGE_KEY = "unclick_orchestrator_dripfeed_education_
 const ANALOGY_STORAGE_KEY = "unclick_orchestrator_analogy_v1";
 const EVENT_PREVIEW_CHARS = 520;
 const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
-const INITIAL_CONTEXT_LIMIT = 80;
+const INITIAL_CONTEXT_LIMIT = 120;
 const MAX_CONTEXT_LIMIT = 200;
 const CONTINUITY_VISIBLE_STEP = 24;
-const STORY_CHAPTER_VISIBLE_STEP = 8;
+const STORY_CHAPTER_VISIBLE_STEP = 10;
 const STORY_CHAPTER_SPLIT_MS = 45 * 60_000;
 const STORY_CHAPTER_MAX_TOTAL = 14;
 const STORY_CHAPTER_MAX_PER_BEAT = 2;
@@ -862,17 +862,21 @@ export default function AdminOrchestratorPage() {
   const [orchestratorContext, setOrchestratorContext] = useState<OrchestratorContext | null>(null);
   const [contextLimit, setContextLimit] = useState(INITIAL_CONTEXT_LIMIT);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOrchestratorContextRef = useRef(false);
 
   const envEnabled = aiChatEnvEnabled();
 
   useEffect(() => {
     if (sessionLoading) return;
     if (!authToken) {
+      hasLoadedOrchestratorContextRef.current = false;
       queueMicrotask(() => setLoading(false));
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    if (!hasLoadedOrchestratorContextRef.current) {
+      setLoading(true);
+    }
     (async () => {
       try {
         const [channelRes, statusRes, connRes, contextRes, tenantRes] = await Promise.all([
@@ -900,6 +904,7 @@ export default function AdminOrchestratorPage() {
         if (contextRes.ok) {
           const body = (await contextRes.json()) as { context?: OrchestratorContext };
           setOrchestratorContext(body.context ?? null);
+          hasLoadedOrchestratorContextRef.current = true;
         }
         if (tenantRes?.env_enabled) setTenant(tenantRes.settings);
       } finally {

@@ -19,6 +19,59 @@ function renderOrchestrator(route = "/admin/orchestrator") {
   );
 }
 
+function jsonResponse(value: unknown): Response {
+  return {
+    ok: true,
+    json: async () => value,
+  } as Response;
+}
+
+function contextWithEvents(events: Array<Record<string, unknown>>) {
+  return {
+    context: {
+      version: "orchestrator-context-v1",
+      generated_at: "2026-05-10T06:00:00.000Z",
+      current_state_card: {
+        summary: "1 active job, 1 active seat, 0 blocker signals.",
+        newest_activity_at: "2026-05-10T05:55:00.000Z",
+        newest_checkin_at: "2026-05-10T05:55:00.000Z",
+        active_todo_count: 1,
+        blocker_count: 0,
+        active_seat_count: 1,
+        next_actions: [],
+        blockers: [],
+        live_sources: {
+          profiles: 1,
+          boardroom_messages: 0,
+          todos: 0,
+          comments: 0,
+          dispatches: 0,
+          signals: 0,
+          sessions: 0,
+          library: 0,
+          business_context: 0,
+          conversation_turns: events.length,
+        },
+      },
+      profile_cards: [
+        {
+          agent_id: "codex-orchestrator-seat",
+          label: "Codex Orchestrator Seat",
+          role: "ai-seat",
+          emoji: "🤖",
+          source_app_label: "Codex",
+          connection_label: "Connected",
+          last_seen_at: "2026-05-10T05:55:00.000Z",
+          freshness_label: "Live",
+        },
+      ],
+      human_operator_time: null,
+      continuity_events: events,
+      library_snapshots: [],
+    },
+  };
+}
+
 describe("AdminOrchestratorPage", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -256,6 +309,91 @@ describe("AdminOrchestratorPage", () => {
     expect(screen.queryByText(/Archive event 24/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Message the AI assistant...")).not.toBeInTheDocument();
     expect(screen.queryByText("Using AI Assistant")).not.toBeInTheDocument();
+  });
+
+  it("loads a larger Story context window by default", async () => {
+    renderOrchestrator();
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("orchestrator_context_read&limit=120"),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+        }),
+      ),
+    );
+  });
+
+  it("keeps Story content visible while deeper history loads", async () => {
+    let resolveDeepHistory: (response: Response) => void = () => undefined;
+    const deepHistoryPromise = new Promise<Response>((resolve) => {
+      resolveDeepHistory = resolve;
+    });
+    const initialEvents = [
+      {
+        source_kind: "conversation_turn",
+        source_id: "story-scroll-ask",
+        created_at: "2026-05-10T06:15:00.000Z",
+        kind: "context",
+        role: "user",
+        summary: "user: Can Story hold more conversation by default?",
+        tags: ["conversation", "user"],
+      },
+      ...Array.from({ length: 119 }, (_, index) => ({
+        source_kind: "conversation_turn",
+        source_id: `archive-${index}`,
+        created_at: `2026-05-10T04:${String(59 - (index % 50)).padStart(2, "0")}:00.000Z`,
+        kind: "context",
+        role: "assistant",
+        summary: `Archive event ${index}: older detail.`,
+        tags: ["archive"],
+      })),
+    ];
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      const textUrl = String(url);
+      if (textUrl.includes("orchestrator_context_read") && textUrl.includes("limit=200")) {
+        return deepHistoryPromise;
+      }
+      if (textUrl.includes("orchestrator_context_read")) {
+        return jsonResponse(contextWithEvents(initialEvents));
+      }
+      if (textUrl.includes("tenant_settings")) {
+        return jsonResponse({
+          env_enabled: true,
+          settings: {
+            ai_chat_enabled: true,
+            ai_chat_provider: "google",
+            ai_chat_model: "gemini-2.5-flash-lite",
+            ai_chat_system_prompt: null,
+            ai_chat_max_turns: 20,
+            has_api_key: true,
+          },
+        });
+      }
+      if (textUrl.includes("admin_channel_status")) {
+        return jsonResponse({ channel_active: false, last_seen: null, client_info: null });
+      }
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderOrchestrator();
+
+    expect((await screen.findAllByText(/Chris pulled the thread back to the real question/i)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText("Read more"));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("orchestrator_context_read&limit=200"),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+        }),
+      ),
+    );
+    expect(screen.queryByText("Writing the latest story...")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Chris pulled the thread back to the real question/i).length).toBeGreaterThan(0);
+
+    resolveDeepHistory(jsonResponse(contextWithEvents(initialEvents)));
   });
 
   it("shows read-only continuity on the Timeline subpage", async () => {
