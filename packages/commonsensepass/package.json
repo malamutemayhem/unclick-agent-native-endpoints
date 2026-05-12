@@ -1,0 +1,27 @@
+{
+  "name": "@unclick/commonsensepass",
+  "version": "0.1.0",
+  "description": "CommonSensePass - rule-and-evidence sanity gate for AI/worker claims (PASS/BLOCKER/HOLD/SUPPRESS/ROUTE). Verdict-only; does not build, merge, close, or mutate source state.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./schema": "./dist/schema.js",
+    "./rules": "./dist/rules.js",
+    "./check": "./dist/check.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
