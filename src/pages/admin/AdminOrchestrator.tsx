@@ -148,10 +148,26 @@ const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
 const INITIAL_CONTEXT_LIMIT = 80;
 const MAX_CONTEXT_LIMIT = 200;
 const CONTINUITY_VISIBLE_STEP = 24;
-const STORY_VISIBLE_STEP = 8;
-const STORY_PREVIEW_CHARS = 880;
-const STORY_NATIVE_PREVIEW_CHARS = 560;
+const STORY_CHAPTER_VISIBLE_STEP = 5;
+const STORY_CHAPTER_WINDOW_MS = 18 * 60_000;
+const STORY_CHAPTER_MAX_EVENTS = 14;
+const STORY_CHAPTER_PREVIEW_CHARS = 1_450;
+const STORY_NATIVE_PREVIEW_COUNT = 5;
 const STORY_NATIVE_STORAGE_KEY = "unclick_orchestrator_story_native_v1";
+
+type StoryTheme = "question" | "orchestrator" | "autopilot" | "blocker" | "shipping" | "signals" | "general";
+
+interface StoryChapter {
+  key: string;
+  theme: StoryTheme;
+  title: string;
+  emoji: string;
+  events: OrchestratorContinuityEvent[];
+  startedAt: string | null;
+  endedAt: string | null;
+  narrative: string;
+  nativeNotes: string[];
+}
 
 function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -429,22 +445,323 @@ function truncateText(value: string, maxChars: number): { text: string; truncate
   };
 }
 
-function storyTextForEvent(event: OrchestratorContinuityEvent, actor: ActorIdentity): string {
-  const easy = easyReadForEvent(event, actor);
-  if (/^PASS:/i.test(event.summary)) return `Good news. ${easy}`;
-  if (/^BLOCKER:/i.test(event.summary)) return easy;
-  if (event.kind === "proof") return `${easy} The receipt is kept close so another seat can trust it later.`;
-  if (event.kind === "decision" || event.tags?.includes("decision")) {
-    return `${easy} This becomes part of the shared story until Chris changes direction.`;
-  }
-  return easy;
+function cleanStoryText(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^user:\s*/i, "")
+    .replace(/^assistant:\s*/i, "")
+    .replace(/^AI replied:\s*/i, "")
+    .replace(/^Chris said:\s*/i, "")
+    .replace(/^PASS:\s*/i, "")
+    .replace(/^BLOCKER:\s*/i, "")
+    .trim();
 }
 
-function nativeNoteForEvent(event: OrchestratorContinuityEvent, actor: ActorIdentity): string {
+function chapterSourceText(events: OrchestratorContinuityEvent[]): string {
+  return events
+    .map((event) => [event.kind, event.source_kind, event.role, event.summary, ...(event.tags ?? [])].join(" "))
+    .join(" ")
+    .toLowerCase();
+}
+
+function themeForEvent(event: OrchestratorContinuityEvent): StoryTheme {
+  const text = chapterSourceText([event]);
+  if (
+    /^blocker:/i.test(event.summary) ||
+    event.kind === "blocker" ||
+    /\b(blocker|stale_ack|unclear_owner|queue hydration|active_jobs=0|worker2|missed_next_checkin)\b/.test(text)
+  ) {
+    return "blocker";
+  }
+  if (/\b(orchestrator story|story view|story page|orchestrator continuity|orchestrator)\b/.test(text)) {
+    return "orchestrator";
+  }
+  if (/\b(autopilot|runner|queuepush|pinballwake|nudgeonly|igniteonly|pushonly|claimability|fleet throughput|#715|#726)\b/.test(text)) {
+    return "autopilot";
+  }
+  if (/\b(broadcast|achievable|greenlight|todo|todos|question|asked)\b/.test(text) || event.role === "user") {
+    return "question";
+  }
+  if (/^pass:/i.test(event.summary) || /\b(merged|checks passed|green|vercel|testpass|shipped|proof landed)\b/.test(text)) {
+    return "shipping";
+  }
+  if (/\b(signal|wakepass|alert|reroute|dispatch)\b/.test(text)) {
+    return "signals";
+  }
+  return "general";
+}
+
+function chapterTheme(events: OrchestratorContinuityEvent[]): StoryTheme {
+  const scores: Record<StoryTheme, number> = {
+    question: 0,
+    orchestrator: 0,
+    autopilot: 0,
+    blocker: 0,
+    shipping: 0,
+    signals: 0,
+    general: 0,
+  };
+  for (const event of events) {
+    const theme = themeForEvent(event);
+    scores[theme] += theme === "blocker" ? 3 : theme === "signals" ? 1 : 2;
+  }
+  if (scores.blocker > 0) return "blocker";
+  return (Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] as StoryTheme) ?? "general";
+}
+
+function chapterTitle(theme: StoryTheme, events: OrchestratorContinuityEvent[]): { emoji: string; title: string } {
+  const text = chapterSourceText(events);
+  if (hasRunnerFreshness(text)) {
+    return { emoji: "👀", title: "Watching the scheduled runner" };
+  }
+  if (hasSessionDecision(text)) {
+    return { emoji: "🧠", title: "Fresh direction from Session" };
+  }
+  if (hasQueuePush(text) && hasStaleAck(text)) return { emoji: "📬", title: "QueuePush needs a clean answer" };
+  if (hasStaleAck(text)) return { emoji: "👀", title: "A handoff is waiting" };
+  if (/worker2|queue hydration|active_jobs=0/.test(text)) return { emoji: "⚠️", title: "The worker2 situation" };
+  if (/orchestrator story|story view|story page|#724/.test(text)) {
+    return { emoji: "🟢", title: "Orchestrator Story, tucked into place" };
+  }
+  if (/queuepush|#726/.test(text)) return { emoji: "📬", title: "QueuePush gets less noisy" };
+  if (/runner|claimability|pinballwake/.test(text)) return { emoji: "🚦", title: "The runner check-in" };
+  if (/achievable|broadcast|greenlight|todo/.test(text)) return { emoji: "🌅", title: "The big question" };
+  if (/merged|checks passed|proof landed|shipped/.test(text)) return { emoji: "✅", title: "Proof landed" };
+  if (/wakepass|signal|alert|dispatch/.test(text)) return { emoji: "📡", title: "Signals in the background" };
+  const fallback: Record<StoryTheme, { emoji: string; title: string }> = {
+    question: { emoji: "🌅", title: "The big question" },
+    orchestrator: { emoji: "🟢", title: "Orchestrator keeps the story" },
+    autopilot: { emoji: "🚀", title: "Autopilot gets sharper" },
+    blocker: { emoji: "⚠️", title: "The sticky bit" },
+    shipping: { emoji: "✅", title: "Small ships, clean proof" },
+    signals: { emoji: "📡", title: "Signals in the background" },
+    general: { emoji: "🐾", title: "Where we are" },
+  };
+  return fallback[theme];
+}
+
+function latestUserAsk(events: OrchestratorContinuityEvent[]): string | null {
+  const event = events.find((item) => item.role === "user");
+  if (!event) return null;
+  const clean = cleanStoryText(event.summary)
+    .replace(/^User asked\s*/i, "asked ")
+    .replace(/^Chris said:\s*/i, "")
+    .trim();
+  if (!clean) return null;
+  return clean.length > 170 ? `${clean.slice(0, 170).trimEnd()}...` : clean;
+}
+
+function buildFocus(events: OrchestratorContinuityEvent[]): string | null {
+  const summary = events.map((event) => event.summary).find((value) => /it is about/i.test(value));
+  const match = summary?.match(/it is about\s+(.+?)(?:\.|$)/i);
+  if (match?.[1]) return cleanStoryText(match[1]);
+  const text = chapterSourceText(events);
+  if (/subscription chat messages.*orchestrator/.test(text)) {
+    return "getting subscription chat messages to show properly inside Orchestrator";
+  }
+  if (/orchestrator story|story view|story page/.test(text)) {
+    return "making Orchestrator Story read like a real running story";
+  }
+  if (/queuepush/.test(text)) return "making QueuePush quieter and better at closing loops";
+  if (/claimability|runner/.test(text)) return "making the runner explain which jobs it can really claim";
+  return null;
+}
+
+function hasRunnerFreshness(text: string): boolean {
+  return /runner-freshness|autonomous-runner|next schedule|canary/.test(text);
+}
+
+function hasSessionDecision(text: string): boolean {
+  return /decision from session|session.*decision|tags.*decision/.test(text);
+}
+
+function hasStaleAck(text: string): boolean {
+  return /stale_ack|stale wake|wakepass stale|missed_next_checkin|ack_required/.test(text);
+}
+
+function hasQueuePush(text: string): boolean {
+  return /queuepush|direct decision|direct qc packet|owner lift|reviewer\/safety/.test(text);
+}
+
+function storySignatureForEvents(events: OrchestratorContinuityEvent[]): string {
+  const text = chapterSourceText(events);
+  if (hasRunnerFreshness(text)) return "runner-freshness";
+  if (hasSessionDecision(text)) return "session-decision";
+  if (hasQueuePush(text) && hasStaleAck(text)) return "queuepush-stale-ack";
+  if (hasStaleAck(text)) return "stale-ack";
+  return chapterTheme(events);
+}
+
+function chapterNarrative(theme: StoryTheme, events: OrchestratorContinuityEvent[]): string {
+  const text = chapterSourceText(events);
+  const ask = latestUserAsk(events);
+  const passCount = events.filter((event) => /^pass:/i.test(event.summary) || event.kind === "proof").length;
+  const blockerCount = events.filter((event) => /^blocker:/i.test(event.summary) || event.kind === "blocker").length;
+  const prMatches = Array.from(new Set((text.match(/#\d+/g) ?? []).slice(0, 4))).join(", ");
+  const focus = buildFocus(events);
+
+  if (hasRunnerFreshness(text)) {
+    return [
+      "One of the AI helpers raised a concern about the scheduled runner.",
+      "That runner is meant to wake up on a timer and pick up jobs, a bit like an oven timer that should click on at set times, and it has been quiet for too long.",
+      "The next move is simple: watch for its next scheduled wake-up, then hand it one small test job.",
+      "If that goes through cleanly, the jobs waiting behind it can start moving again. 👀",
+    ].join(" ");
+  }
+
+  if (hasSessionDecision(text)) {
+    return [
+      "Session handed down a fresh decision, the kind that sets the tone for what everyone works on next.",
+      "A few signals lit up around it asking to be noticed, and proof landed close by so the change is properly on the record.",
+      focus
+        ? `The next small step is ${focus}. That thread has been running through the day, so it is good to see it inch forward. ✅`
+        : "The useful bit is that the direction is now part of the shared story until Chris points things somewhere else. ✅",
+    ].join(" ");
+  }
+
+  if (hasQueuePush(text) && hasStaleAck(text)) {
+    return [
+      "QueuePush is trying to move a job to the right people, but the handoff has not been clearly acknowledged yet.",
+      "That usually means the message reached the room, but the next seat has not left a clean yes, no, or blocker receipt.",
+      "The useful fix is not to shout louder. It is to either get the Reviewer or Safety seat to answer, or stop the repeat packet once the proof already exists. 📬",
+    ].join(" ");
+  }
+
+  if (hasStaleAck(text)) {
+    return [
+      "A handoff is waiting for a clear acknowledgement.",
+      "That means UnClick can see the work, but it does not yet have a trustworthy receipt saying who picked it up or why it should wait.",
+      "The safe move is to keep the alert visible until a seat replies with proof, a blocker, or a clean handoff. 👀",
+    ].join(" ");
+  }
+
+  if (theme === "question") {
+    return [
+      ask ? `Chris pulled the thread back to the real question: ${ask}.` : "Chris pulled the thread back to the real question.",
+      "The useful move was to turn that into a small practical push for the seats, with todos and proof expected instead of more vague status.",
+      "That keeps the room pointed at the next action, not just another round of describing the problem. ✅",
+    ].join(" ");
+  }
+
+  if (theme === "orchestrator") {
+    return [
+      "The Orchestrator work moved forward as a product surface, not just a hidden log.",
+      "Story is becoming the friendly front door, while Timeline keeps the exact receipts for anyone who needs to inspect the raw trail.",
+      passCount > 0
+        ? "Proof notes landed around it, so another seat can come back later and understand why the change was trusted. ✅"
+        : "The shape is clear: make the running story easy for Chris first, then keep the machine notes tucked underneath.",
+    ].join(" ");
+  }
+
+  if (theme === "blocker") {
+    return [
+      "This is the sticky part.",
+      /worker2/.test(text)
+        ? "Worker2 is still showing up as the pressure point, with work visible but not moving cleanly through the lane."
+        : "Something in the handoff chain still needs a clear owner, proof, or next safe step before it can be called healthy.",
+      blockerCount > 0
+        ? "The system is right to call that a blocker until it either gets claimed or explains exactly why it cannot be claimed. ⚠️"
+        : "It is not a panic moment, but it is not a clean finish either.",
+    ].join(" ");
+  }
+
+  if (theme === "autopilot") {
+    return [
+      prMatches ? `The autopilot work kept tightening around ${prMatches}.` : "The autopilot work kept tightening.",
+      "The important idea is less noise and more closure: see the job, decide the lane, wake the right worker, then leave proof.",
+      "That is the difference between a clever traffic light and a system that actually gets work over the line. 🚀",
+    ].join(" ");
+  }
+
+  if (theme === "shipping") {
+    return [
+      "A run of useful proof landed here.",
+      passCount > 1
+        ? "Several seats left receipts close together, which means the work was not just talked about, it was checked and recorded."
+        : "A seat left a receipt, which is the important little mark that says the work can be trusted later.",
+      "Good, steady movement. ✅",
+    ].join(" ");
+  }
+
+  if (theme === "signals") {
+    return [
+      "A few background signals moved through the system.",
+      "They are kept here as part of the story, but the detailed Timeline is the right place to inspect every wake, reroute, and receipt.",
+      "For Story, the main thing is simple: the system noticed something and kept the trail alive. 📡",
+    ].join(" ");
+  }
+
+  return [
+    "This was a small connecting stretch in the day.",
+    "A few notes landed, the shared context stayed warm, and the next useful piece of work stayed visible.",
+    "Nothing needs to be split into tiny log lines here. The Timeline can hold that detail. 🐾",
+  ].join(" ");
+}
+
+function nativeNoteForChapter(
+  event: OrchestratorContinuityEvent,
+  profileByAgentId: Map<string, OrchestratorProfileCard>,
+): string {
+  const actor = actorIdentityForEvent(event, profileByAgentId);
   const source = `${sourceLabel(event.source_kind)}${event.source_id ? ` ${event.source_id}` : ""}`;
-  const who = actor.label;
-  const summary = event.summary.trim();
-  return `${who} from ${source}: ${summary}`;
+  return `${formatRelative(event.created_at)} · ${actor.label} · ${source} · ${cleanStoryText(event.summary)}`;
+}
+
+function buildStoryChapters(
+  events: OrchestratorContinuityEvent[],
+  profileByAgentId: Map<string, OrchestratorProfileCard>,
+): StoryChapter[] {
+  const sorted = [...events].sort((a, b) => {
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    return bTime - aTime;
+  });
+  const chunks: OrchestratorContinuityEvent[][] = [];
+
+  for (const event of sorted) {
+    const latestChunk = chunks[chunks.length - 1];
+    const latestTime = latestChunk?.[0]?.created_at ? new Date(latestChunk[0].created_at).getTime() : 0;
+    const eventTime = event.created_at ? new Date(event.created_at).getTime() : 0;
+    const sameWindow = latestChunk && latestTime - eventTime <= STORY_CHAPTER_WINDOW_MS;
+    const sameStory = latestChunk && storySignatureForEvents(latestChunk) === storySignatureForEvents([event]);
+    if (latestChunk && sameWindow && sameStory && latestChunk.length < STORY_CHAPTER_MAX_EVENTS) {
+      latestChunk.push(event);
+    } else {
+      chunks.push([event]);
+    }
+  }
+
+  const mergedChunks: OrchestratorContinuityEvent[][] = [];
+  for (const chunk of chunks) {
+    const previous = mergedChunks[mergedChunks.length - 1];
+    if (
+      previous &&
+      storySignatureForEvents(previous) === storySignatureForEvents(chunk) &&
+      previous.length + chunk.length <= STORY_CHAPTER_MAX_EVENTS * 3
+    ) {
+      previous.push(...chunk);
+    } else {
+      mergedChunks.push([...chunk]);
+    }
+  }
+
+  return mergedChunks.map((chapterEvents, index) => {
+    const theme = chapterTheme(chapterEvents);
+    const title = chapterTitle(theme, chapterEvents);
+    return {
+      key: `${chapterEvents[0]?.source_kind ?? "chapter"}:${chapterEvents[0]?.source_id ?? index}:${chapterEvents[0]?.created_at ?? index}`,
+      theme,
+      title: title.title,
+      emoji: title.emoji,
+      events: chapterEvents,
+      startedAt: chapterEvents[chapterEvents.length - 1]?.created_at ?? null,
+      endedAt: chapterEvents[0]?.created_at ?? null,
+      narrative: chapterNarrative(theme, chapterEvents),
+      nativeNotes: chapterEvents
+        .slice(0, STORY_NATIVE_PREVIEW_COUNT)
+        .map((event) => nativeNoteForChapter(event, profileByAgentId)),
+    };
+  });
 }
 
 export default function AdminOrchestratorPage() {
@@ -636,24 +953,19 @@ function OrchestratorStoryPanel({
   maxContextLimit: number;
   onLoadDeeperHistory: () => void;
 }) {
-  const [visibleEventCount, setVisibleEventCount] = useState(STORY_VISIBLE_STEP);
+  const [visibleChapterCount, setVisibleChapterCount] = useState(STORY_CHAPTER_VISIBLE_STEP);
   const [nativeNotes, setNativeNotes] = useState(() => readStoredBoolean(STORY_NATIVE_STORAGE_KEY, false));
-  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(() => new Set());
+  const [expandedChapters, setExpandedChapters] = useState<Set<string>>(() => new Set());
   const profileByAgentId = useMemo(
     () => buildProfileLookup(context?.profile_cards),
     [context?.profile_cards],
   );
-  const events = useMemo(
-    () =>
-      [...(context?.continuity_events ?? [])].sort((a, b) => {
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-        return bTime - aTime;
-      }),
-    [context?.continuity_events],
+  const chapters = useMemo(
+    () => buildStoryChapters(context?.continuity_events ?? [], profileByAgentId),
+    [context?.continuity_events, profileByAgentId],
   );
-  const visibleEvents = events.slice(0, visibleEventCount);
-  const hasMoreLoaded = visibleEventCount < events.length;
+  const visibleChapters = chapters.slice(0, visibleChapterCount);
+  const hasMoreLoaded = visibleChapterCount < chapters.length;
   const canLoadFromServer = contextLimit < maxContextLimit;
 
   const toggleNativeNotes = (value: boolean) => {
@@ -661,11 +973,11 @@ function OrchestratorStoryPanel({
     writeStoredBoolean(STORY_NATIVE_STORAGE_KEY, value);
   };
 
-  const toggleEvent = (eventKey: string) => {
-    setExpandedEvents((current) => {
+  const toggleChapter = (chapterKey: string) => {
+    setExpandedChapters((current) => {
       const next = new Set(current);
-      if (next.has(eventKey)) next.delete(eventKey);
-      else next.add(eventKey);
+      if (next.has(chapterKey)) next.delete(chapterKey);
+      else next.add(chapterKey);
       return next;
     });
   };
@@ -677,10 +989,10 @@ function OrchestratorStoryPanel({
           <div>
             <div className="flex items-center gap-2 text-[#61C1C4]">
               <BookOpen className="h-4 w-4" />
-              <h2 className="text-lg font-semibold text-white">Story</h2>
+              <h2 className="text-lg font-semibold text-white">Today's running story</h2>
             </div>
             <p className="mt-1 text-sm text-white/45">
-              Latest first, written like the calm running story of what UnClick is doing.
+              Latest first, grouped into plain-English chapters. Timeline keeps every raw receipt.
             </p>
           </div>
           <label className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/20 px-3 py-2 text-xs text-white/55">
@@ -700,71 +1012,77 @@ function OrchestratorStoryPanel({
           <div className="flex h-full min-h-[420px] items-center justify-center text-sm text-white/45">
             Writing the latest story...
           </div>
-        ) : events.length === 0 ? (
+        ) : chapters.length === 0 ? (
           <div className="flex h-full min-h-[420px] items-center justify-center text-center text-sm text-white/45">
             No story lines yet. When seats leave receipts, they will appear here as a simple read.
           </div>
         ) : (
-          <article className="mx-auto max-w-3xl space-y-7">
-            {visibleEvents.map((event, index) => {
-              const actor = actorIdentityForEvent(event, profileByAgentId);
-              const eventKey = `${event.source_kind}:${event.source_id}:${event.created_at ?? index}`;
-              const expanded = expandedEvents.has(eventKey);
-              const story = storyTextForEvent(event, actor);
-              const storyPreview = truncateText(story, STORY_PREVIEW_CHARS);
-              const nativeNote = nativeNoteForEvent(event, actor);
-              const nativePreview = truncateText(nativeNote, STORY_NATIVE_PREVIEW_CHARS);
-              const showFullStory = expanded || !storyPreview.truncated;
-              const shownStory = showFullStory ? story : storyPreview.text;
-              const shownNative = showFullStory ? nativeNote : nativePreview.text;
+          <article className="mx-auto max-w-3xl space-y-9">
+            {visibleChapters.map((chapter) => {
+              const expanded = expandedChapters.has(chapter.key);
+              const preview = truncateText(chapter.narrative, STORY_CHAPTER_PREVIEW_CHARS);
+              const showFullStory = expanded || !preview.truncated;
+              const shownStory = showFullStory ? chapter.narrative : preview.text;
 
               return (
-                <div key={eventKey} className="group">
-                  <time
-                    dateTime={event.created_at ?? undefined}
-                    className="mb-2 block text-[10px] font-medium uppercase tracking-[0.18em] text-white/30"
-                  >
-                    {formatRelative(event.created_at)} · {formatAbsolute(event.created_at)}
-                  </time>
-                  <p className="text-base leading-8 text-white/82 sm:text-[17px]">
+                <section key={chapter.key} className="group">
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="text-xl font-semibold leading-7 text-white sm:text-2xl">
+                      <span className="mr-2">{chapter.emoji}</span>
+                      {chapter.title}
+                    </h3>
+                    <time
+                      dateTime={chapter.endedAt ?? undefined}
+                      title={`${formatRelative(chapter.endedAt)} · ${formatAbsolute(chapter.endedAt)}`}
+                      className="shrink-0 pt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/25"
+                    >
+                      {formatRelative(chapter.endedAt)}
+                    </time>
+                  </div>
+                  <p className="mt-3 text-base leading-8 text-white/82 sm:text-[17px]">
                     {shownStory}
                   </p>
                   {nativeNotes && (
-                    <p className="mt-3 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-xs leading-6 text-white/42">
-                      Native note: {shownNative}
-                    </p>
+                    <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-xs leading-6 text-white/42">
+                      <div className="mb-2 font-medium text-white/55">Native notes from this chapter</div>
+                      <ul className="space-y-1">
+                        {chapter.nativeNotes.map((note) => (
+                          <li key={note}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
-                  {(storyPreview.truncated || (nativeNotes && nativePreview.truncated)) && (
+                  {preview.truncated && (
                     <button
                       type="button"
-                      onClick={() => toggleEvent(eventKey)}
+                      onClick={() => toggleChapter(chapter.key)}
                       className="mt-2 text-xs font-medium text-[#61C1C4] transition-colors hover:text-[#8ee3e6]"
                     >
                       {expanded ? "Read less" : "Read more"}
                     </button>
                   )}
-                </div>
+                </section>
               );
             })}
           </article>
         )}
       </div>
 
-      {!loading && events.length > 0 && (
+      {!loading && chapters.length > 0 && (
         <div className="border-t border-white/[0.06] px-5 py-4">
           <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-white/35">
-              Showing {Math.min(visibleEventCount, events.length)} of {events.length} loaded story lines.
+              Showing {Math.min(visibleChapterCount, chapters.length)} of {chapters.length} story chapters.
             </p>
             {(hasMoreLoaded || canLoadFromServer) && (
               <button
                 type="button"
                 onClick={() => {
                   if (hasMoreLoaded) {
-                    setVisibleEventCount((value) => Math.min(events.length, value + STORY_VISIBLE_STEP));
+                    setVisibleChapterCount((value) => Math.min(chapters.length, value + STORY_CHAPTER_VISIBLE_STEP));
                   } else {
                     onLoadDeeperHistory();
-                    setVisibleEventCount((value) => value + STORY_VISIBLE_STEP);
+                    setVisibleChapterCount((value) => value + STORY_CHAPTER_VISIBLE_STEP);
                   }
                 }}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#61C1C4]/25 bg-[#61C1C4]/10 px-3 py-2 text-sm font-medium text-[#61C1C4] transition-colors hover:bg-[#61C1C4]/15"
@@ -1370,6 +1688,7 @@ function ContinuityRow({
   profileByAgentId: Map<string, OrchestratorProfileCard>;
 }) {
   const actor = actorIdentityForEvent(event, profileByAgentId);
+  const friendlySummary = chapterNarrative(themeForEvent(event), [event]);
   const content = (
     <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -1385,7 +1704,7 @@ function ContinuityRow({
         <span className="font-semibold uppercase text-[#61C1C4]">{event.kind}</span>
         <span>{sourceLabel(event.source_kind)}</span>
       </div>
-      <p className="line-clamp-2 text-xs leading-5 text-white/65">{event.summary}</p>
+      <p className="line-clamp-2 text-xs leading-5 text-white/65">{friendlySummary}</p>
     </div>
   );
 

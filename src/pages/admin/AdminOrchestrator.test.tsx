@@ -132,6 +132,44 @@ describe("AdminOrchestratorPage", () => {
                 continuity_events: [
                   {
                     source_kind: "conversation_turn",
+                    source_id: "runner-alert",
+                    created_at: "2026-05-10T06:15:00.000Z",
+                    kind: "blocker",
+                    role: "assistant",
+                    summary:
+                      "AI replied: UnClick alert runner-freshness -- autonomous-runner ebf08d -- BLOCKER -- watch for next schedule on ebf08d+ then canary chatgpt-codex-worker2 -- d4c35fdb/1ed47811/f5d4bcd5/cde846d7/863335f9",
+                    tags: ["alert", "runner-freshness"],
+                  },
+                  {
+                    source_kind: "session_summary",
+                    source_id: "session-decision",
+                    created_at: "2026-05-10T06:05:00.000Z",
+                    kind: "decision",
+                    actor_agent_id: "codex-orchestrator-seat",
+                    summary:
+                      "Decision from Session. This should guide what seats do next. This becomes part of the shared story until Chris changes direction.",
+                    tags: ["decision"],
+                  },
+                  {
+                    source_kind: "signal",
+                    source_id: "signal-1",
+                    created_at: "2026-05-10T06:04:00.000Z",
+                    kind: "signal",
+                    summary: "Signal to notice: something needs attention.",
+                    tags: ["signal"],
+                  },
+                  {
+                    source_kind: "todo_comment",
+                    source_id: "build-step",
+                    created_at: "2026-05-10T06:03:00.000Z",
+                    kind: "context",
+                    actor_agent_id: "codex-orchestrator-seat",
+                    summary:
+                      "AI Assistant wrote the next small build step. It is about getting subscription chat messages to show inside Orchestrator.",
+                    tags: ["todo", "comment"],
+                  },
+                  {
+                    source_kind: "conversation_turn",
                     source_id: "turn-1",
                     created_at: "2026-05-10T05:55:00.000Z",
                     kind: "context",
@@ -201,12 +239,18 @@ describe("AdminOrchestratorPage", () => {
   it("shows Story as the friendly default Orchestrator view", async () => {
     renderOrchestrator();
 
-    expect(await screen.findByRole("heading", { name: "Story" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Today's running story" })).toBeInTheDocument();
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByLabelText("Native notes")).not.toBeChecked();
-    expect(screen.getByText(/Good news/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Latest first/i)).toBeInTheDocument();
+    expect(screen.getByText("Watching the scheduled runner")).toBeInTheDocument();
+    expect(screen.getAllByText(/One of the AI helpers raised a concern about the scheduled runner/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Fresh direction from Session")).toBeInTheDocument();
+    expect(screen.getAllByText(/Session handed down a fresh decision/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/runner-freshness/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/d4c35fdb/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/The Orchestrator work moved forward/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Timeline keeps every raw receipt/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Archive event 24/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Message the AI assistant...")).not.toBeInTheDocument();
     expect(screen.queryByText("Using AI Assistant")).not.toBeInTheDocument();
   });
@@ -220,7 +264,7 @@ describe("AdminOrchestratorPage", () => {
     expect(screen.getByLabelText("Analogies")).toBeChecked();
     expect(screen.getByPlaceholderText("Filter Orchestrator feed")).toBeInTheDocument();
     expect(
-      (await screen.findAllByText("user: Orchestrator context should show subscription messages."))
+      (await screen.findAllByText(/Chris said: Orchestrator context should show subscription messages/i))
         .length,
     ).toBeGreaterThan(0);
     expect((await screen.findAllByText("Codex Orchestrator Seat")).length).toBeGreaterThan(1);
@@ -236,7 +280,7 @@ describe("AdminOrchestratorPage", () => {
     const filter = await screen.findByPlaceholderText("Filter Orchestrator feed");
     fireEvent.change(filter, { target: { value: "proof" } });
 
-    expect(await screen.findByText("1 of 1 matching events shown")).toBeInTheDocument();
+    expect(await screen.findByText(/matching events shown/)).toBeInTheDocument();
     expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
     expect(document.querySelector("mark")?.textContent?.toLowerCase()).toContain("proof");
   });
