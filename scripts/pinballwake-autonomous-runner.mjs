@@ -649,6 +649,7 @@ export function extractBoardroomTodoIdFromCodingRoomJob(job = {}) {
 }
 
 const BOARDROOM_SCOPING_ACTION_REASONS = new Set([
+  "unassigned_open",
   "stale_in_progress",
   "stale_assigned_open",
   "role_assigned_open",
@@ -794,16 +795,19 @@ export function selectBoardroomTodoForScoping({ queueSourceResult = {}, lastResu
     return null;
   }
 
-  const missingScopepackIds = new Set(
+  const needsScopingIds = new Set(
     (lastResult.skipped || [])
-      .filter((skip) => skip?.reason === "boardroom_todo_missing_scopepack")
+      .filter((skip) => (
+        skip?.reason === "boardroom_todo_missing_scopepack" ||
+        skip?.reason === "missing_owned_files"
+      ))
       .map((skip) => String(skip.job_id || "").replace(/^boardroom-todo:/, "").trim())
       .filter(Boolean),
   );
-  if (missingScopepackIds.size === 0) return null;
+  if (needsScopingIds.size === 0) return null;
 
   return (queueSourceResult.todos || []).find((todo) => (
-    missingScopepackIds.has(String(todo.id || "").trim()) &&
+    needsScopingIds.has(String(todo.id || "").trim()) &&
     BOARDROOM_SCOPING_ACTION_REASONS.has(String(todo.actionability_reason || "").trim())
   )) || null;
 }
@@ -855,7 +859,7 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
       target_id: todoId,
       text: compact(
         [
-          "Autonomous Runner could not safely build this job yet because no ScopePack was attached.",
+          "Autonomous Runner could not safely build this job yet because no file-level ScopePack was attached.",
           "Reopened for scoping instead of holding a stale active claim.",
           "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
           `reason=${todo.actionability_reason || "missing_scopepack"}.`,
