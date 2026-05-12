@@ -812,6 +812,52 @@ export function selectBoardroomTodoForScoping({ queueSourceResult = {}, lastResu
   )) || null;
 }
 
+function buildClaimabilityScorecard({
+  seen = 0,
+  claimable = 0,
+  imported = 0,
+  skipped = [],
+} = {}) {
+  const skipReasons = {};
+  for (const skip of skipped || []) {
+    const reason = String(skip?.reason || skip?.skip_reason || "unknown").trim() || "unknown";
+    skipReasons[reason] = (skipReasons[reason] || 0) + 1;
+  }
+
+  const skippedCount = Array.isArray(skipped) ? skipped.length : 0;
+  const state = seen <= 0
+    ? "empty"
+    : claimable > 0
+      ? "claimable"
+      : "blocked_no_claimable";
+
+  return {
+    seen,
+    claimable,
+    imported,
+    skipped: skippedCount,
+    skip_reasons: skipReasons,
+    state,
+    healthy: state !== "blocked_no_claimable",
+  };
+}
+
+function buildRunClaimabilityScorecard({ queueSourceResult = {}, results = [], lastResult = {} } = {}) {
+  const base = queueSourceResult.claimability_scorecard || buildClaimabilityScorecard({
+    seen: queueSourceResult.seen || 0,
+    claimable: queueSourceResult.imported || 0,
+    imported: queueSourceResult.imported || 0,
+    skipped: queueSourceResult.skipped || [],
+  });
+
+  return {
+    ...base,
+    claimed: results.filter((result) => result?.action === "claimed").length,
+    last_action: lastResult.action || null,
+    last_reason: lastResult.reason || null,
+  };
+}
+
 export async function syncBoardroomTodoScopingRequestToUnClick({
   todo,
   runner = DEFAULT_AUTONOMOUS_RUNNER,
@@ -1027,6 +1073,11 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
       ledger: createCodingRoomJobLedger({ jobs: ledger?.jobs || [], updatedAt: ledger?.updated_at || now }),
       imported: 0,
       seen: 0,
+      claimability_scorecard: {
+        ...buildClaimabilityScorecard(),
+        state: "queue_unavailable",
+        healthy: false,
+      },
     };
   }
 
@@ -1037,6 +1088,7 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
 
   let next = createCodingRoomJobLedger({ jobs: ledger?.jobs || [], updatedAt: ledger?.updated_at || now });
   let imported = 0;
+  let claimable = 0;
   const skipped = [];
   for (const todo of ordered) {
     const scopePack = extractBoardroomTodoScopePack(todo);
@@ -1067,6 +1119,7 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
       continue;
     }
 
+    claimable += 1;
     const upserted = upsertCodingRoomJob({
       ledger: next,
       job: createCodingRoomJobFromBoardroomTodo(
@@ -1091,6 +1144,12 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
     imported,
     seen: ordered.length,
     skipped,
+    claimability_scorecard: buildClaimabilityScorecard({
+      seen: ordered.length,
+      claimable,
+      imported,
+      skipped,
+    }),
     todos: ordered.map((todo) => {
       const scopePack = extractBoardroomTodoScopePack(todo);
       return {
@@ -1387,6 +1446,7 @@ export async function runAutonomousRunnerFile({
         ledger,
         ledger_path: ledgerPath,
         queue_source: queueSourceResult,
+        claimability_scorecard: queueSourceResult.claimability_scorecard,
       };
     }
   }
@@ -1413,6 +1473,11 @@ export async function runAutonomousRunnerFile({
   const executeBlocked = safeMode === "execute" && !safePolicy.allowExecute;
   const shouldPersist = safeMode !== "dry-run" && !safePolicy.disabled && !executeBlocked;
   const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
+  const claimabilityScorecard = buildRunClaimabilityScorecard({
+    queueSourceResult,
+    results,
+    lastResult: last,
+  });
   let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
   let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
 
@@ -1443,6 +1508,7 @@ export async function runAutonomousRunnerFile({
         ledger,
         ledger_path: ledgerPath,
         queue_source: queueSourceResult,
+        claimability_scorecard: claimabilityScorecard,
         todo_claim_sync: todoClaimSync,
       };
     }
@@ -1471,6 +1537,7 @@ export async function runAutonomousRunnerFile({
         ledger,
         ledger_path: ledgerPath,
         queue_source: queueSourceResult,
+        claimability_scorecard: claimabilityScorecard,
         todo_claim_sync: todoClaimSync,
         todo_scoping_sync: todoScopingSync,
       };
@@ -1493,6 +1560,7 @@ export async function runAutonomousRunnerFile({
     ledger,
     ledger_path: ledgerPath,
     queue_source: queueSourceResult,
+    claimability_scorecard: claimabilityScorecard,
     todo_claim_sync: todoClaimSync,
     todo_scoping_sync: todoScopingSync,
   };

@@ -326,6 +326,22 @@ describe("PinballWake autonomous Runner seat", () => {
       assert.equal(result.action, "claimed");
       assert.equal(result.queue_source.seen, 5);
       assert.equal(result.queue_source.imported, 1);
+      assert.deepEqual(result.queue_source.claimability_scorecard, {
+        seen: 5,
+        claimable: 1,
+        imported: 1,
+        skipped: 4,
+        skip_reasons: {
+          boardroom_todo_already_assigned: 1,
+          boardroom_todo_hold_or_blocker_marker: 1,
+          boardroom_todo_priority_not_allowed: 1,
+          protected_surface_auth: 1,
+        },
+        state: "claimable",
+        healthy: true,
+      });
+      assert.equal(result.claimability_scorecard.claimed, 1);
+      assert.equal(result.claimability_scorecard.last_action, "claimed");
       assert.equal(result.ledger.jobs[0].job_id, "boardroom-todo:todo-safe");
       assert.deepEqual(
         result.queue_source.skipped.map((skip) => skip.reason).sort(),
@@ -1059,6 +1075,20 @@ describe("PinballWake autonomous Runner seat", () => {
       assert.equal(result.ok, true);
       assert.equal(result.action, "idle");
       assert.equal(result.reason, "no_claimable_jobs");
+      assert.deepEqual(result.queue_source.claimability_scorecard, {
+        seen: 1,
+        claimable: 0,
+        imported: 0,
+        skipped: 1,
+        skip_reasons: {
+          boardroom_todo_not_open: 1,
+        },
+        state: "blocked_no_claimable",
+        healthy: false,
+      });
+      assert.equal(result.claimability_scorecard.claimed, 0);
+      assert.equal(result.claimability_scorecard.last_action, "idle");
+      assert.equal(result.claimability_scorecard.last_reason, "no_claimable_jobs");
       assert.equal(result.queue_source.skipped[0].id, "todo-stale-scoped-1");
       assert.equal(result.queue_source.skipped[0].reason, "boardroom_todo_not_open");
       assert.deepEqual(calls.map((call) => call.body.params.name), ["list_actionable_todos"]);
