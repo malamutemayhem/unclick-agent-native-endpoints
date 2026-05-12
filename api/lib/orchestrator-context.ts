@@ -236,6 +236,12 @@ export interface OrchestratorContext {
     newest_activity_at: string | null;
     newest_checkin_at: string | null;
     active_todo_count: number;
+    // active_jobs is the strict v9 definition used by Heartbeat step 5:
+    // COUNT(todos WHERE status='in_progress' AND owner_last_seen <= 24h).
+    // active_todo_count is the broader open+in_progress count kept for
+    // back-compat with the rolling snapshot list. PASS/BLOCKER reasoning
+    // should use active_jobs.
+    active_jobs: number;
     blocker_count: number;
     active_seat_count: number;
     live_sources: {
@@ -262,6 +268,12 @@ export interface OrchestratorContext {
 }
 
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
+// active_jobs (v9 definition pinned 2026-05-12 by todo a4cd5229): an
+// in_progress todo is "active" only when its assigned owner has been seen
+// in the last 24 hours. A todo assigned to a dormant or never-seen owner
+// is NOT active, even if its status is in_progress. This is the same
+// window used by Heartbeat step 5 so PASS/BLOCKER does not oscillate.
+const OWNER_FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PRIORITY_RANK: Record<string, number> = {
   urgent: 4,
   high: 3,
@@ -331,6 +343,12 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     .filter((todo) => todo.status === "open" || todo.status === "in_progress")
     .sort(compareTodoPriorityThenUpdated)
     .slice(0, 8);
+  // active_jobs (v9 definition pinned by todo a4cd5229): strict
+  // in_progress + owner_last_seen <= 24h. Heartbeat step 5 uses the same
+  // formula so state_card and PASS/BLOCKER never disagree on identical
+  // input. Computed over the full input.todos array, NOT the sliced
+  // activeTodos, so the count is deterministic regardless of UI cap.
+  const activeJobsCount = computeActiveJobsCount(input.todos, input.profiles, nowMs);
 
   const messageEvents = input.messages.map(messageToEvent);
   const todoEvents = activeTodos.map(todoToEvent);
@@ -409,12 +427,13 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     },
     current_state_card: {
       summary: compactText(
-        `${activeTodos.length} active job${activeTodos.length === 1 ? "" : "s"}, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.${humanOperatorTime ? ` Operator time: ${humanOperatorTime.summary}.` : ""}`,
+        `${activeJobsCount} active job${activeJobsCount === 1 ? "" : "s"}, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.${humanOperatorTime ? ` Operator time: ${humanOperatorTime.summary}.` : ""}`,
         180,
       ),
       newest_activity_at: newestActivityAt,
       newest_checkin_at: newestCheckinAt,
       active_todo_count: activeTodos.length,
+      active_jobs: activeJobsCount,
       blocker_count: blockers.length,
       active_seat_count: activeSeatCount,
       live_sources: {
@@ -977,6 +996,35 @@ function isFresh(iso: string | null | undefined, nowMs: number): boolean {
   if (!iso) return false;
   const seenMs = Date.parse(iso);
   return Number.isFinite(seenMs) && Number.isFinite(nowMs) && nowMs - seenMs <= ACTIVE_WINDOW_MS;
+}
+
+// Owner-freshness gate for current_state_card.active_jobs. Mirrors the
+// Heartbeat step 5 definition: active_jobs = COUNT(todos WHERE
+// status='in_progress' AND owner_last_seen <= 24h). Keeps state_card and
+// heartbeat aligned so identical input always produces identical PASS/BLOCKER.
+function isOwnerFresh(iso: string | null | undefined, nowMs: number): boolean {
+  if (!iso) return false;
+  const seenMs = Date.parse(iso);
+  return Number.isFinite(seenMs) && Number.isFinite(nowMs) && nowMs - seenMs <= OWNER_FRESH_WINDOW_MS;
+}
+
+export function computeActiveJobsCount(
+  todos: OrchestratorTodoRow[],
+  profiles: OrchestratorProfileRow[],
+  nowMs: number,
+): number {
+  const ownerLastSeen = new Map<string, string | null>();
+  for (const profile of profiles) {
+    if (profile.agent_id) {
+      ownerLastSeen.set(profile.agent_id, profile.last_seen_at ?? profile.created_at ?? null);
+    }
+  }
+  return todos.filter((todo) => {
+    if (todo.status !== "in_progress") return false;
+    const owner = todo.assigned_to_agent_id;
+    if (!owner) return false;
+    return isOwnerFresh(ownerLastSeen.get(owner), nowMs);
+  }).length;
 }
 
 function prettifyAgentId(agentId: string): string {
