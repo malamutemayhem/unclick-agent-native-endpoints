@@ -401,6 +401,52 @@ describe("orchestrator context", () => {
     expect(context.rolling_snapshot.source_pointers.some((pointer) => pointer.source_id === "turn-heartbeat")).toBe(false);
   });
 
+  it("does not promote heartbeat status summaries that mention blockers", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-12T11:45:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [
+        {
+          id: "comment-heartbeat-proof",
+          target_kind: "todo",
+          target_id: "todo-active-state",
+          author_agent_id: "chatgpt-codex-heartbeat-seat",
+          text: "Heartbeat proof 2026-05-12T11:43Z: active_jobs=6. Remaining blocker noise is stale history, not the active_jobs formula.",
+          created_at: "2026-05-12T11:43:00.000Z",
+        },
+      ],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [
+        {
+          id: "turn-heartbeat-pass",
+          session_id: "unclick-heartbeat",
+          role: "assistant",
+          content: "PASS: Heartbeat completed one safe useful step. Remaining blocker noise is stale history.",
+          created_at: "2026-05-12T11:44:00.000Z",
+        },
+        {
+          id: "turn-heartbeat-blocker",
+          session_id: "unclick-heartbeat",
+          role: "assistant",
+          content: "BLOCKER: Heartbeat verified unchanged state, progress checked, next native cleanup.",
+          created_at: "2026-05-12T11:42:00.000Z",
+        },
+      ],
+    });
+
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.continuity_events.find((event) => event.source_id === "comment-heartbeat-proof")?.kind).toBe("proof");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-pass")?.kind).toBe("proof");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-blocker")?.kind).toBe("status");
+  });
+
   it("keeps fresh-seat active_decision populated from active work when no decision event is live", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-10T04:16:00.000Z",
