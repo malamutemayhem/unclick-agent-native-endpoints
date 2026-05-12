@@ -338,7 +338,7 @@ function compactContinuityText(input: unknown, maxChars = 240, options: { heartb
 
 export function buildOrchestratorContext(input: BuildOrchestratorContextInput): OrchestratorContext {
   const nowMs = Date.parse(input.generatedAt);
-  const continuityLimit = Math.min(Math.max(Number(input.continuityLimit ?? 36) || 36, 20), 200);
+  const continuityLimit = Math.min(Math.max(Number(input.continuityLimit ?? 36) || 36, 20), 500);
   const profiles = input.profiles
     .map((profile) => buildProfileCard(profile, nowMs))
     .sort((a, b) => compareIsoDesc(a.last_seen_at, b.last_seen_at));
@@ -989,7 +989,12 @@ function classifyHeartbeatAutomationText(lower: string): OrchestratorContinuityE
 }
 
 function isZeroBlockerMetricStatus(lower: string): boolean {
-  return /\bblocker_count\s*[=:]\s*0\b/.test(lower) || /\b0\s+blocker signals?\b/.test(lower);
+  return (
+    /\bblocker_count\s*[=:]\s*0\b/.test(lower) ||
+    /\b0\s+blocker signals?\b/.test(lower) ||
+    /\bno\s+action_needed\/blocker signals?\b/.test(lower) ||
+    /\bno\s+blocker signals?\b/.test(lower)
+  );
 }
 
 function normalizeTags(tags?: string[] | null): string[] {

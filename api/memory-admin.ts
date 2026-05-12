@@ -7935,8 +7935,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               ...(searchUuid ? [`id.eq.${searchUuid}`] : []),
             ].join(",")
           : "";
-        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), 200);
-        const smallerLimit = searchQuery ? limit : Math.min(limit, 120);
+        const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), 500);
+        const smallerLimit = searchQuery ? limit : Math.min(limit, 300);
 
         let messagesQuery = supabase
           .from("mc_fishbowl_messages")
@@ -7978,7 +7978,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select("id, session_id, platform, summary, decisions, open_loops, topics, created_at")
           .eq("api_key_hash", apiKeyHash)
           .order("created_at", { ascending: false })
-          .limit(searchQuery ? 40 : 12);
+          .limit(searchQuery ? 40 : 24);
         if (searchPattern) sessionsQuery = sessionsQuery.ilike("summary", searchPattern);
 
         let conversationTurnsQuery = supabase

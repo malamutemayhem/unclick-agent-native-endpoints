@@ -145,13 +145,13 @@ const DRIPFEED_EDUCATION_STORAGE_KEY = "unclick_orchestrator_dripfeed_education_
 const ANALOGY_STORAGE_KEY = "unclick_orchestrator_analogy_v1";
 const EVENT_PREVIEW_CHARS = 520;
 const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
-const INITIAL_CONTEXT_LIMIT = 120;
-const MAX_CONTEXT_LIMIT = 200;
+const INITIAL_CONTEXT_LIMIT = 240;
+const MAX_CONTEXT_LIMIT = 500;
 const CONTINUITY_VISIBLE_STEP = 24;
-const STORY_CHAPTER_VISIBLE_STEP = 10;
-const STORY_CHAPTER_SPLIT_MS = 45 * 60_000;
-const STORY_CHAPTER_MAX_TOTAL = 14;
-const STORY_CHAPTER_MAX_PER_BEAT = 2;
+const STORY_CHAPTER_VISIBLE_STEP = 36;
+const STORY_CHAPTER_SPLIT_MS = 18 * 60_000;
+const STORY_CHAPTER_MAX_TOTAL = 72;
+const STORY_CHAPTER_MAX_EVENTS = 4;
 const STORY_CHAPTER_PREVIEW_CHARS = 1_450;
 const STORY_NATIVE_PREVIEW_COUNT = 5;
 const STORY_NATIVE_STORAGE_KEY = "unclick_orchestrator_story_native_v1";
@@ -544,7 +544,7 @@ function chapterTitle(theme: StoryTheme, events: OrchestratorContinuityEvent[]):
     blocker: { emoji: "⚠️", title: "The sticky bit" },
     shipping: { emoji: "✅", title: "Small ships, clean proof" },
     signals: { emoji: "📡", title: "Signals in the background" },
-    general: { emoji: "🐾", title: "Where we are" },
+    general: { emoji: "•", title: "Where we are" },
   };
   return fallback[theme];
 }
@@ -604,6 +604,221 @@ function extractPrNumbers(events: OrchestratorContinuityEvent[], limit = 4): str
   return Array.from(seen).join(", ");
 }
 
+function storyPlainText(value: string): string {
+  return cleanStoryText(value)
+    .replace(/`/g, "")
+    .replace(/\s+[-–—]{2,}\s+/g, ", ")
+    .replace(/https?:\/\/\S+/g, "the linked page")
+    .replace(/\b[a-f0-9]{8}-[a-f0-9-]{27,}\b/gi, "a saved item")
+    .replace(/\b[a-f0-9]{6,}(?:\/[a-f0-9]{6,})+\b/gi, "saved items")
+    .replace(/\bdispatch_[a-z0-9]+\b/gi, "a dispatch")
+    .replace(/\bqueuepush:[^\s]+/gi, "QueuePush packet")
+    .replace(/\brunner-freshness\b/gi, "worker health")
+    .replace(/\bautonomous-runner\s+[a-z0-9+-]+/gi, "scheduled runner")
+    .replace(/\{.*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function firstReadableSentence(value: string): string {
+  const text = storyPlainText(value);
+  const sentence = text.split(/(?<=[.!?])\s+/)[0] ?? text;
+  return sentence.replace(/[.!?]+$/, "").trim();
+}
+
+function titleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (match) => match.toUpperCase())
+    .replace(/\bPr\b/g, "PR")
+    .replace(/\bQc\b/g, "QC")
+    .replace(/\bUi\b/g, "UI")
+    .replace(/\bAi\b/g, "AI")
+    .replace(/\bApi\b/g, "API");
+}
+
+function headlineFromText(value: string, fallback: string): string {
+  const clean = firstReadableSentence(value)
+    .replace(/^asked\s*/i, "")
+    .replace(/^new todo:\s*/i, "")
+    .replace(/^todo done:\s*/i, "")
+    .replace(/^decision from session\.?\s*/i, "")
+    .replace(/^queuepush id:\s*/i, "")
+    .replace(/^wakepass auto-reroute\s*/i, "")
+    .trim();
+  if (!clean) return fallback;
+  const trimmed = clean.length > 58 ? `${clean.slice(0, 58).replace(/[,\s]+$/, "")}...` : clean;
+  return titleCase(trimmed);
+}
+
+function storyMomentKind(event: OrchestratorContinuityEvent): "ask" | "blocker" | "decision" | "proof" | "handoff" | "work" | "context" {
+  const text = chapterSourceText([event]);
+  if (event.role === "user") return "ask";
+  if (event.kind === "blocker" || /^blocker:/i.test(event.summary) || /stale|missed|blocked|needs-doing|wakepass stale/.test(text)) {
+    return "blocker";
+  }
+  if (event.kind === "decision" || /decision from session|greenlit|confirmed|correction from chris/.test(text)) return "decision";
+  if (event.kind === "proof" || /^pass:/i.test(event.summary) || /merged cleanly|checks passed|proof landed|todo done|shipped/.test(text)) {
+    return "proof";
+  }
+  if (/queuepush|wakepass|reroute|direct qc packet|direct decision packet|handoff|assign/.test(text)) return "handoff";
+  if (event.source_kind === "todo" || event.source_kind === "todo_comment" || event.source_kind === "boardroom_message") return "work";
+  return "context";
+}
+
+function storyMomentKeyForEvent(event: OrchestratorContinuityEvent): string {
+  const text = chapterSourceText([event]);
+  if (/orchestrator story|story view|story page|adminorchestrator|scrolling feed|continuous story/.test(text)) {
+    return "story-view";
+  }
+  if (/continuous qc|xpass-backed fixes|rotating site crawl/.test(text)) return "continuous-qc";
+  if (/improver loop|continuous improver/.test(text)) return "improver";
+  if (/queuepush|direct qc packet|direct decision packet/.test(text)) return "queuepush";
+  if (/wakepass|reroute/.test(text)) return "wakepass";
+  if (/worker2|runner-freshness|autonomous-runner/.test(text)) return "worker-health";
+  if (/heartbeat|unclick heartbeat/.test(text)) return "heartbeat";
+  if (/pr #\d+/i.test(event.summary)) return event.summary.match(/pr #\d+/i)?.[0].toLowerCase() ?? "pr";
+  return storyMomentKind(event);
+}
+
+function isUsefulStoryEvent(event: OrchestratorContinuityEvent): boolean {
+  const text = chapterSourceText([event]);
+  if (/signal to notice/.test(text) && event.kind !== "blocker") return false;
+  if (/\bheartbeat trigger includes\b|<heartbeat>|current_time_iso/.test(text)) return false;
+  return Boolean(storyPlainText(event.summary));
+}
+
+function storyTitleForMoment(events: OrchestratorContinuityEvent[]): { emoji: string; title: string; theme: StoryTheme } {
+  const event = events[0];
+  const kind = storyMomentKind(event);
+  const text = chapterSourceText(events);
+  const prMatches = extractPrNumbers(events, 1);
+
+  if (/orchestrator story|story view|story page|scrolling feed|continuous story/.test(text)) {
+    return { emoji: "🟢", title: "Story Becomes A Running Feed", theme: "orchestrator" };
+  }
+  if (prMatches && /merged|merge commit|closed cleanly/.test(text)) {
+    return { emoji: "✅", title: `${prMatches} Closes Cleanly`, theme: "shipping" };
+  }
+  if (prMatches && /opened|ready for review|checks are running/.test(text)) {
+    return { emoji: "📬", title: `${prMatches} Enters The Lane`, theme: "autopilot" };
+  }
+  if (/continuous qc|rotating site crawl|xpass-backed fixes/.test(text)) {
+    return { emoji: "🧪", title: "Continuous QC Needs Live Proof", theme: "blocker" };
+  }
+  if (/improver loop|continuous improver/.test(text)) {
+    return { emoji: "♻️", title: "Improver Loop Needs Live Proof", theme: "blocker" };
+  }
+  if (/queuepush|direct qc packet|direct decision packet/.test(text)) {
+    return { emoji: "📬", title: "QueuePush Routes A Clean Packet", theme: "autopilot" };
+  }
+  if (/wakepass|reroute/.test(text)) {
+    return { emoji: "📡", title: "WakePass Reroutes A Stalled Lane", theme: "signals" };
+  }
+  if (/worker2|runner-freshness|autonomous-runner/.test(text)) {
+    return { emoji: "⚠️", title: "Worker Health Stays Visible", theme: "blocker" };
+  }
+
+  if (kind === "ask") return { emoji: "🌅", title: `Chris Asks: ${headlineFromText(event.summary, "The Next Useful Question")}`, theme: "question" };
+  if (kind === "decision") return { emoji: "🧠", title: headlineFromText(event.summary, "A Decision Sets Direction"), theme: "general" };
+  if (kind === "proof") return { emoji: "✅", title: headlineFromText(event.summary, "Proof Lands"), theme: "shipping" };
+  if (kind === "blocker") return { emoji: "⚠️", title: headlineFromText(event.summary, "A Handoff Needs Attention"), theme: "blocker" };
+  if (kind === "handoff") return { emoji: "📬", title: headlineFromText(event.summary, "A Handoff Moves"), theme: "autopilot" };
+  if (kind === "work") return { emoji: "🛠️", title: headlineFromText(event.summary, "Work Moves Forward"), theme: "general" };
+  return { emoji: "•", title: headlineFromText(event.summary, "Context Keeps Moving"), theme: "general" };
+}
+
+function storySubject(events: OrchestratorContinuityEvent[]): string {
+  const event = events[0];
+  const sourceText = chapterSourceText(events);
+  if (/runner-freshness|autonomous-runner|worker2/.test(sourceText)) return "the worker health check";
+  const text = storyPlainText(event.summary)
+    .replace(/^new todo:\s*/i, "")
+    .replace(/^todo done:\s*/i, "")
+    .replace(/^decision from session\.?\s*/i, "")
+    .replace(/^wakepass auto-reroute\s*/i, "")
+    .trim();
+  const quotedTitle = event.summary.match(/"title"\s*:\s*"([^"]+)"/i)?.[1];
+  const reason = event.summary.match(/Reason:\s*([^\n]+)/i)?.[1];
+  const chosen = quotedTitle || reason || text;
+  if (!chosen) return "the current thread";
+  return chosen.length > 190 ? `${chosen.slice(0, 190).replace(/[,\s]+$/, "")}...` : chosen;
+}
+
+function storyNarrativeForMoment(
+  events: OrchestratorContinuityEvent[],
+  allEvents: OrchestratorContinuityEvent[],
+): string {
+  const event = events[0];
+  const kind = storyMomentKind(event);
+  const text = chapterSourceText(events);
+  const subject = storySubject(events);
+  const prMatches = extractPrNumbers(events);
+  const nearby = events.length > 1 ? ` ${events.length} nearby receipts point at the same moment.` : "";
+
+  if (kind === "ask") {
+    return [
+      `Chris asked: ${subject}.`,
+      "The important part is the shape of the request: keep the page readable, keep the trail continuous, and make the next step obvious without turning the story into raw machinery.",
+    ].join(" ");
+  }
+
+  if (/orchestrator story|story view|story page|scrolling feed|continuous story/.test(text)) {
+    return [
+      prMatches ? `The Story work moved through ${prMatches}.` : "The Story work moved again.",
+      "The page should feel like a living read: one calm stream, fresh headings as the work changes, and enough source detail nearby for trust without making the first read heavy.",
+      nearby.trim(),
+    ].filter(Boolean).join(" ");
+  }
+
+  if (kind === "blocker") {
+    return [
+      `A handoff stalled around ${subject}.`,
+      "The useful read is simple: it needs a current owner, a clear ACK, proof, or a reroute. Repeating the alert is not progress, but keeping it visible stops it from disappearing.",
+      nearby.trim(),
+    ].filter(Boolean).join(" ");
+  }
+
+  if (kind === "proof") {
+    return [
+      prMatches ? `Proof landed around ${prMatches}.` : `Proof landed around ${subject}.`,
+      "That matters because the next seat can continue from evidence instead of guessing what changed. The raw receipt stays underneath, but the story can stay light.",
+      nearby.trim(),
+    ].filter(Boolean).join(" ");
+  }
+
+  if (kind === "decision") {
+    return [
+      `Direction was set: ${subject}.`,
+      "This is the part the next seat should carry forward. It turns scattered updates into a shared reason for the next useful move.",
+      nearby.trim(),
+    ].filter(Boolean).join(" ");
+  }
+
+  if (kind === "handoff") {
+    return [
+      `A handoff moved through the system: ${subject}.`,
+      "The story keeps the human version of that movement, while Timeline keeps the exact packet and source details for anyone checking the machinery.",
+      nearby.trim(),
+    ].filter(Boolean).join(" ");
+  }
+
+  const allText = chapterSourceText(allEvents);
+  const activeThreads = [
+    /story mode|orchestrator story|story view/.test(allText) ? "Story is still being shaped into the friendly front door" : null,
+    /queuepush|wakepass/.test(allText) ? "routing and proof are being tightened" : null,
+    /worker2|continuous qc|improver loop/.test(allText) ? "worker health is still part of the background" : null,
+  ].filter(Boolean);
+
+  return [
+    `The thread kept moving around ${subject}.`,
+    activeThreads.length > 0
+      ? `${activeThreads.join(", ")}, and this receipt gives the next reader another plain-English step in that path.`
+      : "It is not the headline by itself, but it helps the running story stay connected instead of becoming a pile of loose receipts.",
+    nearby.trim(),
+  ].filter(Boolean).join(" ");
+}
+
 function storyBeatForEvent(event: OrchestratorContinuityEvent): StoryBeat | null {
   const text = chapterSourceText([event]);
   if (
@@ -639,7 +854,7 @@ function storyBeatTitle(beat: StoryBeat): { emoji: string; title: string; theme:
     queuepush: { emoji: "📬", title: "QueuePush gets less noisy", theme: "autopilot" },
     worker2: { emoji: "⚠️", title: "The worker2 situation", theme: "blocker" },
     shipping: { emoji: "✅", title: "Small ships, clean proof", theme: "shipping" },
-    "where-we-are": { emoji: "🐾", title: "Where we are", theme: "general" },
+    "where-we-are": { emoji: "•", title: "Where we are", theme: "general" },
   };
   return titles[beat];
 }
@@ -762,55 +977,43 @@ function buildStoryChapters(
   events: OrchestratorContinuityEvent[],
   profileByAgentId: Map<string, OrchestratorProfileCard>,
 ): StoryChapter[] {
-  const sorted = [...events].sort((a, b) => eventTimeMs(b) - eventTimeMs(a));
+  const sorted = [...events]
+    .filter(isUsefulStoryEvent)
+    .sort((a, b) => eventTimeMs(b) - eventTimeMs(a));
 
-  const groups: Array<{ beat: StoryBeat; events: OrchestratorContinuityEvent[] }> = [];
+  const groups: Array<{ key: string; kind: ReturnType<typeof storyMomentKind>; events: OrchestratorContinuityEvent[] }> = [];
   for (const event of sorted) {
-    const beat = storyBeatForEvent(event);
-    if (!beat) continue;
-
+    const key = storyMomentKeyForEvent(event);
+    const kind = storyMomentKind(event);
     const eventTime = eventTimeMs(event);
-    const beatGroups = groups.filter((group) => group.beat === beat);
-    if (beatGroups.length >= STORY_CHAPTER_MAX_PER_BEAT) {
-      const lastGroup = beatGroups[beatGroups.length - 1];
-      if (lastGroup.events.length < 24) lastGroup.events.push(event);
-      continue;
-    }
-
-    const latestGroup = beatGroups[beatGroups.length - 1];
+    const latestGroup = groups[groups.length - 1];
     const latestGroupTime = latestGroup?.events[0] ? eventTimeMs(latestGroup.events[0]) : 0;
-    if (latestGroup && latestGroupTime - eventTime <= STORY_CHAPTER_SPLIT_MS && latestGroup.events.length < 24) {
+    if (
+      latestGroup &&
+      latestGroup.key === key &&
+      latestGroup.kind === kind &&
+      latestGroupTime - eventTime <= STORY_CHAPTER_SPLIT_MS &&
+      latestGroup.events.length < STORY_CHAPTER_MAX_EVENTS
+    ) {
       latestGroup.events.push(event);
     } else {
-      groups.push({ beat, events: [event] });
+      groups.push({ key, kind, events: [event] });
     }
-  }
-
-  for (let index = groups.length - 1; index >= 0; index -= 1) {
-    const group = groups[index];
-    if (groups.length <= 1 || group.beat !== "shipping") continue;
-    const usefulProof = group.events.filter((event) => !/signal to notice|alert/.test(chapterSourceText([event])));
-    if (usefulProof.length < 2) groups.splice(index, 1);
-    else group.events = usefulProof;
-  }
-
-  if (sorted.length > 0) {
-    groups.push({ beat: "where-we-are", events: sorted.slice(0, 18) });
   }
 
   return groups
-    .map(({ beat, events: chapterEvents }) => {
-      const title = storyBeatTitle(beat);
+    .map(({ key, events: chapterEvents }) => {
+      const title = storyTitleForMoment(chapterEvents);
       const newest = chapterEvents[0]?.created_at ?? null;
       return {
-        key: `story:${beat}:${newest ?? "unknown"}`,
+        key: `story:${key}:${newest ?? "unknown"}:${chapterEvents[0]?.source_id ?? "event"}`,
         theme: title.theme,
         title: title.title,
         emoji: title.emoji,
         events: chapterEvents,
         startedAt: chapterEvents[chapterEvents.length - 1]?.created_at ?? null,
         endedAt: newest,
-        narrative: storyBeatNarrative(beat, chapterEvents, sorted),
+        narrative: storyNarrativeForMoment(chapterEvents, sorted),
         nativeNotes: chapterEvents
           .slice(0, STORY_NATIVE_PREVIEW_COUNT)
           .map((event) => nativeNoteForChapter(event, profileByAgentId)),
@@ -1078,7 +1281,7 @@ function OrchestratorStoryPanel({
               <h2 className="text-lg font-semibold text-white">Today's running story</h2>
             </div>
             <p className="mt-1 text-sm text-white/45">
-              Latest first, grouped into plain-English chapters. Timeline keeps every raw receipt.
+              Latest first, written as a continuous read. Timeline keeps every raw receipt.
             </p>
           </div>
           <label className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/20 px-3 py-2 text-xs text-white/55">
@@ -1158,7 +1361,7 @@ function OrchestratorStoryPanel({
         <div className="border-t border-white/[0.06] px-5 py-4">
           <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-white/35">
-              Showing {Math.min(visibleChapterCount, chapters.length)} of {chapters.length} story chapters.
+              Showing {Math.min(visibleChapterCount, chapters.length)} of {chapters.length} story moments.
             </p>
             {(hasMoreLoaded || canLoadFromServer) && (
               <button

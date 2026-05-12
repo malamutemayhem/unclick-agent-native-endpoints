@@ -570,6 +570,14 @@ describe("orchestrator context", () => {
             "UnClick Heartbeat PASS @ 2026-05-12T12:31Z. check_signals=1 info-only; list_todos in_progress=9 unchanged.",
           created_at: "2026-05-12T12:43:56.000Z",
         },
+        {
+          id: "turn-heartbeat-no-slash-signals",
+          session_id: "unclick-heartbeat-seat",
+          role: "assistant",
+          content:
+            "UnClick Heartbeat 2026-05-12. check_signals: 1 info. no action_needed/blocker signals.",
+          created_at: "2026-05-12T12:44:56.000Z",
+        },
       ],
     });
 
@@ -578,6 +586,7 @@ describe("orchestrator context", () => {
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-request")?.kind).toBe("status");
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-protocol-pass")?.kind).toBe("proof");
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-pass-at")?.kind).toBe("proof");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-no-slash-signals")?.kind).toBe("status");
   });
 
   it("keeps fresh-seat active_decision populated from active work when no decision event is live", () => {

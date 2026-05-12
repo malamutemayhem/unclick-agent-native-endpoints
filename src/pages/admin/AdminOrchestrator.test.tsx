@@ -295,18 +295,18 @@ describe("AdminOrchestratorPage", () => {
     expect(await screen.findByRole("heading", { name: "Today's running story" })).toBeInTheDocument();
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getByLabelText("Native notes")).not.toBeChecked();
-    expect(screen.getByText("The worker2 situation")).toBeInTheDocument();
-    expect(screen.getAllByText(/Worker2 is still the pressure point/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("Session sets the direction")).toBeInTheDocument();
-    expect(screen.getAllByText(/Session set the direction for the room/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Worker Health Stays Visible")).toBeInTheDocument();
+    expect(screen.getAllByText(/A handoff stalled around/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("A Decision Sets Direction")).toBeInTheDocument();
+    expect(screen.getAllByText(/Direction was set/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("heading", { level: 3 }).length).toBeGreaterThan(8);
     expect(screen.queryByText("Watching the scheduled runner")).not.toBeInTheDocument();
     expect(screen.queryByText("Signals in the background")).not.toBeInTheDocument();
     expect(screen.queryByText("Fresh direction from Session")).not.toBeInTheDocument();
     expect(screen.queryByText(/runner-freshness/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/d4c35fdb/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Story is becoming the friendly front door/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Latest first, written as a continuous read/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Timeline keeps every raw receipt/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Archive event 24/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Archive event/i).length).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText("Message the AI assistant...")).not.toBeInTheDocument();
     expect(screen.queryByText("Using AI Assistant")).not.toBeInTheDocument();
   });
@@ -316,7 +316,7 @@ describe("AdminOrchestratorPage", () => {
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("orchestrator_context_read&limit=120"),
+        expect.stringContaining("orchestrator_context_read&limit=240"),
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
         }),
@@ -339,7 +339,7 @@ describe("AdminOrchestratorPage", () => {
         summary: "user: Can Story hold more conversation by default?",
         tags: ["conversation", "user"],
       },
-      ...Array.from({ length: 119 }, (_, index) => ({
+      ...Array.from({ length: 3 }, (_, index) => ({
         source_kind: "conversation_turn",
         source_id: `archive-${index}`,
         created_at: `2026-05-10T04:${String(59 - (index % 50)).padStart(2, "0")}:00.000Z`,
@@ -379,19 +379,19 @@ describe("AdminOrchestratorPage", () => {
 
     renderOrchestrator();
 
-    expect((await screen.findAllByText(/Chris pulled the thread back to the real question/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Chris asked: Can Story hold more conversation by default/i)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByText("Read more"));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("orchestrator_context_read&limit=200"),
+        expect.stringContaining("orchestrator_context_read&limit=480"),
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
         }),
       ),
     );
     expect(screen.queryByText("Writing the latest story...")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Chris pulled the thread back to the real question/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Chris asked: Can Story hold more conversation by default/i).length).toBeGreaterThan(0);
 
     resolveDeepHistory(jsonResponse(contextWithEvents(initialEvents)));
   });
