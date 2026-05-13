@@ -322,6 +322,25 @@ function normalisePainpointType(value: unknown): string {
   return PAINPOINT_TYPES.find((type) => raw.includes(type)) ?? "none";
 }
 
+function ackOnlyWakeProof(value: unknown): { original_wake_id: string | null; reason: string } | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const originalWakeId = text.match(/\b(wake-[a-z0-9_-]+(?:-[a-z0-9_-]+)*)\b/i)?.[1] ?? null;
+  const startsWithAckWake = /^\s*ack\s+wake-/i.test(text);
+  if (startsWithAckWake) {
+    return { original_wake_id: originalWakeId, reason: "ack_only_comment" };
+  }
+
+  const verifierOnly = /\b(ack-only|verifier-only|verifier receipt|ack proof receipt)\b/i.test(text)
+    && /\b(no|not|missing|absent|still)\b.{0,80}\b(executor|terminal|build_attempt|pr_proof|done|receipt)\b/i.test(text);
+  if (verifierOnly && originalWakeId) {
+    return { original_wake_id: originalWakeId, reason: "verifier_only_comment" };
+  }
+
+  return null;
+}
+
 function asOptionalString(value: unknown): string | null {
   const trimmed = String(value ?? "").trim();
   return trimmed ? trimmed : null;
@@ -511,6 +530,7 @@ export async function nudgeonlyReceiptBridge(args: Record<string, unknown>): Pro
   const text = evidenceText(args, nudge);
   const hasSourceEvidence = Boolean(sourceId || sourceUrl || target);
   const hasCue = hasConcreteCue(painpointType, text);
+  const ackOnlyProof = ackOnlyWakeProof(args.event_text ?? args.context ?? nudge.nudge);
   const traceInput = JSON.stringify({
     painpoint_type: painpointType,
     source_id: sourceId,
@@ -521,6 +541,32 @@ export async function nudgeonlyReceiptBridge(args: Record<string, unknown>): Pro
     nudge_trace_id: asOptionalString(args.nudge_trace_id) ?? asOptionalString(nudge.trace_id),
   });
   const bridgeId = `nudgebridge_${shortHash(traceInput)}`;
+
+  if (ackOnlyProof) {
+    return {
+      bridge_id: bridgeId,
+      bridge_status: "suppress",
+      worker: NUDGEONLY_POLICY.worker_name,
+      official_name: NUDGEONLY_POLICY.official_name,
+      code_name: NUDGEONLY_POLICY.code_name,
+      ecosystem: NUDGEONLY_POLICY.ecosystem,
+      authority: NUDGEONLY_POLICY.authority,
+      painpoint_detected: false,
+      painpoint_type: "none",
+      suppressed_painpoint_type: painpointType,
+      suppression: {
+        ...ackOnlyProof,
+        source_id: sourceId,
+        source_url: sourceUrl,
+        target,
+      },
+      reason: "ACK-only or verifier-only WakePass comments are proof metadata for the original wake, not fresh wake requests.",
+      quality_gate: "duplicate ACK wake suppression",
+      requires_verifier: true,
+      allowed_actions: ["record suppress receipt", "attach proof metadata to original wake"],
+      prohibited_actions: NUDGEONLY_POLICY.prohibited_actions,
+    };
+  }
 
   if (!detected || painpointType === "none") {
     return {
