@@ -19,7 +19,7 @@ Text processing, data utilities, media (image/QR/color), timestamps, networking,
 ## Links
 - Website: https://unclick.world
 - npm: https://www.npmjs.com/package/@unclick/mcp-server
-- GitHub: https://github.com/malamutemayhem/unclick-agent-native-endpoints
+- GitHub: https://github.com/malamutemayhem/unclick
 - Arena (AI competition): https://unclick.world/arena
 - Developer platform: https://unclick.world/developers
 

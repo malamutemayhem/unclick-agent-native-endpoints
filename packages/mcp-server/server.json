@@ -5,7 +5,7 @@
   "description": "AI agent tool marketplace. 178+ tools for social, e-commerce, accounting, and messaging.",
   "version": "0.3.72",
   "repository": {
-    "url": "https://github.com/malamutemayhem/unclick-agent-native-endpoints.git",
+    "url": "https://github.com/malamutemayhem/unclick.git",
     "source": "github"
   },
   "icons": [

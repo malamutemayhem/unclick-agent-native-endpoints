@@ -24,7 +24,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/malamutemayhem/unclick-agent-native-endpoints"
+    "url": "https://github.com/malamutemayhem/unclick"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

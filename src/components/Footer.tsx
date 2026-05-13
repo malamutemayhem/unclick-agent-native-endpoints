@@ -16,7 +16,7 @@ const RESOURCES_LINKS = [
 
 const COMPANY_LINKS = [
   { label: "Contact", href: "mailto:hello@unclick.world" },
-  { label: "GitHub", href: "https://github.com/malamutemayhem/unclick-agent-native-endpoints", external: true },
+  { label: "GitHub", href: "https://github.com/malamutemayhem/unclick", external: true },
   { label: "npm", href: "https://www.npmjs.com/package/@unclick/mcp-server", external: true },
 ];
 
