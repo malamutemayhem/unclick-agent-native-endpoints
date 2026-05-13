@@ -675,8 +675,25 @@ function isActiveBlockerEvent(
   nowMs: number,
 ): boolean {
   if (event.kind !== "blocker") return false;
+  if (isWakeIssueCommentStale(event, activeTodos)) return false;
   if (!isHistoricalWakeOrFishbowlStale(event, activeTodos, nowMs)) return true;
   return false;
+}
+
+function isWakeIssueCommentStale(
+  event: OrchestratorContinuityEvent,
+  activeTodos: OrchestratorTodoRow[],
+): boolean {
+  if (event.source_kind !== "dispatch") return false;
+  if (activeTodos.length > 0) return false;
+
+  const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  const summary = event.summary.toLowerCase();
+  const isWakePass = tags.includes("wakepass") || /\bwakepass\b/.test(summary);
+  const isStale = tags.includes("stale") || /\bstale\b/.test(summary);
+  if (!isWakePass || !isStale) return false;
+
+  return /\bwake-issue_comment-comment-\d+/.test(summary) || /\bissue_comment\b/.test(summary);
 }
 
 function isHistoricalWakeOrFishbowlStale(

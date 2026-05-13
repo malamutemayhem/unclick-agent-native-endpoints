@@ -351,6 +351,42 @@ describe("orchestrator context", () => {
     expect(context.seat_handshake.active_blocker).toBeNull();
   });
 
+  it("does not count fresh WakePass issue-comment stale rows as active blockers when no jobs remain", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-13T04:05:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-fresh-issue-comment-wake",
+          source: "wakepass",
+          target_agent_id: "master",
+          task_ref: "wake-issue_comment-comment-4436827196-32a36c4d4da6",
+          status: "stale",
+          payload: {
+            source_url: "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/751",
+            wake_reason: "Manual wake from issue comment",
+          },
+          created_at: "2026-05-13T03:30:00.000Z",
+          updated_at: "2026-05-13T03:30:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.continuity_events.filter((event) => event.kind === "blocker")).toHaveLength(1);
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.current_state_card.blockers).toHaveLength(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.seat_handshake.active_blocker).toBeNull();
+  });
+
   it("keeps heartbeat prompt bodies out of continuity summaries", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T23:45:00.000Z",
