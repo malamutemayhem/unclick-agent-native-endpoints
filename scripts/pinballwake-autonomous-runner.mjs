@@ -15,6 +15,7 @@ import {
   runCodingRoomRunnerCycle,
 } from "./pinballwake-coding-room-runner.mjs";
 import { evaluateOrchestratorProofWakeGate } from "./lib/autopilotkit-liveness.mjs";
+import { buildScopePackHydrationReceipt } from "./pinballwake-scopepack-hydrator.mjs";
 
 export const AUTONOMOUS_RUNNER_MODES = new Set(["dry-run", "claim", "execute"]);
 
@@ -849,6 +850,8 @@ function buildRunClaimabilityScorecard({
   finalAction = lastResult.action || null,
   finalReason = lastResult.reason || null,
   scopingRequested = 0,
+  hydrationBlocked = 0,
+  hydrationSuppressed = 0,
 } = {}) {
   const base = queueSourceResult.claimability_scorecard || buildClaimabilityScorecard({
     seen: queueSourceResult.seen || 0,
@@ -865,8 +868,13 @@ function buildRunClaimabilityScorecard({
   return {
     ...base,
     imported_claimable: importedClaimable,
-    claim_attemptable_after_safety: Math.max(0, importedClaimable - protectedBlocked - scopingRequested),
+    claim_attemptable_after_safety: Math.max(
+      0,
+      importedClaimable - protectedBlocked - scopingRequested - hydrationBlocked - hydrationSuppressed,
+    ),
     scoping_requested: scopingRequested,
+    scopepack_hydration_blocked: hydrationBlocked,
+    scopepack_hydration_suppressed: hydrationSuppressed,
     protected_blocked: protectedBlocked,
     claimed: results.filter((result) => result?.action === "claimed").length,
     last_action: finalAction,
@@ -912,6 +920,30 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
     };
   }
 
+  const hydration = buildScopePackHydrationReceipt(todo);
+  if (hydration.action === "suppress") {
+    return {
+      ok: true,
+      todo_id: todoId,
+      status: "open",
+      assigned_to_agent_id: null,
+      comment_ok: false,
+      comment_suppressed: true,
+      comment_detail: hydration.reason,
+      scopepack_hydration: hydration,
+    };
+  }
+
+  const commentText = hydration.receipt || compact(
+    [
+      "Autonomous Runner could not safely build this job yet because no file-level ScopePack was attached.",
+      "Reopened for scoping instead of holding a stale active claim.",
+      "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
+      `reason=${todo.actionability_reason || "missing_scopepack"}.`,
+    ].join(" "),
+    700,
+  );
+
   const comment = await callUnClickMcpTool({
     mcpUrl,
     apiKey,
@@ -921,15 +953,7 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
       agent_id: agentId,
       target_kind: "todo",
       target_id: todoId,
-      text: compact(
-        [
-          "Autonomous Runner could not safely build this job yet because no file-level ScopePack was attached.",
-          "Reopened for scoping instead of holding a stale active claim.",
-          "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
-          `reason=${todo.actionability_reason || "missing_scopepack"}.`,
-        ].join(" "),
-        700,
-      ),
+      text: commentText,
     },
   });
 
@@ -941,6 +965,7 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
     comment_ok: comment.ok,
     comment_id: comment.ok ? comment.data?.comment?.id || null : null,
     comment_detail: comment.ok ? null : comment.reason || comment.error || null,
+    scopepack_hydration: hydration.action === "needs_manual_scoping" ? null : hydration,
   };
 }
 
@@ -1178,6 +1203,13 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
         assigned_to_agent_id: todo.assigned_to_agent_id || null,
         actionability_reason: todo.actionability_reason || null,
         scope_pack_seen: Boolean(scopePack.hasScopePack),
+        scope_pack: todo.scope_pack ?? todo.scopePack ?? null,
+        runner_scope: todo.runner_scope ?? todo.runnerScope ?? null,
+        recent_comments: Array.isArray(todo.recent_comments) ? todo.recent_comments : undefined,
+        comments: Array.isArray(todo.comments) ? todo.comments : undefined,
+        description: todo.description || null,
+        body: todo.body || null,
+        notes: todo.notes || null,
         lane: todo.lane || scopePack.lane || null,
         owner_hint: todo.owner_hint || todo.ownerHint || scopePack.owner_hint || null,
       };
@@ -1494,9 +1526,9 @@ export async function runAutonomousRunnerFile({
   let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
   let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
   const todoForScoping = selectBoardroomTodoForScoping({ queueSourceResult, lastResult: last });
-  const finalAction = todoForScoping && shouldPersist ? "scoping_requested" : last.action;
-  const finalReason = todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason;
-  const claimabilityScorecard = buildRunClaimabilityScorecard({
+  let finalAction = todoForScoping && shouldPersist ? "scoping_requested" : last.action;
+  let finalReason = todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason;
+  let claimabilityScorecard = buildRunClaimabilityScorecard({
     queueSourceResult,
     results,
     lastResult: last,
@@ -1565,6 +1597,28 @@ export async function runAutonomousRunnerFile({
         todo_scoping_sync: todoScopingSync,
       };
     }
+
+    const hydrationAction = todoScopingSync.scopepack_hydration?.action || "";
+    if (hydrationAction === "scopepack_hydrated") {
+      finalAction = "scopepack_hydrated";
+      finalReason = "boardroom_todo_scopepack_hydrated";
+    } else if (hydrationAction === "blocker") {
+      finalAction = "blocked";
+      finalReason = todoScopingSync.scopepack_hydration?.reason || "scopepack_hydration_missing_fields";
+    } else if (hydrationAction === "suppress") {
+      finalAction = "suppressed";
+      finalReason = todoScopingSync.scopepack_hydration?.reason || "duplicate_scopepack_hydration_receipt";
+    }
+    claimabilityScorecard = buildRunClaimabilityScorecard({
+      queueSourceResult,
+      results,
+      lastResult: last,
+      finalAction,
+      finalReason,
+      scopingRequested: hydrationAction ? 0 : 1,
+      hydrationBlocked: hydrationAction === "blocker" ? 1 : 0,
+      hydrationSuppressed: hydrationAction === "suppress" ? 1 : 0,
+    });
   }
 
   if (shouldPersist) {
