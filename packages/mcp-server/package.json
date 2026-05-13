@@ -1,6 +1,6 @@
 {
   "name": "@unclick/mcp-server",
-  "version": "0.3.70",
+  "version": "0.3.71",
   "mcpName": "io.github.malamutemayhem/unclick-mcp-server",
   "description": "MCP server for the UnClick tool marketplace — lets AI agents discover and use every UnClick tool",
   "type": "module",
