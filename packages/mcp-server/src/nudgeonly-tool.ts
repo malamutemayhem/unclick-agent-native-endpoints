@@ -361,6 +361,22 @@ function ackOnlyWakeProof(value: unknown): { original_wake_id: string | null; re
   return null;
 }
 
+function supersededStatusProof(value: unknown): { superseded_by: string | null; reason: string } | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const historicalStatus = /\b(blocker root-cause update|pass progress|progress from heartbeat|status update|historical status|old blocker|old pass|superseded status)\b/i.test(text);
+  if (!historicalStatus) return null;
+
+  const supersededBy = text.match(/\bsuperseded by\b.{0,180}\b((?:pr|pull request)\s*#?\d+|merged|live proof|production proof|publish mcp server proof|later proof)\b/i)?.[1] ?? null;
+  const laterProof = /\b(later production proof|current live .*proof|publish mcp server proof|live .*suppresses?)\b/i.test(text);
+  if (supersededBy || laterProof) {
+    return { superseded_by: supersededBy, reason: "superseded_status_comment" };
+  }
+
+  return null;
+}
+
 function asOptionalString(value: unknown): string | null {
   const trimmed = String(value ?? "").trim();
   return trimmed ? trimmed : null;
@@ -553,6 +569,7 @@ export async function nudgeonlyReceiptBridge(args: Record<string, unknown>): Pro
   const hasSourceEvidence = Boolean(sourceId || sourceUrl || target);
   const hasCue = hasConcreteCue(painpointType, text);
   const ackOnlyProof = ackOnlyWakeProof(args.event_text ?? args.context ?? nudge.nudge);
+  const supersededProof = supersededStatusProof(text);
   const traceInput = JSON.stringify({
     painpoint_type: painpointType,
     source_id: sourceId,
@@ -586,6 +603,32 @@ export async function nudgeonlyReceiptBridge(args: Record<string, unknown>): Pro
       quality_gate: "duplicate ACK wake suppression",
       requires_verifier: true,
       allowed_actions: ["record suppress receipt", "attach proof metadata to original wake"],
+      prohibited_actions: NUDGEONLY_POLICY.prohibited_actions,
+    };
+  }
+
+  if (supersededProof) {
+    return {
+      bridge_id: bridgeId,
+      bridge_status: "suppress",
+      worker: NUDGEONLY_POLICY.worker_name,
+      official_name: NUDGEONLY_POLICY.official_name,
+      code_name: NUDGEONLY_POLICY.code_name,
+      ecosystem: NUDGEONLY_POLICY.ecosystem,
+      authority: NUDGEONLY_POLICY.authority,
+      painpoint_detected: false,
+      painpoint_type: "none",
+      suppressed_painpoint_type: painpointType,
+      suppression: {
+        ...supersededProof,
+        source_id: sourceId,
+        source_url: sourceUrl,
+        target,
+      },
+      reason: "Historical heartbeat PASS/BLOCKER status that is superseded by later proof is proof metadata, not a fresh blocker.",
+      quality_gate: "superseded status suppression",
+      requires_verifier: true,
+      allowed_actions: ["record suppress receipt", "attach proof metadata to superseding proof"],
       prohibited_actions: NUDGEONLY_POLICY.prohibited_actions,
     };
   }
