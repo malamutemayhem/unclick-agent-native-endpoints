@@ -19,7 +19,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | src/pages/admin/AdminShell.tsx | 09f113d1ff4c | 19020 |
 | .github/workflows/ci.yml | 79e43dd8e26c | 1608 |
 | .github/workflows/brainmap-auto-update.yml | 7e8b08eb16aa | 1137 |
-| package.json | 5bbe1bfea290 | 4176 |
+| package.json | cbf9e95adc4a | 4176 |
 | scripts/pinballwake-ack-ledger-room.mjs | e7dcb642bc75 | 12719 |
 | scripts/pinballwake-close-supersede-room.mjs | 4d31f6a6a8c2 | 3891 |
 | scripts/pinballwake-coding-room.mjs | 4a48ded33a31 | 25453 |
