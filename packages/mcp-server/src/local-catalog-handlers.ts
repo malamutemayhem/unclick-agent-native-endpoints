@@ -1062,7 +1062,7 @@ export const LOCAL_CATALOG_HANDLERS: Record<string, LocalHandler> = {
 
   "report_bug.create": (args) => {
     process.stderr.write(`[UnClick BugReport] ${JSON.stringify(args)}\n`);
-    return { submitted: true, message: "Bug report logged. To file publicly, visit https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues" };
+    return { submitted: true, message: "Bug report logged. To file publicly, visit https://github.com/malamutemayhem/unclick/issues" };
   },
 
   // ── KV STORE (in-memory, per session) ─────────────────────────────────────────

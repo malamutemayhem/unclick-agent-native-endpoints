@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const repository = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick-agent-native-endpoints";
+const repository = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick";
 const serverUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
 const githubToken = process.env.GITHUB_TOKEN || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";

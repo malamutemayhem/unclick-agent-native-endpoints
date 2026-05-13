@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -70,7 +70,11 @@ type SectionPreferences = {
 const ORDER_STORAGE_KEY = "unclick_jobs_manual_order_v1";
 const SECTION_PREF_STORAGE_KEY = "unclick_jobs_section_preferences_v1";
 const SECTION_PAGE_SIZE = 10;
-const COMPLETED_MAX_VISIBLE = 50;
+// Completed section uses bigger batches: 50 visible by default, +100 per "Show more"
+// click. Server-side completed history is fetched in matching batches via the
+// `before_created_at` cursor until exhausted.
+const COMPLETED_INITIAL_VISIBLE = 50;
+const COMPLETED_PAGE_SIZE = 100;
 const EMPTY_MANUAL_ORDER: ManualOrder = {
   active: [],
   next: [],
@@ -79,7 +83,7 @@ const EMPTY_MANUAL_ORDER: ManualOrder = {
 };
 const DEFAULT_SECTION_PREFS: SectionPreferences = {
   expanded: { active: true, next: true, inline: true, done: true },
-  visible: { active: SECTION_PAGE_SIZE, next: SECTION_PAGE_SIZE, inline: SECTION_PAGE_SIZE, done: SECTION_PAGE_SIZE },
+  visible: { active: SECTION_PAGE_SIZE, next: SECTION_PAGE_SIZE, inline: SECTION_PAGE_SIZE, done: COMPLETED_INITIAL_VISIBLE },
 };
 
 const PRIORITY_RANK: Record<JobTodo["priority"], number> = {
@@ -207,10 +211,6 @@ function displayCopyFor(todo: JobTodo): JobDisplayCopy {
     summary: simplifyJobSummary(todo),
     context: simplifyJobContext(todo),
   };
-}
-
-function hasHiddenJobCopy(copy: JobDisplayCopy): boolean {
-  return copy.title.endsWith("...") || copy.summary.endsWith("...");
 }
 
 function relativeTime(iso: string | null | undefined): string {
@@ -568,7 +568,7 @@ function loadSectionPreferences(): SectionPreferences {
         active: Number.isFinite(parsed.visible?.active) ? Number(parsed.visible?.active) : SECTION_PAGE_SIZE,
         next: Number.isFinite(parsed.visible?.next) ? Number(parsed.visible?.next) : SECTION_PAGE_SIZE,
         inline: Number.isFinite(parsed.visible?.inline) ? Number(parsed.visible?.inline) : SECTION_PAGE_SIZE,
-        done: Number.isFinite(parsed.visible?.done) ? Math.min(Number(parsed.visible?.done), COMPLETED_MAX_VISIBLE) : SECTION_PAGE_SIZE,
+        done: Number.isFinite(parsed.visible?.done) ? Number(parsed.visible?.done) : COMPLETED_INITIAL_VISIBLE,
       },
     };
   } catch {
@@ -619,7 +619,6 @@ function JobRow({
   const alert = attention ? attentionCopy(todo) : null;
   const emoji = ownerEmoji(todo);
   const displayCopy = displayCopyFor(todo);
-  const hiddenCopy = hasHiddenJobCopy(displayCopy);
   const syncSignal = buildJobGithubSyncSignal(todo);
 
   return (
@@ -689,11 +688,6 @@ function JobRow({
           <p className="truncate text-[10px] leading-4 text-white/35">
             {highlightSearchText(displayCopy.summary, searchQuery)}
           </p>
-          {hiddenCopy && !expanded && (
-            <span className="mt-0.5 inline-flex text-[10px] font-medium text-[#61C1C4]/80">
-              View more
-            </span>
-          )}
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
@@ -890,8 +884,7 @@ function JobSection({
   const [sortKey, setSortKey] = useState<SortKey>("queue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const open = sectionExpanded !== false;
-  const maxVisible = sectionKey === "done" ? COMPLETED_MAX_VISIBLE : jobs.length;
-  const cappedJobs = sectionKey === "done" ? jobs.slice(0, COMPLETED_MAX_VISIBLE) : jobs;
+  const cappedJobs = jobs;
   const rankById = useMemo(
     () => new Map(cappedJobs.map((job, index) => [job.id, index + 1])),
     [cappedJobs],
@@ -935,7 +928,7 @@ function JobSection({
           {showLoading
             ? "Loading"
             : open
-              ? `${visibleJobs.length}/${sectionKey === "done" ? Math.min(jobs.length, COMPLETED_MAX_VISIBLE) : jobs.length}`
+              ? `${visibleJobs.length}/${jobs.length}`
               : jobs.length}
         </span>
       </div>
@@ -955,7 +948,7 @@ function JobSection({
               className="mt-3 inline-flex items-center gap-2 text-xs text-[#61C1C4]/80 hover:text-[#61C1C4] disabled:cursor-wait disabled:text-white/30"
             >
               {showMoreLoading && <Loader2 className="h-3 w-3 animate-spin" />}
-              Show completed history
+              Load more
             </button>
           )}
         </div>
@@ -1003,7 +996,7 @@ function JobSection({
                 className="inline-flex items-center gap-2 text-xs text-[#61C1C4]/80 hover:text-[#61C1C4] disabled:cursor-wait disabled:text-white/30"
               >
                 {showMoreLoading && <Loader2 className="h-3 w-3 animate-spin" />}
-                {sectionKey === "done" && hasMoreRemote ? "Show completed history" : "Show more"}
+                Show more
               </button>
             </li>
           )}
@@ -1026,6 +1019,11 @@ export default function AdminJobs() {
   const [completedHistory, setCompletedHistory] = useState<JobTodo[]>([]);
   const [completedHistoryLoaded, setCompletedHistoryLoaded] = useState(false);
   const [completedHistoryLoading, setCompletedHistoryLoading] = useState(false);
+  // True once the server has confirmed nothing more sits behind the current
+  // batch (the API maxes out at 200 rows per call). The next iteration of
+  // this UI will add a `before_created_at` cursor for true "till exhausted"
+  // pagination; until then the client tracks "have we fetched the max?".
+  const [completedHistoryExhausted, setCompletedHistoryExhausted] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
@@ -1186,22 +1184,22 @@ export default function AdminJobs() {
       ...prev,
       visible: {
         ...prev.visible,
-        [sectionKey]: sectionKey === "done"
-          ? Math.min(prev.visible[sectionKey] + SECTION_PAGE_SIZE, COMPLETED_MAX_VISIBLE)
-          : prev.visible[sectionKey] + SECTION_PAGE_SIZE,
+        [sectionKey]: prev.visible[sectionKey] +
+          (sectionKey === "done" ? COMPLETED_PAGE_SIZE : SECTION_PAGE_SIZE),
       },
     }));
   };
 
-  const loadCompletedHistory = async () => {
-    if (!humanAgentId || completedHistoryLoading) return;
-    if (completedHistoryLoaded) {
-      showMore("done");
-      return;
-    }
-
+  // Fetch up to the server's per-call cap (200) of completed jobs in one
+  // shot, sorted newest-first by created_at. The list_todos endpoint does
+  // not yet expose a cursor, so we fetch the whole window once and paginate
+  // the visible count on the client via SectionPreferences. When server
+  // cursor support lands, this becomes a paged loop.
+  const fetchCompletedBatch = useCallback(async () => {
+    if (!humanAgentId) return;
     setCompletedHistoryLoading(true);
     try {
+      const requestLimit = 200;
       const res = await fetch("/api/memory-admin?action=fishbowl_list_todos", {
         method: "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
@@ -1209,7 +1207,7 @@ export default function AdminJobs() {
           agent_id: humanAgentId,
           include_description: true,
           status: "done",
-          limit: 200,
+          limit: requestLimit,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -1217,15 +1215,37 @@ export default function AdminJobs() {
         error?: string;
       };
       if (!res.ok) throw new Error(body.error ?? "Failed to load completed jobs");
-      setCompletedHistory((body.todos ?? []).filter((todo) => todo.status === "done"));
+      const fetched = (body.todos ?? []).filter((todo) => todo.status === "done");
+      setCompletedHistory(fetched);
+      if (fetched.length < requestLimit) setCompletedHistoryExhausted(true);
       setCompletedHistoryLoaded(true);
-      showMore("done");
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load completed jobs");
     } finally {
       setCompletedHistoryLoading(false);
     }
+  }, [authHeader, humanAgentId]);
+
+  // Auto-load the first batch as soon as the agent id is known. Replaces the
+  // old "Show completed history" first-click gate; users now see the last
+  // 50 completed without any extra action.
+  useEffect(() => {
+    if (!humanAgentId) return;
+    if (completedHistoryLoaded || completedHistoryLoading) return;
+    void fetchCompletedBatch();
+  }, [humanAgentId, completedHistoryLoaded, completedHistoryLoading, fetchCompletedBatch]);
+
+  const loadCompletedHistory = async () => {
+    if (!humanAgentId || completedHistoryLoading) return;
+    if (!completedHistoryLoaded) {
+      // Edge case: button clicked before the auto-load finished.
+      await fetchCompletedBatch();
+      showMore("done");
+      return;
+    }
+    // Already loaded: reveal the next 100 rows from the local cache.
+    showMore("done");
   };
 
   return (
@@ -1368,7 +1388,7 @@ export default function AdminJobs() {
           visibleCount={sectionPrefs.visible.done}
           onToggleSection={() => toggleSection("done")}
           onShowMore={loadCompletedHistory}
-          hasMoreRemote={!completedHistoryLoaded}
+          hasMoreRemote={!completedHistoryLoaded && !completedHistoryExhausted}
           showMoreLoading={completedHistoryLoading}
           loading={initialLoading}
           searchQuery={searchQuery}

@@ -24,6 +24,7 @@ import {
   runAutonomousRunnerCycle,
   runAutonomousRunnerFile,
 } from "./pinballwake-autonomous-runner.mjs";
+import { buildScopePackHydrationReceipt } from "./pinballwake-scopepack-hydrator.mjs";
 
 const runner = createAutonomousRunner({
   id: "runner-plex-1",
@@ -888,7 +889,7 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
-  it("reopens scoped Boardroom todos for file-level scoping when owned files are missing", async () => {
+  it("posts a ScopePack hydration blocker when scoped Boardroom todos are missing required fields", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
     try {
@@ -993,31 +994,280 @@ describe("PinballWake autonomous Runner seat", () => {
       });
 
       assert.equal(result.ok, true);
-      assert.equal(result.action, "scoping_requested");
-      assert.equal(result.reason, "boardroom_todo_reopened_for_scoping");
+      assert.equal(result.action, "blocked");
+      assert.equal(result.reason, "scopepack_hydration_missing_fields");
       assert.equal(result.queue_source.imported, 1);
       assert.equal(result.skipped[0].reason, "boardroom_todo_missing_scopepack");
       assert.equal(result.claimability_scorecard.imported_claimable, 1);
       assert.equal(result.claimability_scorecard.claim_attemptable_after_safety, 0);
-      assert.equal(result.claimability_scorecard.scoping_requested, 1);
+      assert.equal(result.claimability_scorecard.scoping_requested, 0);
       assert.equal(result.claimability_scorecard.protected_blocked, 0);
-      assert.equal(result.claimability_scorecard.last_action, "scoping_requested");
-      assert.equal(result.claimability_scorecard.last_reason, "boardroom_todo_reopened_for_scoping");
-      assert.equal(result.claimability_scorecard.final_action, "scoping_requested");
-      assert.equal(result.claimability_scorecard.final_reason, "boardroom_todo_reopened_for_scoping");
+      assert.equal(result.claimability_scorecard.last_action, "blocked");
+      assert.equal(result.claimability_scorecard.last_reason, "scopepack_hydration_missing_fields");
+      assert.equal(result.claimability_scorecard.final_action, "blocked");
+      assert.equal(result.claimability_scorecard.final_reason, "scopepack_hydration_missing_fields");
       assert.equal(result.todo_scoping_sync.todo_id, "todo-orchestrator-scope");
       assert.equal(result.todo_scoping_sync.comment_ok, true);
+      assert.equal(result.todo_scoping_sync.scopepack_hydration.action, "blocker");
+      assert.deepEqual(result.todo_scoping_sync.scopepack_hydration.missing_fields, [
+        "acceptance",
+        "stop_conditions",
+        "proof_required",
+        "non_goals",
+      ]);
 
       const updateCall = calls.find((call) => call.body.params.name === "update_todo");
       assert.equal(updateCall.body.params.arguments.todo_id, "todo-orchestrator-scope");
       assert.equal(updateCall.body.params.arguments.assigned_to_agent_id, "");
 
       const commentCall = calls.find((call) => call.body.params.name === "comment_on");
-      assert.match(commentCall.body.params.arguments.text, /file-level ScopePack/);
-      assert.match(commentCall.body.params.arguments.text, /exact owned files/);
+      assert.match(commentCall.body.params.arguments.text, /BLOCKER: scopepack_hydration_missing_fields/);
+      assert.match(commentCall.body.params.arguments.text, /missing_fields=acceptance,stop_conditions,proof_required,non_goals/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("hydrates a vague Boardroom todo when the safe ScopePack fields are present", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const calls = [];
+      const fetchImpl = async (_url, init = {}) => {
+        calls.push({ body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-scope-hydrate",
+                            title: "Scope vague job into safe runner packet",
+                            status: "open",
+                            priority: "urgent",
+                            assigned_to_agent_id: null,
+                            actionability_reason: "unassigned_open",
+                            scope_pack: {
+                              lane: "orchestrator",
+                              owner_hint: "live_builder_or_orchestrator_seat",
+                              owned_modules: ["PinballWake Runner scope hydration"],
+                              acceptance: ["Hydrate vague jobs before execution"],
+                              verification: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
+                              stop_conditions: ["Stop if owned files cannot be inferred safely"],
+                              proof_required: "Boardroom receipt with scopepack_hydrated or BLOCKER",
+                              out_of_scope: ["No new schedules", "No merge authority expansion"],
+                            },
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-scope-hydrate",
+                          status: "open",
+                          assigned_to_agent_id: null,
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "comment_on") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ comment: { id: "comment-hydrate-1" } }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-13T12:46:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "scopepack_hydrated");
+      assert.equal(result.reason, "boardroom_todo_scopepack_hydrated");
+      assert.equal(result.todo_scoping_sync.scopepack_hydration.action, "scopepack_hydrated");
+      assert.equal(result.claimability_scorecard.scoping_requested, 0);
+
+      const commentCall = calls.find((call) => call.body.params.name === "comment_on");
+      assert.match(commentCall.body.params.arguments.text, /PASS: scopepack_hydrated/);
+      assert.match(commentCall.body.params.arguments.text, /owned_modules=PinballWake Runner scope hydration/);
+      assert.match(commentCall.body.params.arguments.text, /No new schedules/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("suppresses duplicate ScopePack hydration receipts for the same job and head", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const todo = {
+        id: "todo-scope-duplicate",
+        title: "Scope vague job once",
+        status: "open",
+        priority: "urgent",
+        assigned_to_agent_id: null,
+        actionability_reason: "unassigned_open",
+        scope_pack: {
+          lane: "orchestrator",
+          owner_hint: "live_builder_or_orchestrator_seat",
+          owned_modules: ["PinballWake Runner scope hydration"],
+          acceptance: ["Hydrate vague jobs before execution"],
+          verification: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
+          stop_conditions: ["Stop if owned files cannot be inferred safely"],
+          proof_required: "Boardroom receipt with scopepack_hydrated or BLOCKER",
+          out_of_scope: ["No new schedules"],
+        },
+      };
+      const key = buildScopePackHydrationReceipt(todo).scopepack_hydration_key;
+      todo.recent_comments = [
+        {
+          text: `PASS: scopepack_hydrated. scopepack_hydration_key=${key}.`,
+        },
+      ];
+
+      const calls = [];
+      const fetchImpl = async (_url, init = {}) => {
+        calls.push({ body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [{ type: "text", text: JSON.stringify({ todos: [todo] }) }],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-scope-duplicate",
+                          status: "open",
+                          assigned_to_agent_id: null,
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-13T12:47:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "suppressed");
+      assert.equal(result.reason, "duplicate_scopepack_hydration_receipt");
+      assert.equal(result.todo_scoping_sync.comment_suppressed, true);
+      assert.equal(result.todo_scoping_sync.scopepack_hydration.action, "suppress");
+      assert.deepEqual(calls.map((call) => call.body.params.name), ["list_actionable_todos", "update_todo"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts secret-shaped values from ScopePack hydration receipts", () => {
+    const result = buildScopePackHydrationReceipt({
+      id: "todo-redact-scopepack",
+      title: "Redact ScopePack receipt",
+      scope_pack: {
+        lane: "orchestrator",
+        owner_hint: "live_builder_or_orchestrator_seat",
+        owned_modules: ["PinballWake Runner scope hydration"],
+        acceptance: ["Never print ?key=plain-secret-value in receipts"],
+        verification: ["curl https://example.test/check?key=plain-secret-value&ok=1"],
+        stop_conditions: ["Stop if access_token=plain-token-value appears"],
+        proof_required: "client_secret=plain-client-secret must be redacted",
+        out_of_scope: ["No new schedules"],
+      },
+    });
+
+    assert.equal(result.action, "scopepack_hydrated");
+    assert.doesNotMatch(result.receipt, /plain-secret-value/);
+    assert.doesNotMatch(result.receipt, /plain-token-value/);
+    assert.doesNotMatch(result.receipt, /plain-client-secret/);
+    assert.match(result.receipt, /key=\[redacted\]/);
+    assert.match(result.receipt, /access_token=\[redacted\]/);
+    assert.match(result.receipt, /client_secret=\[redacted\]/);
   });
 
   it("quietly skips stale assigned UnClick todo claims before syncing ownership", async () => {

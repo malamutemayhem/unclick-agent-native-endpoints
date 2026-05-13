@@ -55,7 +55,7 @@ describe("system credential inventory", () => {
     const byName = new Map(listSystemCredentialHealthRows().map((entry) => [entry.name, entry]));
 
     expect(byName.get("TESTPASS_TOKEN")).toMatchObject({
-      ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
+      ownerLabel: "GitHub Actions - malamutemayhem/unclick",
       ownerConfidence: "inferred",
     });
     expect(byName.get("SUPABASE_SERVICE_ROLE_KEY")).toMatchObject({
@@ -98,7 +98,7 @@ describe("system credential inventory", () => {
 
     expect(testpass).toMatchObject({
       sourceLabel: "GitHub Actions secret name",
-      ownerLabel: "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints",
+      ownerLabel: "GitHub Actions - malamutemayhem/unclick",
       ownerConfidence: "inferred",
       displayStatus: "untested",
       healthEvidenceLabel: "Use latest TestPass PR check receipt.",

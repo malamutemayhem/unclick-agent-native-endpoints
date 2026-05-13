@@ -1,25 +1,22 @@
 {
-  "name": "@unclick/copypass",
+  "name": "@unclick/commonsensepass",
   "version": "0.1.0",
-  "description": "CopyPass - fixture-only product-copy review with advisory verdict packs.",
+  "description": "CommonSensePass - rule-and-evidence sanity gate for AI/worker claims (PASS/BLOCKER/HOLD/SUPPRESS/ROUTE). Verdict-only; does not build, merge, close, or mutate source state.",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./copy-library": "./dist/copy-library.js",
     "./schema": "./dist/schema.js",
-    "./verdict-pack": "./dist/verdict-pack.js"
+    "./rules": "./dist/rules.js",
+    "./check": "./dist/check.js"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "dependencies": {
-    "zod": "^3.23.8"
-  },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^20.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   },

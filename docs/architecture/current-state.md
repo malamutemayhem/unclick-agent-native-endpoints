@@ -2,14 +2,14 @@
 
 **Phase 1 Ground Floor QC. Generated 2026-04-24. Read-only snapshot of `main` at commit `4f655f2`.**
 
-This document is the investor-readable reality map of the `unclick-agent-native-endpoints` repository. Every claim cites a concrete file path or migration. Nothing in this document is aspirational. For the target-state design, see [`target-state.md`](./target-state.md).
+This document is the investor-readable reality map of the `unclick` repository. Every claim cites a concrete file path or migration. Nothing in this document is aspirational. For the target-state design, see [`target-state.md`](./target-state.md).
 
 ---
 
 ## 1. Repository structure
 
 ```
-unclick-agent-native-endpoints/
+unclick/
 ├── api/                    # Vercel serverless functions (22 files, ~10.1k LOC)
 ├── apps/                   # Workspace app roots (currently only apps/api, a Hono service)
 ├── packages/               # Published / publishable npm workspace packages (6 dirs)

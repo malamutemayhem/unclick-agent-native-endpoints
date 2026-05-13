@@ -351,6 +351,114 @@ describe("orchestrator context", () => {
     expect(context.seat_handshake.active_blocker).toBeNull();
   });
 
+  it("does not count fresh WakePass issue-comment stale rows as active blockers when no jobs remain", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-13T04:05:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-fresh-issue-comment-wake",
+          source: "wakepass",
+          target_agent_id: "master",
+          task_ref: "wake-issue_comment-comment-4436827196-32a36c4d4da6",
+          status: "stale",
+          payload: {
+            source_url: "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/751",
+            wake_reason: "Manual wake from issue comment",
+          },
+          created_at: "2026-05-13T03:30:00.000Z",
+          updated_at: "2026-05-13T03:30:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.continuity_events.filter((event) => event.kind === "blocker")).toHaveLength(1);
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.current_state_card.blockers).toHaveLength(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.seat_handshake.active_blocker).toBeNull();
+  });
+
+  it("keeps superseded WakePass stale dispatches in history without counting active blockers", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-13T03:48:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [
+        {
+          id: "todo-current-backlog",
+          title: "Current backlog item",
+          description: "Keep active work visible while stale proof is cleaned up.",
+          status: "open",
+          priority: "urgent",
+          created_by_agent_id: "codex",
+          created_at: "2026-05-13T02:50:00.000Z",
+          updated_at: "2026-05-13T03:40:00.000Z",
+        },
+      ],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-superseded-wakepass",
+          source: "wakepass",
+          target_agent_id: "master",
+          task_ref: null,
+          status: "stale",
+          payload: {
+            reason: "superseded_status_comment",
+            bridge_status: "suppress",
+            painpoint_detected: false,
+            painpoint_type: "none",
+            title: "Old heartbeat BLOCKER superseded by later PASS proof",
+            source_url:
+              "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/751#issuecomment-4436810525",
+          },
+          created_at: "2026-05-13T03:20:00.000Z",
+          updated_at: "2026-05-13T03:30:00.000Z",
+        },
+        {
+          dispatch_id: "dispatch-real-wakepass",
+          source: "wakepass",
+          target_agent_id: "master",
+          task_ref: null,
+          status: "stale",
+          payload: {
+            title: "WakePass current blocker still needs review",
+            source_url:
+              "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/800#issuecomment-4437000000",
+          },
+          created_at: "2026-05-13T03:25:00.000Z",
+          updated_at: "2026-05-13T03:31:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    const blockerEvents = context.continuity_events.filter((event) => event.kind === "blocker");
+    const activeBlockerIds = context.rolling_snapshot.active_blockers.map((event) => event.source_id);
+
+    expect(blockerEvents.map((event) => event.source_id)).toEqual(
+      expect.arrayContaining(["dispatch-superseded-wakepass", "dispatch-real-wakepass"]),
+    );
+    expect(context.current_state_card.active_todo_count).toBe(1);
+    expect(context.current_state_card.blocker_count).toBe(1);
+    expect(activeBlockerIds).toEqual(["dispatch-real-wakepass"]);
+    expect(JSON.stringify(context.current_state_card.blockers)).toContain("current blocker");
+    expect(JSON.stringify(context.current_state_card.blockers)).not.toContain("superseded_status_comment");
+  });
+
   it("keeps heartbeat prompt bodies out of continuity summaries", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T23:45:00.000Z",

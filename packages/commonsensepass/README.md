@@ -1,0 +1,54 @@
+# @unclick/commonsensepass
+
+Rule-and-evidence sanity gate for AI/worker claims. Verdict-only: does not build, merge, close, or mutate source state. Workers call `commonsensepassCheck(input)` before claiming `healthy`, `quiet`, `no_work`, `pass`, `done`, `merge_ready`, or `duplicate_wake`, and respect the returned verdict.
+
+## Verdicts
+
+- `PASS` - claim is consistent with the evidence; safe to proceed.
+- `BLOCKER` - claim is contradicted by evidence; do not proceed. Includes a `next_action`.
+- `HOLD` - claim is missing required evidence; supply it and retry.
+- `SUPPRESS` - claim is a duplicate / no-op; drop it silently.
+- `ROUTE` - claim is valid but should be handled elsewhere (reserved; not emitted by R1-R5).
+
+## Rules (baseline)
+
+| Rule | Triggers on claim | Checks |
+| ---- | ----------------- | ------ |
+| R1   | `healthy` / `quiet` / `no_work` | Active-state mismatch: actionable queue depth > 0, or `active_jobs=0` while in-progress todos have a fresh owner (within 24h, matches the pinned formula in `orchestrator-context.ts`). |
+| R2   | `pass`            | Head SHA freshness: PASS authored on `commented_on_sha` that does not match `current_head_sha` is stale. |
+| R3   | `duplicate_wake`  | Wake suppression: same `id` and `state_fingerprint` emitted within the duplicate-wake window. |
+| R4   | `done`            | Done-without-proof: requires `pipeline === 100` AND a `closing_ref` on the subject todo. |
+| R5   | `merge_ready`     | Merge-ready-without-proof: PR must be mergeable, checks green, and have a Reviewer PASS authored on the current head SHA. |
+
+## Usage
+
+```ts
+import { commonsensepassCheck } from "@unclick/commonsensepass";
+
+const result = commonsensepassCheck({
+  claim: "healthy",
+  context: {
+    now_ms: Date.now(),
+    todos: [...],
+    active_jobs: 0,
+  },
+});
+
+if (result.verdict !== "PASS") {
+  // do not emit the heartbeat-healthy claim; act on result.next_action
+}
+```
+
+## Boundaries
+
+This package only inspects claims and returns a verdict. It does not:
+
+- Mutate todos, PRs, comments, or any external state.
+- Close todos or merge PRs.
+- Emit wakes or schedule work.
+
+Workers and orchestrators are responsible for acting on the verdict.
+
+## Related
+
+- Active-state v9 formula pinned in `api/lib/orchestrator-context.ts` (`computeActiveJobsCount`) and `packages/mcp-server/src/heartbeat-protocol.ts` step 5 (PR #735).

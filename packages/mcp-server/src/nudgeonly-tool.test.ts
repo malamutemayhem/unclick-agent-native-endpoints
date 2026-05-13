@@ -343,6 +343,59 @@ describe("NudgeOnlyAPI policy", () => {
     });
   });
 
+  it("suppresses ACK-only WakePass comments instead of creating duplicate stale wakes", async () => {
+    await expect(nudgeonlyReceiptBridge({
+      painpoint_detected: true,
+      painpoint_type: "stale_ack",
+      event_text: "ACK wake-issue_comment-comment-4436477251-51e47b7d9cdd. The wake is acknowledged, but this is still waiting for terminal executor proof.",
+      source_id: "wake-issue_comment-comment-4436519129-d570faed9137",
+      source_url: "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/751",
+      ack_status: "missing",
+      created_at: "2026-05-13T02:04:37.000Z",
+      now: "2026-05-13T02:15:48.000Z",
+      ttl_minutes: 5,
+    })).resolves.toMatchObject({
+      bridge_status: "suppress",
+      painpoint_detected: false,
+      painpoint_type: "none",
+      suppressed_painpoint_type: "stale_ack",
+      suppression: {
+        reason: "ack_only_comment",
+        original_wake_id: "wake-issue_comment-comment-4436477251-51e47b7d9cdd",
+        source_id: "wake-issue_comment-comment-4436519129-d570faed9137",
+      },
+      quality_gate: "duplicate ACK wake suppression",
+    });
+  });
+
+  it("suppresses superseded heartbeat status comments instead of keeping old blockers active", async () => {
+    await expect(nudgeonlyReceiptBridge({
+      painpoint_detected: true,
+      painpoint_type: "stale_ack",
+      event_text: "PASS progress from heartbeat: created focused production hotfix PR #761 to promote NudgeOnly/WakePass suppression to main. Next safe step: wait for CI.",
+      context: "Superseded by PR #761 closed and PR #762 merged to main with live Publish MCP server proof. Current live nudgeonly_receipt_bridge suppresses the ACK-only wake.",
+      source_id: "wake-issue_comment-comment-4436827196-32a36c4d4da6",
+      source_url: "https://github.com/malamutemayhem/unclick-agent-native-endpoints/issues/751#issuecomment-4436827196",
+      target: "issue #751 comment 4436827196",
+      ack_status: "stale",
+      proof_status: "present",
+      created_at: "2026-05-13T03:13:27.000Z",
+      now: "2026-05-13T03:31:00.000Z",
+      ttl_minutes: 60,
+    })).resolves.toMatchObject({
+      bridge_status: "suppress",
+      painpoint_detected: false,
+      painpoint_type: "none",
+      suppressed_painpoint_type: "stale_ack",
+      suppression: {
+        reason: "superseded_status_comment",
+        source_id: "wake-issue_comment-comment-4436827196-32a36c4d4da6",
+        target: "issue #751 comment 4436827196",
+      },
+      quality_gate: "superseded status suppression",
+    });
+  });
+
   it("routes unclear ownership only to Job Manager for resolution", async () => {
     await expect(nudgeonlyReceiptBridge({
       painpoint_detected: true,

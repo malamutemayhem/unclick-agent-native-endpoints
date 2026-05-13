@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const eventName = process.env.GITHUB_EVENT_NAME || "manual";
 const eventPath = process.env.GITHUB_EVENT_PATH || "";
-const repository = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick-agent-native-endpoints";
+const repository = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick";
 const serverUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
 const runId = process.env.GITHUB_RUN_ID || "";
 const apiUrl = process.env.UNCLICK_API_URL || "https://unclick.world/api/memory-admin";

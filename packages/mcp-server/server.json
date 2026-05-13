@@ -3,9 +3,9 @@
   "name": "io.github.malamutemayhem/unclick-mcp-server",
   "title": "UnClick",
   "description": "AI agent tool marketplace. 178+ tools for social, e-commerce, accounting, and messaging.",
-  "version": "0.3.69",
+  "version": "0.3.76",
   "repository": {
-    "url": "https://github.com/malamutemayhem/unclick-agent-native-endpoints.git",
+    "url": "https://github.com/malamutemayhem/unclick.git",
     "source": "github"
   },
   "icons": [
@@ -21,7 +21,7 @@
     {
       "registryType": "npm",
       "identifier": "@unclick/mcp-server",
-      "version": "0.3.69",
+      "version": "0.3.76",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

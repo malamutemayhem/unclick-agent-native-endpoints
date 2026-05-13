@@ -1,3 +1,8 @@
+import {
+  inspectOrchestratorActiveState,
+} from "./commonsensepass-bridge.js";
+import type { CommonSensePassResult } from "../../packages/commonsensepass/src/index.js";
+
 export interface OrchestratorProfileRow {
   agent_id: string;
   emoji?: string | null;
@@ -258,6 +263,14 @@ export interface OrchestratorContext {
     };
     next_actions: string[];
     blockers: string[];
+    // health_verdict (added 2026-05-12 by PR #746): CommonSensePass R1
+    // verdict computed from the same todos+profiles input used to derive
+    // active_jobs. Any seat reading the state card can use this as the
+    // authoritative answer to "is the orchestrator's implicit healthy
+    // claim supported by the evidence?" without having to recompute the
+    // rule themselves. Verdict-only - this field does not gate any
+    // downstream behavior in the builder; consumers act on it.
+    health_verdict: CommonSensePassResult;
   };
   profile_cards: OrchestratorProfileCard[];
   human_operator_time: OrchestratorOperatorTimeContext | null;
@@ -355,6 +368,20 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
   // input. Computed over the full input.todos array, NOT the sliced
   // activeTodos, so the count is deterministic regardless of UI cap.
   const activeJobsCount = computeActiveJobsCount(input.todos, input.profiles, nowMs);
+
+  // CommonSensePass R1 verdict (added by PR #746). The orchestrator
+  // context publishes an implicit "healthy" / "quiet" claim whenever
+  // active_jobs and queue depth both look quiet. Run the verdict-only
+  // gate against the same data so consumers (heartbeat seat, watcher,
+  // reviewer) have an authoritative PASS / BLOCKER / HOLD signal to
+  // act on without recomputing R1 themselves. Verdict-only - this does
+  // not change any other field on the state card.
+  const healthVerdict = inspectOrchestratorActiveState({
+    todos: input.todos,
+    profiles: input.profiles,
+    active_jobs: activeJobsCount,
+    now_ms: nowMs,
+  });
 
   const messageEvents = input.messages.map(messageToEvent);
   const todoEvents = activeTodos.map(todoToEvent);
@@ -456,6 +483,7 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
       },
       next_actions: nextActions,
       blockers,
+      health_verdict: healthVerdict,
     },
     profile_cards: profiles,
     human_operator_time: humanOperatorTime,
@@ -647,8 +675,49 @@ function isActiveBlockerEvent(
   nowMs: number,
 ): boolean {
   if (event.kind !== "blocker") return false;
+  if (isWakeIssueCommentStale(event, activeTodos)) return false;
+  if (isSuppressedWakePassStatusDispatch(event)) return false;
   if (!isHistoricalWakeOrFishbowlStale(event, activeTodos, nowMs)) return true;
   return false;
+}
+
+function isWakeIssueCommentStale(
+  event: OrchestratorContinuityEvent,
+  activeTodos: OrchestratorTodoRow[],
+): boolean {
+  if (event.source_kind !== "dispatch") return false;
+  if (activeTodos.length > 0) return false;
+
+  const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  const summary = event.summary.toLowerCase();
+  const isWakePass = tags.includes("wakepass") || /\bwakepass\b/.test(summary);
+  const isStale = tags.includes("stale") || /\bstale\b/.test(summary);
+  if (!isWakePass || !isStale) return false;
+
+  return /\bwake-issue_comment-comment-\d+/.test(summary) || /\bissue_comment\b/.test(summary);
+}
+
+function isSuppressedWakePassStatusDispatch(event: OrchestratorContinuityEvent): boolean {
+  if (event.source_kind !== "dispatch") return false;
+
+  const tags = (event.tags ?? []).map((tag) => tag.toLowerCase());
+  const summary = event.summary.toLowerCase();
+  const text = `${summary} ${tags.join(" ")}`;
+  const isWakePass =
+    tags.some((tag) => tag.includes("wakepass")) ||
+    /\b(wakepass|wake router|wake-issue_comment|manual wake)\b/.test(summary);
+  if (!isWakePass) return false;
+
+  const hasSuppressReceipt =
+    tags.includes("superseded_status_comment") ||
+    tags.includes("bridge_status:suppress") ||
+    text.includes("superseded_status_comment") ||
+    (text.includes("bridge_status") && text.includes("suppress"));
+  const isDuplicateAck =
+    tags.includes("duplicate_ack") ||
+    (text.includes("duplicate") && (text.includes("ack") || text.includes("wake")));
+
+  return hasSuppressReceipt || isDuplicateAck;
 }
 
 function isHistoricalWakeOrFishbowlStale(
@@ -832,6 +901,7 @@ function commentToEvent(comment: OrchestratorCommentRow): OrchestratorContinuity
 }
 
 function dispatchToEvent(dispatch: OrchestratorDispatchRow): OrchestratorContinuityEvent {
+  const payloadTags = dispatchPayloadEvidenceTags(dispatch.payload);
   const detail = [
     dispatch.source,
     dispatch.status,
@@ -848,8 +918,19 @@ function dispatchToEvent(dispatch: OrchestratorDispatchRow): OrchestratorContinu
     kind: dispatch.status === "leased" ? "handoff" : dispatch.status === "failed" || dispatch.status === "stale" ? "blocker" : "status",
     actor_agent_id: dispatch.lease_owner ?? dispatch.target_agent_id,
     summary: compactText(detail, 240),
-    tags: ["dispatch", dispatch.source, dispatch.status],
+    tags: ["dispatch", dispatch.source, dispatch.status, ...payloadTags],
   };
+}
+
+function dispatchPayloadEvidenceTags(payload: OrchestratorDispatchRow["payload"]): string[] {
+  const text = compactText(payload, 800).toLowerCase();
+  const tags: string[] = [];
+
+  if (text.includes("superseded_status_comment")) tags.push("superseded_status_comment");
+  if (text.includes("bridge_status") && text.includes("suppress")) tags.push("bridge_status:suppress");
+  if (text.includes("duplicate") && (text.includes("ack") || text.includes("wake"))) tags.push("duplicate_ack");
+
+  return Array.from(new Set(tags));
 }
 
 function signalToEvent(signal: OrchestratorSignalRow): OrchestratorContinuityEvent {

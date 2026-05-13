@@ -446,7 +446,7 @@ function sanitizeMetadataCopy(
 function ownerLabelFor(entry: SystemCredentialInventoryEntry): string {
   switch (entry.source) {
     case "github_actions_secret":
-      return "GitHub Actions - malamutemayhem/unclick-agent-native-endpoints";
+      return "GitHub Actions - malamutemayhem/unclick";
     case "vercel_env":
       return "Vercel project environment";
   }

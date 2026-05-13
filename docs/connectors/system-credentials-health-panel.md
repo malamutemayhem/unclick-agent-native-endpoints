@@ -115,7 +115,7 @@ type CredentialOwner = {
 Rules:
 
 - Use `confidence: "known"` only when returned by a provider API, admin metadata, or explicit operator configuration.
-- Use `confidence: "inferred"` only for safe metadata such as `GitHub Actions secret in malamutemayhem/unclick-agent-native-endpoints`.
+- Use `confidence: "inferred"` only for safe metadata such as `GitHub Actions secret in malamutemayhem/unclick`.
 - Use `confidence: "unknown"` when only the env var name is known.
 - Never derive owner from a secret value.
 

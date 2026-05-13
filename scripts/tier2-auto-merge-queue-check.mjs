@@ -202,7 +202,7 @@ export async function runCommandJson(command, args, { cwd = process.cwd(), env =
 }
 
 export async function fetchOpenPullRequests({
-  repo = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick-agent-native-endpoints",
+  repo = process.env.GITHUB_REPOSITORY || "malamutemayhem/unclick",
   limit = parseBoundedInt(process.env.TIER2_AUTOMERGE_PR_LIMIT, 30, 1, 100),
   cwd = process.cwd(),
   runJson = runCommandJson,

@@ -2,7 +2,7 @@
 
 **For execution by Claude Code**
 **Author: Chris Byrne (with Cowork strategy session, April 15, 2026)**
-**Repo: malamutemayhem/unclick-agent-native-endpoints**
+**Repo: malamutemayhem/unclick**
 
 **v2 changelog (April 15, 2026):** Corrections folded in from a prior Claude Code exploration session that caught codebase drift in v1. See "CODEBASE GROUND TRUTH" below for the specifics.
 
