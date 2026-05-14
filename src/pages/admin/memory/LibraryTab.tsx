@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { ChevronDown, ChevronRight, BookOpen, History } from "lucide-react";
+import { groupMemoryTaxonomyShelves } from "@/lib/memoryTaxonomy";
 import EmptyState from "./EmptyState";
 
 interface LibraryDoc {
@@ -42,6 +43,8 @@ export default function LibraryTab({ apiKey }: { apiKey: string }) {
   const [historySlug, setHistorySlug] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [collapsedShelfIds, setCollapsedShelfIds] = useState<Set<string>>(() => new Set());
+  const shelves = useMemo(() => groupMemoryTaxonomyShelves(docs), [docs]);
 
   const load = useCallback(async () => {
     try {
@@ -102,6 +105,15 @@ export default function LibraryTab({ apiKey }: { apiKey: string }) {
     }
   };
 
+  const toggleShelf = (shelfId: string) => {
+    setCollapsedShelfIds((current) => {
+      const next = new Set(current);
+      if (next.has(shelfId)) next.delete(shelfId);
+      else next.add(shelfId);
+      return next;
+    });
+  };
+
   if (loading) {
     return <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 animate-pulse rounded-lg bg-white/[0.03] border border-white/[0.06]" />)}</div>;
   }
@@ -122,88 +134,107 @@ export default function LibraryTab({ apiKey }: { apiKey: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      {docs.map((doc) => {
-        const isExpanded = expandedId === doc.id;
-        const showingHistory = historySlug === doc.slug;
-
+    <div className="space-y-5">
+      {shelves.map((shelf) => {
+        const isCollapsed = collapsedShelfIds.has(shelf.id);
         return (
-          <div key={doc.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] overflow-hidden">
+          <section key={shelf.id} className="space-y-2">
             <button
-              onClick={() => viewDoc(doc)}
-              className="flex w-full items-start gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
+              onClick={() => toggleShelf(shelf.id)}
+              className="flex w-full items-center gap-2 border-b border-white/[0.06] pb-2 text-left text-xs text-white/50 hover:text-white transition-colors"
             >
-              {isExpanded
-                ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+              {isCollapsed
+                ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/30" />
               }
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-white">{doc.title}</span>
-                  {doc.decay_tier && (
-                    <span className="flex items-center gap-1 text-[10px] text-white/30">
-                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${DECAY_COLORS[doc.decay_tier] ?? "bg-gray-500"}`} />
-                      {doc.decay_tier}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-white/30">
-                  <code className="font-mono text-white/40">{doc.slug}</code>
-                  <span>v{doc.version}</span>
-                  <span>updated {formatDate(doc.updated_at)}</span>
-                </div>
-                {(doc.tags ?? []).length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {doc.tags!.map((t) => (
-                      <span key={t} className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/40">{t}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <span className="font-semibold text-white/70">{shelf.label}</span>
+              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/35">{shelf.count}</span>
             </button>
 
-            {isExpanded && (
-              <div className="border-t border-white/[0.06] p-4 space-y-3">
-                {docLoading ? (
-                  <p className="text-xs text-white/30">Loading snapshot...</p>
-                ) : docContent ? (
-                  <pre className="max-h-96 overflow-auto rounded-lg bg-white/[0.02] p-4 text-xs text-white/60 whitespace-pre-wrap font-mono">
-                    {docContent}
-                  </pre>
-                ) : (
-                  <p className="text-xs text-white/30">No content available.</p>
-                )}
+            {!isCollapsed && shelf.docs.map((doc) => {
+              const isExpanded = expandedId === doc.id;
+              const showingHistory = historySlug === doc.slug;
 
-                <button
-                  onClick={() => viewHistory(doc.slug)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] px-3 py-1.5 text-xs text-white/50 hover:bg-white/[0.04] hover:text-white transition-colors"
-                >
-                  <History className="h-3 w-3" />
-                  {showingHistory ? "Hide History" : "Snapshot History"}
-                </button>
-
-                {showingHistory && (
-                  <div className="space-y-2">
-                    {historyLoading ? (
-                      <p className="text-xs text-white/30">Loading history...</p>
-                    ) : history.length === 0 ? (
-                      <p className="text-xs text-white/30">No version history found.</p>
-                    ) : (
-                      history.map((h) => (
-                        <div key={h.id} className="rounded border border-white/[0.04] bg-white/[0.01] p-3">
-                          <div className="flex items-center gap-2 text-[10px] text-white/30">
-                            <span className="font-semibold text-white/50">v{h.version}</span>
-                            <span>{formatDate(h.created_at)}</span>
-                          </div>
-                          <p className="mt-1 text-xs text-white/40 line-clamp-3">{h.content}</p>
+              return (
+                <div key={doc.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] overflow-hidden">
+                  <button
+                    onClick={() => viewDoc(doc)}
+                    className="flex w-full items-start gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
+                  >
+                    {isExpanded
+                      ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+                      : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+                    }
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-white">{doc.title}</span>
+                        {doc.decay_tier && (
+                          <span className="flex items-center gap-1 text-[10px] text-white/30">
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${DECAY_COLORS[doc.decay_tier] ?? "bg-gray-500"}`} />
+                            {doc.decay_tier}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-white/30">
+                        <code className="font-mono text-white/40">{doc.slug}</code>
+                        <span>v{doc.version}</span>
+                        <span>updated {formatDate(doc.updated_at)}</span>
+                      </div>
+                      {(doc.tags ?? []).length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {doc.tags!.map((t) => (
+                            <span key={t} className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/40">{t}</span>
+                          ))}
                         </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                      )}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-white/[0.06] p-4 space-y-3">
+                      {docLoading ? (
+                        <p className="text-xs text-white/30">Loading snapshot...</p>
+                      ) : docContent ? (
+                        <pre className="max-h-96 overflow-auto rounded-lg bg-white/[0.02] p-4 text-xs text-white/60 whitespace-pre-wrap font-mono">
+                          {docContent}
+                        </pre>
+                      ) : (
+                        <p className="text-xs text-white/30">No content available.</p>
+                      )}
+
+                      <button
+                        onClick={() => viewHistory(doc.slug)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] px-3 py-1.5 text-xs text-white/50 hover:bg-white/[0.04] hover:text-white transition-colors"
+                      >
+                        <History className="h-3 w-3" />
+                        {showingHistory ? "Hide History" : "Snapshot History"}
+                      </button>
+
+                      {showingHistory && (
+                        <div className="space-y-2">
+                          {historyLoading ? (
+                            <p className="text-xs text-white/30">Loading history...</p>
+                          ) : history.length === 0 ? (
+                            <p className="text-xs text-white/30">No version history found.</p>
+                          ) : (
+                            history.map((h) => (
+                              <div key={h.id} className="rounded border border-white/[0.04] bg-white/[0.01] p-3">
+                                <div className="flex items-center gap-2 text-[10px] text-white/30">
+                                  <span className="font-semibold text-white/50">v{h.version}</span>
+                                  <span>{formatDate(h.created_at)}</span>
+                                </div>
+                                <p className="mt-1 text-xs text-white/40 line-clamp-3">{h.content}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
         );
       })}
     </div>
