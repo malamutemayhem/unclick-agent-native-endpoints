@@ -75,6 +75,7 @@ import AdminModeration from "./pages/admin/AdminModeration.tsx";
 import AdminAuditLog from "./pages/admin/AdminAuditLog.tsx";
 import AdminBrainmap from "./pages/admin/AdminBrainmap.tsx";
 import AdminJobs from "./pages/admin/AdminJobs.tsx";
+import AdminJobsmith from "./pages/admin/AdminJobsmith.tsx";
 import {
   AdminAutopilot,
   AdminBilling,
@@ -167,6 +168,7 @@ const App = () => (
             <Route path="agents/heartbeat" element={<AdminSeatHeartbeatPage />} />
             <Route path="workers" element={<AdminWorkers />} />
             <Route path="jobs" element={<AdminJobs />} />
+            <Route path="jobsmith" element={<AdminJobsmith />} />
             <Route path="todos" element={<Navigate to="/admin/jobs" replace />} />
             <Route path="checks" element={<AdminChecks />} />
             <Route path="ledger" element={<AdminLedger />} />

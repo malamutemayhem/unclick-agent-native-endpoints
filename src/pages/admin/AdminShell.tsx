@@ -349,6 +349,7 @@ function SidebarNav({
       <MemoryNavItem onClick={onLinkClick} />
       <OrchestratorNavItem onClick={onLinkClick} />
       <SurfaceLink path="/admin/tools"    label="Apps"                     icon={AppWindow} onClick={onLinkClick} />
+      <SurfaceLink path="/admin/jobsmith" label="Jobsmith"                 icon={PenSquare} onClick={onLinkClick} />
       <SurfaceLink path="/admin/keychain" label="Passport"                 icon={KeyRound} onClick={onLinkClick} />
       <SeatsNavItem onClick={onLinkClick} />
       <AutopilotNavGroup onLinkClick={onLinkClick} />
