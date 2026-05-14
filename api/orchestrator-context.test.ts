@@ -4,6 +4,7 @@ import {
   compactText,
   computeActiveJobsCount,
   isHeartbeatAutomationText,
+  mergeOrchestratorTodoRows,
   redactSensitive,
 } from "./lib/orchestrator-context";
 
@@ -1176,5 +1177,63 @@ describe("computeActiveJobsCount (v9 definition)", () => {
     });
     expect(directCount).toBe(1);
     expect(context.current_state_card.active_jobs).toBe(directCount);
+  });
+
+  it("merges in_progress todos back into a recency or search limited Orchestrator slice", () => {
+    const recentSlice = [
+      {
+        id: "todo-open-recent",
+        title: "Recent open todo",
+        status: "open",
+        priority: "urgent",
+        created_by_agent_id: "watcher",
+        assigned_to_agent_id: null,
+        created_at: "2026-05-14T00:00:00.000Z",
+        updated_at: "2026-05-14T00:00:00.000Z",
+      },
+      {
+        id: "todo-active",
+        title: "Active job from recent slice",
+        status: "in_progress",
+        priority: "urgent",
+        created_by_agent_id: "watcher",
+        assigned_to_agent_id: "builder-1",
+        created_at: "2026-05-11T00:00:00.000Z",
+        updated_at: "2026-05-14T00:00:00.000Z",
+      },
+    ];
+    const activeStateSlice = [
+      {
+        id: "todo-active",
+        title: "Active job from canonical in_progress slice",
+        status: "in_progress",
+        priority: "urgent",
+        created_by_agent_id: "watcher",
+        assigned_to_agent_id: "builder-1",
+        created_at: "2026-05-11T00:00:00.000Z",
+        updated_at: "2026-05-14T00:01:00.000Z",
+      },
+      {
+        id: "todo-active-old",
+        title: "Old active job outside recent slice",
+        status: "in_progress",
+        priority: "urgent",
+        created_by_agent_id: "watcher",
+        assigned_to_agent_id: "builder-2",
+        created_at: "2026-05-08T00:00:00.000Z",
+        updated_at: "2026-05-08T00:00:00.000Z",
+      },
+    ];
+
+    const merged = mergeOrchestratorTodoRows(recentSlice, activeStateSlice);
+
+    expect(merged.map((todo) => todo.id)).toEqual([
+      "todo-open-recent",
+      "todo-active",
+      "todo-active-old",
+    ]);
+    expect(merged.find((todo) => todo.id === "todo-active")?.title).toBe(
+      "Active job from canonical in_progress slice",
+    );
   });
 });

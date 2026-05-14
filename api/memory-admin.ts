@@ -106,6 +106,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
 import {
   buildOrchestratorContext,
+  mergeOrchestratorTodoRows,
   redactSensitive,
   type OrchestratorBusinessContextRow,
   type OrchestratorCommentRow,
@@ -7937,6 +7938,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : "";
         const limit = Math.min(Math.max(Number(body.limit ?? req.query.limit ?? 80) || 80, 20), 500);
         const smallerLimit = searchQuery ? limit : Math.min(limit, 300);
+        const todoSelect =
+          "id, title, description, status, priority, created_by_agent_id, assigned_to_agent_id, source_idea_id, created_at, updated_at, completed_at";
 
         let messagesQuery = supabase
           .from("mc_fishbowl_messages")
@@ -7948,7 +7951,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let todosQuery = supabase
           .from("mc_fishbowl_todos")
-          .select("id, title, description, status, priority, created_by_agent_id, assigned_to_agent_id, source_idea_id, created_at, updated_at, completed_at")
+          .select(todoSelect)
           .eq("api_key_hash", apiKeyHash)
           .neq("status", "dropped")
           .order("updated_at", { ascending: false })
@@ -7956,6 +7959,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (searchPattern) {
           todosQuery = todosQuery.or(`title.ilike.${searchPattern},description.ilike.${searchPattern}`);
         }
+        const inProgressTodosQuery = supabase
+          .from("mc_fishbowl_todos")
+          .select(todoSelect)
+          .eq("api_key_hash", apiKeyHash)
+          .eq("status", "in_progress")
+          .order("updated_at", { ascending: false })
+          .limit(100);
 
         let commentsQuery = supabase
           .from("mc_fishbowl_comments")
@@ -8001,6 +8011,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           profilesResult,
           messagesResult,
           todosResult,
+          inProgressTodosResult,
           commentsResult,
           dispatchesResult,
           signalsResult,
@@ -8018,6 +8029,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .limit(smallerLimit),
           messagesQuery,
           todosQuery,
+          inProgressTodosQuery,
           commentsQuery,
           supabase
             .from("mc_agent_dispatches")
@@ -8047,6 +8059,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           profilesResult.error,
           messagesResult.error,
           todosResult.error,
+          inProgressTodosResult.error,
           commentsResult.error,
           dispatchesResult.error,
           signalsResult.error,
@@ -8083,6 +8096,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ]
           .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
           .slice(0, smallerLimit);
+        const todos = mergeOrchestratorTodoRows(
+          (todosResult.data ?? []) as OrchestratorTodoRow[],
+          (inProgressTodosResult.data ?? []) as OrchestratorTodoRow[],
+        );
 
         return res.status(200).json({
           context: buildOrchestratorContext({
@@ -8090,7 +8107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             continuityLimit: limit,
             profiles: (profilesResult.data ?? []) as OrchestratorProfileRow[],
             messages: (messagesResult.data ?? []) as OrchestratorMessageRow[],
-            todos: (todosResult.data ?? []) as OrchestratorTodoRow[],
+            todos,
             comments: (commentsResult.data ?? []) as OrchestratorCommentRow[],
             dispatches: (dispatchesResult.data ?? []) as OrchestratorDispatchRow[],
             signals: (signalsResult.data ?? []) as OrchestratorSignalRow[],

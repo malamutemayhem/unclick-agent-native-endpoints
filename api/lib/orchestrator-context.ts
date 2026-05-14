@@ -41,6 +41,21 @@ export interface OrchestratorTodoRow {
   completed_at?: string | null;
 }
 
+export function mergeOrchestratorTodoRows(
+  ...sources: Array<OrchestratorTodoRow[] | null | undefined>
+): OrchestratorTodoRow[] {
+  const byId = new Map<string, OrchestratorTodoRow>();
+
+  for (const source of sources) {
+    for (const todo of source ?? []) {
+      if (!todo?.id) continue;
+      byId.set(todo.id, todo);
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
 export interface OrchestratorCommentRow {
   id: string;
   target_kind: "todo" | "idea" | string;
