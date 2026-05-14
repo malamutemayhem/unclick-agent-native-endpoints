@@ -17,6 +17,7 @@ import {
 type SourceMode = "url" | "paste" | "notes";
 type SourceFactKey = "roleProof" | "skillProof" | "achievementProof" | "portfolioProof";
 type ClaimKey = "openingHook" | "cvBullet" | "coverLetter" | "portalSummary";
+type RiskLevel = "blocked" | "risky" | "ready";
 type MaterialKey =
   | "masterCv"
   | "portfolioLinks"
@@ -181,6 +182,26 @@ interface TruthLedgerEntry {
   reason: string;
 }
 
+interface AtsRiskCheck {
+  id: string;
+  label: string;
+  level: RiskLevel;
+  reason: string;
+}
+
+interface PortalReadinessLabel {
+  portal: string;
+  level: RiskLevel;
+  reason: string;
+}
+
+interface AtsFormatPreview {
+  level: RiskLevel;
+  headline: string;
+  checks: AtsRiskCheck[];
+  portalLabels: PortalReadinessLabel[];
+}
+
 function buildTruthLedger(draft: JobsmithDraft): TruthLedgerEntry[] {
   return (Object.keys(CLAIM_LABELS) as ClaimKey[]).map((key) => {
     const claim = draft.applicationClaims[key].trim();
@@ -229,6 +250,144 @@ function buildTruthLedger(draft: JobsmithDraft): TruthLedgerEntry[] {
       reason: `${usableSourceKeys.length} source fact${usableSourceKeys.length === 1 ? "" : "s"} cited`,
     };
   });
+}
+
+function hasSourceCaptured(draft: JobsmithDraft): boolean {
+  return (
+    (draft.sourceMode === "url" && draft.sourceUrl.trim().length > 0) ||
+    (draft.sourceMode === "paste" && draft.pastedDescription.trim().length > 0) ||
+    (draft.sourceMode === "notes" && draft.manualNotes.trim().length > 0)
+  );
+}
+
+function hasLongParagraph(value: string): boolean {
+  return value
+    .split(/\n{2,}/)
+    .some((paragraph) => paragraph.trim().split(/\s+/).filter(Boolean).length > 80 || paragraph.trim().length > 700);
+}
+
+function hasBrittleFormatLanguage(value: string): boolean {
+  return /\b(table|tables|column|columns|two-column|textbox|text box|image-only|pdf-only|scanned|screenshot|infographic)\b/i.test(value);
+}
+
+function hasAcronymHeavyClaim(value: string): boolean {
+  const tokens = value.split(/\s+/).filter(Boolean);
+  if (tokens.length < 8) return false;
+  const acronymCount = tokens.filter((token) => /^[A-Z]{2,6}[,.;:]?$/.test(token)).length;
+  return acronymCount >= 4;
+}
+
+function overallRiskLevel(checks: AtsRiskCheck[]): RiskLevel {
+  if (checks.some((check) => check.level === "blocked")) return "blocked";
+  if (checks.some((check) => check.level === "risky")) return "risky";
+  return "ready";
+}
+
+function buildAtsFormatPreview(draft: JobsmithDraft, ledger: TruthLedgerEntry[]): AtsFormatPreview {
+  const claimText = Object.values(draft.applicationClaims).join("\n\n");
+  const sourceFactText = Object.values(draft.sourceFacts).join("\n\n");
+  const allText = [claimText, sourceFactText, draft.pastedDescription, draft.manualNotes].join("\n\n");
+  const roleFactsReady = REQUIRED_FIELDS.every((field) => {
+    const value = draft[field];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+  const sourceReady = hasSourceCaptured(draft);
+  const draftedClaims = ledger.filter((entry) => entry.status !== "empty");
+  const readyClaims = ledger.filter((entry) => entry.status === "ready");
+  const blockedClaims = ledger.filter((entry) => entry.status === "blocked");
+  const portalSummary = ledger.find((entry) => entry.key === "portalSummary");
+  const hasSourceMaterial = draft.materials.masterCv || draft.materials.roleHistory || draft.materials.skills;
+
+  const checks: AtsRiskCheck[] = [
+    {
+      id: "role-facts",
+      label: "Role and source basics",
+      level: roleFactsReady && sourceReady ? "ready" : "blocked",
+      reason: roleFactsReady && sourceReady ? "Company, role, source, vendor, and role context are captured" : "Needs role facts and a captured job source",
+    },
+    {
+      id: "source-material",
+      label: "Source material support",
+      level: hasSourceMaterial ? "ready" : "risky",
+      reason: hasSourceMaterial ? "At least one core source material is marked ready" : "Mark the master CV, role history, or skills list before relying on the plan",
+    },
+    {
+      id: "truth-ledger",
+      label: "Cited application claims",
+      level: blockedClaims.length > 0 ? "blocked" : readyClaims.length > 0 ? "ready" : "blocked",
+      reason:
+        blockedClaims.length > 0
+          ? `${blockedClaims.length} drafted claim${blockedClaims.length === 1 ? "" : "s"} still need source facts`
+          : readyClaims.length > 0
+            ? `${readyClaims.length} claim${readyClaims.length === 1 ? "" : "s"} are cited`
+            : "Draft at least one claim and cite it to a filled source fact",
+    },
+    {
+      id: "plain-text-fallback",
+      label: "Plain-text portal fallback",
+      level: portalSummary?.status === "ready" ? "ready" : "blocked",
+      reason: portalSummary?.status === "ready" ? "Portal summary is short, cited, and copyable" : "Create a cited portal summary before portal copy is ready",
+    },
+    {
+      id: "paragraph-length",
+      label: "Paragraph length",
+      level: hasLongParagraph(claimText) ? "risky" : "ready",
+      reason: hasLongParagraph(claimText) ? "One drafted claim is too long for reliable portal paste fields" : "Drafted claims stay in short copyable blocks",
+    },
+    {
+      id: "format-language",
+      label: "Brittle format wording",
+      level: hasBrittleFormatLanguage(allText) ? "risky" : "ready",
+      reason: hasBrittleFormatLanguage(allText) ? "Mentions tables, columns, image-only, or scanned/PDF-only material" : "No table, column, image-only, or scanned wording detected",
+    },
+    {
+      id: "acronyms",
+      label: "Acronym density",
+      level: hasAcronymHeavyClaim(claimText) ? "risky" : "ready",
+      reason: hasAcronymHeavyClaim(claimText) ? "A claim may be too acronym-heavy for a first-pass recruiter skim" : "Claims are not acronym-heavy",
+    },
+    {
+      id: "manual-plan",
+      label: "Manual plan inputs",
+      level: draftedClaims.length > 0 && roleFactsReady ? "ready" : "blocked",
+      reason: draftedClaims.length > 0 && roleFactsReady ? "Manual plan has role facts and drafted application copy" : "Needs role facts plus at least one drafted claim",
+    },
+  ];
+  const level = overallRiskLevel(checks);
+  const portalLabels: PortalReadinessLabel[] = [
+    {
+      portal: "Workday",
+      level,
+      reason: level === "ready" ? "Ready for plain field-by-field paste" : level === "risky" ? "Review flagged format risks before pasting" : "Blocked until basics and citations are ready",
+    },
+    {
+      portal: "Greenhouse",
+      level,
+      reason: level === "ready" ? "Ready for summary, cover note, and CV copy checks" : level === "risky" ? "Shorten or simplify flagged copy first" : "Blocked until portal summary and cited claims are ready",
+    },
+    {
+      portal: "Lever",
+      level,
+      reason: level === "ready" ? "Ready for recruiter skim and manual field copy" : level === "risky" ? "Review skim and formatting warnings first" : "Blocked until claim support is ready",
+    },
+    {
+      portal: "Email",
+      level,
+      reason: level === "ready" ? "Ready to adapt into a plain recruiter email" : level === "risky" ? "Use only the clean, cited sections" : "Blocked until cited source-backed copy exists",
+    },
+  ];
+
+  return {
+    level,
+    headline:
+      level === "ready"
+        ? "Ready to copy with care"
+        : level === "risky"
+          ? "Review format risks first"
+          : "Blocked until basics are ready",
+    checks,
+    portalLabels,
+  };
 }
 
 function buildManualPlan(draft: JobsmithDraft): string {
@@ -328,6 +487,18 @@ function Metric({
   );
 }
 
+function RiskBadge({ level }: { level: RiskLevel }) {
+  const label = level === "ready" ? "Ready" : level === "risky" ? "Risk" : "Blocked";
+  const className =
+    level === "ready"
+      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+      : level === "risky"
+        ? "border-[#E2B93B]/30 bg-[#E2B93B]/10 text-[#E2B93B]"
+        : "border-rose-300/30 bg-rose-300/10 text-rose-200";
+
+  return <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${className}`}>{label}</span>;
+}
+
 export default function AdminJobsmith() {
   const [draft, setDraft] = useState<JobsmithDraft>(() => loadDraft());
   const [copied, setCopied] = useState(false);
@@ -341,11 +512,7 @@ export default function AdminJobsmith() {
     return typeof value === "string" && value.trim().length > 0;
   }).length;
 
-  const sourceCaptured =
-    (draft.sourceMode === "url" && draft.sourceUrl.trim().length > 0) ||
-    (draft.sourceMode === "paste" && draft.pastedDescription.trim().length > 0) ||
-    (draft.sourceMode === "notes" && draft.manualNotes.trim().length > 0);
-
+  const sourceCaptured = hasSourceCaptured(draft);
   const materialsReady = Object.values(draft.materials).filter(Boolean).length;
   const ledger = useMemo(() => buildTruthLedger(draft), [draft]);
   const draftedClaims = ledger.filter((entry) => entry.status !== "empty").length;
@@ -353,6 +520,7 @@ export default function AdminJobsmith() {
   const blockedClaims = ledger.filter((entry) => entry.status === "blocked").length;
   const truthStatus = blockedClaims > 0 ? `${blockedClaims} blocked` : draftedClaims > 0 ? `${readyClaims}/${draftedClaims} ready` : "No claims yet";
   const plan = useMemo(() => buildManualPlan(draft), [draft]);
+  const atsPreview = useMemo(() => buildAtsFormatPreview(draft, ledger), [draft, ledger]);
 
   function updateField<K extends keyof JobsmithDraft>(field: K, value: JobsmithDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -401,6 +569,55 @@ export default function AdminJobsmith() {
         <Metric icon={FileText} label="Materials" value={`${materialsReady}/6 ready`} />
         <Metric icon={ShieldCheck} label="Truth ledger" value={truthStatus} />
       </div>
+
+      <section className="mb-6 rounded-lg border border-white/[0.06] bg-[#111] p-5" aria-label="ATS and format risk preview">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-[#E2B93B]" />
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">ATS and Format Risk Preview</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <RiskBadge level={atsPreview.level} />
+            <span className="text-sm font-semibold text-white">{atsPreview.headline}</span>
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-[#61C1C4]" />
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Readiness checks</p>
+            </div>
+            <div className="space-y-2">
+              {atsPreview.checks.map((check) => (
+                <div key={check.id} data-testid="jobsmith-ats-check" className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">{check.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/45">{check.reason}</p>
+                  </div>
+                  <RiskBadge level={check.level} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-fuchsia-300" />
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Portal guidance</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {atsPreview.portalLabels.map((label) => (
+                <div key={label.portal} data-testid="jobsmith-portal-readiness" className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">{label.portal}</p>
+                    <RiskBadge level={label.level} />
+                  </div>
+                  <p className="text-xs leading-5 text-white/45">{label.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
