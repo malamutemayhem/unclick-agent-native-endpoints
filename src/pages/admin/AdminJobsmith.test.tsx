@@ -72,4 +72,42 @@ describe("AdminJobsmith", () => {
     expect(within(portals[1]).getByText("Greenhouse")).toBeInTheDocument();
     expect(portals[1]).toHaveTextContent("Ready");
   });
+
+  it("captures silence after a sent dogfood application", () => {
+    render(React.createElement(AdminJobsmith));
+
+    fireEvent.change(screen.getByLabelText("Outcome status"), { target: { value: "silence" } });
+    fireEvent.change(screen.getByLabelText("Sent date"), { target: { value: "2026-05-15" } });
+    fireEvent.change(screen.getByLabelText("Follow-up date"), { target: { value: "2026-05-21" } });
+    fireEvent.change(screen.getByLabelText("Recruiter response"), { target: { value: "No response after initial application." } });
+
+    const summary = screen.getByTestId("jobsmith-outcome-summary");
+    expect(summary).toHaveTextContent("Silence");
+    expect(summary).toHaveTextContent("3 evidence items");
+    expect(summary).toHaveTextContent("Follow up on 2026-05-21");
+    expect(summary).toHaveTextContent("Sent application captured");
+    expect(summary).toHaveTextContent("Post-send outcome captured");
+  });
+
+  it("records interview notes and carries a custom outcome action into the manual plan", () => {
+    render(React.createElement(AdminJobsmith));
+
+    fireEvent.change(screen.getByLabelText("Outcome status"), { target: { value: "interview" } });
+    fireEvent.change(screen.getByLabelText("Outcome notes"), {
+      target: { value: "First interview booked with design lead." },
+    });
+
+    expect(screen.getByTestId("jobsmith-outcome-summary")).toHaveTextContent(
+      "Prepare interview proof from cited source facts and portfolio links.",
+    );
+
+    fireEvent.change(screen.getByLabelText("Next action override"), {
+      target: { value: "Bring portfolio proof to the call." },
+    });
+
+    const plan = screen.getByText((content, element) => element?.tagName.toLowerCase() === "pre" && content.includes("Dogfood outcome"));
+    expect(plan).toHaveTextContent("- Status: Interview");
+    expect(plan).toHaveTextContent("- Outcome notes: First interview booked with design lead.");
+    expect(plan).toHaveTextContent("- Next action: Bring portfolio proof to the call.");
+  });
 });

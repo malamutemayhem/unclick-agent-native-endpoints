@@ -18,6 +18,7 @@ type SourceMode = "url" | "paste" | "notes";
 type SourceFactKey = "roleProof" | "skillProof" | "achievementProof" | "portfolioProof";
 type ClaimKey = "openingHook" | "cvBullet" | "coverLetter" | "portalSummary";
 type RiskLevel = "blocked" | "risky" | "ready";
+type ApplicationOutcomeStatus = "draft" | "sent" | "silence" | "interview" | "rejected" | "offer" | "withdrawn";
 type MaterialKey =
   | "masterCv"
   | "portfolioLinks"
@@ -25,6 +26,15 @@ type MaterialKey =
   | "roleHistory"
   | "skills"
   | "notes";
+
+interface ApplicationOutcome {
+  status: ApplicationOutcomeStatus;
+  sentDate: string;
+  followUpDate: string;
+  recruiterResponse: string;
+  outcomeNotes: string;
+  nextActionOverride: string;
+}
 
 interface JobsmithDraft {
   sourceMode: SourceMode;
@@ -44,6 +54,7 @@ interface JobsmithDraft {
   sourceFacts: Record<SourceFactKey, string>;
   applicationClaims: Record<ClaimKey, string>;
   claimSources: Record<ClaimKey, SourceFactKey[]>;
+  outcome: ApplicationOutcome;
 }
 
 const STORAGE_KEY = "unclick_jobsmith_phase1_capture_draft_v1";
@@ -78,6 +89,15 @@ const EMPTY_CLAIM_SOURCES: Record<ClaimKey, SourceFactKey[]> = {
   portalSummary: [],
 };
 
+const EMPTY_OUTCOME: ApplicationOutcome = {
+  status: "draft",
+  sentDate: "",
+  followUpDate: "",
+  recruiterResponse: "",
+  outcomeNotes: "",
+  nextActionOverride: "",
+};
+
 const DEFAULT_DRAFT: JobsmithDraft = {
   sourceMode: "url",
   sourceUrl: "",
@@ -96,6 +116,7 @@ const DEFAULT_DRAFT: JobsmithDraft = {
   sourceFacts: EMPTY_SOURCE_FACTS,
   applicationClaims: EMPTY_APPLICATION_CLAIMS,
   claimSources: EMPTY_CLAIM_SOURCES,
+  outcome: EMPTY_OUTCOME,
 };
 
 const MATERIAL_LABELS: Record<MaterialKey, string> = {
@@ -125,6 +146,16 @@ const CLAIM_LABELS: Record<ClaimKey, string> = {
   cvBullet: "CV bullet",
   coverLetter: "Cover letter paragraph",
   portalSummary: "Portal summary",
+};
+
+const OUTCOME_LABELS: Record<ApplicationOutcomeStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  silence: "Silence",
+  interview: "Interview",
+  rejected: "Rejected",
+  offer: "Offer",
+  withdrawn: "Withdrawn",
 };
 
 const REQUIRED_FIELDS: Array<keyof JobsmithDraft> = [
@@ -162,6 +193,10 @@ function loadDraft(): JobsmithDraft {
         ...EMPTY_CLAIM_SOURCES,
         ...(parsed.claimSources ?? {}),
       },
+      outcome: {
+        ...EMPTY_OUTCOME,
+        ...(parsed.outcome ?? {}),
+      },
     };
   } catch {
     return DEFAULT_DRAFT;
@@ -171,6 +206,55 @@ function loadDraft(): JobsmithDraft {
 function textValue(value: string, fallback = "Not captured"): string {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : fallback;
+}
+
+interface OutcomeSummary {
+  label: string;
+  sent: boolean;
+  postSend: boolean;
+  evidenceCount: number;
+  nextAction: string;
+}
+
+function buildOutcomeSummary(draft: JobsmithDraft): OutcomeSummary {
+  const { outcome } = draft;
+  const override = outcome.nextActionOverride.trim();
+  const sent = outcome.status !== "draft" || outcome.sentDate.trim().length > 0;
+  const postSend = ["silence", "interview", "rejected", "offer", "withdrawn"].includes(outcome.status);
+  const evidenceCount = [
+    outcome.sentDate,
+    outcome.followUpDate,
+    outcome.recruiterResponse,
+    outcome.outcomeNotes,
+  ].filter((value) => value.trim().length > 0).length;
+
+  let nextAction = "Send only after the truth ledger and ATS preview are ready.";
+  if (outcome.status === "sent") {
+    nextAction = outcome.followUpDate.trim().length > 0 ? `Follow up on ${outcome.followUpDate}` : "Set a follow-up date and watch for response.";
+  }
+  if (outcome.status === "silence") {
+    nextAction = outcome.followUpDate.trim().length > 0 ? `Follow up on ${outcome.followUpDate}` : "Choose a follow-up date or mark final outcome.";
+  }
+  if (outcome.status === "interview") {
+    nextAction = "Prepare interview proof from cited source facts and portfolio links.";
+  }
+  if (outcome.status === "rejected") {
+    nextAction = "Capture rejection reason and update Jobsmith rules if a pattern emerges.";
+  }
+  if (outcome.status === "offer") {
+    nextAction = "Capture offer details and compare salary, location, flexibility, and fit.";
+  }
+  if (outcome.status === "withdrawn") {
+    nextAction = "Record why it was withdrawn so the rulebook learns.";
+  }
+
+  return {
+    label: OUTCOME_LABELS[outcome.status],
+    sent,
+    postSend,
+    evidenceCount,
+    nextAction: override.length > 0 ? override : nextAction,
+  };
 }
 
 interface TruthLedgerEntry {
@@ -403,6 +487,7 @@ function buildManualPlan(draft: JobsmithDraft): string {
   const ledger = buildTruthLedger(draft);
   const blockedClaims = ledger.filter((entry) => entry.status === "blocked");
   const ledgerLines = ledger.map((entry) => `- ${entry.label}: ${entry.status.toUpperCase()} - ${entry.reason}`);
+  const outcomeSummary = buildOutcomeSummary(draft);
 
   return [
     `Jobsmith capture: ${textValue(draft.role, "Role")} at ${textValue(draft.company, "Company")}`,
@@ -426,6 +511,14 @@ function buildManualPlan(draft: JobsmithDraft): string {
     "Truth ledger",
     ...ledgerLines,
     `- Unsupported claims: ${blockedClaims.length > 0 ? blockedClaims.map((entry) => entry.label).join(", ") : "None"}`,
+    "",
+    "Dogfood outcome",
+    `- Status: ${outcomeSummary.label}`,
+    `- Sent date: ${textValue(draft.outcome.sentDate)}`,
+    `- Follow-up date: ${textValue(draft.outcome.followUpDate)}`,
+    `- Recruiter response: ${textValue(draft.outcome.recruiterResponse)}`,
+    `- Outcome notes: ${textValue(draft.outcome.outcomeNotes)}`,
+    `- Next action: ${outcomeSummary.nextAction}`,
     "",
     "Manual tailoring plan",
     "- Pull only interview-defensible claims from source facts.",
@@ -521,6 +614,7 @@ export default function AdminJobsmith() {
   const truthStatus = blockedClaims > 0 ? `${blockedClaims} blocked` : draftedClaims > 0 ? `${readyClaims}/${draftedClaims} ready` : "No claims yet";
   const plan = useMemo(() => buildManualPlan(draft), [draft]);
   const atsPreview = useMemo(() => buildAtsFormatPreview(draft, ledger), [draft, ledger]);
+  const outcomeSummary = useMemo(() => buildOutcomeSummary(draft), [draft]);
 
   function updateField<K extends keyof JobsmithDraft>(field: K, value: JobsmithDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -535,6 +629,13 @@ export default function AdminJobsmith() {
     updateField("claimSources", {
       ...draft.claimSources,
       [claimKey]: nextSources,
+    });
+  }
+
+  function updateOutcome<K extends keyof ApplicationOutcome>(field: K, value: ApplicationOutcome[K]) {
+    updateField("outcome", {
+      ...draft.outcome,
+      [field]: value,
     });
   }
 
@@ -837,6 +938,87 @@ export default function AdminJobsmith() {
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <section className="rounded-lg border border-white/[0.06] bg-[#111] p-5" aria-label="Dogfood outcome">
+            <div className="mb-4 flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-emerald-300" />
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Dogfood Outcome</h2>
+            </div>
+            <div className="mb-4 grid gap-3">
+              <label htmlFor="jobsmith-outcome-status" className="block">
+                <span className="mb-1 block text-xs font-medium text-white/55">Outcome status</span>
+                <select
+                  id="jobsmith-outcome-status"
+                  value={draft.outcome.status}
+                  onChange={(event) => updateOutcome("status", event.target.value as ApplicationOutcomeStatus)}
+                  className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#61C1C4]/45"
+                >
+                  {(Object.keys(OUTCOME_LABELS) as ApplicationOutcomeStatus[]).map((status) => (
+                    <option key={status} value={status} className="bg-[#111] text-white">
+                      {OUTCOME_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <Field id="jobsmith-outcome-sent-date" label="Sent date" value={draft.outcome.sentDate} onChange={(value) => updateOutcome("sentDate", value)} type="date" />
+                <Field id="jobsmith-outcome-follow-up-date" label="Follow-up date" value={draft.outcome.followUpDate} onChange={(value) => updateOutcome("followUpDate", value)} type="date" />
+              </div>
+              <label htmlFor="jobsmith-recruiter-response" className="block">
+                <span className="mb-1 block text-xs font-medium text-white/55">Recruiter response</span>
+                <textarea
+                  id="jobsmith-recruiter-response"
+                  value={draft.outcome.recruiterResponse}
+                  onChange={(event) => updateOutcome("recruiterResponse", event.target.value)}
+                  rows={3}
+                  className="w-full resize-y rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/45"
+                  placeholder="Reply, silence context, interview request, rejection note, or offer signal."
+                />
+              </label>
+              <label htmlFor="jobsmith-outcome-notes" className="block">
+                <span className="mb-1 block text-xs font-medium text-white/55">Outcome notes</span>
+                <textarea
+                  id="jobsmith-outcome-notes"
+                  value={draft.outcome.outcomeNotes}
+                  onChange={(event) => updateOutcome("outcomeNotes", event.target.value)}
+                  rows={3}
+                  className="w-full resize-y rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/45"
+                  placeholder="What worked, what failed, and what Jobsmith should learn."
+                />
+              </label>
+              <label htmlFor="jobsmith-next-action-override" className="block">
+                <span className="mb-1 block text-xs font-medium text-white/55">Next action override</span>
+                <textarea
+                  id="jobsmith-next-action-override"
+                  value={draft.outcome.nextActionOverride}
+                  onChange={(event) => updateOutcome("nextActionOverride", event.target.value)}
+                  rows={2}
+                  className="w-full resize-y rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/45"
+                  placeholder="Optional custom next step."
+                />
+              </label>
+            </div>
+            <div className="space-y-2" data-testid="jobsmith-outcome-summary">
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+                <p className="text-xs font-medium text-white/45">Current status</p>
+                <p className="mt-1 text-sm font-semibold text-white">{outcomeSummary.label}</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+                <p className="text-xs font-medium text-white/45">Evidence count</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {outcomeSummary.evidenceCount} evidence item{outcomeSummary.evidenceCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+                <p className="text-xs font-medium text-white/45">Next action</p>
+                <p className="mt-1 text-sm font-semibold text-white">{outcomeSummary.nextAction}</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs leading-5 text-white/55">
+                <p>{outcomeSummary.sent ? "Sent application captured" : "Draft only"}</p>
+                <p>{outcomeSummary.postSend ? "Post-send outcome captured" : "Awaiting outcome"}</p>
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-lg border border-white/[0.06] bg-[#111] p-5">
             <div className="mb-4 flex items-center gap-2">
               <Clipboard className="h-4 w-4 text-[#61C1C4]" />
