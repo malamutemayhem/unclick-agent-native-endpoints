@@ -604,6 +604,45 @@ describe("orchestrator context", () => {
     expect(context.continuity_events.find((event) => event.source_id === "signal-message-posted")?.kind).toBe("status");
   });
 
+  it("does not promote prompt templates that mention PASS/BLOCKER/HOLD as live blockers", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-14T02:10:00.000Z",
+      profiles: [],
+      messages: [],
+      todos: [],
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [
+        {
+          id: "turn-master-prompt-summary",
+          session_id: "codex-2026-05-14-master-broadcast-prompt",
+          role: "assistant",
+          content:
+            "Created a master broadcast prompt for all seats. It tells seats to read Memory/Orchestrator first, claim before working, choose the highest-priority job, do one bounded useful step, verify it, post proof, and finish with PASS/BLOCKER/HOLD.",
+          created_at: "2026-05-14T02:03:29.000Z",
+        },
+        {
+          id: "turn-master-prompt-body",
+          session_id: "codex-2026-05-14-master-broadcast-prompt",
+          role: "assistant",
+          content:
+            "Use this prompt. Finish with exactly one: PASS: <what moved>; proof: <link/id>; next: <best next step>. BLOCKER: <what stopped you>; checked: <what you verified>; need: <smallest decision>.",
+          created_at: "2026-05-14T02:03:28.000Z",
+        },
+      ],
+    });
+
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.seat_handshake.active_blocker).toBeNull();
+    expect(context.continuity_events.find((event) => event.source_id === "turn-master-prompt-summary")?.kind).toBe("status");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-master-prompt-body")?.kind).toBe("status");
+  });
+
   it("does not promote zero blocker metric chatter as a live blocker", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-12T12:35:00.000Z",

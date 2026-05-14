@@ -1052,6 +1052,7 @@ function classify(tags: string[], text: string): OrchestratorContinuityEvent["ki
   if (lower.startsWith("blocker: heartbeat")) return "status";
   if (tagSet.has("info")) return "status";
   if ((tagSet.has("done") || tagSet.has("fyi")) && !lower.startsWith("blocker:")) return "status";
+  if (isPromptTemplateInstructionText(lower)) return "status";
   if (tagSet.has("proof") || lower.startsWith("pass:") || lower.includes("proof:") || lower.includes(" pr #")) return "proof";
   if (isZeroBlockerMetricStatus(lower)) return "status";
   if (tagSet.has("blocker") || lower.startsWith("blocker:") || /\bblocked\b/.test(lower) || /\bblocker\b/.test(lower)) return "blocker";
@@ -1068,6 +1069,27 @@ function classifyHeartbeatAutomationText(lower: string): OrchestratorContinuityE
   if (lower.startsWith("pass:")) return "proof";
   if (lower.startsWith("unclick heartbeat pass") || lower.startsWith("unclick healthy. pass")) return "proof";
   return "status";
+}
+
+function isPromptTemplateInstructionText(lower: string): boolean {
+  const hasOutputLabels =
+    lower.includes("pass/blocker") ||
+    lower.includes("pass, blocker") ||
+    lower.includes("pass / blocker") ||
+    lower.includes("pass/blocker/hold") ||
+    (lower.includes("pass:") && lower.includes("blocker:"));
+  if (!hasOutputLabels) return false;
+
+  return (
+    lower.includes("master broadcast prompt") ||
+    lower.includes("broadcast prompt") ||
+    lower.includes("prompt-template") ||
+    lower.includes("finish with exactly one") ||
+    lower.includes("finish with one") ||
+    lower.includes("finish with pass") ||
+    lower.includes("tells seats to") ||
+    lower.includes("use this prompt")
+  );
 }
 
 function isZeroBlockerMetricStatus(lower: string): boolean {
