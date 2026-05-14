@@ -23,6 +23,82 @@ function compactText(value, max = 700) {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
+function signalCoverage(signal = {}) {
+  const candidates = [
+    ["open_todo", signal.coveredByOpenTodo ?? signal.covered_by_open_todo],
+    ["recent_proof", signal.coveredByRecentProof ?? signal.covered_by_recent_proof],
+    ["active_claim", signal.coveredByActiveClaim ?? signal.covered_by_active_claim],
+    ["covered", signal.coveredBy ?? signal.covered_by],
+  ];
+  for (const [kind, value] of candidates) {
+    const ref = compactText(value, 180);
+    if (ref) return { kind, ref };
+  }
+  return null;
+}
+
+function coverageReasonKey(coverage) {
+  if (coverage?.kind === "open_todo") return "covered_by_open_todo";
+  if (coverage?.kind === "recent_proof") return "covered_by_recent_proof";
+  if (coverage?.kind === "active_claim") return "covered_by_active_claim";
+  return "duplicate_covered";
+}
+
+function xpassAdvisoryFor(kind) {
+  const advisory = ["CommonSensePass"];
+  if (kind === "protected_surface_safeguard") advisory.push("SecurityPass");
+  else if (kind === "proof_flow") advisory.push("ProofPass");
+  else if (kind === "launchpad_routing") advisory.push("FlowPass");
+  else if (kind === "merge_flow") advisory.push("MergePass");
+  else advisory.push("QualityPass");
+  return advisory;
+}
+
+function evidenceFor(top) {
+  const signal = top.signal || {};
+  const evidence = [`kind=${top.kind}`, `score=${top.score}`];
+  const title = compactText(signal.title || signal.name, 180);
+  const source = compactText(signal.source || signal.room || signal.channel, 120);
+  const detail = compactText(signal.detail || signal.summary || signal.reason || signal.blocker || signal.text, 260);
+  if (title) evidence.push(`title=${title}`);
+  if (source) evidence.push(`source=${source}`);
+  if (detail) evidence.push(`detail=${detail}`);
+  return evidence;
+}
+
+function proofRequiredFor(tests = []) {
+  const testText = tests.length ? tests.join("; ") : "the smallest focused check for the touched files";
+  return `Patch, non-overlap note, Boardroom proof, and tests: ${testText}`;
+}
+
+function nativeImproverReceipt({ top, job, tests, now, source }) {
+  return {
+    receipt_type: "native_improver_opportunity",
+    emitted_at: now,
+    source,
+    improvement_kind: top.kind,
+    score: top.score,
+    evidence: evidenceFor(top),
+    next_action: `Build ${job.chip}: patch ${job.owned_files.join(", ")}`,
+    proof_required: proofRequiredFor(tests),
+    xpass_advisory: xpassAdvisoryFor(top.kind),
+  };
+}
+
+function nativeImproverHoldReceipt({ top, now, source }) {
+  return {
+    receipt_type: "native_improver_hold",
+    emitted_at: now,
+    source,
+    improvement_kind: top.kind,
+    score: top.score,
+    evidence: evidenceFor(top),
+    next_action: "Do not create a duplicate build job; update the covered todo, proof, or active claim instead.",
+    proof_required: "Boardroom proof of the covered item, or the exact missing receipt if coverage is stale.",
+    xpass_advisory: xpassAdvisoryFor(top.kind),
+  };
+}
+
 function signalText(signal = {}) {
   return [
     signal.type,
@@ -208,6 +284,21 @@ export function evaluateContinuousImprovementRoom({
     };
   }
 
+  const duplicateCoverage = signalCoverage(top.signal);
+  if (duplicateCoverage) {
+    return {
+      ok: true,
+      action: "continuous_improvement_room",
+      result: "hold",
+      reason: coverageReasonKey(duplicateCoverage),
+      highest_score: top.score,
+      improvement_kind: top.kind,
+      signal: top.signal,
+      duplicate_coverage: duplicateCoverage,
+      receipt: nativeImproverHoldReceipt({ top, now, source }),
+    };
+  }
+
   const files = ownedFilesFor(top.kind);
   const tests = expectedTestsFor(files);
   const signalSummary = compactText(signalText(top.signal), 500);
@@ -226,6 +317,7 @@ export function evaluateContinuousImprovementRoom({
     },
     createdAt: now,
   });
+  const receipt = nativeImproverReceipt({ top, job, tests, now, source });
 
   return {
     ok: true,
@@ -238,11 +330,16 @@ export function evaluateContinuousImprovementRoom({
     signal: top.signal,
     recommended_insertion: "prepend_to_coding_room_ledger",
     job,
+    receipt,
     packet: {
       worker,
       chip: job.chip,
       context: job.context,
       owned_files: job.owned_files,
+      evidence: receipt.evidence,
+      next_action: receipt.next_action,
+      proof_required: receipt.proof_required,
+      xpass_advisory: receipt.xpass_advisory,
       expected_proof: tests.length
         ? `Patch the smallest safe improvement and run: ${tests.join("; ")}`
         : "Patch the smallest safe improvement and run focused proof.",

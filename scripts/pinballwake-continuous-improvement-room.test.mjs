@@ -34,6 +34,43 @@ describe("PinballWake Continuous Improvement Room", () => {
     assert.equal(result.job.status, "queued");
     assert(result.job.owned_files.includes("scripts/pinballwake-merge-room.mjs"));
     assert(result.packet.expected_proof.includes("pinballwake-merge-room.test.mjs"));
+    assert.equal(result.receipt.receipt_type, "native_improver_opportunity");
+    assert.equal(result.receipt.emitted_at, "2026-05-05T01:00:00.000Z");
+    assert.equal(result.receipt.improvement_kind, "ack_handoff");
+    assert(result.receipt.evidence.some((item) => item.includes("missing ACK mirror handoff")));
+    assert.match(result.receipt.next_action, /Improve ACK handoff/);
+    assert.match(result.receipt.proof_required, /pinballwake-merge-room.test.mjs/);
+    assert(result.receipt.xpass_advisory.includes("CommonSensePass"));
+    assert.deepEqual(result.packet.evidence, result.receipt.evidence);
+    assert.equal(result.packet.next_action, result.receipt.next_action);
+    assert.equal(result.packet.proof_required, result.receipt.proof_required);
+    assert.deepEqual(result.packet.xpass_advisory, result.receipt.xpass_advisory);
+  });
+
+  it("holds duplicate-covered opportunities instead of creating another build job", () => {
+    const result = evaluateContinuousImprovementRoom({
+      now: "2026-05-05T01:00:00.000Z",
+      source: "heartbeat",
+      signals: [
+        {
+          type: "stuck",
+          title: "Queue idle for hours while jobs are waiting",
+          detail: "runner dormant and repeated manual nudges required",
+          severity: "high",
+          count: 2,
+          coveredByOpenTodo: "todo-123",
+        },
+      ],
+    });
+
+    assert.equal(result.result, "hold");
+    assert.equal(result.reason, "covered_by_open_todo");
+    assert.equal(result.improvement_kind, "queue_flow");
+    assert.equal(result.duplicate_coverage.ref, "todo-123");
+    assert.equal(result.job, undefined);
+    assert.equal(result.receipt.receipt_type, "native_improver_hold");
+    assert.equal(result.receipt.source, "heartbeat");
+    assert.match(result.receipt.next_action, /duplicate build job/);
   });
 
   it("routes stale queue resistance to the queue and jobs surfaces", () => {
