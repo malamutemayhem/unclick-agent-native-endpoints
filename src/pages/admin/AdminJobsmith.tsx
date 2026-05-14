@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
+  AlertTriangle,
   BriefcaseBusiness,
   CheckCircle2,
   Clipboard,
@@ -9,10 +10,13 @@ import {
   MapPin,
   NotebookTabs,
   Save,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
 
 type SourceMode = "url" | "paste" | "notes";
+type SourceFactKey = "roleProof" | "skillProof" | "achievementProof" | "portfolioProof";
+type ClaimKey = "openingHook" | "cvBullet" | "coverLetter" | "portalSummary";
 type MaterialKey =
   | "masterCv"
   | "portfolioLinks"
@@ -36,6 +40,9 @@ interface JobsmithDraft {
   source: string;
   atsVendor: string;
   materials: Record<MaterialKey, boolean>;
+  sourceFacts: Record<SourceFactKey, string>;
+  applicationClaims: Record<ClaimKey, string>;
+  claimSources: Record<ClaimKey, SourceFactKey[]>;
 }
 
 const STORAGE_KEY = "unclick_jobsmith_phase1_capture_draft_v1";
@@ -47,6 +54,27 @@ const EMPTY_MATERIALS: Record<MaterialKey, boolean> = {
   roleHistory: false,
   skills: false,
   notes: false,
+};
+
+const EMPTY_SOURCE_FACTS: Record<SourceFactKey, string> = {
+  roleProof: "",
+  skillProof: "",
+  achievementProof: "",
+  portfolioProof: "",
+};
+
+const EMPTY_APPLICATION_CLAIMS: Record<ClaimKey, string> = {
+  openingHook: "",
+  cvBullet: "",
+  coverLetter: "",
+  portalSummary: "",
+};
+
+const EMPTY_CLAIM_SOURCES: Record<ClaimKey, SourceFactKey[]> = {
+  openingHook: [],
+  cvBullet: [],
+  coverLetter: [],
+  portalSummary: [],
 };
 
 const DEFAULT_DRAFT: JobsmithDraft = {
@@ -64,6 +92,9 @@ const DEFAULT_DRAFT: JobsmithDraft = {
   source: "",
   atsVendor: "",
   materials: EMPTY_MATERIALS,
+  sourceFacts: EMPTY_SOURCE_FACTS,
+  applicationClaims: EMPTY_APPLICATION_CLAIMS,
+  claimSources: EMPTY_CLAIM_SOURCES,
 };
 
 const MATERIAL_LABELS: Record<MaterialKey, string> = {
@@ -79,6 +110,20 @@ const SOURCE_MODE_LABELS: Record<SourceMode, string> = {
   url: "URL",
   paste: "Paste",
   notes: "Notes",
+};
+
+const SOURCE_FACT_LABELS: Record<SourceFactKey, string> = {
+  roleProof: "Role proof",
+  skillProof: "Skill proof",
+  achievementProof: "Achievement proof",
+  portfolioProof: "Portfolio proof",
+};
+
+const CLAIM_LABELS: Record<ClaimKey, string> = {
+  openingHook: "Opening hook",
+  cvBullet: "CV bullet",
+  coverLetter: "Cover letter paragraph",
+  portalSummary: "Portal summary",
 };
 
 const REQUIRED_FIELDS: Array<keyof JobsmithDraft> = [
@@ -104,6 +149,18 @@ function loadDraft(): JobsmithDraft {
         ...EMPTY_MATERIALS,
         ...(parsed.materials ?? {}),
       },
+      sourceFacts: {
+        ...EMPTY_SOURCE_FACTS,
+        ...(parsed.sourceFacts ?? {}),
+      },
+      applicationClaims: {
+        ...EMPTY_APPLICATION_CLAIMS,
+        ...(parsed.applicationClaims ?? {}),
+      },
+      claimSources: {
+        ...EMPTY_CLAIM_SOURCES,
+        ...(parsed.claimSources ?? {}),
+      },
     };
   } catch {
     return DEFAULT_DRAFT;
@@ -115,6 +172,65 @@ function textValue(value: string, fallback = "Not captured"): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
+interface TruthLedgerEntry {
+  key: ClaimKey;
+  label: string;
+  claim: string;
+  sources: string[];
+  status: "empty" | "blocked" | "ready";
+  reason: string;
+}
+
+function buildTruthLedger(draft: JobsmithDraft): TruthLedgerEntry[] {
+  return (Object.keys(CLAIM_LABELS) as ClaimKey[]).map((key) => {
+    const claim = draft.applicationClaims[key].trim();
+    const selectedSourceKeys = draft.claimSources[key] ?? [];
+    const usableSourceKeys = selectedSourceKeys.filter((sourceKey) => draft.sourceFacts[sourceKey].trim().length > 0);
+
+    if (claim.length === 0) {
+      return {
+        key,
+        label: CLAIM_LABELS[key],
+        claim,
+        sources: [],
+        status: "empty",
+        reason: "Not drafted yet",
+      };
+    }
+
+    if (selectedSourceKeys.length === 0) {
+      return {
+        key,
+        label: CLAIM_LABELS[key],
+        claim,
+        sources: [],
+        status: "blocked",
+        reason: "Needs at least one source fact",
+      };
+    }
+
+    if (usableSourceKeys.length !== selectedSourceKeys.length) {
+      return {
+        key,
+        label: CLAIM_LABELS[key],
+        claim,
+        sources: usableSourceKeys.map((sourceKey) => SOURCE_FACT_LABELS[sourceKey]),
+        status: "blocked",
+        reason: "Selected source fact is empty",
+      };
+    }
+
+    return {
+      key,
+      label: CLAIM_LABELS[key],
+      claim,
+      sources: usableSourceKeys.map((sourceKey) => SOURCE_FACT_LABELS[sourceKey]),
+      status: "ready",
+      reason: `${usableSourceKeys.length} source fact${usableSourceKeys.length === 1 ? "" : "s"} cited`,
+    };
+  });
+}
+
 function buildManualPlan(draft: JobsmithDraft): string {
   const materialList = (Object.entries(draft.materials) as Array<[MaterialKey, boolean]>)
     .filter(([, present]) => present)
@@ -122,6 +238,12 @@ function buildManualPlan(draft: JobsmithDraft): string {
   const missingList = (Object.entries(draft.materials) as Array<[MaterialKey, boolean]>)
     .filter(([, present]) => !present)
     .map(([key]) => MATERIAL_LABELS[key]);
+  const sourceFactLines = (Object.entries(draft.sourceFacts) as Array<[SourceFactKey, string]>).map(
+    ([key, value]) => `- ${SOURCE_FACT_LABELS[key]}: ${textValue(value, "Needed")}`,
+  );
+  const ledger = buildTruthLedger(draft);
+  const blockedClaims = ledger.filter((entry) => entry.status === "blocked");
+  const ledgerLines = ledger.map((entry) => `- ${entry.label}: ${entry.status.toUpperCase()} - ${entry.reason}`);
 
   return [
     `Jobsmith capture: ${textValue(draft.role, "Role")} at ${textValue(draft.company, "Company")}`,
@@ -139,8 +261,16 @@ function buildManualPlan(draft: JobsmithDraft): string {
     `- Ready: ${materialList.length > 0 ? materialList.join(", ") : "None yet"}`,
     `- Missing: ${missingList.length > 0 ? missingList.join(", ") : "None"}`,
     "",
+    "Source facts",
+    ...sourceFactLines,
+    "",
+    "Truth ledger",
+    ...ledgerLines,
+    `- Unsupported claims: ${blockedClaims.length > 0 ? blockedClaims.map((entry) => entry.label).join(", ") : "None"}`,
+    "",
     "Manual tailoring plan",
     "- Pull only interview-defensible claims from source facts.",
+    "- Copy only Ready claims into CV, cover letter, portal, or recruiter email.",
     "- Match role language to real skills and portfolio proof.",
     "- Reduce unnecessary age or over-seniority signals without hiding honest history.",
     "- Prepare ATS-safe CV, cover letter notes, portal copy, and recruiter email notes.",
@@ -217,10 +347,27 @@ export default function AdminJobsmith() {
     (draft.sourceMode === "notes" && draft.manualNotes.trim().length > 0);
 
   const materialsReady = Object.values(draft.materials).filter(Boolean).length;
+  const ledger = useMemo(() => buildTruthLedger(draft), [draft]);
+  const draftedClaims = ledger.filter((entry) => entry.status !== "empty").length;
+  const readyClaims = ledger.filter((entry) => entry.status === "ready").length;
+  const blockedClaims = ledger.filter((entry) => entry.status === "blocked").length;
+  const truthStatus = blockedClaims > 0 ? `${blockedClaims} blocked` : draftedClaims > 0 ? `${readyClaims}/${draftedClaims} ready` : "No claims yet";
   const plan = useMemo(() => buildManualPlan(draft), [draft]);
 
   function updateField<K extends keyof JobsmithDraft>(field: K, value: JobsmithDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateClaimSource(claimKey: ClaimKey, sourceKey: SourceFactKey, checked: boolean) {
+    const currentSources = draft.claimSources[claimKey] ?? [];
+    const nextSources = checked
+      ? [...currentSources.filter((key) => key !== sourceKey), sourceKey]
+      : currentSources.filter((key) => key !== sourceKey);
+
+    updateField("claimSources", {
+      ...draft.claimSources,
+      [claimKey]: nextSources,
+    });
   }
 
   async function copyPlan() {
@@ -252,7 +399,7 @@ export default function AdminJobsmith() {
         <Metric icon={CheckCircle2} label="Required" value={`${requiredComplete}/${REQUIRED_FIELDS.length}`} />
         <Metric icon={LinkIcon} label="Source" value={sourceCaptured ? "Captured" : "Needed"} />
         <Metric icon={FileText} label="Materials" value={`${materialsReady}/6 ready`} />
-        <Metric icon={ClipboardCheck} label="Engine" value="Manual plan" />
+        <Metric icon={ShieldCheck} label="Truth ledger" value={truthStatus} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -366,6 +513,108 @@ export default function AdminJobsmith() {
                   <span>{MATERIAL_LABELS[key]}</span>
                 </label>
               ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-white/[0.06] bg-[#111] p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-300" />
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Source Facts</h2>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {(Object.keys(SOURCE_FACT_LABELS) as SourceFactKey[]).map((key) => (
+                <Field
+                  key={key}
+                  id={`jobsmith-source-fact-${key}`}
+                  label={SOURCE_FACT_LABELS[key]}
+                  value={draft.sourceFacts[key]}
+                  onChange={(value) =>
+                    updateField("sourceFacts", {
+                      ...draft.sourceFacts,
+                      [key]: value,
+                    })
+                  }
+                  placeholder="Paste the exact proof or reference."
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-white/[0.06] bg-[#111] p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-[#61C1C4]" />
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Application Claims</h2>
+            </div>
+            <div>
+              {(Object.keys(CLAIM_LABELS) as ClaimKey[]).map((claimKey) => {
+                const entry = ledger.find((item) => item.key === claimKey);
+                const isBlocked = entry?.status === "blocked";
+                const isReady = entry?.status === "ready";
+
+                return (
+                  <div key={claimKey} className="border-t border-white/[0.06] py-4 first:border-t-0 first:pt-0 last:pb-0">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <label
+                        htmlFor={`jobsmith-claim-${claimKey}`}
+                        className="text-xs font-medium text-white/55"
+                      >
+                        {CLAIM_LABELS[claimKey]}
+                      </label>
+                      <span
+                        aria-label={`Truth ledger status for ${CLAIM_LABELS[claimKey]}`}
+                        data-testid="jobsmith-ledger-status"
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                          isReady
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : isBlocked
+                              ? "border-[#E2B93B]/30 bg-[#E2B93B]/10 text-[#E2B93B]"
+                              : "border-white/[0.08] bg-black/20 text-white/45"
+                        }`}
+                      >
+                        {isBlocked ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                        {entry?.status === "empty" ? "Not drafted" : isReady ? "Ready" : "Blocked"}
+                      </span>
+                    </div>
+                    <textarea
+                      id={`jobsmith-claim-${claimKey}`}
+                      value={draft.applicationClaims[claimKey]}
+                      onChange={(event) =>
+                        updateField("applicationClaims", {
+                          ...draft.applicationClaims,
+                          [claimKey]: event.target.value,
+                        })
+                      }
+                      rows={2}
+                      className="w-full resize-y rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#61C1C4]/45"
+                      placeholder="Draft one claim, then cite its source facts."
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(Object.keys(SOURCE_FACT_LABELS) as SourceFactKey[]).map((sourceKey) => (
+                        <label
+                          key={sourceKey}
+                          htmlFor={`jobsmith-claim-${claimKey}-source-${sourceKey}`}
+                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                            draft.claimSources[claimKey]?.includes(sourceKey)
+                              ? "border-[#61C1C4]/35 bg-[#61C1C4]/10 text-white"
+                              : "border-white/[0.08] bg-black/20 text-white/55"
+                          }`}
+                        >
+                          <input
+                            id={`jobsmith-claim-${claimKey}-source-${sourceKey}`}
+                            aria-label={`${CLAIM_LABELS[claimKey]} cites ${SOURCE_FACT_LABELS[sourceKey]}`}
+                            type="checkbox"
+                            checked={draft.claimSources[claimKey]?.includes(sourceKey) ?? false}
+                            onChange={(event) => updateClaimSource(claimKey, sourceKey, event.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-white/20 bg-black text-[#61C1C4]"
+                          />
+                          <span>{SOURCE_FACT_LABELS[sourceKey]}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-white/45">{entry?.reason}</p>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>
