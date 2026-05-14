@@ -15,7 +15,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | docs/fleet-worker-roles.md | de6d70d0d55a | 3662 |
 | docs/adr/0005-two-layer-admin-gating.md | cefe739796f2 | 2186 |
 | docs/adr/0006-orchestrator-is-user-chat.md | bf91808d2d8d | 2169 |
-| src/App.tsx | 7b996d8df357 | 13035 |
+| src/App.tsx | 7a3c1848a432 | 13148 |
 | src/pages/admin/AdminShell.tsx | fa1b64904f84 | 19137 |
 | .github/workflows/ci.yml | 79e43dd8e26c | 1608 |
 | .github/workflows/brainmap-auto-update.yml | 7e8b08eb16aa | 1137 |
@@ -162,6 +162,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | /faqpage | FAQPage | User-facing page for FAQPage. | src/pages/FAQPage.tsx |
 | / | Index | Public home and first explanation of UnClick. | src/pages/Index.tsx |
 | /install-recover | Install Recover | User-facing page for Install Recover. | src/pages/InstallRecover.tsx |
+| /jobsmith | Jobsmith | User-facing page for Jobsmith. | src/pages/Jobsmith.tsx |
 | /login | Login | Sign-in page. | src/pages/Login.tsx |
 | /memory | Memory | Public memory product page. | src/pages/Memory.tsx |
 | /memory-admin | Memory Admin | User-facing page for Memory Admin. | src/pages/MemoryAdmin.tsx |

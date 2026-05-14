@@ -33,6 +33,7 @@ import OrganiserPage from "./pages/Organiser.tsx";
 import DispatchPage from "./pages/Dispatch.tsx";
 import CrewsPage from "./pages/Crews.tsx";
 import ToolsPage from "./pages/Tools.tsx";
+import JobsmithPage from "./pages/Jobsmith.tsx";
 import NewToAIPage from "./pages/NewToAI.tsx";
 import SmartHomePage from "./pages/SmartHome.tsx";
 import InstallRecoverPage from "./pages/InstallRecover.tsx";
@@ -137,6 +138,7 @@ const App = () => (
           <Route path="/backstagepass" element={<Navigate to="/admin/keychain" replace />} />
           {/* Core product pages */}
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/jobsmith" element={<JobsmithPage />} />
           <Route path="/memory" element={<MemoryPage />} />
           {/* /memory/admin redirects to the new admin shell */}
           <Route path="/memory/admin" element={<Navigate to="/admin/memory" replace />} />
