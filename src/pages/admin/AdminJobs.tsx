@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowDownUp,
+  ArrowUp,
   AlertTriangle,
   BookOpen,
   CheckCircle2,
@@ -514,15 +517,20 @@ function SortHeader({
   sortDirection: SortDirection;
   onSort: (value: SortKey) => void;
 }) {
+  const active = sortKey === value;
+  const Icon = !active ? ArrowDownUp : sortDirection === "asc" ? ArrowUp : ArrowDown;
   return (
     <button
       type="button"
       onClick={() => onSort(value)}
-      className={`truncate text-left hover:text-white/65 ${sortKey === value ? "text-white/60" : ""}`}
+      className={`group inline-flex w-full min-w-0 items-center gap-1 rounded-[3px] text-left hover:text-white/65 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#61C1C4]/45 ${
+        active ? "text-white/65" : ""
+      }`}
       title={`Sort by ${label}`}
+      aria-pressed={active}
     >
-      {label}
-      {sortKey === value && <span className="ml-1 text-[9px]">{sortDirection === "asc" ? "↑" : "↓"}</span>}
+      <span className="truncate">{label}</span>
+      <Icon className={`h-3 w-3 shrink-0 ${active ? "text-[#61C1C4]/70" : "text-white/20 group-hover:text-white/35"}`} aria-hidden="true" />
     </button>
   );
 }
@@ -682,7 +690,10 @@ function JobRow({
           className="min-w-0 cursor-pointer select-text rounded-[3px] outline-none focus-visible:ring-1 focus-visible:ring-[#61C1C4]/50"
           title={todo.title}
         >
-          <p className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}>
+          <p
+            className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+            data-testid="job-row-title"
+          >
             {highlightSearchText(displayCopy.title, searchQuery)}
           </p>
           <p className="truncate text-[10px] leading-4 text-white/35">
@@ -727,12 +738,13 @@ function JobRow({
             <button
               type="button"
               onClick={onToggle}
-              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-[10px] font-bold text-red-200 hover:border-red-300/35 hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-200/60"
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-red-300/10 bg-red-500/[0.045] text-red-200/65 hover:border-red-300/25 hover:bg-red-500/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-200/50"
               aria-expanded={expanded}
-              aria-label={expanded ? "Hide job alert" : "Show job alert"}
-              title={`${alert.message} Fallback: ${alert.actions.join(", ")}`}
+              aria-label={`Job needs attention: ${alert.message}`}
+              title={`${alert.message} Next: ${alert.actions.join(", ")}`}
+              data-testid="job-attention-indicator"
             >
-              !
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
             </button>
           ) : (
             <span aria-hidden="true" className="hidden md:block" />
@@ -742,13 +754,6 @@ function JobRow({
 
       {expanded && (
         <div className="mx-3 mb-2 space-y-2 rounded-md border border-white/[0.06] bg-black/20 p-2.5">
-          {alert && (
-            <div className="flex flex-wrap items-center gap-2 rounded-[5px] border border-red-300/15 bg-red-500/[0.06] px-2 py-1 text-[11px] text-red-100/75">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              <span>{alert.message}</span>
-              <span className="text-red-100/45">Fallback: {alert.actions.join(" / ")}</span>
-            </div>
-          )}
           <div className="grid gap-3 text-xs text-white/50 sm:grid-cols-5">
             <div>
               <span className="block text-[10px] uppercase tracking-wide text-white/30">Created</span>
