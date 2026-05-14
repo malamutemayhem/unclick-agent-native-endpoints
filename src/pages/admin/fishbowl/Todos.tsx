@@ -17,6 +17,15 @@ interface Todo {
   comment_count?: number;
 }
 
+interface TodoQueueMetrics {
+  active: number;
+  open_backlog: number;
+  done: number;
+  dropped: number;
+  legacy_queued_equals: "open_backlog";
+  note: string;
+}
+
 interface TodosProps {
   authHeader: Record<string, string>;
   humanAgentId: string | null;
@@ -385,6 +394,7 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
   });
 
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [queueMetrics, setQueueMetrics] = useState<TodoQueueMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -411,9 +421,14 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
         headers: { ...authHeader, "Content-Type": "application/json" },
         body: JSON.stringify({ agent_id: humanAgentId, limit: 200 }),
       });
-      const body = (await res.json().catch(() => ({}))) as { todos?: Todo[]; error?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        todos?: Todo[];
+        queue_metrics?: TodoQueueMetrics;
+        error?: string;
+      };
       if (!res.ok) throw new Error(body.error ?? "Failed to load todos");
       setTodos(body.todos ?? []);
+      setQueueMetrics(body.queue_metrics ?? null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -459,7 +474,8 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
     });
   };
 
-  const totalActive = grouped.open.length + grouped.in_progress.length;
+  const activeCount = queueMetrics?.active ?? grouped.in_progress.length;
+  const openBacklogCount = queueMetrics?.open_backlog ?? grouped.open.length;
 
   return (
     <section className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
@@ -472,9 +488,14 @@ export default function FishbowlTodos({ authHeader, humanAgentId }: TodosProps) 
         <span className="flex items-center gap-2 text-sm font-semibold text-[#ccc]">
           <span aria-hidden>📋</span>
           <span>Todos</span>
-          {totalActive > 0 && (
+          {activeCount > 0 && (
             <span className="rounded-full bg-[#E2B93B]/15 px-2 py-0.5 text-[10px] font-medium text-[#E2B93B]">
-              {totalActive} active
+              {activeCount} in progress
+            </span>
+          )}
+          {openBacklogCount > 0 && (
+            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-[#888]">
+              {openBacklogCount} open backlog
             </span>
           )}
         </span>

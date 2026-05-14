@@ -8582,6 +8582,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { data, error } = await q;
           if (error) throw error;
 
+          const countTodosByStatus = async (status: "open" | "in_progress" | "done" | "dropped") => {
+            const { count, error: countError } = await supabase
+              .from("mc_fishbowl_todos")
+              .select("id", { count: "exact", head: true })
+              .eq("api_key_hash", apiKeyHash)
+              .eq("status", status);
+            if (countError) throw countError;
+            return count ?? 0;
+          };
+          const [openBacklogCount, activeCount, doneCount, droppedCount] = await Promise.all([
+            countTodosByStatus("open"),
+            countTodosByStatus("in_progress"),
+            countTodosByStatus("done"),
+            countTodosByStatus("dropped"),
+          ]);
+
           const stageRank = {
             brief: 1,
             build: 2,
@@ -8717,6 +8733,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }));
           return res.status(200).json({
             todos: includeDescription ? decorated : compactTodos,
+            queue_metrics: {
+              active: activeCount,
+              open_backlog: openBacklogCount,
+              done: doneCount,
+              dropped: droppedCount,
+              legacy_queued_equals: "open_backlog",
+              note: "Open backlog is not the runnable queue; active is in_progress work.",
+            },
             response_bounds: {
               compact: !includeDescription,
               descriptions_included: includeDescription,
