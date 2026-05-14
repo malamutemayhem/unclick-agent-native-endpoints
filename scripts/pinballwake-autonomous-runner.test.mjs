@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  evaluateAutonomousRunnerCommonSensePass,
   evaluateBoardroomTodoAutoClaimEligibility,
   evaluateOrchestratorSeatHandshakeProof,
   extractBoardroomTodoIdFromCodingRoomJob,
@@ -1388,9 +1389,9 @@ describe("PinballWake autonomous Runner seat", () => {
         now: "2026-05-09T12:35:00.000Z",
       });
 
-      assert.equal(result.ok, true);
-      assert.equal(result.action, "idle");
-      assert.equal(result.reason, "no_claimable_jobs");
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "blocked");
+      assert.equal(result.reason, "commonsensepass_no_work_blocked_by_visible_queue");
       assert.deepEqual(result.queue_source.claimability_scorecard, {
         seen: 1,
         claimable: 0,
@@ -1402,9 +1403,13 @@ describe("PinballWake autonomous Runner seat", () => {
         state: "blocked_no_claimable",
         healthy: false,
       });
+      assert.equal(result.commonsensepass.verdict, "BLOCKER");
+      assert.equal(result.commonsensepass.rule_id, "R1");
       assert.equal(result.claimability_scorecard.claimed, 0);
       assert.equal(result.claimability_scorecard.last_action, "idle");
       assert.equal(result.claimability_scorecard.last_reason, "no_claimable_jobs");
+      assert.equal(result.claimability_scorecard.final_action, "blocked");
+      assert.equal(result.claimability_scorecard.final_reason, "commonsensepass_no_work_blocked_by_visible_queue");
       assert.equal(result.queue_source.skipped[0].id, "todo-stale-scoped-1");
       assert.equal(result.queue_source.skipped[0].reason, "boardroom_todo_not_open");
       assert.deepEqual(calls.map((call) => call.body.params.name), ["list_actionable_todos"]);
@@ -1414,6 +1419,39 @@ describe("PinballWake autonomous Runner seat", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("CommonSensePass guard passes ordinary runner actions and blocks visible no-work", () => {
+    const claimed = evaluateAutonomousRunnerCommonSensePass({
+      queueSourceResult: { source: "unclick" },
+      claimabilityScorecard: {
+        seen: 1,
+        claimable: 1,
+        imported: 1,
+        state: "claimable",
+        healthy: true,
+        final_action: "claimed",
+        final_reason: null,
+      },
+    });
+    assert.equal(claimed.verdict, "PASS");
+
+    const blocked = evaluateAutonomousRunnerCommonSensePass({
+      queueSourceResult: { source: "unclick" },
+      claimabilityScorecard: {
+        seen: 2,
+        claimable: 0,
+        imported: 0,
+        claimed: 0,
+        claim_attemptable_after_safety: 0,
+        state: "blocked_no_claimable",
+        healthy: false,
+        final_action: "idle",
+        final_reason: "no_claimable_jobs",
+      },
+    });
+    assert.equal(blocked.verdict, "BLOCKER");
+    assert.equal(blocked.reason_code, "commonsensepass_no_work_blocked_by_visible_queue");
   });
 
   it("blocks stale UnClick todo lease tokens before syncing ownership", async () => {

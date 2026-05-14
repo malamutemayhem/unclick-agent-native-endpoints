@@ -884,6 +884,86 @@ function buildRunClaimabilityScorecard({
   };
 }
 
+function claimabilityEvidence(scorecard = {}) {
+  return [
+    { kind: "queue", ref: `seen=${scorecard.seen ?? 0}` },
+    { kind: "queue", ref: `claimable=${scorecard.claimable ?? 0}` },
+    { kind: "queue", ref: `imported=${scorecard.imported ?? 0}` },
+    { kind: "queue", ref: `state=${scorecard.state || "unknown"}` },
+    { kind: "runner", ref: `final_action=${scorecard.final_action || "unknown"}` },
+    { kind: "runner", ref: `final_reason=${scorecard.final_reason || "unknown"}` },
+  ];
+}
+
+export function evaluateAutonomousRunnerCommonSensePass({
+  queueSourceResult = {},
+  claimabilityScorecard = {},
+  finalAction = claimabilityScorecard.final_action || null,
+  finalReason = claimabilityScorecard.final_reason || null,
+} = {}) {
+  if (queueSourceResult.source !== "unclick") {
+    return {
+      verdict: "PASS",
+      rule_id: null,
+      reason: "CommonSensePass guard skipped for non-UnClick queue source.",
+      evidence: claimabilityEvidence(claimabilityScorecard),
+    };
+  }
+
+  const trustedNoWorkClaim = finalAction === "idle" && finalReason === "no_claimable_jobs";
+  if (!trustedNoWorkClaim) {
+    return {
+      verdict: "PASS",
+      rule_id: "R1",
+      reason: "Runner did not emit a trusted no-work claim.",
+      evidence: claimabilityEvidence(claimabilityScorecard),
+    };
+  }
+
+  if (claimabilityScorecard.state === "queue_unavailable") {
+    return {
+      verdict: "HOLD",
+      rule_id: "R1",
+      reason: "CommonSensePass HOLD: UnClick queue evidence is unavailable, so no-work cannot be trusted.",
+      reason_code: "commonsensepass_queue_unavailable",
+      evidence: claimabilityEvidence(claimabilityScorecard),
+      next_action: "restore_queue_source_or_read_jobs_room",
+    };
+  }
+
+  const seen = Number.isFinite(claimabilityScorecard.seen) ? claimabilityScorecard.seen : 0;
+  const claimed = Number.isFinite(claimabilityScorecard.claimed) ? claimabilityScorecard.claimed : 0;
+  const attemptable = Number.isFinite(claimabilityScorecard.claim_attemptable_after_safety)
+    ? claimabilityScorecard.claim_attemptable_after_safety
+    : Number.POSITIVE_INFINITY;
+
+  if (
+    seen > 0 &&
+    claimed === 0 &&
+    (
+      claimabilityScorecard.healthy === false ||
+      claimabilityScorecard.state === "blocked_no_claimable" ||
+      attemptable === 0
+    )
+  ) {
+    return {
+      verdict: "BLOCKER",
+      rule_id: "R1",
+      reason: `CommonSensePass BLOCKER: ${seen} UnClick job(s) were visible but none were claimable, so no-work cannot be trusted.`,
+      reason_code: "commonsensepass_no_work_blocked_by_visible_queue",
+      evidence: claimabilityEvidence(claimabilityScorecard),
+      next_action: "hydrate_scopepack_or_route_exact_blocker",
+    };
+  }
+
+  return {
+    verdict: "PASS",
+    rule_id: "R1",
+    reason: "No-work claim consistent with UnClick queue evidence.",
+    evidence: claimabilityEvidence(claimabilityScorecard),
+  };
+}
+
 export async function syncBoardroomTodoScopingRequestToUnClick({
   todo,
   runner = DEFAULT_AUTONOMOUS_RUNNER,
@@ -1621,13 +1701,31 @@ export async function runAutonomousRunnerFile({
     });
   }
 
+  const commonsensepass = evaluateAutonomousRunnerCommonSensePass({
+    queueSourceResult,
+    claimabilityScorecard,
+    finalAction,
+    finalReason,
+  });
+  if (commonsensepass.verdict !== "PASS") {
+    finalAction = "blocked";
+    finalReason = commonsensepass.reason_code || "commonsensepass_blocked";
+    claimabilityScorecard = {
+      ...claimabilityScorecard,
+      final_action: finalAction,
+      final_reason: finalReason,
+      commonsensepass_verdict: commonsensepass.verdict,
+      commonsensepass_rule_id: commonsensepass.rule_id,
+    };
+  }
+
   if (shouldPersist) {
     await writeCodingRoomJobLedger(ledgerPath, ledger);
   }
 
   return {
     ...last,
-    ok: results.every((result) => result.ok) && todoClaimSync.ok && todoScopingSync.ok,
+    ok: commonsensepass.verdict === "PASS" && results.every((result) => result.ok) && todoClaimSync.ok && todoScopingSync.ok,
     action: finalAction,
     reason: finalReason,
     mode: safeMode,
@@ -1638,6 +1736,7 @@ export async function runAutonomousRunnerFile({
     ledger_path: ledgerPath,
     queue_source: queueSourceResult,
     claimability_scorecard: claimabilityScorecard,
+    commonsensepass,
     todo_claim_sync: todoClaimSync,
     todo_scoping_sync: todoScopingSync,
   };
