@@ -636,6 +636,220 @@ export async function fetchUnClickActionableTodos({
   };
 }
 
+export async function fetchCurrentMainHeadSha({
+  repo = "",
+  branch = "main",
+  githubToken = "",
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const repoName = String(repo || "").trim();
+  const branchName = String(branch || "main").trim() || "main";
+  if (!repoName || !repoName.includes("/")) {
+    return { ok: false, reason: "missing_github_repository" };
+  }
+  if (typeof fetchImpl !== "function") {
+    return { ok: false, reason: "missing_fetch_impl" };
+  }
+
+  const [owner, name] = repoName.split("/", 2).map((part) => encodeURIComponent(part));
+  const response = await fetchImpl(
+    `https://api.github.com/repos/${owner}/${name}/branches/${encodeURIComponent(branchName)}`,
+    {
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "unclick-pinballwake-autonomous-runner",
+        ...(githubToken ? { authorization: `Bearer ${githubToken}` } : {}),
+      },
+    },
+  );
+
+  if (!response?.ok) {
+    return {
+      ok: false,
+      reason: "github_branch_http_error",
+      status: response?.status ?? null,
+    };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const sha = String(payload?.commit?.sha || "").trim();
+  if (!sha) {
+    return { ok: false, reason: "github_branch_missing_sha" };
+  }
+
+  return {
+    ok: true,
+    repo: repoName,
+    branch: branchName,
+    current_main_sha: sha,
+    current_main_committed_at:
+      payload?.commit?.commit?.committer?.date ||
+      payload?.commit?.commit?.author?.date ||
+      payload?.commit?.commit?.committed_at ||
+      null,
+  };
+}
+
+export function assertRunnerOnFreshMain({
+  checkedOutSha = "",
+  currentMainSha = "",
+  currentMainCommittedAt = "",
+  now = new Date().toISOString(),
+  thresholdMinutes = 20,
+} = {}) {
+  const checkedOut = String(checkedOutSha || "").trim().toLowerCase();
+  const currentMain = String(currentMainSha || "").trim().toLowerCase();
+  const threshold = Number.isFinite(Number(thresholdMinutes)) ? Number(thresholdMinutes) : 20;
+  const mainCommittedAtMs = Date.parse(String(currentMainCommittedAt || ""));
+  const nowMs = Date.parse(String(now || ""));
+  const observedLagMinutes =
+    Number.isFinite(mainCommittedAtMs) && Number.isFinite(nowMs)
+      ? Math.max(0, Math.round((nowMs - mainCommittedAtMs) / 60000))
+      : null;
+
+  if (!checkedOut) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "missing_checked_out_sha",
+      threshold_minutes: threshold,
+    };
+  }
+  if (!currentMain) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "missing_current_main_sha",
+      checked_out_sha: checkedOutSha,
+      threshold_minutes: threshold,
+    };
+  }
+  if (checkedOut !== currentMain) {
+    return {
+      ok: false,
+      reason: "stale_runner_main",
+      checked_out_sha: checkedOutSha,
+      current_main_sha: currentMainSha,
+      current_main_committed_at: currentMainCommittedAt || null,
+      observed_lag_minutes: observedLagMinutes,
+      threshold_minutes: threshold,
+    };
+  }
+
+  return {
+    ok: true,
+    reason: "runner_on_current_main",
+    checked_out_sha: checkedOutSha,
+    current_main_sha: currentMainSha,
+    current_main_committed_at: currentMainCommittedAt || null,
+    observed_lag_minutes: 0,
+    threshold_minutes: threshold,
+  };
+}
+
+export async function postRunnerMainFreshnessPacket({
+  check,
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  fetchImpl = globalThis.fetch,
+  repo = "",
+  branch = "main",
+  wakeSource = "unknown",
+} = {}) {
+  if (check?.ok) {
+    return { ok: true, skipped: true, reason: check.reason || "runner_main_fresh" };
+  }
+  if (!apiKey) {
+    return { ok: true, skipped: true, reason: "missing_unclick_api_key" };
+  }
+
+  return callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "post_message",
+    arguments: {
+      agent_id: boardroomClaimAgentId(runner),
+      recipients: ["all"],
+      tags: ["blocker", "fyi"],
+      text: compact(
+        [
+          "BLOCKER stale_runner_main:",
+          `repo=${repo || "unknown"}.`,
+          `branch=${branch || "main"}.`,
+          `wake_source=${wakeSource || "unknown"}.`,
+          `checked_out_sha=${check?.checked_out_sha || "unknown"}.`,
+          `current_main_sha=${check?.current_main_sha || "unknown"}.`,
+          `observed_lag_minutes=${check?.observed_lag_minutes ?? "unknown"}.`,
+          `threshold_minutes=${check?.threshold_minutes ?? "unknown"}.`,
+          "next=rerun runner on current main or inspect schedule delivery.",
+        ].join(" "),
+        900,
+      ),
+    },
+  });
+}
+
+export async function runAutonomousRunnerMainFreshnessCanary({
+  repo = "",
+  branch = "main",
+  checkedOutSha = "",
+  githubToken = "",
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  fetchImpl = globalThis.fetch,
+  now = new Date().toISOString(),
+  thresholdMinutes = 20,
+  wakeSource = "unknown",
+} = {}) {
+  if (!repo || !checkedOutSha) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: !repo ? "missing_github_repository" : "missing_checked_out_sha",
+    };
+  }
+
+  const current = await fetchCurrentMainHeadSha({ repo, branch, githubToken, fetchImpl });
+  if (!current.ok) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "canary_api_failed",
+      detail: current.reason,
+      status: current.status ?? null,
+    };
+  }
+
+  const check = assertRunnerOnFreshMain({
+    checkedOutSha,
+    currentMainSha: current.current_main_sha,
+    currentMainCommittedAt: current.current_main_committed_at,
+    now,
+    thresholdMinutes,
+  });
+  const packet = await postRunnerMainFreshnessPacket({
+    check,
+    runner,
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    repo,
+    branch,
+    wakeSource,
+  });
+
+  return {
+    ok: true,
+    action: check.ok ? "main_freshness_ok" : "stale_main_reported",
+    reason: check.reason,
+    check,
+    packet,
+  };
+}
+
 export function extractBoardroomTodoIdFromCodingRoomJob(job = {}) {
   const jobId = String(job?.job_id || "").trim();
   const source = String(job?.source || "").trim();
@@ -1430,6 +1644,11 @@ export async function runAutonomousRunnerFile({
   proofExpectedEveryMinutes = 15,
   proofGraceMinutes = 15,
   trustedFallbackFreshMinutes = 10,
+  githubRepository = "",
+  githubBranch = "main",
+  checkedOutSha = "",
+  githubToken = "",
+  mainFreshnessThresholdMinutes = 20,
 } = {}) {
   if (orchestratorProof) {
     return runOrchestratorSeatHandshakeProof({
@@ -1449,8 +1668,22 @@ export async function runAutonomousRunnerFile({
     });
   }
 
+  const mainFreshnessCanary = await runAutonomousRunnerMainFreshnessCanary({
+    repo: githubRepository,
+    branch: githubBranch,
+    checkedOutSha,
+    githubToken,
+    runner,
+    mcpUrl: unclickMcpUrl,
+    apiKey: unclickApiKey,
+    fetchImpl,
+    now,
+    thresholdMinutes: mainFreshnessThresholdMinutes,
+    wakeSource,
+  });
+
   if (!ledgerPath) {
-    return { ok: false, reason: "missing_ledger_path" };
+    return { ok: false, reason: "missing_ledger_path", main_freshness_canary: mainFreshnessCanary };
   }
 
   const safePolicy = createAutonomousRunnerPolicy(policy);
@@ -1497,6 +1730,7 @@ export async function runAutonomousRunnerFile({
         ledger_path: ledgerPath,
         queue_source: queueSourceResult,
         claimability_scorecard: queueSourceResult.claimability_scorecard,
+        main_freshness_canary: mainFreshnessCanary,
       };
     }
   }
@@ -1566,6 +1800,7 @@ export async function runAutonomousRunnerFile({
         queue_source: queueSourceResult,
         claimability_scorecard: claimabilityScorecard,
         todo_claim_sync: todoClaimSync,
+        main_freshness_canary: mainFreshnessCanary,
       };
     }
   }
@@ -1595,6 +1830,7 @@ export async function runAutonomousRunnerFile({
         claimability_scorecard: claimabilityScorecard,
         todo_claim_sync: todoClaimSync,
         todo_scoping_sync: todoScopingSync,
+        main_freshness_canary: mainFreshnessCanary,
       };
     }
 
@@ -1640,6 +1876,7 @@ export async function runAutonomousRunnerFile({
     claimability_scorecard: claimabilityScorecard,
     todo_claim_sync: todoClaimSync,
     todo_scoping_sync: todoScopingSync,
+    main_freshness_canary: mainFreshnessCanary,
   };
 }
 
@@ -1690,6 +1927,14 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     trustedFallbackFreshMinutes: parseIntOption(
       getArg("trusted-fallback-fresh-minutes", process.env.AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_FRESH_MINUTES),
       10,
+    ),
+    githubRepository: getArg("github-repository", process.env.GITHUB_REPOSITORY || ""),
+    githubBranch: getArg("github-branch", process.env.AUTONOMOUS_RUNNER_MAIN_BRANCH || "main"),
+    checkedOutSha: getArg("checked-out-sha", process.env.GITHUB_SHA || ""),
+    githubToken: getArg("github-token", process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ""),
+    mainFreshnessThresholdMinutes: parseIntOption(
+      getArg("main-freshness-threshold-minutes", process.env.AUTONOMOUS_RUNNER_MAIN_FRESHNESS_THRESHOLD_MINUTES),
+      20,
     ),
     policy: createAutonomousRunnerPolicy({
       disabled: parseBoolean(process.env.AUTONOMOUS_RUNNER_DISABLED),

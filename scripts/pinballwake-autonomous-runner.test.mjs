@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  assertRunnerOnFreshMain,
   evaluateBoardroomTodoAutoClaimEligibility,
   evaluateOrchestratorSeatHandshakeProof,
   extractBoardroomTodoIdFromCodingRoomJob,
@@ -21,6 +22,7 @@ import {
   markUnsafeJobsBlockedForAutonomousRunner,
   normalizeAutonomousRunnerMode,
   parseMcpEventStreamPayload,
+  runAutonomousRunnerMainFreshnessCanary,
   runAutonomousRunnerCycle,
   runAutonomousRunnerFile,
 } from "./pinballwake-autonomous-runner.mjs";
@@ -53,6 +55,90 @@ describe("PinballWake autonomous Runner seat", () => {
   it("defaults unknown modes back to dry-run", () => {
     assert.equal(normalizeAutonomousRunnerMode("claim"), "claim");
     assert.equal(normalizeAutonomousRunnerMode("ship-it"), "dry-run");
+  });
+
+  it("treats the checked-out SHA as fresh when it matches current main", () => {
+    const check = assertRunnerOnFreshMain({
+      checkedOutSha: "abc123",
+      currentMainSha: "abc123",
+      currentMainCommittedAt: "2026-05-14T09:00:00.000Z",
+      now: "2026-05-14T09:30:00.000Z",
+      thresholdMinutes: 20,
+    });
+
+    assert.equal(check.ok, true);
+    assert.equal(check.reason, "runner_on_current_main");
+    assert.equal(check.observed_lag_minutes, 0);
+  });
+
+  it("posts a stale-main packet when the checked-out SHA trails current main", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes("api.github.com")) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              commit: {
+                sha: "new-sha",
+                commit: { committer: { date: "2026-05-14T09:00:00.000Z" } },
+              },
+            };
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        async text() {
+          return JSON.stringify({
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({ message: { id: "boardroom-msg-1" } }),
+                },
+              ],
+            },
+          });
+        },
+      };
+    };
+
+    const result = await runAutonomousRunnerMainFreshnessCanary({
+      repo: "malamutemayhem/unclick",
+      checkedOutSha: "old-sha",
+      apiKey: "test-key",
+      fetchImpl,
+      now: "2026-05-14T09:30:00.000Z",
+      runner,
+      wakeSource: "schedule",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "stale_main_reported");
+    assert.equal(result.reason, "stale_runner_main");
+    assert.equal(result.check.observed_lag_minutes, 30);
+    assert.equal(calls.length, 2);
+    assert.match(calls[1].init.body, /stale_runner_main/);
+    assert.match(calls[1].init.body, /old-sha/);
+    assert.match(calls[1].init.body, /new-sha/);
+  });
+
+  it("keeps the runner non-blocking when the current-main API check fails", async () => {
+    const result = await runAutonomousRunnerMainFreshnessCanary({
+      repo: "malamutemayhem/unclick",
+      checkedOutSha: "old-sha",
+      fetchImpl: async () => ({ ok: false, status: 500, async json() { return {}; } }),
+      now: "2026-05-14T09:30:00.000Z",
+      runner,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, "canary_api_failed");
+    assert.equal(result.status, 500);
   });
 
   it("claims safe scoped work through the existing Coding Room runner", () => {
