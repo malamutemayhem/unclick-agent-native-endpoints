@@ -22,7 +22,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | package.json | 37074f6e60a5 | 4175 |
 | scripts/pinballwake-ack-ledger-room.mjs | e7dcb642bc75 | 12719 |
 | scripts/pinballwake-close-supersede-room.mjs | 4d31f6a6a8c2 | 3891 |
-| scripts/pinballwake-coding-room.mjs | 4a48ded33a31 | 25453 |
+| scripts/pinballwake-coding-room.mjs | 9fa5689c555e | 25310 |
 | scripts/pinballwake-continuous-improvement-room.mjs | 4cbb389faf56 | 8822 |
 | scripts/pinballwake-dogfood-room.mjs | d161028d1382 | 2782 |
 | scripts/pinballwake-event-ledger-room.mjs | e8f8f9f84123 | 16104 |
