@@ -426,6 +426,24 @@ describe("AdminOrchestratorPage", () => {
     expect(document.querySelector("mark")?.textContent?.toLowerCase()).toContain("proof");
   });
 
+  it("filters Timeline continuity by source kind without removing source links", async () => {
+    renderOrchestrator("/admin/orchestrator/timeline");
+
+    expect(await screen.findByText("Continuity Feed")).toBeInTheDocument();
+    expect((await screen.findAllByText(/Signal to notice: something needs attention/i)).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Work sources" }));
+
+    expect(screen.getAllByText(/Orchestrator continuity proof landed/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Signal to notice: something needs attention/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Open source")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat sources" }));
+
+    expect(screen.getAllByText(/Orchestrator context should show subscription messages/i).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Orchestrator continuity proof landed/i)).toHaveLength(0);
+  });
+
   it("lets humans view more loaded Orchestrator history", async () => {
     renderOrchestrator("/admin/orchestrator/timeline");
 

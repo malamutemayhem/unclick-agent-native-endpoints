@@ -118,6 +118,7 @@ type SeatFreshnessLabel = "Live" | "Recent" | "Missed check-in" | "Quiet";
 type OrchestratorProfileCard = OrchestratorContext["profile_cards"][number];
 type OrchestratorContinuityEvent = OrchestratorContext["continuity_events"][number];
 type ActorTone = "human" | "seat" | "system" | "work";
+type SourceVisibilityFilter = "all" | "work" | "chat" | "signals" | "memory";
 
 interface ActorIdentity {
   emoji: string;
@@ -143,6 +144,7 @@ const ACTOR_TONE_STYLES: Record<ActorTone, string> = {
 const EASY_READ_STORAGE_KEY = "unclick_orchestrator_easy_read_v1";
 const DRIPFEED_EDUCATION_STORAGE_KEY = "unclick_orchestrator_dripfeed_education_v1";
 const ANALOGY_STORAGE_KEY = "unclick_orchestrator_analogy_v1";
+const SOURCE_VISIBILITY_STORAGE_KEY = "unclick_orchestrator_source_visibility_v1";
 const EVENT_PREVIEW_CHARS = 520;
 const NATURAL_CONTEXT_PREVIEW_CHARS = 360;
 const INITIAL_CONTEXT_LIMIT = 240;
@@ -155,6 +157,13 @@ const STORY_CHAPTER_MAX_EVENTS = 4;
 const STORY_CHAPTER_PREVIEW_CHARS = 1_450;
 const STORY_NATIVE_PREVIEW_COUNT = 5;
 const STORY_NATIVE_STORAGE_KEY = "unclick_orchestrator_story_native_v1";
+const SOURCE_VISIBILITY_FILTERS: Array<{ value: SourceVisibilityFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "work", label: "Work" },
+  { value: "chat", label: "Chat" },
+  { value: "signals", label: "Signals" },
+  { value: "memory", label: "Memory" },
+];
 
 type StoryTheme = "question" | "orchestrator" | "autopilot" | "blocker" | "shipping" | "signals" | "general";
 type StoryBeat =
@@ -398,6 +407,42 @@ function writeStoredBoolean(key: string, value: boolean) {
   } catch {
     // Local storage can be unavailable in private browsing; the UI still works for this session.
   }
+}
+
+function readStoredSourceVisibility(): SourceVisibilityFilter {
+  try {
+    const saved = localStorage.getItem(SOURCE_VISIBILITY_STORAGE_KEY);
+    if (SOURCE_VISIBILITY_FILTERS.some((filter) => filter.value === saved)) {
+      return saved as SourceVisibilityFilter;
+    }
+  } catch {
+    // Local storage can be unavailable in private browsing; the UI still works for this session.
+  }
+  return "all";
+}
+
+function writeStoredSourceVisibility(value: SourceVisibilityFilter) {
+  try {
+    localStorage.setItem(SOURCE_VISIBILITY_STORAGE_KEY, value);
+  } catch {
+    // Local storage can be unavailable in private browsing; the UI still works for this session.
+  }
+}
+
+function sourceVisibilityForEvent(event: OrchestratorContinuityEvent): SourceVisibilityFilter {
+  if (event.source_kind === "todo" || event.source_kind === "todo_comment" || event.source_kind === "boardroom_message") {
+    return "work";
+  }
+  if (event.source_kind === "conversation_turn") return "chat";
+  if (event.source_kind === "signal" || event.source_kind === "dispatch") return "signals";
+  if (event.source_kind === "session_summary" || event.source_kind === "library" || event.source_kind === "business_context") {
+    return "memory";
+  }
+  return "memory";
+}
+
+function matchesSourceVisibility(event: OrchestratorContinuityEvent, filter: SourceVisibilityFilter): boolean {
+  return filter === "all" || sourceVisibilityForEvent(event) === filter;
 }
 
 function eventSearchText(
@@ -1457,6 +1502,7 @@ function OrchestratorContinuityPanel({
     readStoredBoolean(DRIPFEED_EDUCATION_STORAGE_KEY, true),
   );
   const [analogies, setAnalogies] = useState(() => readStoredBoolean(ANALOGY_STORAGE_KEY, true));
+  const [sourceVisibility, setSourceVisibility] = useState<SourceVisibilityFilter>(readStoredSourceVisibility);
   const profileByAgentId = useMemo(
     () => buildProfileLookup(feedContext?.profile_cards),
     [feedContext?.profile_cards],
@@ -1476,10 +1522,15 @@ function OrchestratorContinuityPanel({
       }),
     [events, profileByAgentId],
   );
+  const sourceFilteredEventViews = useMemo(
+    () => eventViews.filter(({ event }) => matchesSourceVisibility(event, sourceVisibility)),
+    [eventViews, sourceVisibility],
+  );
+  const sourceVisibleCount = sourceFilteredEventViews.length;
   const filteredEventViews = useMemo(
     () =>
-      eventViews.filter(({ event, actor }) => matchesEventSearch(event, actor, searchQuery)),
-    [eventViews, searchQuery],
+      sourceFilteredEventViews.filter(({ event, actor }) => matchesEventSearch(event, actor, searchQuery)),
+    [sourceFilteredEventViews, searchQuery],
   );
   const visibleEventViews = filteredEventViews.slice(0, visibleEventCount);
   const canRevealLoadedHistory = filteredEventViews.length > visibleEventCount;
@@ -1508,6 +1559,11 @@ function OrchestratorContinuityPanel({
   function toggleAnalogies(nextValue: boolean) {
     setAnalogies(nextValue);
     writeStoredBoolean(ANALOGY_STORAGE_KEY, nextValue);
+  }
+
+  function updateSourceVisibility(value: SourceVisibilityFilter) {
+    setSourceVisibility(value);
+    writeStoredSourceVisibility(value);
   }
 
   return (
@@ -1579,6 +1635,34 @@ function OrchestratorContinuityPanel({
             <span className={`absolute top-1 h-4 w-4 rounded-full transition ${easyRead ? "left-6 bg-[#61C1C4]" : "left-1 bg-white/55"}`} />
           </span>
         </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-5 py-3 text-xs text-white/55">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-white/35">Sources</span>
+        {SOURCE_VISIBILITY_FILTERS.map((filter) => {
+          const selected = filter.value === sourceVisibility;
+          return (
+            <button
+              key={filter.value}
+              type="button"
+              aria-label={`${filter.label} sources`}
+              aria-pressed={selected}
+              onClick={() => updateSourceVisibility(filter.value)}
+              className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                selected
+                  ? "border-[#61C1C4]/35 bg-[#61C1C4]/15 text-[#A9EEF0]"
+                  : "border-white/[0.06] bg-black/20 text-white/45 hover:border-white/[0.12] hover:text-white/70"
+              }`}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
+        {sourceVisibility !== "all" && (
+          <span className="text-[11px] text-white/30">
+            {sourceVisibleCount} loaded event{sourceVisibleCount === 1 ? "" : "s"} in this source view.
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] px-5 py-3 text-xs text-white/55">
