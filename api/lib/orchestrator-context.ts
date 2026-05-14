@@ -329,6 +329,7 @@ export function isHeartbeatAutomationText(input: unknown): boolean {
   if (lower.startsWith("run unclick heartbeat.")) return true;
   if (lower.startsWith("load unclick seats > heartbeat")) return true;
   if (lower.startsWith("heartbeat schedule request:") || lower.includes("run embedded unclick heartbeat instructions")) return true;
+  if (lower.startsWith("heartbeat tick ") && (lower.includes("check_signals") || lower.includes("job hunt:"))) return true;
   if (lower.startsWith("unclick heartbeat pass") || lower.startsWith("unclick healthy. pass")) return true;
   if (lower.includes("heartbeat_protocol=")) return true;
   if (lower.startsWith("unclick heartbeat ") && lower.includes("check_signals=")) return true;

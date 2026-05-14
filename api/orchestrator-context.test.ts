@@ -686,15 +686,30 @@ describe("orchestrator context", () => {
             "UnClick Heartbeat 2026-05-12. check_signals: 1 info. no action_needed/blocker signals.",
           created_at: "2026-05-12T12:44:56.000Z",
         },
+        {
+          id: "turn-heartbeat-tick-r1-blocker",
+          session_id: "unclick-heartbeat-seat",
+          role: "assistant",
+          content:
+            "Heartbeat tick 2026-05-14T01:36Z. PASS. check_signals: 1 info. Job hunt: active_jobs=5 in_progress. R1 BLOCKER is backlog state, not a live blocker event.",
+          created_at: "2026-05-12T12:45:56.000Z",
+        },
       ],
     });
 
+    expect(
+      isHeartbeatAutomationText(
+        "Heartbeat tick 2026-05-14T01:36Z. PASS. check_signals: 1 info. Job hunt: active_jobs=5 in_progress. R1 BLOCKER is backlog state.",
+      ),
+    ).toBe(true);
     expect(context.current_state_card.blocker_count).toBe(0);
     expect(context.rolling_snapshot.active_blockers).toHaveLength(0);
+    expect(context.seat_handshake.active_blocker).toBeNull();
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-request")?.kind).toBe("status");
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-protocol-pass")?.kind).toBe("proof");
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-pass-at")?.kind).toBe("proof");
     expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-no-slash-signals")?.kind).toBe("status");
+    expect(context.continuity_events.find((event) => event.source_id === "turn-heartbeat-tick-r1-blocker")?.kind).toBe("status");
   });
 
   it("keeps fresh-seat active_decision populated from active work when no decision event is live", () => {
