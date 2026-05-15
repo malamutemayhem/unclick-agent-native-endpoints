@@ -1,7 +1,7 @@
 // apps/jobsmith/src/lib/voiceProfile.ts
 //
 // Statistical voice signal extracted from a Corpus.
-// v0 is purely heuristic — no LLM. Used as templating input for renderDraft.
+// v0 is purely heuristic, no LLM. Used as templating input for renderDraft.
 
 import type { Corpus, CoverLetter } from "./ingestCvCorpus";
 
@@ -90,7 +90,9 @@ export function buildVoiceProfile(corpus: Corpus): VoiceProfile {
 
   const frequentPhrases = extractFrequentPhrases(combinedTexts, 25);
 
-  const openingFormulas = extractMatchingFirstLines(combinedTexts, OPENING_RES, 5);
+  const openingFormulas = prioritiseOpeningFormulas(
+    extractMatchingFirstLines(combinedTexts, OPENING_RES, 5),
+  );
   const closingFormulas = extractMatchingLastLines(combinedTexts, CLOSING_RES, 5);
   const signoffFormulas = extractMatchingLastLines(combinedTexts, SIGNOFF_RES, 3);
 
@@ -205,6 +207,17 @@ function extractMatchingLastLines(
     }
   }
   return [...result];
+}
+
+function prioritiseOpeningFormulas(openings: string[]): string[] {
+  return [...openings].sort((a, b) => openingPriority(a) - openingPriority(b));
+}
+
+function openingPriority(opening: string): number {
+  if (/^I am /i.test(opening)) return 0;
+  if (/^I would like to express /i.test(opening)) return 1;
+  if (/^Dear (Hiring Manager|Recruiter)/i.test(opening)) return 2;
+  return 3;
 }
 
 function splitLetterLines(text: string): string[] {

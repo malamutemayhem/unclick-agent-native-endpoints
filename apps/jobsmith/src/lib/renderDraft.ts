@@ -1,7 +1,7 @@
 // apps/jobsmith/src/lib/renderDraft.ts
 //
 // Compose a draft cover letter from a job description + voice profile.
-// v0 is pure templating — no LLM. The output is meant to be edited before sending.
+// v0 is pure templating, no LLM. The output is meant to be edited before sending.
 
 import type { VoiceProfile } from "./voiceProfile";
 
@@ -81,7 +81,7 @@ function looksLikeRole(s: string): boolean {
 function looksLikeCompany(s: string): boolean {
   if (!s) return false;
   if (s.length > 80) return false;
-  if (/(sydney|melbourne|brisbane|perth|adelaide|nsw|vic|qld|wa|sa|tas)/i.test(s)) return false;
+  if (/\b(sydney|melbourne|brisbane|perth|adelaide|nsw|vic|qld|wa|sa|tas)\b/i.test(s)) return false;
   return /[A-Z]/.test(s);
 }
 

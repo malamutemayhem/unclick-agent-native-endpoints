@@ -1,4 +1,4 @@
-# Jobsmith v0 — drafted code drop
+# Jobsmith v0: drafted code drop
 
 Drafted 2026-05-15 under Chris's any-worker-hat greenlight while waiting on UnClick fleet seats to claim. Pairs with:
 
@@ -33,7 +33,7 @@ mkdir -p apps/jobsmith/src/lib apps/jobsmith/src/pages apps/jobsmith/docs
 cp -r path/to/this/folder/* apps/jobsmith/
 ```
 
-Then wire `apps/jobsmith` into the workspace however the repo handles new app folders (likely a top-level `package.json` add, plus the package's own `package.json` + `tsconfig.json` — those aren't included in this draft because they depend on the existing workspace conventions).
+Then wire `apps/jobsmith` into the workspace however the repo handles new app folders (likely a top-level `package.json` add, plus the package's own `package.json` + `tsconfig.json`; those aren't included in this draft because they depend on the existing workspace conventions).
 
 ## Test it
 
@@ -43,7 +43,7 @@ pnpm --filter jobsmith test
 cd apps/jobsmith && npx vitest run
 ```
 
-All three lib suites are designed to pass with zero external dependencies — they use tmp fixtures and in-memory Corpus objects.
+All three lib suites are designed to pass with zero external dependencies; they use tmp fixtures and in-memory Corpus objects.
 
 ## Builder TODO before opening a PR
 
@@ -59,7 +59,7 @@ See `docs/jobsmith-v0.md` for the full deferred list. Headline:
 - No PDF parsing.
 - No LLM call.
 - Heuristic JD parsing (warnings surfaced when detection fails).
-- No persistence — corpus loads on each mount.
+- No persistence; corpus loads on each mount.
 
 ## Source
 
