@@ -8,7 +8,7 @@ import { GENERATED_PATH, generateBrainmap } from "./UnClick-brainmap.mjs";
 describe("UnClick ecosystem Brainmap", () => {
   it("keeps the generated artifact fresh", async () => {
     const generated = await generateBrainmap({ root: process.cwd() });
-    const saved = await readFile(GENERATED_PATH, "utf8");
+    const saved = (await readFile(GENERATED_PATH, "utf8")).replace(/\r\n/g, "\n");
     assert.equal(saved, generated);
   });
 
