@@ -534,6 +534,85 @@ describe("PinballWake autonomous Runner seat", () => {
     );
   });
 
+  it("keeps watcher and tether runners off unassigned builder ScopePacks unless exactly assigned", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      const tetherRunner = createAutonomousRunner({
+        id: "pc-tether-runner",
+        agentId: "pc-tether-agent",
+        readiness: "builder_ready",
+        capabilities: ["implementation", "test_fix", "tether"],
+      });
+      const base = {
+        id: "todo-tether-builder-unassigned",
+        title: "Builder lane lift packet",
+        status: "open",
+        priority: "urgent",
+        assigned_to_agent_id: null,
+        actionability_reason: "unassigned_open",
+        scope_pack: {
+          owned_files: ["docs/tether-claim-filter.md"],
+          patch: "diff --git a/docs/tether-claim-filter.md b/docs/tether-claim-filter.md\n--- a/docs/tether-claim-filter.md\n+++ b/docs/tether-claim-filter.md\n@@ -1 +1 @@\n-old\n+new\n",
+          role: "builder",
+        },
+      };
+      const assigned = {
+        ...base,
+        id: "todo-tether-builder-assigned",
+        assigned_to_agent_id: "pc-tether-agent",
+        actionability_reason: "role_assigned_open",
+      };
+
+      assert.equal(evaluateBoardroomTodoAutoClaimEligibility(base, { runner: tetherRunner }).ok, false);
+      assert.equal(
+        evaluateBoardroomTodoAutoClaimEligibility(base, { runner: tetherRunner }).reason,
+        "watcher_tether_builder_lane_not_assigned",
+      );
+      assert.equal(evaluateBoardroomTodoAutoClaimEligibility(assigned, { runner: tetherRunner }).ok, true);
+      assert.equal(evaluateBoardroomTodoAutoClaimEligibility(base, { runner }).ok, true);
+
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+      const fetchImpl = async () => ({
+        ok: true,
+        async json() {
+          return {
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({ todos: [base, assigned] }),
+                },
+              ],
+            },
+          };
+        },
+      });
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner: tetherRunner,
+        mode: "dry-run",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-16T22:55:00.000Z",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "claimed");
+      assert.equal(result.queue_source.imported, 1);
+      assert.equal(result.queue_source.skipped.length, 1);
+      assert.equal(result.queue_source.skipped[0].id, "todo-tether-builder-unassigned");
+      assert.equal(result.queue_source.skipped[0].skip_reason, "watcher_tether_builder_lane_not_assigned");
+      assert.equal(result.ledger.jobs[0].job_id, "boardroom-todo:todo-tether-builder-assigned");
+      assert.equal(result.ledger.jobs[0].worker, "pc-tether-agent");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("allows dirty-branch hygiene titles when a builder owner hint names a safe ScopePack", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");

@@ -188,6 +188,42 @@ function ownerHintAllowsBuilderCompatibleOrchestrator(todo = {}, scopePack = {})
   return tokens.includes("builder") && tokens.includes("orchestrator");
 }
 
+function listRunnerClaimTokens(runner = {}) {
+  const raw = [
+    runner.id,
+    runner.agent_id,
+    runner.agentId,
+    runner.name,
+    runner.role,
+    runner.worker_role,
+    runner.lane,
+    runner.readiness,
+    ...(Array.isArray(runner.capabilities) ? runner.capabilities : []),
+  ];
+
+  return raw
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function autonomousRunnerAgentId(runner = {}) {
+  return String(runner.agent_id || runner.agentId || runner.id || "").trim();
+}
+
+function isWatcherOrTetherRunner(runner = {}) {
+  const tokens = new Set(listRunnerClaimTokens(runner));
+  return tokens.has("watcher") || tokens.has("tether");
+}
+
+function scopePackLooksBuilderAssigned({ roleTokens = [], hasBuilderCompatibleOwnerHint = false } = {}) {
+  return hasBuilderCompatibleOwnerHint || roleTokens.some((role) => role === "builder" || role === "plex-builder");
+}
+
 function recentTodoCommentText(todo = {}) {
   const comments = Array.isArray(todo.recent_comments)
     ? todo.recent_comments
@@ -1628,6 +1664,7 @@ export function evaluateBoardroomTodoAutoClaimEligibility(
     allowedActionReasons = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons,
     allowedTodoRoles = DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedTodoRoles,
     allowProtectedSurfaces = false,
+    runner = DEFAULT_AUTONOMOUS_RUNNER,
     now = new Date().toISOString(),
   } = {},
 ) {
@@ -1647,13 +1684,17 @@ export function evaluateBoardroomTodoAutoClaimEligibility(
   }
 
   const assignedTo = String(todo.assigned_to_agent_id || "").trim();
-  if (assignedTo) {
+  const runnerAgentId = autonomousRunnerAgentId(runner);
+  const assignedToRunner = Boolean(assignedTo && runnerAgentId && assignedTo === runnerAgentId);
+  if (assignedTo && !assignedToRunner) {
     return { ok: false, reason: "boardroom_todo_already_assigned", assigned_to_agent_id: assignedTo };
   }
 
   const actionReason = normalizeToken(todo.actionability_reason || "");
   const safeActionReasons = tokenSet(allowedActionReasons, DEFAULT_AUTONOMOUS_RUNNER_POLICY.allowedActionReasons);
-  if (actionReason && safeActionReasons.size > 0 && !safeActionReasons.has(actionReason)) {
+  const selfAssignedActionReason =
+    assignedToRunner && (actionReason === "role_assigned_open" || actionReason === "assigned_open");
+  if (actionReason && safeActionReasons.size > 0 && !safeActionReasons.has(actionReason) && !selfAssignedActionReason) {
     return { ok: false, reason: "boardroom_todo_action_reason_not_allowed", actionability_reason: actionReason };
   }
 
@@ -1676,6 +1717,13 @@ export function evaluateBoardroomTodoAutoClaimEligibility(
   const hasBuilderCompatibleOwnerHint = ownerHintAllowsBuilderCompatibleRunner(todo, scopePack);
   const hasBuilderCompatibleOrchestratorHint =
     roleTokens.includes("orchestrator") && ownerHintAllowsBuilderCompatibleOrchestrator(todo, scopePack);
+  if (
+    !assignedToRunner &&
+    isWatcherOrTetherRunner(runner) &&
+    scopePackLooksBuilderAssigned({ roleTokens, hasBuilderCompatibleOwnerHint })
+  ) {
+    return { ok: false, reason: "watcher_tether_builder_lane_not_assigned", role: roleTokens[0] || null };
+  }
   const hasAllowedRole =
     roleTokens.length === 0 ||
     roleTokens.some((role) => safeRoles.has(role)) ||
@@ -1751,6 +1799,7 @@ export async function hydrateAutonomousRunnerLedgerFromUnClick({
       allowedActionReasons,
       allowedTodoRoles,
       allowProtectedSurfaces,
+      runner,
       now,
     });
     if (!eligibility.ok) {
