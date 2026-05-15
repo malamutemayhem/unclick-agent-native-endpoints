@@ -289,6 +289,23 @@ describe("acceptance: keyword fallback restores search when hybrid returns []", 
 // ─── Embeddings helper ────────────────────────────────────────────────────
 
 describe("embedText", () => {
+  it("returns null unless OpenAI embeddings are explicitly enabled", async () => {
+    const savedKey = process.env.OPENAI_API_KEY;
+    const savedFlag = process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    process.env.OPENAI_API_KEY = "sk-test-no-fetch";
+    delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    try {
+      const { embedText } = await import("../embeddings.js");
+      const result = await embedText("a searchable memory query that is long enough");
+      expect(result).toBeNull();
+    } finally {
+      if (savedKey !== undefined) process.env.OPENAI_API_KEY = savedKey;
+      else delete process.env.OPENAI_API_KEY;
+      if (savedFlag !== undefined) process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED = savedFlag;
+      else delete process.env.MEMORY_OPENAI_EMBEDDINGS_ENABLED;
+    }
+  });
+
   it("returns null when OPENAI_API_KEY is not set", async () => {
     const saved = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
