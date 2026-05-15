@@ -21,7 +21,7 @@ function freshPacket(overrides = {}) {
 
 const FRESH_HEARTBEAT = { tickId: "tick-1", emittedAt: new Date().toISOString() };
 
-describe("processExecutorPacket — gate failures", () => {
+describe("processExecutorPacket gate failures", () => {
   test("HOLD when packet is invalid (caught by CommonSensePass)", async () => {
     const r = await processExecutorPacket({
       packet: freshPacket({ intent: "delete" }),
@@ -41,7 +41,7 @@ describe("processExecutorPacket — gate failures", () => {
   });
 });
 
-describe("processExecutorPacket — test_only intent", () => {
+describe("processExecutorPacket test_only intent", () => {
   test("PASS on test_only without an executor function", async () => {
     const r = await processExecutorPacket({
       packet: freshPacket({ intent: "test_only" }),
@@ -54,7 +54,7 @@ describe("processExecutorPacket — test_only intent", () => {
   });
 });
 
-describe("processExecutorPacket — modify intent", () => {
+describe("processExecutorPacket modify intent", () => {
   test("HOLD when executor is not provided", async () => {
     const r = await processExecutorPacket({
       packet: freshPacket(),

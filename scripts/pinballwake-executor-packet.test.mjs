@@ -87,7 +87,8 @@ describe("validateExecutorPacket", () => {
   });
 
   test("rejects wrong version", () => {
-    const p = basePacket({ executor_packet_version: "v99" });
+    const p = basePacket();
+    p.executor_packet_version = "v99";
     const r = validateExecutorPacket(p);
     assert.equal(r.ok, false);
     assert.equal(r.reason, "unsupported_version");

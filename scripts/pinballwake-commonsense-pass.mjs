@@ -1,6 +1,6 @@
 // scripts/pinballwake-commonsense-pass.mjs
 //
-// CommonSensePass — the pre-flight check the executor lane runs on every
+// CommonSensePass: the pre-flight check the executor lane runs on every
 // executor packet before any code change is applied.
 //
 // Stateless / deterministic so it can be unit-tested cleanly.
@@ -10,7 +10,7 @@
 
 import { isProtectedPath, validateExecutorPacket } from "./pinballwake-executor-packet.mjs";
 
-export const DEFAULT_HEARTBEAT_MAX_AGE_MS = 12 * 60 * 1000; // 12 min — ~one cycle past a 10-min tick
+export const DEFAULT_HEARTBEAT_MAX_AGE_MS = 12 * 60 * 1000; // 12 min, about one cycle past a 10-min tick
 export const DEFAULT_ALLOWED_REQUESTER_SEATS = new Set([
   "pinballwake-job-runner",
   "unclick-heartbeat-seat",
@@ -21,11 +21,11 @@ export const DEFAULT_ALLOWED_REQUESTER_SEATS = new Set([
  * Run all CommonSensePass checks against a packet.
  *
  * @param {object} args
- * @param {object} args.packet                 — the executor packet (post `makePacket`)
- * @param {object} [args.now]                  — current Date; defaults to new Date()
- * @param {object} [args.heartbeat]            — `{ tickId, emittedAt }` of the latest known tick
+ * @param {object} args.packet                 the executor packet (post `makePacket`)
+ * @param {object} [args.now]                  current Date; defaults to new Date()
+ * @param {object} [args.heartbeat]            `{ tickId, emittedAt }` of the latest known tick
  * @param {Set<string>} [args.allowedRequesterSeats]
- * @param {function} [args.fileExists]         — async (file) => boolean, used for owned_files presence checks. Defaults to a noop that returns true (skip the check) so this can be unit-tested without filesystem.
+ * @param {function} [args.fileExists]         async (file) => boolean, used for owned_files presence checks. Defaults to a noop that returns true (skip the check) so this can be unit-tested without filesystem.
  * @returns {Promise<{ok: boolean, reason?: string, [k: string]: any}>}
  */
 export async function commonSensePass({
@@ -42,7 +42,7 @@ export async function commonSensePass({
     return { ok: false, reason: `packet_invalid:${v.reason}`, evidence: v };
   }
 
-  // 2. Authority gate — only allowlisted seats may emit packets.
+  // 2. Authority gate: only allowlisted seats may emit packets.
   if (!allowedRequesterSeats.has(packet.requesting_seat_id)) {
     return {
       ok: false,
@@ -75,7 +75,7 @@ export async function commonSensePass({
     }
   }
 
-  // 4. Protected-path gate (re-check, defence in depth — packet validator already checks but the
+  // 4. Protected-path gate (re-check, defence in depth; packet validator already checks but the
   //    runtime context may have changed since the packet was emitted).
   for (const file of packet.owned_files) {
     if (isProtectedPath(file)) {
@@ -84,7 +84,7 @@ export async function commonSensePass({
   }
 
   // 5. Owned-files existence check (skipped when fileExists is the default noop).
-  //    For `intent: "create"`, the test target need not exist yet — that's the point.
+  //    For `intent: "create"`, the test target need not exist yet because that's the point.
   //    For `intent: "modify"` or `"test_only"`, all owned_files must exist.
   if (packet.intent !== "create") {
     for (const file of packet.owned_files) {
@@ -99,7 +99,7 @@ export async function commonSensePass({
     }
   }
 
-  // 6. Acceptance sanity — when test_command is present, it must be a string.
+  // 6. Acceptance sanity: when test_command is present, it must be a string.
   if (packet.acceptance.test_command !== undefined) {
     if (typeof packet.acceptance.test_command !== "string" || !packet.acceptance.test_command.trim()) {
       return { ok: false, reason: "acceptance_test_command_must_be_non_empty_string" };

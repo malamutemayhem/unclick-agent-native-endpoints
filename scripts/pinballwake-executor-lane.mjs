@@ -26,12 +26,12 @@ const PROOF_REQUIRED = ["pr_url", "head_sha", "test_run_id", "executor_seat_id"]
  * Process a single executor packet end-to-end.
  *
  * @param {object} args
- * @param {object} args.packet                  — the executor packet
- * @param {object} [args.heartbeat]             — `{ tickId, emittedAt }` of latest tick
- * @param {function} [args.fileExists]          — async (file) => boolean
- * @param {function} [args.executor]            — async (packet) => { ok, pr_url?, head_sha_after?, test_run_id?, output? }
+ * @param {object} args.packet                  the executor packet
+ * @param {object} [args.heartbeat]             `{ tickId, emittedAt }` of latest tick
+ * @param {function} [args.fileExists]          async (file) => boolean
+ * @param {function} [args.executor]            async (packet) => { ok, pr_url?, head_sha_after?, test_run_id?, output? }
  *                                                Wraps whichever build runner actually applies code changes and opens the PR.
- * @param {string} [args.executorSeatId]        — id of the executor seat fulfilling the packet
+ * @param {string} [args.executorSeatId]        id of the executor seat fulfilling the packet
  * @param {Date}   [args.now]
  * @returns {Promise<object>} receipt
  */
@@ -60,7 +60,7 @@ export async function processExecutorPacket({
     });
   }
 
-  // Phase 2: Test-only intent — skip executor, just confirm gate pass.
+  // Phase 2: Test-only intent, skip executor and just confirm gate pass.
   if (packet.intent === "test_only") {
     return buildPassReceipt({
       packet,
