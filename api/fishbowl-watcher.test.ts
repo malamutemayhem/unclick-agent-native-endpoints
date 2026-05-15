@@ -9,6 +9,7 @@ import {
   buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
   buildWakepassAutoReroutePlan,
+  buildWorkerSelfHealingSignal,
   isMissedCheckinDispatch,
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
@@ -515,5 +516,91 @@ describe("worker self-healing decision plan", () => {
       latest_handoff_receipt_id: "handoff-latest-4",
       reason: "no_stale_worker_or_reclaimable_lease",
     });
+  });
+
+  it("turns an expired lease decision into a reclaim signal without exposing the token", () => {
+    const decision = planWorkerSelfHealingDecision({
+      todo: {
+        id: "todo-expired-lease",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-5",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    const signal = buildWorkerSelfHealingSignal(decision);
+
+    expect(signal).toMatchObject({
+      action: "worker_self_healing_reclaimable_lease",
+      severity: "action_needed",
+      summary: "Todo todo-expired-lease has an expired worker lease and can be reclaimed.",
+      payload: {
+        todo_id: "todo-expired-lease",
+        assigned_to_agent_id: "worker-1",
+        has_lease_token: true,
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+        next_reclaim_count: 3,
+        latest_handoff_receipt_id: "handoff-latest-5",
+        reason: "lease_expired",
+      },
+    });
+    expect(signal?.payload).not.toHaveProperty("lease_token");
+  });
+
+  it("turns a stale worker decision into an action-needed signal with profile context", () => {
+    const nowMs = Date.parse("2026-05-01T01:22:00.000Z");
+    const decision = planWorkerSelfHealingDecision({
+      todo: {
+        id: "todo-stale-worker",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: null,
+        lease_expires_at: null,
+        reclaim_count: 0,
+      },
+      profile: baseProfile,
+      latestHandoffReceiptId: "handoff-latest-6",
+      nowMs,
+    });
+
+    expect(buildWorkerSelfHealingSignal(decision)).toMatchObject({
+      action: "worker_self_healing_stale_worker",
+      severity: "action_needed",
+      payload: {
+        todo_id: "todo-stale-worker",
+        profile_agent_id: "worker-1",
+        next_checkin_at: "2026-05-01T01:10:00.000Z",
+        last_seen_at: "2026-05-01T00:30:00.000Z",
+        reason: "missed_next_checkin_without_active_lease",
+      },
+    });
+  });
+
+  it("keeps no-action decisions quiet", () => {
+    const decision = planWorkerSelfHealingDecision({
+      todo: {
+        id: "todo-current-worker",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: null,
+        lease_expires_at: null,
+        reclaim_count: 0,
+      },
+      profile: {
+        ...baseProfile,
+        last_seen_at: "2026-05-01T01:21:00.000Z",
+        next_checkin_at: "2026-05-01T01:30:00.000Z",
+      },
+      latestHandoffReceiptId: "handoff-latest-7",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    expect(buildWorkerSelfHealingSignal(decision)).toBeNull();
   });
 });
