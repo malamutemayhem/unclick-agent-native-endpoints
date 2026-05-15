@@ -21,6 +21,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | .github/workflows/brainmap-auto-update.yml | 7e8b08eb16aa | 1137 |
 | package.json | 37074f6e60a5 | 4175 |
 | scripts/pinballwake-ack-ledger-room.mjs | e7dcb642bc75 | 12719 |
+| scripts/pinballwake-buildbait-room.mjs | 400dccb101ba | 5214 |
 | scripts/pinballwake-close-supersede-room.mjs | 4d31f6a6a8c2 | 3891 |
 | scripts/pinballwake-coding-room.mjs | 9fa5689c555e | 25310 |
 | scripts/pinballwake-continuous-improvement-room.mjs | c80556b2d930 | 12439 |
@@ -393,6 +394,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | Room | Meaning | Source |
 | --- | --- | --- |
 | ack ledger | PinballWake room logic generated from scripts/pinballwake-ack-ledger-room.mjs. | scripts/pinballwake-ack-ledger-room.mjs |
+| buildbait | PinballWake room logic generated from scripts/pinballwake-buildbait-room.mjs. | scripts/pinballwake-buildbait-room.mjs |
 | close supersede | PinballWake room logic generated from scripts/pinballwake-close-supersede-room.mjs. | scripts/pinballwake-close-supersede-room.mjs |
 | coding | PinballWake room logic generated from scripts/pinballwake-coding-room.mjs. | scripts/pinballwake-coding-room.mjs |
 | continuous improvement | PinballWake room logic generated from scripts/pinballwake-continuous-improvement-room.mjs. | scripts/pinballwake-continuous-improvement-room.mjs |
