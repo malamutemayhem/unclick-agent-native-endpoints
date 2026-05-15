@@ -1,7 +1,7 @@
 // apps/jobsmith/src/lib/renderDraft.ts
 //
 // Compose a draft cover letter from a job description + voice profile.
-// v0 is pure templating — no LLM. The output is meant to be edited before sending.
+// v0 is pure templating, no LLM. The output is meant to be edited before sending.
 
 import type { VoiceProfile } from "./voiceProfile";
 
