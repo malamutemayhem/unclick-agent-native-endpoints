@@ -732,6 +732,46 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("allows generated runner ledger files through git hygiene preflight", async () => {
+    const result = await runAutonomousRunnerFile({
+      ledgerPath: ".pinballwake/coding-room-ledger.json",
+      runner,
+      mode: "claim",
+      policy: { disabled: true },
+      gitHygienePreflight: true,
+      gitStatusImpl: async () => ({
+        ok: true,
+        status: 0,
+        stdout: "?? .pinballwake/coding-room-ledger.json\n",
+        stderr: "",
+      }),
+      now: "2026-05-15T22:05:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "disabled");
+    assert.equal(result.git_hygiene.ok, true);
+    assert.equal(result.git_hygiene.reason, "git_hygiene_generated_only");
+    assert.deepEqual(result.git_hygiene.ignored_files, [".pinballwake/coding-room-ledger.json"]);
+  });
+
+  it("keeps blocking real dirty files while ignoring generated runner ledger files", async () => {
+    const result = await evaluateAutonomousRunnerGitHygiene({
+      ignoredPaths: [".pinballwake/coding-room-ledger.json"],
+      gitStatusImpl: async () => ({
+        ok: true,
+        status: 0,
+        stdout: "?? .pinballwake/coding-room-ledger.json\n M api/server.ts\n",
+        stderr: "",
+      }),
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "git_hygiene_dirty_worktree");
+    assert.deepEqual(result.dirty_files, ["api/server.ts"]);
+    assert.deepEqual(result.ignored_files, [".pinballwake/coding-room-ledger.json"]);
+  });
+
   it("parses and evaluates autonomous runner git hygiene status", async () => {
     assert.deepEqual(
       parseAutonomousRunnerGitStatusPorcelain(" M api/server.ts\n?? scratch.txt\n"),
