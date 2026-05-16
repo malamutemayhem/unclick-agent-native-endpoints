@@ -111,8 +111,8 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     model: "arena_bots.model or claude-haiku-4-5-20251001",
     cost_tier: "paid",
     default_allowed: false,
-    allow_paid_flag: "ANTHROPIC_API_KEY",
-    notes: "Arena bot solve uses Anthropic for live generated solutions and should remain explicit-key only.",
+    allow_paid_flag: "ARENA_ANTHROPIC_ENABLED",
+    notes: "Arena bot solve uses Anthropic for live generated solutions and must require an explicit arena spend opt-in in addition to server-side credentials.",
   },
   {
     id: "mcp.openai.tool.chat",

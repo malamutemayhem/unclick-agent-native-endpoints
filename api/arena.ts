@@ -15,7 +15,12 @@
  *   POST /v1/arena/submit-problem
  */
 
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import {
+  decideAiProviderCall,
+  type AiProviderCallDecision,
+} from "./lib/ai-provider-inventory";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -248,7 +253,7 @@ function isLandslide(solutions: Solution[]): boolean {
 // Response helpers
 // ---------------------------------------------------------------------------
 
-function json(res: any, data: unknown, status = 200) {
+function json(res: VercelResponse, data: unknown, status = 200) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -256,7 +261,7 @@ function json(res: any, data: unknown, status = 200) {
   res.end(JSON.stringify({ data, meta: { request_id: 'arena-static' } }));
 }
 
-function notFound(res: any, msg: string) {
+function notFound(res: VercelResponse, msg: string) {
   res.statusCode = 404;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -283,10 +288,27 @@ function solutionsForProblem(problemId: string): Solution[] {
 
 const ARENA_MAX_CONTENT_LENGTH = 2000;
 const ARENA_MAX_NAME_LENGTH = 80;
+const ARENA_ANTHROPIC_PROVIDER_PATH_ID = "arena.anthropic.bot-solve";
+const ARENA_DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 const VALID_CATEGORIES = [
   "cat_automation","cat_business","cat_content","cat_data",
   "cat_devtools","cat_life","cat_scheduling","cat_security","cat_web",
 ];
+
+export function isArenaAnthropicSpendEnabled(value = process.env.ARENA_ANTHROPIC_ENABLED): boolean {
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
+export function decideArenaAnthropicProviderCall(
+  model: string | null | undefined,
+  allowPaid: boolean
+): AiProviderCallDecision {
+  return decideAiProviderCall({
+    path_id: ARENA_ANTHROPIC_PROVIDER_PATH_ID,
+    model: model || ARENA_DEFAULT_ANTHROPIC_MODEL,
+    allow_paid: allowPaid,
+  });
+}
 
 async function callClaude(prompt: string, model: string, apiKey: string): Promise<string> {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -307,7 +329,7 @@ async function callClaude(prompt: string, model: string, apiKey: string): Promis
 // Main handler
 // ---------------------------------------------------------------------------
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers for all responses
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -466,7 +488,6 @@ export default async function handler(req: any, res: any) {
     const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!supabaseUrl || !supabaseKey) return res.status(503).json({ error: "Storage unavailable" });
-    if (!anthropicKey) return res.status(503).json({ error: "AI service unavailable" });
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -475,7 +496,7 @@ export default async function handler(req: any, res: any) {
       .eq("id", problem_id).eq("status", "active").single();
     if (problemErr || !problem) return res.status(404).json({ error: "Problem not found or not active" });
 
-    let bot: { id: string; name: string; description: string; model: string } | null = null;
+    let bot: { id: string; name: string; description: string; model: string } | null;
     if (bot_name) {
       const { data } = await supabase.from("arena_bots").select("id, name, description, model").eq("name", bot_name).single();
       bot = data;
@@ -484,6 +505,20 @@ export default async function handler(req: any, res: any) {
       bot = data;
     }
     if (!bot) return res.status(404).json({ error: "No bot found. Add a row to arena_bots first." });
+    const model = bot.model || ARENA_DEFAULT_ANTHROPIC_MODEL;
+
+    const providerDecision = decideArenaAnthropicProviderCall(model, isArenaAnthropicSpendEnabled());
+    if (!providerDecision.allowed) {
+      return res.status(503).json({
+        error: "AI provider call blocked by spend guardrail",
+        provider: providerDecision.provider,
+        model: providerDecision.model,
+        cost_tier: providerDecision.cost_tier,
+        reason: providerDecision.reason,
+        allow_paid_flag: providerDecision.allow_paid_flag,
+      });
+    }
+    if (!anthropicKey) return res.status(503).json({ error: "AI service unavailable" });
 
     const prompt = [
       `You are ${bot.name}, an AI assistant competing in UnClick Arena.`,
@@ -493,7 +528,7 @@ export default async function handler(req: any, res: any) {
     ].filter(Boolean).join("\n");
 
     let solutionText: string;
-    try { solutionText = await callClaude(prompt, bot.model || "claude-haiku-4-5-20251001", anthropicKey); }
+    try { solutionText = await callClaude(prompt, model, anthropicKey); }
     catch (err) { console.error("Claude API error:", err); return res.status(502).json({ error: "Failed to generate solution" }); }
     if (!solutionText.trim()) return res.status(502).json({ error: "Empty solution generated" });
 
