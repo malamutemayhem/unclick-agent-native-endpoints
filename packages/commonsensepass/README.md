@@ -20,6 +20,8 @@ Rule-and-evidence sanity gate for AI/worker claims. Verdict-only: does not build
 | R4   | `done`            | Done-without-proof: requires `pipeline === 100` AND a `closing_ref` on the subject todo. |
 | R5   | `merge_ready`     | Merge-ready-without-proof: PR must be mergeable, checks green, and have Reviewer PASS plus Safety PASS authored on the current head SHA. |
 
+The worker-facing rule matrix and next candidate backlog live in `docs/commonsensepass-rule-matrix.md`.
+
 ## Usage
 
 ```ts
