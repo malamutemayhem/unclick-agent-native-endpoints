@@ -23,7 +23,9 @@ import {
   inspectAutonomousRunnerJobSafety,
   markUnsafeJobsBlockedForAutonomousRunner,
   normalizeAutonomousRunnerMode,
+  parseAutonomousRunnerGitStatusPorcelain,
   parseMcpEventStreamPayload,
+  evaluateAutonomousRunnerGitHygiene,
   runAutonomousRunnerMainFreshnessCanary,
   runAutonomousRunnerCycle,
   runAutonomousRunnerFile,
@@ -686,6 +688,74 @@ describe("PinballWake autonomous Runner seat", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("blocks claim mode before queue import when git hygiene preflight sees dirty files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      let fetchCalled = false;
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl: async () => {
+          fetchCalled = true;
+          return { ok: true, async json() { return { result: { content: [] } }; } };
+        },
+        gitHygienePreflight: true,
+        gitStatusImpl: async () => ({
+          ok: true,
+          status: 0,
+          stdout: " M api/memory-admin.ts\n?? scripts/scratch-proof.mjs\n",
+          stderr: "",
+        }),
+        now: "2026-05-15T22:05:00.000Z",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "blocked");
+      assert.equal(result.reason, "git_hygiene_dirty_worktree");
+      assert.deepEqual(result.git_hygiene.dirty_files, [
+        "api/memory-admin.ts",
+        "scripts/scratch-proof.mjs",
+      ]);
+      assert.equal(fetchCalled, false);
+      assert.equal(result.persisted, false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("parses and evaluates autonomous runner git hygiene status", async () => {
+    assert.deepEqual(
+      parseAutonomousRunnerGitStatusPorcelain(" M api/server.ts\n?? scratch.txt\n"),
+      [
+        { status: "M", path: "api/server.ts" },
+        { status: "??", path: "scratch.txt" },
+      ],
+    );
+
+    const clean = await evaluateAutonomousRunnerGitHygiene({
+      gitStatusImpl: async () => ({ ok: true, status: 0, stdout: "", stderr: "" }),
+    });
+    assert.equal(clean.ok, true);
+
+    const dirty = await evaluateAutonomousRunnerGitHygiene({
+      gitStatusImpl: async () => ({
+        ok: true,
+        status: 0,
+        stdout: " M api/server.ts\n",
+        stderr: "",
+      }),
+    });
+    assert.equal(dirty.ok, false);
+    assert.equal(dirty.reason, "git_hygiene_dirty_worktree");
   });
 
   it("allows unassigned orchestrator ScopePacks with builder-compatible owner hints", async () => {
