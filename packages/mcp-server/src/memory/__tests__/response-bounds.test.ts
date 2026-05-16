@@ -48,9 +48,10 @@ describe("strict-client memory response bounds", () => {
     assert.ok(text.length < 8000, `payload was ${text.length} chars`);
     assert.equal((compact as { recent_sessions: unknown[] }).recent_sessions.length, 0);
 
-    const profileCard = (compact as { profile_card: { source_receipts: unknown[] } }).profile_card;
+    const profileCard = (compact as { profile_card: { source_receipts: Array<{ redaction_state?: string }> } }).profile_card;
     assert.ok(profileCard);
     assert.ok(profileCard.source_receipts.length > 0);
+    assert.ok(profileCard.source_receipts.every((receipt) => receipt.redaction_state === "clean"));
     assert.equal(JSON.stringify(profileCard).includes(long("summary", 1000)), false);
   });
 
@@ -132,7 +133,7 @@ describe("strict-client memory response bounds", () => {
         timezone_context?: string;
         working_now: string[];
         do_not_repeat: string[];
-        source_receipts: Array<{ memory_id: string; source_kind: string }>;
+        source_receipts: Array<{ memory_id: string; source_kind: string; redaction_state?: string }>;
       };
     };
 
@@ -147,6 +148,7 @@ describe("strict-client memory response bounds", () => {
     assert.doesNotMatch(profileText, /api key token/);
     assert.doesNotMatch(profileText, /Session body should stay hidden/);
     assert.ok(profileCard.source_receipts.some((receipt) => receipt.memory_id === "fact:fact-live"));
+    assert.ok(profileCard.source_receipts.every((receipt) => receipt.redaction_state === "clean"));
     assert.equal(profileCard.source_receipts.some((receipt) => receipt.memory_id === "fact:fact-stale"), false);
     assert.equal(profileCard.source_receipts.some((receipt) => receipt.source_kind === "session_summary"), false);
   });

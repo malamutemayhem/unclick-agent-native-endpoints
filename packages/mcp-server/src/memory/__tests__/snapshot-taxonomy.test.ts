@@ -27,6 +27,16 @@ describe("memory taxonomy snapshots", () => {
       "04 Preferences & Taste",
     ]);
     assert.deepEqual(snapshot.source_ids, ["fact-1"]);
+    assert.deepEqual(snapshot.source_receipts, [
+      {
+        memory_id: "fact:fact-1",
+        source_kind: "fact",
+        source_uri: "/admin/memory?tab=facts",
+        confidence: 0.93,
+        redaction_state: "clean",
+        last_verified_at: "2026-05-10T10:00:00.000Z",
+      },
+    ]);
     assert.ok(snapshot.content.includes("Sources: fact:fact-1"));
   });
 
@@ -95,6 +105,7 @@ describe("memory taxonomy snapshots", () => {
     assert.equal(doc.slug, "memory-taxonomy-15-data-and-memory");
     assert.ok(doc.tags.includes("memory-taxonomy-snapshot"));
     assert.ok(doc.content.includes("Source pointers: fact:fact-memory"));
+    assert.ok(doc.content.includes("Source receipt states: fact:fact-memory clean"));
   });
 
   test("writer supports dry runs and live upserts", async () => {
@@ -120,6 +131,7 @@ describe("memory taxonomy snapshots", () => {
     assert.equal(dryRun.dry_run, true);
     assert.equal(dryRun.snapshot_count, 1);
     assert.equal(dryRun.written_count, 0);
+    assert.ok(dryRun.snapshots[0].source_receipts.every((receipt) => receipt.redaction_state === "clean"));
 
     const writtenDocs: string[] = [];
     const live = await writeMemoryTaxonomySnapshotsToLibrary({
@@ -133,6 +145,7 @@ describe("memory taxonomy snapshots", () => {
 
     assert.equal(live.dry_run, false);
     assert.equal(live.written_count, 1);
+    assert.ok(live.snapshots[0].source_receipts.every((receipt) => receipt.source_uri.startsWith("/admin/memory")));
     assert.deepEqual(writtenDocs, [live.written[0].slug]);
   });
 });

@@ -19,6 +19,7 @@ import type {
   MemoryProfileCard,
   MemoryProfileCardReceipt,
   MemoryProfileCardSourceKind,
+  MemoryReceiptRedactionState,
 } from "./types.js";
 
 function currentApiKeyHash(): string | null {
@@ -140,6 +141,12 @@ const PROFILE_CARD_SOURCE_PATHS: Record<MemoryProfileCardSourceKind, string> = {
 const SENSITIVE_MEMORY_PATTERN = /\b(secret|token|password|credential|private key|api[_ -]?key|plaintext)\b/i;
 const GUARDRAIL_PATTERN = /\b(do not|don't|never|avoid|blocked|blocker|owner auth|human decision|no secrets|no billing|no dns|no production deploy)\b/i;
 const CURRENT_WORK_PATTERN = /\b(active|current|now|todo|job|pr|blocker|blocked|next|in progress|priority|scope)\b/i;
+const MEMORY_REDACTION_STATES = new Set<MemoryReceiptRedactionState>([
+  "clean",
+  "redacted",
+  "sensitive-hidden",
+  "blocked",
+]);
 
 function stringifyForProfile(value: unknown, max = 120): string {
   if (typeof value === "string") return capText(value, max);
@@ -185,7 +192,11 @@ function profileReceipt(
     memory_id: memoryId,
     source_kind: sourceKind,
     source_uri: PROFILE_CARD_SOURCE_PATHS[sourceKind],
+    redaction_state: "clean",
   };
+  if (typeof row.redaction_state === "string" && MEMORY_REDACTION_STATES.has(row.redaction_state as MemoryReceiptRedactionState)) {
+    receipt.redaction_state = row.redaction_state as MemoryReceiptRedactionState;
+  }
   const lastVerified = str(row.last_verified_at) || str(row.updated_at) || str(row.created_at);
   if (lastVerified) receipt.last_verified_at = lastVerified;
   if (typeof row.confidence === "number" && Number.isFinite(row.confidence)) {
@@ -212,15 +223,15 @@ function businessProfileLine(row: Record<string, unknown>): string | null {
   if (hasSensitiveMemorySignal(row.category, row.key, row.value)) return null;
   const category = str(row.category, "context");
   const key = str(row.key, "item");
-  const value = stringifyForProfile(row.value, 60);
-  return compactProfileLine(value ? `${category}/${key}: ${value}` : `${category}/${key}`, 110);
+  const value = stringifyForProfile(row.value, 50);
+  return compactProfileLine(value ? `${category}/${key}: ${value}` : `${category}/${key}`, 96);
 }
 
 function factProfileLine(row: Record<string, unknown>): string | null {
   if (typeof row.fact !== "string" || hasSensitiveMemorySignal(row.fact, row.category)) return null;
   const category = str(row.category);
   const prefix = category ? `${category}: ` : "";
-  return compactProfileLine(`${prefix}${row.fact}`, 110);
+  return compactProfileLine(`${prefix}${row.fact}`, 96);
 }
 
 function timezoneRowScore(row: Record<string, unknown>): number {
@@ -433,7 +444,7 @@ export function compactStartupContextForStrictClients(
     : [];
   out.active_facts = facts.slice(0, 12).map((row) => {
     const r = asRecord(row) ?? {};
-    return { fact: typeof r.fact === "string" ? capText(r.fact, 80) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
+    return { fact: typeof r.fact === "string" ? capText(r.fact, 74) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
   });
   out.profile_card = buildMemoryProfileCard({ business, facts, sessions, includeSessionSummaries });
   out.response_bounds = {

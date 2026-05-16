@@ -27,6 +27,7 @@ import type {
   CodeInput,
   LibraryDocInput,
   MemoryTaxonomySnapshot,
+  MemoryTaxonomySnapshotSourceReceipt,
   MemoryTaxonomySnapshotWriteOptions,
   MemoryTaxonomySnapshotWriteResult,
   MemoryTaxonomySnapshotSource,
@@ -274,6 +275,23 @@ export function isSensitiveMemorySnapshotText(text: string): boolean {
   return SENSITIVE_MEMORY_PATTERN.test(text);
 }
 
+function taxonomySourceUri(kind: MemoryTaxonomySnapshotSource["kind"]): string {
+  return kind === "fact" ? "/admin/memory?tab=facts" : "/admin/memory?tab=sessions";
+}
+
+function taxonomySourceReceipt(source: MemoryTaxonomySnapshotSource): MemoryTaxonomySnapshotSourceReceipt {
+  const lastVerified = source.updated_at ?? source.valid_from ?? source.created_at ?? null;
+  const receipt: MemoryTaxonomySnapshotSourceReceipt = {
+    memory_id: `${source.kind}:${source.id}`,
+    source_kind: source.kind,
+    source_uri: taxonomySourceUri(source.kind),
+    redaction_state: "clean",
+  };
+  if (source.confidence !== undefined) receipt.confidence = source.confidence;
+  if (lastVerified) receipt.last_verified_at = lastVerified;
+  return receipt;
+}
+
 export function buildMemoryTaxonomySnapshots(
   sources: MemoryTaxonomySnapshotSource[],
   options: { maxSnapshots?: number; maxSourcesPerSnapshot?: number } = {}
@@ -362,6 +380,7 @@ export function buildMemoryTaxonomySnapshots(
         content,
         source_ids: sourceIds,
         sources: sourcesForSnapshot.map((source) => ({ id: source.id, kind: source.kind })),
+        source_receipts: sourcesForSnapshot.map(taxonomySourceReceipt),
         confidence: Number(avgConfidence.toFixed(3)),
         weight: Number(Math.min(1, avgConfidence * 0.7 + sourcesForSnapshot.length * 0.06).toFixed(3)),
         last_confirmed_at: latestIso(
@@ -391,6 +410,9 @@ export function memoryTaxonomySnapshotToLibraryDoc(snapshot: MemoryTaxonomySnaps
         ? `- Secondary: ${snapshot.secondary_categories.join(", ")}`
         : "- Secondary: none",
       `- Source pointers: ${snapshot.sources.map((source) => `${source.kind}:${source.id}`).join(", ")}`,
+      `- Source receipt states: ${snapshot.source_receipts
+        .map((receipt) => `${receipt.memory_id} ${receipt.redaction_state}`)
+        .join(", ")}`,
       snapshot.last_confirmed_at ? `- Last confirmed: ${snapshot.last_confirmed_at}` : "- Last confirmed: unknown",
     ].join("\n"),
     tags: [
@@ -423,6 +445,7 @@ export async function writeMemoryTaxonomySnapshotsToLibrary({
     title: snapshot.title,
     primary_category: snapshot.primary_category,
     source_ids: snapshot.source_ids,
+    source_receipts: snapshot.source_receipts,
   }));
 
   if (options.dry_run) {
