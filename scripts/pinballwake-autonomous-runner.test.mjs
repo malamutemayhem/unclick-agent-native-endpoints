@@ -1295,6 +1295,8 @@ describe("PinballWake autonomous Runner seat", () => {
                             created_at: "2026-05-08T05:00:00.000Z",
                             scope_pack: {
                               owned_files: ["docs/runner-scope.md"],
+                              acceptance: ["Claimed scoped todo emits a test-only executor packet"],
+                              verification: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
                               patch: "diff --git a/docs/runner-scope.md b/docs/runner-scope.md\n--- a/docs/runner-scope.md\n+++ b/docs/runner-scope.md\n@@ -1 +1 @@\n-old\n+new\n",
                               tests: [],
                             },
@@ -1385,17 +1387,20 @@ describe("PinballWake autonomous Runner seat", () => {
       assert.match(calls[2].body.params.arguments.text, /dispatch=coding-room-claim:/);
       assert.match(calls[2].body.params.arguments.text, /lease_token=coding-room-claim:/);
       assert.match(calls[2].body.params.arguments.text, /wake_source=queuepush/);
+      assert.match(calls[2].body.params.arguments.text, /executor_packet=executor_packet_pass/);
       assert.equal(result.todo_claim_sync.ok, true);
       assert.equal(result.todo_claim_sync.todo_id, "todo-claim-1");
-      assert.equal(result.quiet_window_autonomy_proof.verdict, "HOLD");
-      assert.equal(result.quiet_window_autonomy_proof.first_missing_rung, "execution_packet");
+      assert.equal(result.todo_claim_sync.test_only_executor_packet.receipt.receipt_type, "executor_packet_pass");
+      assert.equal(result.quiet_window_autonomy_proof.verdict, "BLOCKER");
+      assert.equal(result.quiet_window_autonomy_proof.first_missing_rung, "build_attempt_or_commonsense_blocker");
       assert.deepEqual(result.quiet_window_autonomy_proof.evidence.observed_rungs, [
         "tick",
         "buildbait_crumb",
         "claim_or_lease",
+        "execution_packet",
       ]);
-      assert.equal(result.claimability_scorecard.quiet_window_autonomy_verdict, "HOLD");
-      assert.equal(result.claimability_scorecard.quiet_window_first_missing_rung, "execution_packet");
+      assert.equal(result.claimability_scorecard.quiet_window_autonomy_verdict, "BLOCKER");
+      assert.equal(result.claimability_scorecard.quiet_window_first_missing_rung, "build_attempt_or_commonsense_blocker");
 
       const persisted = JSON.parse(await readFile(ledgerPath, "utf8"));
       assert.equal(persisted.jobs[0].status, "claimed");

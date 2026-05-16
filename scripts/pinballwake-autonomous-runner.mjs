@@ -1120,10 +1120,12 @@ function validateBoardroomClaimSourceState(job = {}) {
 
 export async function syncClaimedBoardroomTodoToUnClick({
   job,
+  todo = null,
   runner = DEFAULT_AUTONOMOUS_RUNNER,
   mcpUrl = DEFAULT_UNCLICK_MCP_URL,
   apiKey = "",
   fetchImpl = globalThis.fetch,
+  testOnlyExecutorPacket = null,
 } = {}) {
   const todoId = extractBoardroomTodoIdFromCodingRoomJob(job);
   if (!todoId) {
@@ -1166,6 +1168,22 @@ export async function syncClaimedBoardroomTodoToUnClick({
     };
   }
 
+  let testOnlyExecutorPacketResult = null;
+  if (todo && testOnlyExecutorPacket?.enabled) {
+    testOnlyExecutorPacketResult = await createAutonomousRunnerTestOnlyExecutorReceipt({
+      todo,
+      scopePack: extractBoardroomTodoScopePackObject(todo),
+      heartbeat: testOnlyExecutorPacket.heartbeat,
+      heartbeatTickId: testOnlyExecutorPacket.heartbeatTickId,
+      headShaAtRequest: testOnlyExecutorPacket.headShaAtRequest,
+      requestingSeatId: testOnlyExecutorPacket.requestingSeatId,
+      scopePackCommentId: testOnlyExecutorPacket.scopePackCommentId,
+      fileExists: testOnlyExecutorPacket.fileExists,
+      executorSeatId: testOnlyExecutorPacket.executorSeatId,
+      now: testOnlyExecutorPacket.now,
+    });
+  }
+
   const comment = await callUnClickMcpTool({
     mcpUrl,
     apiKey,
@@ -1184,8 +1202,9 @@ export async function syncClaimedBoardroomTodoToUnClick({
           `source=${job?.source || "unknown"}.`,
           `wake_source=${job?.source_state?.wake_source || "unknown"}.`,
           `job=${job?.job_id || "unknown"}.`,
-        ].join(" "),
-        600,
+          formatTestOnlyExecutorPacketReceipt(testOnlyExecutorPacketResult),
+        ].filter(Boolean).join(" "),
+        1000,
       ),
     },
   });
@@ -1210,6 +1229,7 @@ export async function syncClaimedBoardroomTodoToUnClick({
     status: "in_progress",
     comment_ok: true,
     comment_id: comment.data?.comment?.id || null,
+    test_only_executor_packet: testOnlyExecutorPacketResult,
   };
 }
 
@@ -1465,6 +1485,7 @@ function createQuietWindowAutonomyProofReceipt({
   finalAction = "",
   finalReason = "",
   commonsensepass = {},
+  testOnlyExecutorPacket = null,
 } = {}) {
   const triggerSource = normalizeQuietWindowToken(wakeSource || "unknown");
   const imported = numberOption(queueSourceResult.imported, 0);
@@ -1503,11 +1524,28 @@ function createQuietWindowAutonomyProofReceipt({
     });
   }
 
+  if (testOnlyExecutorPacket?.packet) {
+    events.push({
+      rung: "execution_packet",
+      at: now,
+      packet_id: testOnlyExecutorPacket.packet.packet_id || null,
+      receipt_type: testOnlyExecutorPacket.receipt?.receipt_type || null,
+    });
+  }
+
   if (blockedResult || commonsensepass.verdict !== "PASS") {
     events.push({
       rung: "commonsensepass_blocker",
       at: now,
       reason: blockedResult?.reason || commonsensepass.reason_code || finalReason || "runner_blocked",
+    });
+  }
+
+  if (testOnlyExecutorPacket?.receipt?.receipt_type === "executor_packet_hold") {
+    events.push({
+      rung: "commonsensepass_blocker",
+      at: now,
+      reason: testOnlyExecutorPacket.receipt.hold_reason || testOnlyExecutorPacket.reason || "executor_packet_hold",
     });
   }
 
@@ -2445,6 +2483,12 @@ export async function runAutonomousRunnerFile({
     finalReason,
     scopingRequested: todoForScoping && shouldPersist ? 1 : 0,
   });
+  const executorHeartbeatTickId = trustedFallbackId || `${wakeSource || "unknown"}:${now}`;
+  const executorHeadSha =
+    checkedOutSha ||
+    mainFreshnessCanary?.check?.current_main_sha ||
+    mainFreshnessCanary?.check?.currentMainSha ||
+    "unknown-head-sha";
 
   if (
     shouldPersist &&
@@ -2452,12 +2496,24 @@ export async function runAutonomousRunnerFile({
     last.action === "claimed" &&
     last.job
   ) {
+    const claimedTodoId = extractBoardroomTodoIdFromCodingRoomJob(last.job);
+    const claimedTodo = (queueSourceResult.todos || []).find((todo) =>
+      String(todo.id || todo.todo_id || "").trim() === claimedTodoId
+    );
     todoClaimSync = await syncClaimedBoardroomTodoToUnClick({
       job: last.job,
+      todo: claimedTodo || null,
       runner,
       apiKey: unclickApiKey,
       mcpUrl: unclickMcpUrl,
       fetchImpl,
+      testOnlyExecutorPacket: {
+        enabled: Boolean(claimedTodo),
+        heartbeat: { tickId: executorHeartbeatTickId, emittedAt: now },
+        heartbeatTickId: executorHeartbeatTickId,
+        headShaAtRequest: executorHeadSha,
+        now,
+      },
     });
 
     if (!todoClaimSync.ok) {
@@ -2481,7 +2537,6 @@ export async function runAutonomousRunnerFile({
   }
 
   if (shouldPersist && todoForScoping) {
-    const executorHeartbeatTickId = trustedFallbackId || `${wakeSource || "unknown"}:${now}`;
     todoScopingSync = await syncBoardroomTodoScopingRequestToUnClick({
       todo: todoForScoping,
       runner,
@@ -2492,11 +2547,7 @@ export async function runAutonomousRunnerFile({
         enabled: true,
         heartbeat: { tickId: executorHeartbeatTickId, emittedAt: now },
         heartbeatTickId: executorHeartbeatTickId,
-        headShaAtRequest:
-          checkedOutSha ||
-          mainFreshnessCanary?.check?.current_main_sha ||
-          mainFreshnessCanary?.check?.currentMainSha ||
-          "unknown-head-sha",
+        headShaAtRequest: executorHeadSha,
         now,
       },
     });
@@ -2570,6 +2621,7 @@ export async function runAutonomousRunnerFile({
     finalAction,
     finalReason,
     commonsensepass,
+    testOnlyExecutorPacket: todoClaimSync.test_only_executor_packet || todoScopingSync.test_only_executor_packet,
   });
   claimabilityScorecard = {
     ...claimabilityScorecard,
