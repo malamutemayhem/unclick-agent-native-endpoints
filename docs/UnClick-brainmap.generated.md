@@ -52,7 +52,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | packages/mcp-server/src/amber-tool.ts | 6d020b798469 | 4138 |
 | packages/mcp-server/src/anthropic-tool.ts | fd197643eefb | 7766 |
 | packages/mcp-server/src/asana-tool.ts | 3f5d880c119d | 8078 |
-| packages/mcp-server/src/assemblyai-tool.ts | 8eaea963f072 | 6080 |
+| packages/mcp-server/src/assemblyai-tool.ts | fdc9c929ba6f | 9625 |
 | packages/mcp-server/src/australiapost-tool.ts | 6fc5a927873d | 5148 |
 | packages/mcp-server/src/bandsintown-tool.ts | a77399b666e2 | 3170 |
 | packages/mcp-server/src/bgg-tool.ts | 5078cb1ae404 | 10461 |

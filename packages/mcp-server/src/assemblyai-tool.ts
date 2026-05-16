@@ -4,6 +4,95 @@
 
 const AAI_BASE = "https://api.assemblyai.com/v2";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type AssemblyAiToolOperation =
+  | "transcription"
+  | "transcript-read"
+  | "transcript-listing"
+  | "sentence-listing"
+  | "paragraph-listing"
+  | "summary-read";
+
+type AssemblyAiToolCostTier = "paid" | "paid_or_unknown";
+
+interface AssemblyAiToolDecisionInput {
+  path_id: string;
+  model: string;
+  allow_paid?: boolean;
+}
+
+export interface AssemblyAiToolDecision {
+  allowed: boolean;
+  path_id: string;
+  provider: "AssemblyAI";
+  model: string;
+  cost_tier: AssemblyAiToolCostTier;
+  default_allowed: false;
+  reason: "explicit_paid_allowed" | "paid_or_unknown_blocked";
+  allow_paid_flag: "api_key argument";
+}
+
+// ─── Spend guard ──────────────────────────────────────────────────────────────
+
+const ASSEMBLYAI_TOOL_PATH_IDS: Record<AssemblyAiToolOperation, string> = {
+  transcription: "mcp.assemblyai.tool.transcription",
+  "transcript-read": "mcp.assemblyai.tool.transcript-read",
+  "transcript-listing": "mcp.assemblyai.tool.transcript-listing",
+  "sentence-listing": "mcp.assemblyai.tool.sentence-listing",
+  "paragraph-listing": "mcp.assemblyai.tool.paragraph-listing",
+  "summary-read": "mcp.assemblyai.tool.summary-read",
+};
+
+const ASSEMBLYAI_TOOL_OPERATION_BY_PATH_ID: Record<string, AssemblyAiToolOperation> =
+  Object.fromEntries(
+    Object.entries(ASSEMBLYAI_TOOL_PATH_IDS).map(([operation, pathId]) => [pathId, operation]),
+  ) as Record<string, AssemblyAiToolOperation>;
+
+const ASSEMBLYAI_TOOL_COST_TIERS: Record<AssemblyAiToolOperation, AssemblyAiToolCostTier> = {
+  transcription: "paid",
+  "transcript-read": "paid_or_unknown",
+  "transcript-listing": "paid_or_unknown",
+  "sentence-listing": "paid_or_unknown",
+  "paragraph-listing": "paid_or_unknown",
+  "summary-read": "paid_or_unknown",
+};
+
+function decideAiProviderCall(input: AssemblyAiToolDecisionInput): AssemblyAiToolDecision {
+  const operation = ASSEMBLYAI_TOOL_OPERATION_BY_PATH_ID[input.path_id];
+  const allowed = input.allow_paid === true;
+
+  return {
+    allowed,
+    path_id: input.path_id,
+    provider: "AssemblyAI",
+    model: input.model,
+    cost_tier: operation ? ASSEMBLYAI_TOOL_COST_TIERS[operation] : "paid_or_unknown",
+    default_allowed: false,
+    reason: allowed ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: "api_key argument",
+  };
+}
+
+export function decideAssemblyAiToolProviderCall(
+  operation: AssemblyAiToolOperation,
+  model: string,
+  apiKey: string,
+): AssemblyAiToolDecision {
+  return decideAiProviderCall({
+    path_id: ASSEMBLYAI_TOOL_PATH_IDS[operation],
+    model,
+    allow_paid: Boolean(apiKey),
+  });
+}
+
+function requireAssemblyAiSpendAllowed(operation: AssemblyAiToolOperation, model: string, apiKey: string): void {
+  const decision = decideAssemblyAiToolProviderCall(operation, model, apiKey);
+  if (!decision.allowed) {
+    throw new Error(`AI spend guard blocked ${decision.path_id}: ${decision.allow_paid_flag} is required.`);
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function requireKey(args: Record<string, unknown>): string {
@@ -44,6 +133,7 @@ async function aaiPost<T>(apiKey: string, path: string, body: unknown): Promise<
 
 export async function assemblyaiTranscribe(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("transcription", "AssemblyAI /transcript", apiKey);
   const audioUrl = String(args.audio_url ?? "").trim();
   if (!audioUrl) throw new Error("audio_url is required (publicly accessible URL of the audio/video file).");
 
@@ -72,6 +162,7 @@ export async function assemblyaiTranscribe(args: Record<string, unknown>): Promi
 
 export async function assemblyaiGetTranscript(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("transcript-read", "AssemblyAI /transcript/{id}", apiKey);
   const id = String(args.transcript_id ?? "").trim();
   if (!id) throw new Error("transcript_id is required.");
   return aaiGet(apiKey, `/transcript/${encodeURIComponent(id)}`);
@@ -79,6 +170,7 @@ export async function assemblyaiGetTranscript(args: Record<string, unknown>): Pr
 
 export async function assemblyaiListTranscripts(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("transcript-listing", "AssemblyAI /transcript", apiKey);
   const params: Record<string, string> = {};
   if (args.limit)  params.limit  = String(Math.min(200, Math.max(1, Number(args.limit ?? 10))));
   if (args.status) params.status = String(args.status);
@@ -89,6 +181,7 @@ export async function assemblyaiListTranscripts(args: Record<string, unknown>): 
 
 export async function assemblyaiGetSentences(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("sentence-listing", "AssemblyAI /transcript/{id}/sentences", apiKey);
   const id = String(args.transcript_id ?? "").trim();
   if (!id) throw new Error("transcript_id is required.");
   const data = await aaiGet<{ sentences: unknown[] }>(apiKey, `/transcript/${encodeURIComponent(id)}/sentences`);
@@ -97,6 +190,7 @@ export async function assemblyaiGetSentences(args: Record<string, unknown>): Pro
 
 export async function assemblyaiGetParagraphs(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("paragraph-listing", "AssemblyAI /transcript/{id}/paragraphs", apiKey);
   const id = String(args.transcript_id ?? "").trim();
   if (!id) throw new Error("transcript_id is required.");
   const data = await aaiGet<{ paragraphs: unknown[] }>(apiKey, `/transcript/${encodeURIComponent(id)}/paragraphs`);
@@ -105,6 +199,7 @@ export async function assemblyaiGetParagraphs(args: Record<string, unknown>): Pr
 
 export async function assemblyaiSummarize(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAssemblyAiSpendAllowed("summary-read", "AssemblyAI /transcript/{id}", apiKey);
   const id = String(args.transcript_id ?? "").trim();
   if (!id) throw new Error("transcript_id is required (transcript must already be completed with summarization enabled).");
   const data = await aaiGet<{ summary?: string; status: string; error?: string }>(apiKey, `/transcript/${encodeURIComponent(id)}`);
