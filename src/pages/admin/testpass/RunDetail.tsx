@@ -1,29 +1,267 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import { ArrowLeft, Check, ClipboardCopy, Download, Loader2, MessageSquare, X } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Check, ChevronDown, ClipboardCopy, Download, Loader2, MessageSquare, Play, X } from "lucide-react";
 import { useSession } from "@/lib/auth";
-import { SEVERITY_BADGE, STATUS_LABEL, STATUS_PILL, VERDICT_ICON, VERDICT_LABEL, elapsedLabel, fmtDate } from "./testpass-ui";
+import { STATUS_LABEL, STATUS_PILL, elapsedLabel, fmtDate } from "./testpass-ui";
 
 type VS = { check?: number; fail?: number; na?: number; other?: number; pending?: number };
-interface RunData { id: string; pack_name: string; target: { url?: string }; profile: string; started_at: string; completed_at?: string; status: string; verdict_summary: VS; report_id?: string | null; }
-interface ReportBreadcrumb { id: string; target: string; run_sequence: string[]; }
+type CardState = "pass" | "fail" | "warn" | "skip";
+
+interface RunData {
+  id: string;
+  pack_name: string;
+  target: { url?: string };
+  profile: string;
+  started_at: string;
+  completed_at?: string;
+  status: string;
+  verdict_summary: VS;
+  report_id?: string | null;
+}
+
+interface ReportBreadcrumb {
+  id: string;
+  target: string;
+  run_sequence: string[];
+}
+
+interface CheckItem {
+  id: string;
+  check_id: string;
+  title: string;
+  category: string;
+  severity: "critical" | "high" | "medium" | "low";
+  verdict: "check" | "na" | "fail" | "other" | "pending";
+  on_fail_comment?: string | null;
+  fix_recipe?: string[] | null;
+  evidence_ref?: string | null;
+  evidence_json?: unknown;
+  evidence?: unknown;
+}
+
+const CARD_STYLE: Record<CardState, { icon: string; border: string; background: string; text: string; label: string }> = {
+  pass: {
+    icon: "✅",
+    border: "border-emerald-400/35",
+    background: "bg-emerald-400/[0.06]",
+    text: "text-emerald-300",
+    label: "Passed",
+  },
+  fail: {
+    icon: "❌",
+    border: "border-red-400/40",
+    background: "bg-red-500/[0.07]",
+    text: "text-red-300",
+    label: "Needs fixing",
+  },
+  warn: {
+    icon: "⚠️",
+    border: "border-[#E2B93B]/45",
+    background: "bg-[#E2B93B]/[0.08]",
+    text: "text-[#E2B93B]",
+    label: "Needs review",
+  },
+  skip: {
+    icon: "⏸",
+    border: "border-white/[0.12]",
+    background: "bg-white/[0.04]",
+    text: "text-gray-300",
+    label: "Skipped",
+  },
+};
+
+const SCORE_STYLE = {
+  ok: "border-emerald-400/35 bg-emerald-400/[0.12] text-emerald-200",
+  warn: "border-[#E2B93B]/40 bg-[#E2B93B]/[0.12] text-[#E2B93B]",
+  fail: "border-red-400/40 bg-red-500/[0.12] text-red-200",
+};
 
 function useReportBreadcrumb(reportId: string | null | undefined, authHeader: Record<string, string>) {
   const [reportInfo, setReportInfo] = useState<ReportBreadcrumb | null>(null);
+
   useEffect(() => {
     if (!reportId) return;
     void fetch(`/api/memory-admin?action=get_report&report_id=${encodeURIComponent(reportId)}`, { headers: authHeader })
       .then((r) => r.json().catch(() => ({})))
       .then((body) => {
         if (body.report) {
-          setReportInfo({ id: body.report.id as string, target: body.report.target as string, run_sequence: body.report.run_sequence as string[] });
+          setReportInfo({
+            id: body.report.id as string,
+            target: body.report.target as string,
+            run_sequence: body.report.run_sequence as string[],
+          });
         }
       })
       .catch(() => undefined);
   }, [reportId, authHeader]);
+
   return reportInfo;
 }
-interface CheckItem { id: string; check_id: string; title: string; category: string; severity: "critical"|"high"|"medium"|"low"; verdict: "check"|"na"|"fail"|"other"|"pending"; on_fail_comment?: string|null; fix_recipe?: string[]|null; }
+
+function cardState(verdict: CheckItem["verdict"]): CardState {
+  if (verdict === "check") return "pass";
+  if (verdict === "fail") return "fail";
+  if (verdict === "other") return "warn";
+  return "skip";
+}
+
+function statusLine(item: CheckItem) {
+  if (item.verdict === "check") return "This check passed.";
+  if (item.verdict === "fail") return item.on_fail_comment ?? "This check needs attention.";
+  if (item.verdict === "other") return "This check needs a closer look.";
+  if (item.verdict === "pending") return "This check has not finished yet.";
+  return "This check was skipped for this run.";
+}
+
+function meaningLine(item: CheckItem) {
+  if (item.on_fail_comment) return item.on_fail_comment;
+  if (item.verdict === "check") return "TestPass found the expected result for this check.";
+  if (item.verdict === "pending") return "TestPass is still waiting for this result.";
+  if (item.verdict === "na") return "This check did not apply to the selected pack or target.";
+  return "TestPass could not turn this result into a clean pass or fail yet.";
+}
+
+function rawEvidence(item: CheckItem) {
+  return {
+    check_id: item.check_id,
+    category: item.category,
+    severity: item.severity,
+    verdict: item.verdict,
+    evidence_ref: item.evidence_ref ?? null,
+    evidence: item.evidence_json ?? item.evidence ?? null,
+  };
+}
+
+function ScoreBadge({
+  passed,
+  total,
+  severity,
+  shareUrl,
+  copied,
+  onCopy,
+}: {
+  passed: number;
+  total: number;
+  severity: "ok" | "warn" | "fail";
+  shareUrl: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      disabled={!shareUrl}
+      title={shareUrl ? "Copy share link" : "Share link is not ready"}
+      className={`flex min-h-11 w-full min-w-[9rem] items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors sm:w-auto ${SCORE_STYLE[severity]} ${
+        copied ? "ring-2 ring-emerald-300/50" : ""
+      } disabled:cursor-not-allowed disabled:opacity-70`}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+      <span>{passed}/{total} passing</span>
+    </button>
+  );
+}
+
+function CheckCard({
+  item,
+  expanded,
+  onToggle,
+  copiedStep,
+  onCopyStep,
+}: {
+  item: CheckItem;
+  expanded: boolean;
+  onToggle: () => void;
+  copiedStep: string | null;
+  onCopyStep: (stepKey: string, text: string) => void;
+}) {
+  const state = cardState(item.verdict);
+  const style = CARD_STYLE[state];
+  const steps = item.fix_recipe ?? [];
+  const raw = rawEvidence(item);
+  const hasRawEvidence = Boolean(raw.evidence_ref || raw.evidence);
+
+  return (
+    <article className={`rounded-lg border ${style.border} ${style.background} p-4`}>
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 text-lg" aria-label={style.label} title={style.label}>
+          {style.icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold leading-5 text-white">{item.title}</h2>
+              <p className="mt-1 text-sm leading-5 text-[#d7d7d7]">{statusLine(item)}</p>
+            </div>
+            <span className={`shrink-0 rounded-full border border-current/25 px-2 py-0.5 text-[11px] font-medium ${style.text}`}>
+              {style.label}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#61C1C4] hover:text-[#8bd9dc]"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+            {expanded ? "Hide detail" : "Show detail"}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-4 space-y-4 border-t border-white/[0.08] pt-4">
+          <section>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#888]">What this means</p>
+            <p className="mt-1 text-sm leading-6 text-[#d7d7d7]">{meaningLine(item)}</p>
+          </section>
+
+          <section>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#888]">How to fix</p>
+            {steps.length > 0 ? (
+              <ol className="mt-2 space-y-2">
+                {steps.map((step, idx) => {
+                  const stepKey = `${item.id}-${idx}`;
+                  return (
+                    <li key={stepKey} className="flex items-start gap-2 rounded-md border border-white/[0.08] bg-black/20 p-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-bold text-[#bbb]">
+                        {idx + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm leading-5 text-[#d7d7d7]">{step}</span>
+                      <button
+                        type="button"
+                        onClick={() => onCopyStep(stepKey, step)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#777] hover:bg-white/[0.08] hover:text-white"
+                        title="Copy this step"
+                      >
+                        {copiedStep === stepKey ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="mt-1 text-sm leading-6 text-[#d7d7d7]">
+                {item.verdict === "fail" ? "Review this check, make the fix, then run TestPass again." : "No action needed."}
+              </p>
+            )}
+          </section>
+
+          {hasRawEvidence && (
+            <details className="rounded-md border border-white/[0.08] bg-black/25 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-[#aaa]">See raw evidence</summary>
+              <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[#bbb]">
+                {JSON.stringify(raw, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function RunDetail() {
   const { id: runId } = useParams<{ id: string }>();
@@ -37,57 +275,143 @@ export default function RunDetail() {
   const [items, setItems] = useState<CheckItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false); const [showModal, setShowModal] = useState(false); const [copiedStep, setCopiedStep] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedFixes, setCopiedFixes] = useState(false);
+  const [copiedStep, setCopiedStep] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchRun = useCallback(async () => {
-    if (!runId || !token) return null;
+    if (!runId || !token) {
+      setLoading(false);
+      return null;
+    }
     try {
       const res = await fetch(`/api/memory-admin?action=get_testpass_run&run_id=${encodeURIComponent(runId)}`, { headers: authHeader });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(body.error ?? "Failed to load run"); return null; }
+      if (!res.ok) {
+        setError(body.error ?? "Failed to load run");
+        return null;
+      }
       setRun(body.run as RunData);
-      setItems(body.items as CheckItem[]);
-      if ((body.items as CheckItem[])?.length > 0 && !selectedId) setSelectedId((body.items as CheckItem[])[0].id);
+      setItems(Array.isArray(body.items) ? body.items as CheckItem[] : []);
       return (body.run as RunData).status;
-    } catch (e) { setError(e instanceof Error ? e.message : "Failed to load run"); return null; }
-    finally { setLoading(false); }
-  }, [runId, token, authHeader, selectedId]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load run");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [runId, token, authHeader]);
 
   useEffect(() => {
-    void fetchRun().then((status) => {
-      if (status === "running" || status === "pending") {
-        pollRef.current = setInterval(() => {
-          void fetchRun().then((s) => {
-            if (s && s !== "running" && s !== "pending" && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-          });
-        }, 3000);
+    const firstFetch = window.setTimeout(() => {
+      void fetchRun().then((status) => {
+        if (status === "running" || status === "pending") {
+          pollRef.current = setInterval(() => {
+            void fetchRun().then((s) => {
+              if (s && s !== "running" && s !== "pending" && pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+            });
+          }, 3000);
+        }
+      });
+    }, 0);
+    return () => {
+      window.clearTimeout(firstFetch);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-    });
-    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    };
   }, [fetchRun]);
 
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const passedCount = run?.verdict_summary?.check ?? 0;
+  const failCount = run?.verdict_summary?.fail ?? 0;
+  const warnCount = run?.verdict_summary?.other ?? 0;
+  const skippedCount = run?.verdict_summary?.na ?? 0;
+  const pendingCount = run?.verdict_summary?.pending ?? 0;
+  const totalFromSummary = passedCount + failCount + warnCount + skippedCount + pendingCount;
+  const totalChecks = items.length || totalFromSummary;
+  const scoreSeverity = failCount > 0 ? "fail" : warnCount + pendingCount > 0 ? "warn" : "ok";
   const failItems = items.filter((i) => i.verdict === "fail");
-  const vs = run?.verdict_summary ?? {};
+  const shareUrl = runId && typeof window !== "undefined" ? `${window.location.origin}/admin/testpass/runs/${runId}` : "";
 
-  async function copyFixList() {
-    const text = failItems.map((i) => `## ${i.check_id}: ${i.title}\n${i.on_fail_comment ?? ""}\n${(i.fix_recipe ?? []).map((s, n) => `  ${n+1}. ${s}`).join("\n")}`).join("\n\n");
-    await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 3000);
-  }
   const agentPrompt = failItems.length > 0
-    ? `I ran TestPass against ${run?.target?.url ?? "my MCP server"} and got ${failItems.length} failing check${failItems.length === 1 ? "" : "s"}:\n\n` + failItems.map((i) => `- ${i.check_id}: ${i.title}\n  ${i.on_fail_comment ?? ""}`).join("\n") + "\n\nCan you help me fix these?"
+    ? `I ran TestPass against ${run?.target?.url ?? "my MCP server"} and got ${failItems.length} failing check${failItems.length === 1 ? "" : "s"}:\n\n` +
+      failItems.map((i) => `- ${i.title}\n  ${i.on_fail_comment ?? ""}`).join("\n") +
+      "\n\nCan you help me fix these?"
     : `TestPass completed with no failures for ${run?.target?.url ?? "my MCP server"}.`;
 
-  if (loading) return <div className="flex items-center justify-center py-24 gap-2 text-[#888]"><Loader2 className="h-5 w-5 animate-spin" /> Loading run...</div>;
-  if (error || !run) return <div className="py-24 text-center"><p className="text-red-400 text-sm mb-4">{error ?? "Run not found."}</p><button onClick={() => navigate("/admin/testpass")} className="text-sm text-[#888] hover:text-white">Back to TestPass</button></div>;
+  function toggleExpanded(itemId: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    await navigator.clipboard.writeText(shareUrl);
+    setCopiedShare(true);
+    setTimeout(() => setCopiedShare(false), 1800);
+  }
+
+  async function copyFixList() {
+    const text = failItems
+      .map((i) => `## ${i.title}\n${i.on_fail_comment ?? ""}\n${(i.fix_recipe ?? []).map((s, n) => `  ${n + 1}. ${s}`).join("\n")}`)
+      .join("\n\n");
+    await navigator.clipboard.writeText(text);
+    setCopiedFixes(true);
+    setTimeout(() => setCopiedFixes(false), 2500);
+  }
+
+  async function copyStep(stepKey: string, text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopiedStep(stepKey);
+    setTimeout(() => setCopiedStep(null), 1800);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-24 text-[#888]">
+        <Loader2 className="h-5 w-5 animate-spin" /> Loading run...
+      </div>
+    );
+  }
+
+  if (error || !run) {
+    return (
+      <div className="py-24 text-center">
+        <p className="mb-4 text-sm text-red-400">{error ?? "Run not found."}</p>
+        <button onClick={() => navigate("/admin/testpass")} className="text-sm text-[#888] hover:text-white">
+          Back to TestPass
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-0">
-      <button onClick={() => navigate("/admin/testpass")} className="mb-4 flex items-center gap-1.5 text-sm text-[#888] hover:text-white w-fit"><ArrowLeft className="h-4 w-4" /> All runs</button>
-      {reportBreadcrumb && run?.report_id && (
-        <p className="mb-3 text-xs text-[#666]">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button onClick={() => navigate("/admin/testpass")} className="flex items-center gap-1.5 text-sm text-[#888] hover:text-white">
+          <ArrowLeft className="h-4 w-4" /> All runs
+        </button>
+        <button
+          onClick={() => navigate("/admin/testpass/new")}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#E2B93B]/30 bg-[#E2B93B]/10 px-4 py-2 text-sm font-semibold text-[#E2B93B] hover:bg-[#E2B93B]/20"
+        >
+          <Play className="h-4 w-4" /> Run again
+        </button>
+      </div>
+
+      {reportBreadcrumb && run.report_id && (
+        <p className="text-xs text-[#666]">
           Run {(reportBreadcrumb.run_sequence.indexOf(runId ?? "") + 1) || "?"} of {reportBreadcrumb.run_sequence.length} in report for{" "}
           <Link to={`/admin/testpass/reports/${run.report_id}`} className="text-[#61C1C4] hover:underline">
             {reportBreadcrumb.target}
@@ -95,132 +419,129 @@ export default function RunDetail() {
         </p>
       )}
 
-      <div className="mb-6 rounded-xl border border-white/[0.06] bg-[#111] p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[run.status] ?? STATUS_PILL.pending}`}>{STATUS_LABEL[run.status] ?? run.status}{(run.status === "running" || run.status === "pending") && <Loader2 className="ml-1.5 inline-block h-3 w-3 animate-spin" />}</span>
+      <section className="rounded-lg border border-white/[0.08] bg-[#101010] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[run.status] ?? STATUS_PILL.pending}`}>
+                {STATUS_LABEL[run.status] ?? run.status}
+                {(run.status === "running" || run.status === "pending") && <Loader2 className="ml-1.5 inline-block h-3 w-3 animate-spin" />}
+              </span>
               <span className="text-xs text-[#666]">{run.profile} depth</span>
             </div>
-            <p className="font-mono text-sm text-[#aaa]">{run.target?.url ?? "(no URL)"}</p>
-            <p className="text-xs text-[#666]">Pack: <span className="text-[#ccc]">{run.pack_name}</span><span className="mx-2 text-[#444]">|</span>Started: <span className="text-[#ccc]">{fmtDate(run.started_at)}</span><span className="mx-2 text-[#444]">|</span>Elapsed: <span className="text-[#ccc]">{elapsedLabel(run.started_at, run.completed_at)}</span></p>
+            <h1 className="text-xl font-semibold text-white">TestPass result</h1>
+            <p className="mt-2 break-words font-mono text-sm text-[#aaa]">{run.target?.url ?? "(no URL)"}</p>
+            <p className="mt-2 text-xs text-[#666]">
+              Pack: <span className="text-[#ccc]">{run.pack_name}</span>
+              <span className="mx-2 text-[#444]">|</span>
+              Started: <span className="text-[#ccc]">{fmtDate(run.started_at)}</span>
+              <span className="mx-2 text-[#444]">|</span>
+              Elapsed: <span className="text-[#ccc]">{elapsedLabel(run.started_at, run.completed_at)}</span>
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            {[["Pass", vs.check, "text-[#61C1C4]"], ["Fail", vs.fail, "text-red-400"], ["N/A", vs.na, "text-gray-400"], ["Other", vs.other, "text-[#E2B93B]"], ["Pending", vs.pending, "text-blue-300"]].filter(([,v]) => (v as number ?? 0) > 0).map(([label, val, color]) => (
-              <div key={label as string} className="flex flex-col items-center">
-                <span className={`text-lg font-bold ${color}`}>{val as number}</span>
-                <span className="text-[#666]">{label as string}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-4 min-h-[500px]">
-        <div className="w-72 shrink-0 rounded-xl border border-white/[0.06] bg-[#111] overflow-auto">
-          {items.length === 0 ? <p className="p-4 text-xs text-[#666]">No checks yet. The run is still starting.</p> : (
-            <ul className="divide-y divide-white/[0.04]">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <button onClick={() => setSelectedId(item.id)} className={`w-full px-4 py-3 text-left transition-colors ${selectedId === item.id ? "bg-white/[0.05]" : "hover:bg-white/[0.02]"}`}>
-                    <div className="flex items-start gap-2">
-                      <span
-                        className="text-sm mt-0.5 shrink-0"
-                        aria-label={VERDICT_LABEL[item.verdict] ?? "Unknown"}
-                        title={VERDICT_LABEL[item.verdict] ?? "Unknown"}
-                      >
-                        {VERDICT_ICON[item.verdict] ?? "❓"}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-[#ccc] truncate">{item.title}</p>
-                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                          <span className="font-mono text-[10px] text-[#555]">{item.check_id}</span>
-                          <span className={`rounded border px-1.5 py-0.5 text-[9px] ${SEVERITY_BADGE[item.severity] ?? ""}`}>{item.severity}</span>
-                          <span className="text-[10px] text-[#777]">{VERDICT_LABEL[item.verdict] ?? "Unknown"}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ScoreBadge
+            passed={passedCount}
+            total={totalChecks}
+            severity={scoreSeverity}
+            shareUrl={shareUrl}
+            copied={copiedShare}
+            onCopy={() => void copyShareLink()}
+          />
         </div>
 
-        <div className="flex-1 rounded-xl border border-white/[0.06] bg-[#111] p-5 overflow-auto">
-          {!selected ? <p className="text-sm text-[#666]">Select a check on the left to see details.</p> : (
-            <div className="flex flex-col gap-4">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-lg" aria-label={VERDICT_LABEL[selected.verdict]}>
-                    {VERDICT_ICON[selected.verdict]}
-                  </span>
-                  <span className="text-xs font-medium text-[#ccc]">{VERDICT_LABEL[selected.verdict] ?? "Unknown"}</span>
-                  <span className={`rounded border px-2 py-0.5 text-xs ${SEVERITY_BADGE[selected.severity] ?? ""}`}>{selected.severity}</span>
-                  <span className="font-mono text-xs text-[#555]">{selected.check_id}</span>
-                </div>
-                <h2 className="text-sm font-semibold text-white">{selected.title}</h2>
-                <p className="text-xs text-[#666] mt-0.5">Category: {selected.category}</p>
-              </div>
-              {selected.on_fail_comment && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                  <p className="text-xs font-medium text-red-400 mb-1">Finding</p>
-                  <p className="text-xs text-[#ccc]">{selected.on_fail_comment}</p>
-                </div>
-              )}
-              {selected.fix_recipe && selected.fix_recipe.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-[#888] mb-2">Fix steps</p>
-                  <ol className="flex flex-col gap-2">
-                    {selected.fix_recipe.map((step, idx) => (
-                      <li key={idx} className="flex items-start gap-2 rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
-                        <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.06] text-[10px] font-bold text-[#888]">{idx + 1}</span>
-                        <span className="text-xs text-[#ccc] flex-1">{step}</span>
-                        <button onClick={async () => { await navigator.clipboard.writeText(step); setCopiedStep(idx); setTimeout(() => setCopiedStep(null), 2000); }} className="shrink-0 text-[#555] hover:text-[#888]" title="Copy this step">
-                          {copiedStep === idx ? <Check className="h-3.5 w-3.5 text-[#61C1C4]" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              {!selected.on_fail_comment && !(selected.fix_recipe?.length) && (
-                <p className="text-xs text-[#666]">{selected.verdict === "check" ? "This check passed." : selected.verdict === "na" ? "Not applicable." : "No additional details recorded."}</p>
-              )}
+        <div className="mt-5 grid gap-3 text-xs sm:grid-cols-5">
+          {[
+            ["Pass", passedCount, "text-emerald-300"],
+            ["Fail", failCount, "text-red-300"],
+            ["Review", warnCount, "text-[#E2B93B]"],
+            ["Skipped", skippedCount, "text-gray-300"],
+            ["Pending", pendingCount, "text-blue-300"],
+          ].map(([label, value, color]) => (
+            <div key={label as string} className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span className={`block text-lg font-bold ${color}`}>{value as number}</span>
+              <span className="text-[#777]">{label as string}</span>
             </div>
-          )}
+          ))}
         </div>
-      </div>
+      </section>
 
-      <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#111] px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {failItems.length > 0 && (
-            <button onClick={() => void copyFixList()} className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20">
-              {copied ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />} {copied ? "Copied" : "Copy fix list"}
+      {items.length === 0 ? (
+        <section className="rounded-lg border border-white/[0.08] bg-[#111] px-6 py-12 text-center">
+          <p className="text-base font-semibold text-white">No checks yet</p>
+          <p className="mt-2 text-sm text-[#888]">This run is still getting ready. Results will appear here as soon as TestPass has them.</p>
+        </section>
+      ) : (
+        <section className="grid gap-4 lg:grid-cols-2">
+          {items.map((item) => (
+            <CheckCard
+              key={item.id}
+              item={item}
+              expanded={expandedIds.has(item.id)}
+              onToggle={() => toggleExpanded(item.id)}
+              copiedStep={copiedStep}
+              onCopyStep={(stepKey, text) => void copyStep(stepKey, text)}
+            />
+          ))}
+        </section>
+      )}
+
+      <div className="rounded-lg border border-white/[0.08] bg-[#111] px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {failItems.length > 0 && (
+              <button
+                onClick={() => void copyFixList()}
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/20"
+              >
+                {copiedFixes ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />} {copiedFixes ? "Copied" : "Copy fix list"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-[#888] hover:text-white"
+            >
+              <MessageSquare className="h-3.5 w-3.5" /> Ask your AI agent
             </button>
-          )}
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-[#888] hover:text-white">
-            <MessageSquare className="h-3.5 w-3.5" /> Ask your AI agent
+          </div>
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify({ run, items }, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const anchor = document.createElement("a");
+              anchor.href = url;
+              anchor.download = `testpass-${runId?.slice(0, 8)}.json`;
+              anchor.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-[#888] hover:text-white"
+          >
+            <Download className="h-3.5 w-3.5" /> Export JSON
           </button>
         </div>
-        <button onClick={() => { const b = new Blob([JSON.stringify({ run, items }, null, 2)], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `testpass-${runId?.slice(0,8)}.json`; a.click(); URL.revokeObjectURL(u); }}
-          className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-[#888] hover:text-white">
-          <Download className="h-3.5 w-3.5" /> Export JSON
-        </button>
       </div>
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-white/[0.08] bg-[#111] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-lg border border-white/[0.08] bg-[#111] p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Ask your AI agent</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#666] hover:text-white"><X className="h-4 w-4" /></button>
+              <button onClick={() => setShowModal(false)} className="text-[#666] hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <p className="mb-3 text-xs text-[#888]">Copy this prompt into your AI chat (Claude, ChatGPT, or any agent) to get help with these checks.</p>
-            <pre className="rounded-lg border border-white/[0.06] bg-black/40 p-3 text-[11px] text-[#ccc] whitespace-pre-wrap max-h-56 overflow-auto">{agentPrompt}</pre>
-            <button onClick={async () => { await navigator.clipboard.writeText(agentPrompt); setCopied(true); setTimeout(() => setCopied(false), 3000); }}
-              className="mt-3 flex items-center gap-1.5 rounded-lg border border-[#61C1C4]/30 bg-[#61C1C4]/10 px-3 py-2 text-xs text-[#61C1C4] hover:bg-[#61C1C4]/20">
-              {copied ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />} {copied ? "Copied" : "Copy prompt"}
+            <p className="mb-3 text-xs text-[#888]">Copy this prompt into your AI chat to get help with these checks.</p>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-black/40 p-3 text-[11px] text-[#ccc]">
+              {agentPrompt}
+            </pre>
+            <button
+              onClick={async () => {
+                await navigator.clipboard.writeText(agentPrompt);
+                setCopiedFixes(true);
+                setTimeout(() => setCopiedFixes(false), 2500);
+              }}
+              className="mt-3 flex items-center gap-1.5 rounded-lg border border-[#61C1C4]/30 bg-[#61C1C4]/10 px-3 py-2 text-xs text-[#61C1C4] hover:bg-[#61C1C4]/20"
+            >
+              {copiedFixes ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />} {copiedFixes ? "Copied" : "Copy prompt"}
             </button>
           </div>
         </div>
