@@ -19,6 +19,7 @@
     "test:rotatepass-redaction": "node --test scripts/rotatepass-redaction-guard.test.mjs",
     "test:watch": "vitest",
     "test:api": "npm run test --workspace=apps/api",
+    "review:dry-run": "node scripts/review-dry-run.mjs",
     "brainmap:generate": "node scripts/UnClick-brainmap.mjs",
     "brainmap:check": "node scripts/UnClick-brainmap.mjs --check",
     "test:brainmap": "node --test scripts/UnClick-brainmap.test.mjs"

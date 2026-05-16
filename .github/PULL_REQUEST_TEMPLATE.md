@@ -15,6 +15,15 @@
 - Non-overlap:
 - Status:
 
+## Review handoff
+<!-- Required before marking ready:
+     - Name the requested reviewer or lane.
+     - State any human decision still pending, or "None".
+     - State merge policy: draft, HOLD, review-only, or autopilot-eligible. -->
+- Reviewer or lane:
+- Human decision pending:
+- Merge policy:
+
 ## Deletions
 <!-- Required: list every file, route, or component removed, with rationale.
      "None" is a valid answer if nothing was deleted.

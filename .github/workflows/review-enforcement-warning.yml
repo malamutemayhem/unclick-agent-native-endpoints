@@ -1,0 +1,21 @@
+name: Review enforcement warning
+
+on:
+  pull_request:
+
+concurrency:
+  group: review-enforcement-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review-dry-run:
+    name: Review dry-run warning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - name: Check PR review and proof sections
+        run: node scripts/review-dry-run.mjs --github-event "$GITHUB_EVENT_PATH"
+        continue-on-error: true
