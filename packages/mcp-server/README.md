@@ -66,6 +66,10 @@ If no UnClick MCP or channel connector exists but an UnClick API key is already 
 
 After saving an accepted external turn, tethered seats should call `read_orchestrator_context` before deciding what the user meant. The safe order is Log -> Read -> Decide -> Reply -> Log reply, so a test cue or proof phrase is not mistaken for a real operator request.
 
+## Worker Sanity Gate
+
+Workers can call `commonsensepass_protocol` with no arguments to fetch the canonical CommonSensePass playbook. The response is versioned and tells workers when to run the verdict-only gate, what evidence to gather, how to interpret PASS/BLOCKER/HOLD/SUPPRESS/ROUTE, and how to write compact receipts. This lets worker prompts shrink to: "Call commonsensepass_protocol on UnClick before claiming healthy, no_work, done, merge_ready, pass, quiet, or duplicate_wake."
+
 ## Configuration
 
 | Environment Variable | Default | Description |

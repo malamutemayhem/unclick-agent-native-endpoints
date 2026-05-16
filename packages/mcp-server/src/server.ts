@@ -14,6 +14,7 @@ import { MEMORY_HANDLERS } from "./memory/handlers.js";
 import { markContextLoaded, recordToolCall } from "./memory/session-state.js";
 import { emitSignal } from "./signals/emit.js";
 import { getHeartbeatProtocol } from "./heartbeat-protocol.js";
+import { getCommonSensePassProtocol } from "./commonsensepass-protocol.js";
 import { createHash } from "node:crypto";
 
 // ─── Umami tool-usage tracking ──────────────────────────────────────────────
@@ -578,6 +579,18 @@ export const VISIBLE_TOOLS = [
     description:
       "Returns the canonical UnClick AI Seat heartbeat playbook. " +
       "Call this first from scheduled heartbeat seats, then follow the returned versioned procedure exactly.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: "commonsensepass_protocol",
+    title: "CommonSensePass protocol",
+    description:
+      "Returns the canonical CommonSensePass worker sanity-gate playbook. " +
+      "Call this when a worker needs to decide if a healthy, no_work, done, merge_ready, pass, quiet, or duplicate_wake claim makes sense.",
     inputSchema: {
       type: "object" as const,
       additionalProperties: false,
@@ -1616,6 +1629,13 @@ export function createServer(): Server {
       if (name === "heartbeat_protocol") {
         return {
           content: [{ type: "text", text: JSON.stringify(getHeartbeatProtocol(), null, 2) }],
+        };
+      }
+
+      // ── CommonSensePass protocol: read-only worker sanity-gate contract ──
+      if (name === "commonsensepass_protocol") {
+        return {
+          content: [{ type: "text", text: JSON.stringify(getCommonSensePassProtocol(), null, 2) }],
         };
       }
 

@@ -19,6 +19,7 @@ describe("runtime tool schema validation", () => {
     { name: "check_signals", args: { agent_id: "strict-probe", bogus_field: "should reject" } },
     { name: "read_orchestrator_context", args: { q: "strict schema probe", bogus_field: "should reject" } },
     { name: "heartbeat_protocol", args: { bogus_field: "should reject" } },
+    { name: "commonsensepass_protocol", args: { bogus_field: "should reject" } },
     {
       name: "ack_handoff",
       args: {
@@ -85,6 +86,7 @@ describe("runtime tool schema validation", () => {
       limit: 40,
     })).toBeNull();
     expect(validateToolArgumentsForRuntime("heartbeat_protocol", {})).toBeNull();
+    expect(validateToolArgumentsForRuntime("commonsensepass_protocol", {})).toBeNull();
     expect(validateToolArgumentsForRuntime("ack_handoff", {
       agent_id: "strict-probe",
       thread_id: "11111111-1111-4111-8111-111111111111",
