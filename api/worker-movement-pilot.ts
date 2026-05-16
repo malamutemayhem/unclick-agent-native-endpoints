@@ -108,6 +108,11 @@ export function isWorkerMovementPilotEnabled(value: string | undefined): boolean
   return normalized === "1" || normalized === "true" || normalized === "enabled";
 }
 
+export function isWorkerMovementPilotHttpMethodAllowed(method: string | undefined): boolean {
+  const normalized = String(method ?? "GET").trim().toUpperCase();
+  return normalized === "GET" || normalized === "POST";
+}
+
 export function buildWorkerMovementPilotDisabledResult(): WorkerMovementPilotRunResult {
   return {
     ok: true,
@@ -259,6 +264,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
   if (!process.env.CRON_SECRET || authHeader !== expected) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!isWorkerMovementPilotHttpMethodAllowed(req.method)) {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   const enabled = isWorkerMovementPilotEnabled(

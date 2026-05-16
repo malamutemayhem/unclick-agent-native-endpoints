@@ -1,13 +1,68 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import {
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { afterEach, describe, expect, it } from "vitest";
+import handler, {
   isWorkerMovementPilotEnabled,
+  isWorkerMovementPilotHttpMethodAllowed,
   runWorkerMovementPilotDryRun,
   type WorkerMovementPilotStore,
   type WorkerMovementPilotTodoRow,
 } from "./worker-movement-pilot.js";
 
 const nowMs = Date.parse("2026-05-01T01:22:00.000Z");
+const originalCronSecret = process.env.CRON_SECRET;
+const originalWorkerMovementPilotEnabled = process.env.WORKER_MOVEMENT_PILOT_ENABLED;
+const originalSupabaseUrl = process.env.SUPABASE_URL;
+const originalViteSupabaseUrl = process.env.VITE_SUPABASE_URL;
+const originalSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function restoreEnvValue(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
+
+function restoreWorkerMovementPilotEnv() {
+  restoreEnvValue("CRON_SECRET", originalCronSecret);
+  restoreEnvValue("WORKER_MOVEMENT_PILOT_ENABLED", originalWorkerMovementPilotEnabled);
+  restoreEnvValue("SUPABASE_URL", originalSupabaseUrl);
+  restoreEnvValue("VITE_SUPABASE_URL", originalViteSupabaseUrl);
+  restoreEnvValue("SUPABASE_SERVICE_ROLE_KEY", originalSupabaseServiceRoleKey);
+}
+
+function createResponse() {
+  return {
+    statusCode: 200,
+    body: undefined as unknown,
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body: unknown) {
+      this.body = body;
+      return this;
+    },
+  };
+}
+
+async function callHandler(params: {
+  method?: string;
+  authorization?: string;
+}) {
+  const response = createResponse();
+  await handler(
+    {
+      method: params.method,
+      headers: {
+        authorization: params.authorization,
+      },
+    } as unknown as VercelRequest,
+    response as unknown as VercelResponse,
+  );
+  return response;
+}
 
 function buildStore(params: {
   candidate: WorkerMovementPilotTodoRow | null;
@@ -57,6 +112,10 @@ function expiredLeaseCandidate(overrides: Partial<WorkerMovementPilotTodoRow> = 
 }
 
 describe("worker movement pilot API dry-run", () => {
+  afterEach(() => {
+    restoreWorkerMovementPilotEnv();
+  });
+
   it("requires an explicit opt-in before polling candidates", async () => {
     const { store, inserted, dedupeChecks, fetches } = buildStore({
       candidate: expiredLeaseCandidate(),
@@ -89,6 +148,64 @@ describe("worker movement pilot API dry-run", () => {
     expect(isWorkerMovementPilotEnabled("1")).toBe(true);
     expect(isWorkerMovementPilotEnabled("true")).toBe(true);
     expect(isWorkerMovementPilotEnabled("enabled")).toBe(true);
+  });
+
+  it("allows only cron GET and manual POST methods", () => {
+    expect(isWorkerMovementPilotHttpMethodAllowed(undefined)).toBe(true);
+    expect(isWorkerMovementPilotHttpMethodAllowed("GET")).toBe(true);
+    expect(isWorkerMovementPilotHttpMethodAllowed("post")).toBe(true);
+    expect(isWorkerMovementPilotHttpMethodAllowed("DELETE")).toBe(false);
+    expect(isWorkerMovementPilotHttpMethodAllowed("PUT")).toBe(false);
+  });
+
+  it("requires cron auth before returning disabled proof status", async () => {
+    process.env.CRON_SECRET = "cron-secret";
+    delete process.env.WORKER_MOVEMENT_PILOT_ENABLED;
+    delete process.env.SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const response = await callHandler({ method: "GET" });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.body).toEqual({ error: "Unauthorized" });
+  });
+
+  it("returns disabled status without database setup when authorized but not enabled", async () => {
+    process.env.CRON_SECRET = "cron-secret";
+    delete process.env.WORKER_MOVEMENT_PILOT_ENABLED;
+    delete process.env.SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const response = await callHandler({
+      method: "GET",
+      authorization: "Bearer cron-secret",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true,
+      status: "skip_disabled",
+      proof_inserted: false,
+      proof_deduped: false,
+    });
+  });
+
+  it("rejects unsupported authorized methods before database setup", async () => {
+    process.env.CRON_SECRET = "cron-secret";
+    process.env.WORKER_MOVEMENT_PILOT_ENABLED = "true";
+    delete process.env.SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const response = await callHandler({
+      method: "DELETE",
+      authorization: "Bearer cron-secret",
+    });
+
+    expect(response.statusCode).toBe(405);
+    expect(response.body).toEqual({ error: "Method not allowed" });
   });
 
   it("skips cleanly when no expired todo lease candidate exists", async () => {
