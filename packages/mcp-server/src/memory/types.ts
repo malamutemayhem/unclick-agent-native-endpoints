@@ -32,12 +32,14 @@ export interface FactInput {
 export type StartupFactKind = "durable" | "operational" | "excluded" | "legacy_unspecified";
 
 export type MemoryProfileCardSourceKind = "business_context" | "fact" | "session_summary";
+export type MemoryReceiptRedactionState = "clean" | "redacted" | "sensitive-hidden" | "blocked";
 
 export interface MemoryProfileCardReceipt {
   memory_id: string;
   source_kind: MemoryProfileCardSourceKind;
   source_uri: string;
   confidence?: number;
+  redaction_state: MemoryReceiptRedactionState;
   last_verified_at?: string | null;
 }
 
@@ -99,6 +101,15 @@ export interface MemoryTaxonomySnapshotSource {
   valid_from?: string | null;
 }
 
+export interface MemoryTaxonomySnapshotSourceReceipt {
+  memory_id: string;
+  source_kind: MemoryTaxonomySourceKind;
+  source_uri: string;
+  confidence?: number | null;
+  redaction_state: MemoryReceiptRedactionState;
+  last_verified_at?: string | null;
+}
+
 export interface MemoryTaxonomySnapshot {
   slug: string;
   title: string;
@@ -109,6 +120,7 @@ export interface MemoryTaxonomySnapshot {
   content: string;
   source_ids: string[];
   sources: Array<{ id: string; kind: MemoryTaxonomySourceKind }>;
+  source_receipts: MemoryTaxonomySnapshotSourceReceipt[];
   confidence: number;
   weight: number;
   last_confirmed_at: string | null;
@@ -132,6 +144,7 @@ export interface MemoryTaxonomySnapshotWriteResult {
     title: string;
     primary_category: string;
     source_ids: string[];
+    source_receipts: MemoryTaxonomySnapshotSourceReceipt[];
   }>;
   written: Array<{
     slug: string;
