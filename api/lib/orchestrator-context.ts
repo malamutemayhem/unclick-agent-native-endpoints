@@ -399,10 +399,13 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     now_ms: nowMs,
   });
 
+  const mergedPrWakePassProof = buildMergedPrWakePassProof(input);
   const messageEvents = input.messages.map(messageToEvent);
   const todoEvents = activeTodos.map(todoToEvent);
   const commentEvents = input.comments.map(commentToEvent);
-  const dispatchEvents = input.dispatches.map(dispatchToEvent);
+  const dispatchEvents = input.dispatches
+    .filter((dispatch) => !isMergedPrWakePassDispatchCompleted(dispatch, mergedPrWakePassProof))
+    .map(dispatchToEvent);
   const signalEvents = input.signals.map(signalToEvent);
   const conversationEvents = input.conversationTurns.map(conversationTurnToEvent);
   const sessionEvents = input.sessions.map(sessionToEvent);
@@ -756,6 +759,125 @@ function isHistoricalWakeOrFishbowlStale(
   const createdMs = event.created_at ? Date.parse(event.created_at) : NaN;
   if (!Number.isFinite(createdMs) || !Number.isFinite(nowMs)) return false;
   return nowMs - createdMs >= 60 * 60 * 1000;
+}
+
+interface MergedPrWakePassProof {
+  prNumbers: Set<number>;
+  wakeEventIds: Set<string>;
+}
+
+function buildMergedPrWakePassProof(input: BuildOrchestratorContextInput): MergedPrWakePassProof {
+  const proof: MergedPrWakePassProof = {
+    prNumbers: new Set(),
+    wakeEventIds: new Set(),
+  };
+  const rows = [
+    ...input.messages.map((message) => ({
+      text: message.text,
+      tags: message.tags,
+    })),
+    ...input.comments.map((comment) => ({
+      text: comment.text,
+      tags: ["comment"],
+    })),
+    ...input.conversationTurns.map((turn) => ({
+      text: turn.content,
+      tags: ["conversation", turn.role],
+    })),
+  ];
+
+  for (const row of rows) {
+    if (!isMergedPrWakePassAckText(row.text, row.tags ?? [])) continue;
+    for (const prNumber of extractPullRequestNumbersFromText(row.text)) {
+      proof.prNumbers.add(prNumber);
+    }
+    for (const wakeEventId of extractWakeEventIdsFromText(row.text)) {
+      proof.wakeEventIds.add(wakeEventId);
+    }
+  }
+
+  return proof;
+}
+
+function isMergedPrWakePassAckText(text: string, tags: string[]): boolean {
+  const lower = text.toLowerCase();
+  const tagSet = new Set(tags.map((tag) => tag.toLowerCase()));
+  const wakePassLike =
+    tagSet.has("wakepass") ||
+    lower.includes("wakepass") ||
+    lower.includes("wake-pull_request-pr");
+  const ackLike =
+    tagSet.has("ack") ||
+    lower.startsWith("ack ") ||
+    lower.includes(" handoff complete") ||
+    lower.includes(" completed ");
+  const mergedPrLike =
+    /\bmerged\s+pr\s*#?\d+\b/i.test(text) ||
+    /\bmerged\s+pull request\s*#?\d+\b/i.test(text);
+
+  return wakePassLike && ackLike && mergedPrLike;
+}
+
+function isMergedPrWakePassDispatchCompleted(
+  dispatch: OrchestratorDispatchRow,
+  proof: MergedPrWakePassProof,
+): boolean {
+  if (dispatch.source !== "wakepass") return false;
+  if (!["leased", "stale", "failed"].includes(dispatch.status.toLowerCase())) return false;
+
+  const wakeEventIds = extractDispatchWakeEventIds(dispatch);
+  if (wakeEventIds.some((wakeEventId) => proof.wakeEventIds.has(wakeEventId))) return true;
+
+  return extractDispatchPullRequestNumbers(dispatch).some((prNumber) => proof.prNumbers.has(prNumber));
+}
+
+function extractDispatchWakeEventIds(dispatch: OrchestratorDispatchRow): string[] {
+  const payload = dispatch.payload ?? {};
+  const values = [
+    dispatch.task_ref,
+    typeof payload.wake_event_id === "string" ? payload.wake_event_id : null,
+    typeof payload.fishbowl_wake_event_id === "string" ? payload.fishbowl_wake_event_id : null,
+    compactText(payload, 1000),
+  ];
+  return extractWakeEventIdsFromText(values.filter(Boolean).join(" "));
+}
+
+function extractDispatchPullRequestNumbers(dispatch: OrchestratorDispatchRow): number[] {
+  const payload = dispatch.payload ?? {};
+  const values = [
+    dispatch.task_ref,
+    typeof payload.source_url === "string" ? payload.source_url : null,
+    typeof payload.sourceUrl === "string" ? payload.sourceUrl : null,
+    compactText(payload, 1000),
+  ];
+  return extractPullRequestNumbersFromText(values.filter(Boolean).join(" "));
+}
+
+function extractPullRequestNumbersFromText(text: string): number[] {
+  const numbers = new Set<number>();
+  const patterns = [
+    /\bPR\s*#?\s*(\d+)\b/gi,
+    /\bpull request\s*#?\s*(\d+)\b/gi,
+    /\/pull\/(\d+)\b/gi,
+    /\bpull_request-pr-(\d+)\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const number = Number(match[1]);
+      if (Number.isFinite(number)) numbers.add(number);
+    }
+  }
+
+  return Array.from(numbers);
+}
+
+function extractWakeEventIdsFromText(text: string): string[] {
+  const wakeEventIds = new Set<string>();
+  for (const match of text.matchAll(/\bwake-pull_request-pr-\d+-[a-z0-9]+\b/gi)) {
+    wakeEventIds.add(match[0]);
+  }
+  return Array.from(wakeEventIds);
 }
 
 function eventToSnapshotItem(

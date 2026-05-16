@@ -460,6 +460,93 @@ describe("orchestrator context", () => {
     expect(JSON.stringify(context.current_state_card.blockers)).not.toContain("superseded_status_comment");
   });
 
+  it("hides merged PR WakePass leased dispatches after ACK proof exists", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-16T14:20:00.000Z",
+      profiles: [],
+      messages: [
+        {
+          id: "msg-pr-864-ack",
+          author_agent_id: "github-action-autoclose",
+          text: "ACK wake-pull_request-pr-864-d8bcb0c7aa0c merged PR #864; WakePass handoff complete.",
+          tags: ["wakepass", "ack"],
+          created_at: "2026-05-16T14:18:54.000Z",
+        },
+      ],
+      todos: [],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-pr-864",
+          source: "wakepass",
+          target_agent_id: "reviewer",
+          task_ref: "wake-pull_request-pr-864-d8bcb0c7aa0c",
+          status: "leased",
+          lease_owner: "reviewer",
+          payload: {
+            wake_event_id: "wake-pull_request-pr-864-d8bcb0c7aa0c",
+            source_url: "https://github.com/malamutemayhem/unclick/pull/864",
+            wake_reason: "PR #864 is ready for review",
+          },
+          created_at: "2026-05-16T14:18:33.000Z",
+          updated_at: "2026-05-16T14:18:33.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.continuity_events.find((event) => event.source_id === "dispatch-pr-864")).toBeUndefined();
+    expect(context.continuity_events.find((event) => event.source_id === "msg-pr-864-ack")?.kind).toBe("proof");
+    expect(context.current_state_card.live_sources.dispatches).toBe(1);
+    expect(context.rolling_snapshot.recent_continuity.map((event) => event.source_id)).not.toContain("dispatch-pr-864");
+  });
+
+  it("keeps WakePass leased dispatches when merged PR ACK proof is missing", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-16T14:20:00.000Z",
+      profiles: [],
+      messages: [
+        {
+          id: "msg-pr-865-generic-ack",
+          author_agent_id: "reviewer",
+          text: "ACK wake-pull_request-pr-865-abc123 checking PR #865.",
+          tags: ["wakepass", "ack"],
+          created_at: "2026-05-16T14:18:54.000Z",
+        },
+      ],
+      todos: [],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-pr-865",
+          source: "wakepass",
+          target_agent_id: "reviewer",
+          task_ref: "wake-pull_request-pr-865-abc123",
+          status: "leased",
+          lease_owner: "reviewer",
+          payload: {
+            wake_event_id: "wake-pull_request-pr-865-abc123",
+            source_url: "https://github.com/malamutemayhem/unclick/pull/865",
+            wake_reason: "PR #865 is ready for review",
+          },
+          created_at: "2026-05-16T14:18:33.000Z",
+          updated_at: "2026-05-16T14:18:33.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.continuity_events.find((event) => event.source_id === "dispatch-pr-865")).toBeDefined();
+  });
+
   it("keeps heartbeat prompt bodies out of continuity summaries", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T23:45:00.000Z",
