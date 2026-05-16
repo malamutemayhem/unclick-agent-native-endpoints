@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  isWorkerMovementPilotEnabled,
   runWorkerMovementPilotDryRun,
   type WorkerMovementPilotStore,
   type WorkerMovementPilotTodoRow,
@@ -55,6 +57,40 @@ function expiredLeaseCandidate(overrides: Partial<WorkerMovementPilotTodoRow> = 
 }
 
 describe("worker movement pilot API dry-run", () => {
+  it("requires an explicit opt-in before polling candidates", async () => {
+    const { store, inserted, dedupeChecks, fetches } = buildStore({
+      candidate: expiredLeaseCandidate(),
+    });
+
+    const result = await runWorkerMovementPilotDryRun({
+      store,
+      nowMs,
+      enabled: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      mode: "dry_run",
+      status: "skip_disabled",
+      candidate_id: null,
+      proof_inserted: false,
+      next_safe_step: "set WORKER_MOVEMENT_PILOT_ENABLED=true after safety review",
+    });
+    expect(fetches).toEqual([]);
+    expect(dedupeChecks).toEqual([]);
+    expect(inserted).toEqual([]);
+  });
+
+  it("accepts only explicit enabled values for the scheduler gate", () => {
+    expect(isWorkerMovementPilotEnabled(undefined)).toBe(false);
+    expect(isWorkerMovementPilotEnabled("")).toBe(false);
+    expect(isWorkerMovementPilotEnabled("0")).toBe(false);
+    expect(isWorkerMovementPilotEnabled("false")).toBe(false);
+    expect(isWorkerMovementPilotEnabled("1")).toBe(true);
+    expect(isWorkerMovementPilotEnabled("true")).toBe(true);
+    expect(isWorkerMovementPilotEnabled("enabled")).toBe(true);
+  });
+
   it("skips cleanly when no expired todo lease candidate exists", async () => {
     const { store, inserted, dedupeChecks, fetches } = buildStore({ candidate: null });
 
@@ -187,6 +223,17 @@ describe("worker movement pilot API dry-run", () => {
       proof_inserted: false,
       proof_deduped: false,
       error: "temporary insert failure",
+    });
+  });
+
+  it("keeps the Vercel cron pointed at the protected proof endpoint", () => {
+    const config = JSON.parse(
+      readFileSync("vercel.json", "utf8"),
+    ) as { crons?: Array<{ path: string; schedule: string }> };
+
+    expect(config.crons).toContainEqual({
+      path: "/api/worker-movement-pilot",
+      schedule: "*/15 * * * *",
     });
   });
 });
