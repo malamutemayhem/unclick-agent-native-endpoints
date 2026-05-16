@@ -73,7 +73,61 @@ describe("fishbowl todo reconciliation helpers", () => {
 
     assert.equal(plan.ok, true);
     assert.deepEqual(plan.auto_close.map((item) => item.todo_id), [TODO_A]);
+    assert.equal(plan.auto_close[0].reason, "linked_pr_marker");
     assert.deepEqual(plan.unchanged.map((item) => item.todo_id), [TODO_B]);
+  });
+
+  it("plans auto-close when an in-progress todo has pipeline ship proof for a merged PR", () => {
+    const plan = buildInProgressReconciliationPlan({
+      now: "2026-05-08T12:00:00.000Z",
+      todos: [
+        {
+          id: TODO_A,
+          title: "proof-complete work",
+          status: "in_progress",
+          completed_at: null,
+          updated_at: "2026-05-08T08:00:00.000Z",
+          pipeline_progress: 100,
+          pipeline_source: "receipt: ship",
+          comments: ["SHIP proof: PR #874 merged to main."],
+        },
+      ],
+      pullRequests: [
+        {
+          number: 874,
+          merged_at: "2026-05-08T10:00:00.000Z",
+          body: "No explicit todo marker in this PR.",
+        },
+      ],
+    });
+
+    assert.equal(plan.ok, true);
+    assert.deepEqual(plan.auto_close.map((item) => item.todo_id), [TODO_A]);
+    assert.equal(plan.auto_close[0].reason, "pipeline_ship_proof");
+    assert.equal(plan.auto_close[0].pr.number, 874);
+  });
+
+  it("does not auto-close pipeline ship proof when the referenced PR is unmerged", () => {
+    const plan = buildInProgressReconciliationPlan({
+      now: "2026-05-08T12:00:00.000Z",
+      todos: [
+        {
+          id: TODO_A,
+          title: "proof-complete work",
+          status: "in_progress",
+          completed_at: null,
+          updated_at: "2026-05-08T08:00:00.000Z",
+          pipeline_progress: 100,
+          pipeline_source: "receipt: ship",
+          proof_text: "SHIP proof pending on PR #874.",
+        },
+      ],
+      pullRequests: [{ number: 874, merged_at: null }],
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.auto_close.length, 0);
+    assert.deepEqual(plan.unchanged.map((item) => item.todo_id), [TODO_A]);
   });
 
   it("surfaces old in-progress todos without marking them done", () => {
