@@ -32,6 +32,7 @@ export async function commonSensePass({
   packet,
   now = new Date(),
   heartbeat = null,
+  requireHeartbeat = false,
   allowedRequesterSeats = DEFAULT_ALLOWED_REQUESTER_SEATS,
   fileExists = async () => true,
   heartbeatMaxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
@@ -52,6 +53,13 @@ export async function commonSensePass({
   }
 
   // 3. Heartbeat freshness gate.
+  if (requireHeartbeat && (!heartbeat || typeof heartbeat !== "object" || !heartbeat.tickId)) {
+    return {
+      ok: false,
+      reason: "heartbeat_missing",
+      evidence: { heartbeat_required: true },
+    };
+  }
   if (heartbeat) {
     if (heartbeat.tickId !== packet.heartbeat_tick_id) {
       return {

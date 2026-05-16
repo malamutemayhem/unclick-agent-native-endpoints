@@ -16,6 +16,7 @@ import {
   runCodingRoomRunnerCycle,
 } from "./pinballwake-coding-room-runner.mjs";
 import { evaluateOrchestratorProofWakeGate } from "./lib/autopilotkit-liveness.mjs";
+import { processScopePackTestOnlyExecutorPacket } from "./pinballwake-executor-lane.mjs";
 import { buildScopePackHydrationReceipt } from "./pinballwake-scopepack-hydrator.mjs";
 
 export const AUTONOMOUS_RUNNER_MODES = new Set(["dry-run", "claim", "execute"]);
@@ -452,17 +453,7 @@ function boardroomTodoScopeTextSources(todo = {}) {
 }
 
 function extractBoardroomTodoScopePack(todo = {}) {
-  const scope = firstPresentObject(
-    todo.scope_pack,
-    todo.scopePack,
-    todo.runner_scope,
-    todo.runnerScope,
-    todo.autonomous_scope,
-    todo.autonomousScope,
-    todo.coding_room_scope,
-    todo.codingRoomScope,
-    ...boardroomTodoScopeTextSources(todo).map(parseLabeledJsonObjectFromText),
-  );
+  const scope = extractBoardroomTodoScopePackObject(todo);
 
   if (!scope) {
     return {
@@ -508,6 +499,46 @@ function extractBoardroomTodoScopePack(todo = {}) {
     lane: String(scope.lane || scope.worker_lane || scope.workerLane || "").trim(),
     owner_hint: String(scope.owner_hint || scope.ownerHint || "").trim(),
   };
+}
+
+function extractBoardroomTodoScopePackObject(todo = {}) {
+  return firstPresentObject(
+    todo.scope_pack,
+    todo.scopePack,
+    todo.runner_scope,
+    todo.runnerScope,
+    todo.autonomous_scope,
+    todo.autonomousScope,
+    todo.coding_room_scope,
+    todo.codingRoomScope,
+    ...boardroomTodoScopeTextSources(todo).map(parseLabeledJsonObjectFromText),
+  );
+}
+
+export async function createAutonomousRunnerTestOnlyExecutorReceipt({
+  todo = {},
+  scopePack = null,
+  heartbeat = null,
+  heartbeatTickId = "",
+  headShaAtRequest = "",
+  requestingSeatId = "pinballwake-job-runner",
+  scopePackCommentId = "",
+  fileExists,
+  executorSeatId = "pinballwake-build-executor",
+  now = new Date(),
+} = {}) {
+  return processScopePackTestOnlyExecutorPacket({
+    todo,
+    scopePack: scopePack || extractBoardroomTodoScopePackObject(todo) || {},
+    heartbeat,
+    heartbeatTickId,
+    headShaAtRequest,
+    requestingSeatId,
+    scopePackCommentId,
+    fileExists,
+    executorSeatId,
+    now,
+  });
 }
 
 export function parseMcpEventStreamPayload(text = "") {
@@ -1660,6 +1691,7 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
   mcpUrl = DEFAULT_UNCLICK_MCP_URL,
   apiKey = "",
   fetchImpl = globalThis.fetch,
+  testOnlyExecutorPacket = null,
 } = {}) {
   const todoId = String(todo?.id || "").trim();
   if (!todoId) {
@@ -1704,15 +1736,34 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
     };
   }
 
-  const commentText = hydration.receipt || compact(
-    [
-      "Autonomous Runner could not safely build this job yet because no file-level ScopePack was attached.",
-      "Reopened for scoping instead of holding a stale active claim.",
-      "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
-      `reason=${todo.actionability_reason || "missing_scopepack"}.`,
-    ].join(" "),
-    700,
-  );
+  let testOnlyExecutorPacketResult = null;
+  if (hydration.action === "scopepack_hydrated" && testOnlyExecutorPacket?.enabled) {
+    testOnlyExecutorPacketResult = await createAutonomousRunnerTestOnlyExecutorReceipt({
+      todo,
+      scopePack: hydration.scopepack,
+      heartbeat: testOnlyExecutorPacket.heartbeat,
+      heartbeatTickId: testOnlyExecutorPacket.heartbeatTickId,
+      headShaAtRequest: testOnlyExecutorPacket.headShaAtRequest,
+      requestingSeatId: testOnlyExecutorPacket.requestingSeatId,
+      scopePackCommentId: testOnlyExecutorPacket.scopePackCommentId,
+      fileExists: testOnlyExecutorPacket.fileExists,
+      executorSeatId: testOnlyExecutorPacket.executorSeatId,
+      now: testOnlyExecutorPacket.now,
+    });
+  }
+
+  const commentText = [
+    hydration.receipt || compact(
+      [
+        "Autonomous Runner could not safely build this job yet because no file-level ScopePack was attached.",
+        "Reopened for scoping instead of holding a stale active claim.",
+        "Next: attach exact owned files, proof/tests, and stop conditions, or split this into a smaller job.",
+        `reason=${todo.actionability_reason || "missing_scopepack"}.`,
+      ].join(" "),
+      700,
+    ),
+    formatTestOnlyExecutorPacketReceipt(testOnlyExecutorPacketResult),
+  ].filter(Boolean).join(" ");
 
   const comment = await callUnClickMcpTool({
     mcpUrl,
@@ -1736,7 +1787,22 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
     comment_id: comment.ok ? comment.data?.comment?.id || null : null,
     comment_detail: comment.ok ? null : comment.reason || comment.error || null,
     scopepack_hydration: hydration.action === "needs_manual_scoping" ? null : hydration,
+    test_only_executor_packet: testOnlyExecutorPacketResult,
   };
+}
+
+function formatTestOnlyExecutorPacketReceipt(result) {
+  if (!result) return "";
+  const packet = result.packet || {};
+  const receipt = result.receipt || {};
+  const parts = [
+    `executor_packet=${receipt.receipt_type || "executor_packet_hold"}.`,
+    `intent=${packet.intent || "test_only"}.`,
+    `packet_id=${packet.packet_id || receipt.packet_id || "none"}.`,
+  ];
+  if (receipt.hold_reason) parts.push(`hold_reason=${receipt.hold_reason}.`);
+  parts.push("execute_enabled=false.");
+  return compact(parts.join(" "), 700);
 }
 
 export function createCodingRoomJobFromBoardroomTodo(todo = {}, { now = new Date().toISOString() } = {}) {
@@ -2415,12 +2481,24 @@ export async function runAutonomousRunnerFile({
   }
 
   if (shouldPersist && todoForScoping) {
+    const executorHeartbeatTickId = trustedFallbackId || `${wakeSource || "unknown"}:${now}`;
     todoScopingSync = await syncBoardroomTodoScopingRequestToUnClick({
       todo: todoForScoping,
       runner,
       apiKey: unclickApiKey,
       mcpUrl: unclickMcpUrl,
       fetchImpl,
+      testOnlyExecutorPacket: {
+        enabled: true,
+        heartbeat: { tickId: executorHeartbeatTickId, emittedAt: now },
+        heartbeatTickId: executorHeartbeatTickId,
+        headShaAtRequest:
+          checkedOutSha ||
+          mainFreshnessCanary?.check?.current_main_sha ||
+          mainFreshnessCanary?.check?.currentMainSha ||
+          "unknown-head-sha",
+        now,
+      },
     });
 
     if (!todoScopingSync.ok) {

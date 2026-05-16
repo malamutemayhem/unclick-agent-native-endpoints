@@ -16,6 +16,7 @@
 // See docs/autopilot-executor-lane.md for the full design.
 
 import { commonSensePass } from "./pinballwake-commonsense-pass.mjs";
+import { makeTestOnlyPacketFromScopePack } from "./pinballwake-executor-packet.mjs";
 
 const RECEIPT_TYPE_PASS = "executor_packet_pass";
 const RECEIPT_TYPE_HOLD = "executor_packet_hold";
@@ -38,6 +39,7 @@ const PROOF_REQUIRED = ["pr_url", "head_sha", "test_run_id", "executor_seat_id"]
 export async function processExecutorPacket({
   packet,
   heartbeat,
+  requireHeartbeat = false,
   fileExists,
   executor,
   executorSeatId = "pinballwake-build-executor",
@@ -47,6 +49,7 @@ export async function processExecutorPacket({
   const gate = await commonSensePass({
     packet,
     heartbeat,
+    requireHeartbeat,
     fileExists,
     now,
   });
@@ -129,6 +132,70 @@ export async function processExecutorPacket({
   });
 }
 
+export async function processScopePackTestOnlyExecutorPacket({
+  todo = {},
+  scopePack = {},
+  heartbeat = null,
+  heartbeatTickId = "",
+  headShaAtRequest = "",
+  requestingSeatId = "pinballwake-job-runner",
+  scopePackCommentId = "",
+  fileExists,
+  executorSeatId = "pinballwake-build-executor",
+  now = new Date(),
+} = {}) {
+  const safeNow = toDate(now);
+  const built = makeTestOnlyPacketFromScopePack({
+    todo,
+    scopepack: scopePack,
+    heartbeatTickId: heartbeatTickId || heartbeat?.tickId || "",
+    headShaAtRequest,
+    requestingSeatId,
+    scopePackCommentId,
+    emittedAt: safeNow.toISOString(),
+  });
+
+  if (!built.ok) {
+    const receipt = buildHoldReceipt({
+      packet: built.packet,
+      executorSeatId,
+      now: safeNow,
+      reason: `packet_build_failed:${built.reason}`,
+      evidence: built.validation ? { validation: built.validation } : { reason: built.reason },
+    });
+    return {
+      ok: false,
+      reason: built.reason,
+      packet: built.packet ?? null,
+      receipt: sanitizeExecutorReceipt(receipt),
+    };
+  }
+
+  const receipt = await processExecutorPacket({
+    packet: built.packet,
+    heartbeat,
+    requireHeartbeat: true,
+    fileExists,
+    executorSeatId,
+    now: safeNow,
+  });
+
+  return {
+    ok: receipt.receipt_type === RECEIPT_TYPE_PASS,
+    reason: receipt.hold_reason ?? "executor_packet_pass",
+    packet: built.packet,
+    receipt: sanitizeExecutorReceipt(receipt),
+  };
+}
+
+export function sanitizeExecutorReceipt(receipt) {
+  const redacted = redactSecrets(receipt);
+  return {
+    ...(redacted && typeof redacted === "object" ? redacted : {}),
+    sanitized: true,
+  };
+}
+
 function buildPassReceipt({ packet, executorSeatId, now, evidence, next_action }) {
   return {
     receipt_type: RECEIPT_TYPE_PASS,
@@ -169,6 +236,35 @@ function clip(value, max) {
   if (value === undefined || value === null) return null;
   const s = String(value);
   return s.length > max ? `${s.slice(0, max - 3)}...` : s;
+}
+
+function toDate(value) {
+  return value instanceof Date ? value : new Date(value || Date.now());
+}
+
+function redactSecrets(value, key = "") {
+  if (value === null || value === undefined) return value;
+  if (isSecretKey(key)) return "[redacted]";
+  if (typeof value === "string") return redactSecretText(value);
+  if (Array.isArray(value)) return value.map((item) => redactSecrets(item));
+  if (typeof value === "object") {
+    const out = {};
+    for (const [childKey, childValue] of Object.entries(value)) {
+      out[childKey] = redactSecrets(childValue, childKey);
+    }
+    return out;
+  }
+  return value;
+}
+
+function redactSecretText(value) {
+  return String(value)
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1 [redacted]")
+    .replace(/\b(api[_-]?key|token|password|secret)=([^&\s]+)/gi, "$1=[redacted]");
+}
+
+function isSecretKey(key) {
+  return /(authorization|api[_-]?key|token|password|secret|credential)/i.test(String(key || ""));
 }
 
 export const __testing__ = {

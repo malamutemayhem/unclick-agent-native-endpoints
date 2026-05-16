@@ -3,7 +3,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { processExecutorPacket, __testing__ } from "./pinballwake-executor-lane.mjs";
+import { processExecutorPacket, processScopePackTestOnlyExecutorPacket, __testing__ } from "./pinballwake-executor-lane.mjs";
 import { makePacket } from "./pinballwake-executor-packet.mjs";
 
 function freshPacket(overrides = {}) {
@@ -51,6 +51,59 @@ describe("processExecutorPacket test_only intent", () => {
     assert.equal(r.receipt_type, __testing__.RECEIPT_TYPE_PASS);
     assert.equal(r.evidence.intent, "test_only");
     assert.equal(r.evidence.pr_url, null);
+  });
+
+  test("HOLD on test_only when heartbeat is explicitly required and absent", async () => {
+    const r = await processExecutorPacket({
+      packet: freshPacket({ intent: "test_only" }),
+      requireHeartbeat: true,
+      fileExists: async () => true,
+    });
+    assert.equal(r.receipt_type, __testing__.RECEIPT_TYPE_HOLD);
+    assert.match(r.hold_reason, /^gate_blocked:heartbeat_missing/);
+  });
+});
+
+describe("processScopePackTestOnlyExecutorPacket", () => {
+  test("builds and processes a sanitized test_only packet from ScopePack", async () => {
+    const now = new Date("2026-05-16T14:58:00.000Z");
+    const result = await processScopePackTestOnlyExecutorPacket({
+      todo: { id: "todo-scopepack" },
+      scopePack: {
+        owned_files: ["scripts/pinballwake-executor-lane.mjs"],
+        acceptance: ["packet bridge passes"],
+        verification: ["node --test scripts/pinballwake-executor-lane.test.mjs"],
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "abc12345",
+      fileExists: async () => true,
+      now,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.packet.intent, "test_only");
+    assert.equal(result.packet.todo_id, "todo-scopepack");
+    assert.equal(result.receipt.receipt_type, __testing__.RECEIPT_TYPE_PASS);
+    assert.equal(result.receipt.sanitized, true);
+  });
+
+  test("returns sanitized HOLD when ScopePack packet build fails", async () => {
+    const now = new Date("2026-05-16T14:58:00.000Z");
+    const result = await processScopePackTestOnlyExecutorPacket({
+      todo: { id: "todo-protected" },
+      scopePack: {
+        owned_files: ["vercel.json"],
+        acceptance: ["packet bridge blocks protected paths"],
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "abc12345",
+      now,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.receipt.receipt_type, __testing__.RECEIPT_TYPE_HOLD);
+    assert.match(result.receipt.hold_reason, /^packet_build_failed:/);
+    assert.equal(result.receipt.sanitized, true);
   });
 });
 
