@@ -18,6 +18,7 @@ import {
   isWakepassAutoRerouteEligible,
   messageAcknowledgesDispatch,
   planWorkerMovementWorkflowPilot,
+  planWorkerMovementWorkflowPilotProofSignal,
   planWorkerSelfHealingDecision,
   planWorkerSelfHealingTodoSignal,
   resolveWakepassRerouteTarget,
@@ -840,5 +841,130 @@ describe("Vercel worker movement workflow pilot plan", () => {
         next_safe_step: "skip workflow start and keep cron watcher as fallback",
       },
     });
+  });
+
+  it("turns a safe dry-run plan into a PASS proof signal insert", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "Worker self-healing: heartbeat timeout, reclaim, and resume-safe queue behavior",
+      todo: {
+        id: "todo-expired-lease",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-11",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    const proof = planWorkerMovementWorkflowPilotProofSignal({
+      apiKeyHash: "hash_123",
+      plan,
+      emittedAt: "2026-05-01T01:22:01.000Z",
+    });
+
+    expect(proof).toMatchObject({
+      signal: {
+        action: "worker_movement_workflow_pilot_pass",
+        severity: "info",
+        summary:
+          "PASS: Vercel worker movement pilot start_dry_run; candidate todo-expired-lease; owner age 12m; decision expired_lease_reclaimable; reason safe_proof_only_candidate; next start Vercel Workflow in dry-run mode and post proof only",
+        payload: {
+          proof_status: "PASS",
+          candidate_id: "todo-expired-lease",
+          action: "start_dry_run",
+          next_safe_step: "start Vercel Workflow in dry-run mode and post proof only",
+          emitted_at: "2026-05-01T01:22:01.000Z",
+        },
+      },
+      insert: {
+        api_key_hash: "hash_123",
+        tool: "fishbowl",
+        action: "worker_movement_workflow_pilot_pass",
+        severity: "info",
+        deep_link: "/admin/jobs#todo-todo-expired-lease",
+      },
+    });
+    expect(JSON.stringify(proof)).not.toContain("lease-secret");
+  });
+
+  it("turns a refused candidate into a BLOCKER proof signal insert", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "SECURITY: deactivate legacy plaintext api_keys_legacy rows after owner auth",
+      todo: {
+        id: "todo-security",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 0,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-12",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    const proof = planWorkerMovementWorkflowPilotProofSignal({
+      apiKeyHash: "hash_123",
+      plan,
+      emittedAt: "2026-05-01T01:22:01.000Z",
+      deepLink: "/admin/jobs#todo-security",
+    });
+
+    expect(proof).toMatchObject({
+      signal: {
+        action: "worker_movement_workflow_pilot_blocker",
+        severity: "action_needed",
+        payload: {
+          proof_status: "BLOCKER",
+          candidate_id: "todo-security",
+          action: "post_refusal_proof",
+          safety_reason: "owner_or_security_gated_job",
+        },
+      },
+      insert: {
+        api_key_hash: "hash_123",
+        tool: "fishbowl",
+        action: "worker_movement_workflow_pilot_blocker",
+        severity: "action_needed",
+        deep_link: "/admin/jobs#todo-security",
+      },
+    });
+    expect(proof?.signal.summary).toContain("BLOCKER:");
+    expect(JSON.stringify(proof)).not.toContain("lease-secret");
+  });
+
+  it("does not plan a proof signal without a tenant hash or emitted time", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "Worker self-healing: heartbeat timeout, reclaim, and resume-safe queue behavior",
+      todo: {
+        id: "todo-expired-lease",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-13",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    expect(
+      planWorkerMovementWorkflowPilotProofSignal({
+        apiKeyHash: "",
+        plan,
+        emittedAt: "2026-05-01T01:22:01.000Z",
+      }),
+    ).toBeNull();
+    expect(
+      planWorkerMovementWorkflowPilotProofSignal({
+        apiKeyHash: "hash_123",
+        plan,
+        emittedAt: "",
+      }),
+    ).toBeNull();
   });
 });
