@@ -15,13 +15,17 @@ import {
 import { resolveAgent, filterContextByLayers } from "./agent.js";
 import { emitSignal } from "../signals/emit.js";
 import { buildSearchMemoryCard } from "../cards/search-memory-card.js";
+import { extractMemoryTypedLinkCandidates } from "./typed-links.js";
 import type {
+  MemoryBackend,
   MemoryProfileCard,
   MemoryProfileCardReceipt,
   MemoryProfileCardSourceKind,
   MemoryRetrievalPlan,
   MemoryReceiptRedactionState,
+  SaveTypedLinkCandidatesResult,
 } from "./types.js";
+import type { MemoryTypedLinkSourceKind } from "./typed-links.js";
 
 function currentApiKeyHash(): string | null {
   return process.env.UNCLICK_API_KEY_HASH ?? null;
@@ -410,6 +414,21 @@ function buildMemoryRetrievalPlan(): MemoryRetrievalPlan {
   };
 }
 
+export async function persistTypedLinksForMemoryWrite(
+  db: Pick<MemoryBackend, "saveTypedLinkCandidates">,
+  input: { source_kind: MemoryTypedLinkSourceKind; source_id: string; text: string }
+): Promise<SaveTypedLinkCandidatesResult> {
+  const candidates = extractMemoryTypedLinkCandidates(input);
+  if (candidates.length === 0) return { saved: 0 };
+
+  try {
+    return await db.saveTypedLinkCandidates(candidates);
+  } catch (err) {
+    console.error("[memory] typed-link persistence failed:", err);
+    return { saved: 0, skipped: "persistence_failed" };
+  }
+}
+
 export function normalizeActiveFactsForLoadMemory(value: unknown): unknown {
   const context = asRecord(value);
   if (!context || !Array.isArray(context.active_facts)) return value;
@@ -639,6 +658,11 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       commit_sha: typeof args.commit_sha === "string" ? args.commit_sha : undefined,
       pr_number: typeof args.pr_number === "number" ? Math.floor(args.pr_number) : undefined,
     });
+    await persistTypedLinksForMemoryWrite(db, {
+      source_kind: "fact",
+      source_id: result.id,
+      text: str(args.fact),
+    });
     const hash = currentApiKeyHash();
     if (hash) {
       const preview = str(args.fact).slice(0, 80);
@@ -672,6 +696,11 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
       role: str(args.role),
       content: str(args.content),
       has_code: bool(args.has_code),
+    });
+    await persistTypedLinksForMemoryWrite(db, {
+      source_kind: "conversation_turn",
+      source_id: receipt.receipt_id,
+      text: str(args.content),
     });
     return receipt;
   },

@@ -31,7 +31,9 @@ import type {
   MemoryTaxonomySnapshotWriteOptions,
   MemoryTaxonomySnapshotWriteResult,
   MemoryTaxonomySnapshotSource,
+  SaveTypedLinkCandidatesResult,
 } from "./types.js";
+import type { MemoryTypedLinkCandidate } from "./typed-links.js";
 import { shouldEnforceManagedMemoryCaps } from "./quota-policy.js";
 
 function pgError(context: string, err: unknown): Error {
@@ -110,6 +112,7 @@ interface TableNames {
   session_summaries: string;
   extracted_facts: string;
   conversation_log: string;
+  memory_typed_links: string;
   code_dumps: string;
 }
 
@@ -485,6 +488,7 @@ const BYOD_TABLES: TableNames = {
   session_summaries: "session_summaries",
   extracted_facts: "extracted_facts",
   conversation_log: "conversation_log",
+  memory_typed_links: "memory_typed_links",
   code_dumps: "code_dumps",
 };
 
@@ -495,6 +499,7 @@ const MANAGED_TABLES: TableNames = {
   session_summaries: "mc_session_summaries",
   extracted_facts: "mc_extracted_facts",
   conversation_log: "mc_conversation_log",
+  memory_typed_links: "mc_memory_typed_links",
   code_dumps: "mc_code_dumps",
 };
 
@@ -504,6 +509,15 @@ function now(): string {
 
 function truncate(s: string, max = 8000): string {
   return s.length > max ? s.slice(0, max) + "\n...[truncated]" : s;
+}
+
+function isTypedLinkSchemaUnavailable(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  return (
+    e.code === "42P01" ||
+    e.code === "42703" ||
+    /memory_typed_links|column .* does not exist/i.test(e.message ?? "")
+  );
 }
 
 // ─── Free-tier caps ──────────────────────────────────────────────────────
@@ -1071,6 +1085,43 @@ export class SupabaseBackend implements MemoryBackend {
       role: String(row.role),
       receipt_id: String(row.id),
     };
+  }
+
+  async saveTypedLinkCandidates(
+    candidates: MemoryTypedLinkCandidate[]
+  ): Promise<SaveTypedLinkCandidatesResult> {
+    if (candidates.length === 0) return { saved: 0 };
+
+    const rows = candidates.map((candidate) =>
+      this.withTenancy({
+        source_kind: candidate.source_kind,
+        source_id: candidate.source_id,
+        relation: candidate.relation,
+        target_kind: candidate.target_kind,
+        target_text: candidate.target_text,
+        confidence: candidate.confidence,
+        evidence_start: candidate.evidence_span.start,
+        evidence_end: candidate.evidence_span.end,
+        evidence_text: candidate.evidence_span.text,
+        redaction_state: candidate.redaction_state,
+      })
+    );
+
+    const onConflict =
+      this.tenancy.mode === "managed"
+        ? "api_key_hash,source_kind,source_id,relation,target_kind,target_text"
+        : "source_kind,source_id,relation,target_kind,target_text";
+    const { data, error } = await this.client
+      .from(this.tables.memory_typed_links)
+      .upsert(rows, { onConflict, ignoreDuplicates: true })
+      .select("id");
+
+    if (error) {
+      if (isTypedLinkSchemaUnavailable(error)) return { saved: 0, skipped: "schema_unavailable" };
+      throw pgError("saveTypedLinkCandidates upsert", error);
+    }
+
+    return { saved: Array.isArray(data) ? data.length : rows.length };
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {

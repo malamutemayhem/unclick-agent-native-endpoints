@@ -1,3 +1,5 @@
+import type { MemoryTypedLinkCandidate } from "./typed-links.js";
+
 /**
  * Shared types for UnClick Memory backends (local + Supabase).
  */
@@ -102,6 +104,11 @@ export interface LibraryDocInput {
   tags: string[];
 }
 
+export interface SaveTypedLinkCandidatesResult {
+  saved: number;
+  skipped?: "schema_unavailable" | "persistence_failed";
+}
+
 export type MemoryTaxonomySourceKind = "fact" | "session";
 
 export interface MemoryTaxonomySnapshotSource {
@@ -197,6 +204,9 @@ export interface MemoryBackend {
 
   /** Log a conversation message. */
   logConversation(data: ConversationInput): Promise<ConversationReceipt>;
+
+  /** Persist deterministic typed-link candidates extracted from Memory writes. */
+  saveTypedLinkCandidates(candidates: MemoryTypedLinkCandidate[]): Promise<SaveTypedLinkCandidatesResult>;
 
   /** Get full conversation log for a session. */
   getConversationDetail(sessionId: string): Promise<unknown>;
