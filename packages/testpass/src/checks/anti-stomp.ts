@@ -12,6 +12,11 @@ export interface CheckResult {
   reason?: string;
 }
 
+export interface GitStatusEntry {
+  status: string;
+  path: string;
+}
+
 // ── DELETE-001 ──────────────────────────────────────────────────────────────
 
 /**
@@ -90,5 +95,31 @@ export function checkFactHasGitLink(fact: FactLinkInput): CheckResult {
     reason: linked
       ? "Fact has git linkage"
       : `Fact in category "${fact.category}" has neither commit_sha nor pr_number`,
+  };
+}
+
+// GIT-HYGIENE-001
+
+export function parseGitStatusPorcelain(statusText: string): GitStatusEntry[] {
+  return String(statusText ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => ({
+      status: line.slice(0, 2).trim(),
+      path: line.slice(3).trim() || line.trim(),
+    }));
+}
+
+export function checkGitStatusClean(statusText: string): CheckResult {
+  const dirty = parseGitStatusPorcelain(statusText);
+  if (dirty.length === 0) {
+    return { pass: true, reason: "git status --porcelain returned no changes" };
+  }
+
+  return {
+    pass: false,
+    missing: dirty.map((entry) => entry.path),
+    reason: `git status --porcelain reported ${dirty.length} uncommitted path(s)`,
   };
 }

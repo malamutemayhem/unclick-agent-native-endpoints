@@ -5,7 +5,10 @@ import {
   checkDeletedFilesMentioned,
   checkAuditRequiresArchaeology,
   checkFactHasGitLink,
+  checkGitStatusClean,
+  parseGitStatusPorcelain,
 } from "../checks/anti-stomp.js";
+import { isDeterministicCheckRegistered } from "../runner/deterministic.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACK_PATH = path.resolve(__dirname, "../../packs/anti-stomp-v0.yaml");
@@ -177,5 +180,31 @@ describe("GIT-LINK-001: checkFactHasGitLink", () => {
   it("passes (no-op) when category is undefined", () => {
     const result = checkFactHasGitLink({});
     expect(result.pass).toBe(true);
+  });
+});
+
+// GIT-HYGIENE-001: checkGitStatusClean
+
+describe("GIT-HYGIENE-001: checkGitStatusClean", () => {
+  it("is registered with the deterministic runner", () => {
+    expect(isDeterministicCheckRegistered("GIT-HYGIENE-001")).toBe(true);
+  });
+
+  it("passes when git status porcelain output is empty", () => {
+    const result = checkGitStatusClean("");
+    expect(result.pass).toBe(true);
+  });
+
+  it("fails and names dirty files when git status porcelain has entries", () => {
+    const result = checkGitStatusClean(" M api/memory-admin.ts\n?? scripts/new-check.mjs\n");
+    expect(result.pass).toBe(false);
+    expect(result.missing).toEqual(["api/memory-admin.ts", "scripts/new-check.mjs"]);
+    expect(result.reason).toMatch(/2 uncommitted path/);
+  });
+
+  it("parses renamed paths without losing the porcelain status", () => {
+    expect(parseGitStatusPorcelain("R  old/path.ts -> new/path.ts\n")).toEqual([
+      { status: "R", path: "old/path.ts -> new/path.ts" },
+    ]);
   });
 });

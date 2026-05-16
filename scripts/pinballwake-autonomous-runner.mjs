@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFile } from "node:child_process";
 import {
   createCodingRoomJobLedger,
   createCodingRoomJob,
@@ -116,6 +117,60 @@ function compact(value, max = 240) {
 function compactMultiline(value, max = 12000) {
   const text = String(value ?? "").trim();
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+export function parseAutonomousRunnerGitStatusPorcelain(statusText = "") {
+  return String(statusText ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => ({
+      status: line.slice(0, 2).trim(),
+      path: line.slice(3).trim() || line.trim(),
+    }));
+}
+
+export async function readAutonomousRunnerGitStatus({ cwd = process.cwd() } = {}) {
+  return new Promise((resolve) => {
+    execFile("git", ["status", "--porcelain"], { cwd }, (error, stdout, stderr) => {
+      const code = error?.code;
+      resolve({
+        ok: !error,
+        status: !error ? 0 : typeof code === "number" ? code : 1,
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+      });
+    });
+  });
+}
+
+export async function evaluateAutonomousRunnerGitHygiene({
+  cwd = process.cwd(),
+  gitStatusImpl = readAutonomousRunnerGitStatus,
+} = {}) {
+  const status = await gitStatusImpl({ cwd });
+  if (!status?.ok) {
+    return {
+      ok: false,
+      reason: /not a git repository/i.test(status?.stderr || "")
+        ? "git_hygiene_not_a_worktree"
+        : "git_hygiene_status_failed",
+      status: status?.status ?? 1,
+      stderr: compact(status?.stderr || status?.error || "", 500),
+    };
+  }
+
+  const dirty = parseAutonomousRunnerGitStatusPorcelain(status.stdout);
+  if (dirty.length === 0) {
+    return { ok: true, reason: "git_hygiene_clean", dirty_files: [] };
+  }
+
+  return {
+    ok: false,
+    reason: "git_hygiene_dirty_worktree",
+    dirty_files: dirty.map((entry) => entry.path),
+    dirty_count: dirty.length,
+  };
 }
 
 function memoryAdminActionUrlFromMcpUrl(mcpUrl = DEFAULT_UNCLICK_MCP_URL, action = "") {
@@ -2094,6 +2149,9 @@ export async function runAutonomousRunnerFile({
   checkedOutSha = "",
   githubToken = "",
   mainFreshnessThresholdMinutes = 20,
+  gitHygienePreflight = false,
+  gitStatusImpl = readAutonomousRunnerGitStatus,
+  worktreeCwd = process.cwd(),
 } = {}) {
   if (orchestratorProof) {
     return runOrchestratorSeatHandshakeProof({
@@ -2141,6 +2199,30 @@ export async function runAutonomousRunnerFile({
     imported: 0,
     seen: ledger.jobs?.length || 0,
   };
+
+  let gitHygiene = { ok: true, skipped: true, reason: "git_hygiene_preflight_disabled" };
+  if (gitHygienePreflight && safeMode !== "dry-run") {
+    gitHygiene = await evaluateAutonomousRunnerGitHygiene({
+      cwd: worktreeCwd,
+      gitStatusImpl,
+    });
+    if (!gitHygiene.ok) {
+      return {
+        ok: false,
+        action: "blocked",
+        reason: gitHygiene.reason,
+        mode: safeMode,
+        dry_run: false,
+        persisted: false,
+        cycles: [],
+        ledger,
+        ledger_path: ledgerPath,
+        queue_source: queueSourceResult,
+        git_hygiene: gitHygiene,
+        main_freshness_canary: mainFreshnessCanary,
+      };
+    }
+  }
 
   if (String(queueSource || "ledger").trim().toLowerCase() === "unclick") {
     queueSourceResult = {
@@ -2357,6 +2439,7 @@ export async function runAutonomousRunnerFile({
     quiet_window_autonomy_proof: quietWindowAutonomyProof,
     todo_claim_sync: todoClaimSync,
     todo_scoping_sync: todoScopingSync,
+    git_hygiene: gitHygiene,
     main_freshness_canary: mainFreshnessCanary,
   };
 }
@@ -2416,6 +2499,9 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
     mainFreshnessThresholdMinutes: parseIntOption(
       getArg("main-freshness-threshold-minutes", process.env.AUTONOMOUS_RUNNER_MAIN_FRESHNESS_THRESHOLD_MINUTES),
       20,
+    ),
+    gitHygienePreflight: !parseBoolean(
+      getArg("skip-git-hygiene-preflight", process.env.AUTONOMOUS_RUNNER_SKIP_GIT_HYGIENE_PREFLIGHT),
     ),
     policy: createAutonomousRunnerPolicy({
       disabled: parseBoolean(process.env.AUTONOMOUS_RUNNER_DISABLED),

@@ -12,7 +12,9 @@
 import type { Pack, RunProfile } from "../types.js";
 import type { RunManagerConfig } from "../run-manager.js";
 import { updateItem, createEvidence } from "../run-manager.js";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { checkGitStatusClean } from "../checks/anti-stomp.js";
 import { buildMcpHeaders, readMcpResponseBody } from "../mcp-http.js";
 
 // ─── Internal types ────────────────────────────────────────────────
@@ -62,6 +64,24 @@ function rpcReq(method: string, params: unknown, id?: number): unknown {
   const r: Record<string, unknown> = { jsonrpc: "2.0", method, params };
   if (id !== undefined) r.id = id;
   return r;
+}
+
+async function runGitStatusPorcelain(
+  cwd = process.cwd(),
+): Promise<{ ok: boolean; status: number; stdout: string; stderr: string; latency_ms: number }> {
+  const start = Date.now();
+  return new Promise((resolve) => {
+    execFile("git", ["status", "--porcelain"], { cwd }, (error, stdout, stderr) => {
+      const code = (error as { code?: unknown } | null)?.code;
+      resolve({
+        ok: !error,
+        status: !error ? 0 : typeof code === "number" ? code : 1,
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        latency_ms: Date.now() - start,
+      });
+    });
+  });
 }
 
 // ─── Check handlers ────────────────────────────────────────────────
@@ -348,7 +368,46 @@ const HANDLERS: Record<string, CheckHandler> = {
       traces: [trace],
     };
   },
+
+  // GIT-HYGIENE-001: session worktrees must be clean before handoff.
+  "GIT-HYGIENE-001": async () => {
+    const r = await runGitStatusPorcelain();
+    const trace: HttpTrace = {
+      request: {
+        url: "local:git-status",
+        body: { command: "git status --porcelain", cwd: process.cwd() },
+      },
+      response: {
+        status: r.status,
+        body: { stdout: r.stdout, stderr: r.stderr },
+        latency_ms: r.latency_ms,
+      },
+    };
+
+    if (!r.ok) {
+      if (/not a git repository/i.test(r.stderr)) {
+        return { verdict: "na", note: "git status is not available outside a git worktree", traces: [trace] };
+      }
+      return {
+        verdict: "fail",
+        note: `git status --porcelain failed: ${r.stderr || `exit ${r.status}`}`,
+        traces: [trace],
+      };
+    }
+
+    const result = checkGitStatusClean(r.stdout);
+    if (result.pass) return { verdict: "check", note: result.reason, traces: [trace] };
+    return {
+      verdict: "fail",
+      note: `${result.reason}: ${(result.missing || []).join(", ")}`,
+      traces: [trace],
+    };
+  },
 };
+
+export function isDeterministicCheckRegistered(id: string): boolean {
+  return Boolean(HANDLERS[id]);
+}
 
 // ─── Public API ─────────────────────────────────────────────────────
 
