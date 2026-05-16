@@ -129,6 +129,18 @@ export interface WorkerSelfHealingDecision {
   last_seen_at?: string | null;
 }
 
+export type WorkerSelfHealingSignalAction =
+  | "worker_self_healing_active_lease"
+  | "worker_self_healing_reclaimable_lease"
+  | "worker_self_healing_stale_worker";
+
+export interface WorkerSelfHealingSignal {
+  action: WorkerSelfHealingSignalAction;
+  severity: "info" | "action_needed";
+  summary: string;
+  payload: Record<string, unknown>;
+}
+
 export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
   if (!profile.next_checkin_at) return false;
   const dueMs = new Date(profile.next_checkin_at).getTime();
@@ -252,6 +264,68 @@ export function planWorkerSelfHealingDecision(params: {
     next_reclaim_count: reclaimCount,
     reason: "no_stale_worker_or_reclaimable_lease",
   };
+}
+
+function workerSelfHealingSignalPayload(decision: WorkerSelfHealingDecision) {
+  const payload: Record<string, unknown> = {
+    todo_id: decision.todo_id,
+    assigned_to_agent_id: decision.assigned_to_agent_id,
+    has_lease_token: Boolean(decision.lease_token),
+    lease_expires_at: decision.lease_expires_at,
+    reclaim_count: decision.reclaim_count,
+    next_reclaim_count: decision.next_reclaim_count,
+    latest_handoff_receipt_id: decision.latest_handoff_receipt_id,
+    reason: decision.reason,
+  };
+
+  if (decision.profile_agent_id) {
+    payload.profile_agent_id = decision.profile_agent_id;
+  }
+  if (decision.next_checkin_at) {
+    payload.next_checkin_at = decision.next_checkin_at;
+  }
+  if (decision.last_seen_at) {
+    payload.last_seen_at = decision.last_seen_at;
+  }
+
+  return payload;
+}
+
+export function buildWorkerSelfHealingSignal(
+  decision: WorkerSelfHealingDecision,
+): WorkerSelfHealingSignal | null {
+  if (decision.action === "active_lease_preserved") {
+    return {
+      action: "worker_self_healing_active_lease",
+      severity: "info",
+      summary: `Todo ${decision.todo_id} has an active worker lease through ${
+        decision.lease_expires_at ?? "unknown"
+      }.`,
+      payload: workerSelfHealingSignalPayload(decision),
+    };
+  }
+
+  if (decision.action === "expired_lease_reclaimable") {
+    return {
+      action: "worker_self_healing_reclaimable_lease",
+      severity: "action_needed",
+      summary: `Todo ${decision.todo_id} has an expired worker lease and can be reclaimed.`,
+      payload: workerSelfHealingSignalPayload(decision),
+    };
+  }
+
+  if (decision.action === "stale_worker_action_needed") {
+    return {
+      action: "worker_self_healing_stale_worker",
+      severity: "action_needed",
+      summary: `Worker ${
+        decision.profile_agent_id ?? decision.assigned_to_agent_id ?? "unknown"
+      } missed the next check-in for todo ${decision.todo_id} without an active lease.`,
+      payload: workerSelfHealingSignalPayload(decision),
+    };
+  }
+
+  return null;
 }
 
 function dispatchToDbRow(dispatch: AgentDispatch) {
