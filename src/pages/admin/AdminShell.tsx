@@ -354,7 +354,6 @@ function SidebarNav({
       <SeatsNavItem onClick={onLinkClick} />
       <AutopilotNavGroup onLinkClick={onLinkClick} />
       <SurfaceLink path="/admin/signals"      label="Signals"       icon={Bell}     onClick={onLinkClick} badge={signalsUnread} />
-      {isAdmin && <SurfaceLink path="/admin/analytics" label="Analytics"    icon={BarChart3} onClick={onLinkClick} />}
       <SurfaceLink path="/admin/settings" label="Settings"                 icon={Settings}  onClick={onLinkClick} />
       <SurfaceLink path="/admin/billing"  label="Billing"                  icon={CreditCard} onClick={onLinkClick} />
       {isAdmin && <AdminSubmenu onLinkClick={onLinkClick} />}

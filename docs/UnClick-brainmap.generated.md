@@ -16,7 +16,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | docs/adr/0005-two-layer-admin-gating.md | cefe739796f2 | 2186 |
 | docs/adr/0006-orchestrator-is-user-chat.md | bf91808d2d8d | 2169 |
 | src/App.tsx | b02c3916f083 | 13089 |
-| src/pages/admin/AdminShell.tsx | ae5e4a8dae80 | 19137 |
+| src/pages/admin/AdminShell.tsx | fcbb1fa44f40 | 19018 |
 | .github/workflows/ci.yml | 79e43dd8e26c | 1608 |
 | .github/workflows/brainmap-auto-update.yml | 7e8b08eb16aa | 1137 |
 | package.json | 9f761ff407b1 | 4232 |
