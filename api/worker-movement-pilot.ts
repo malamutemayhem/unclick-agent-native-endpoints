@@ -38,6 +38,7 @@ export interface WorkerMovementPilotStore {
 export type WorkerMovementPilotRunStatus =
   | "skip_disabled"
   | "skip_no_candidate"
+  | "proof_planned"
   | "proof_inserted"
   | "proof_recently_emitted"
   | "candidate_fetch_failed"
@@ -59,6 +60,9 @@ export interface WorkerMovementPilotRunResult {
   next_safe_step: string;
   error?: string;
 }
+
+const PROOF_WRITE_GATE_NEXT_STEP =
+  "enable WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED=true after planned proof looks safe";
 
 export function createWorkerMovementPilotStore(
   supabase: ReturnType<typeof createClient>,
@@ -108,6 +112,11 @@ export function isWorkerMovementPilotEnabled(value: string | undefined): boolean
   return normalized === "1" || normalized === "true" || normalized === "enabled";
 }
 
+export function isWorkerMovementPilotProofWriteEnabled(value: string | undefined): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "enabled";
+}
+
 export function isWorkerMovementPilotHttpMethodAllowed(method: string | undefined): boolean {
   const normalized = String(method ?? "GET").trim().toUpperCase();
   return normalized === "GET" || normalized === "POST";
@@ -133,6 +142,7 @@ export async function runWorkerMovementPilotDryRun(params: {
   store: WorkerMovementPilotStore;
   nowMs?: number;
   enabled?: boolean;
+  proofWritesEnabled?: boolean;
 }): Promise<WorkerMovementPilotRunResult> {
   if (params.enabled === false) {
     return buildWorkerMovementPilotDisabledResult();
@@ -194,6 +204,23 @@ export async function runWorkerMovementPilotDryRun(params: {
   const proofStatus = proof.signal.action === "worker_movement_workflow_pilot_blocker"
     ? "BLOCKER"
     : "PASS";
+
+  if (params.proofWritesEnabled === false) {
+    return {
+      ok: true,
+      mode: "dry_run",
+      status: "proof_planned",
+      candidate_id: plan.candidate_id,
+      action: plan.action,
+      proof_signal_action: proof.signal.action,
+      proof_status: proofStatus,
+      proof_inserted: false,
+      proof_deduped: false,
+      summary: proof.signal.summary,
+      next_safe_step: PROOF_WRITE_GATE_NEXT_STEP,
+    };
+  }
+
   const dedupeResult = await params.store.hasRecentProof({
     apiKeyHash: candidate.api_key_hash,
     action: proof.insert.action,
@@ -287,6 +314,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const result = await runWorkerMovementPilotDryRun({
     store: createWorkerMovementPilotStore(supabase),
     enabled,
+    proofWritesEnabled: isWorkerMovementPilotProofWriteEnabled(
+      process.env.WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED,
+    ),
   });
   return res.status(result.ok ? 200 : 500).json(result);
 }
@@ -294,7 +324,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 function failureResult(params: {
   status: Exclude<
     WorkerMovementPilotRunStatus,
-    "skip_disabled" | "skip_no_candidate" | "proof_inserted" | "proof_recently_emitted"
+    | "skip_disabled"
+    | "skip_no_candidate"
+    | "proof_planned"
+    | "proof_inserted"
+    | "proof_recently_emitted"
   >;
   candidateId?: string | null;
   action?: WorkerMovementWorkflowPilotAction | null;
