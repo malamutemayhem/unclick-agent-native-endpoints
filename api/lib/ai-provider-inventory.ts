@@ -39,6 +39,14 @@ export interface AiProviderCallDecision {
   allow_paid_flag?: string;
 }
 
+export type MemoryAdminAiChatProvider = "google" | "openai" | "anthropic";
+
+const MEMORY_ADMIN_AI_CHAT_PATH_IDS: Record<MemoryAdminAiChatProvider, string> = {
+  google: "memory.admin.google.ai-chat",
+  openai: "memory.admin.openai.ai-chat",
+  anthropic: "memory.admin.anthropic.ai-chat",
+};
+
 export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
   {
     id: "nudgeonly.openrouter.free-default",
@@ -115,6 +123,39 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     default_allowed: false,
     allow_paid_flag: "ARENA_ANTHROPIC_ENABLED",
     notes: "Arena bot solve uses Anthropic for live generated solutions and must require an explicit arena spend opt-in in addition to server-side credentials.",
+  },
+  {
+    id: "memory.admin.google.ai-chat",
+    provider: "Google",
+    surface: "api/memory-admin.ts?action=admin_ai_chat",
+    call_kind: "chat_completion",
+    model: "tenant ai_chat_model or gemini-2.5-flash-lite",
+    cost_tier: "paid",
+    default_allowed: false,
+    allow_paid_flag: "AI_CHAT_ENABLED + tenant ai_chat_enabled + tenant ai_chat_api_key",
+    notes: "Memory Admin AI chat can call Google models only after the global chat gate, tenant chat toggle, and tenant-owned API key all pass.",
+  },
+  {
+    id: "memory.admin.openai.ai-chat",
+    provider: "OpenAI",
+    surface: "api/memory-admin.ts?action=admin_ai_chat",
+    call_kind: "chat_completion",
+    model: "tenant ai_chat_model or gpt-4o-mini",
+    cost_tier: "paid",
+    default_allowed: false,
+    allow_paid_flag: "AI_CHAT_ENABLED + tenant ai_chat_enabled + tenant ai_chat_api_key",
+    notes: "Memory Admin AI chat can call OpenAI models only after the global chat gate, tenant chat toggle, and tenant-owned API key all pass.",
+  },
+  {
+    id: "memory.admin.anthropic.ai-chat",
+    provider: "Anthropic",
+    surface: "api/memory-admin.ts?action=admin_ai_chat",
+    call_kind: "chat_completion",
+    model: "tenant ai_chat_model or claude-haiku-4-5",
+    cost_tier: "paid",
+    default_allowed: false,
+    allow_paid_flag: "AI_CHAT_ENABLED + tenant ai_chat_enabled + tenant ai_chat_api_key",
+    notes: "Memory Admin AI chat can call Anthropic models only after the global chat gate, tenant chat toggle, and tenant-owned API key all pass.",
   },
   {
     id: "mcp.openai.tool.chat",
@@ -291,6 +332,10 @@ export function getAiProviderInventoryEntry(pathId: string): AiProviderInventory
   return AI_PROVIDER_INVENTORY.find((entry) => entry.id === pathId) ?? null;
 }
 
+export function getMemoryAdminAiChatPathId(provider: MemoryAdminAiChatProvider): string {
+  return MEMORY_ADMIN_AI_CHAT_PATH_IDS[provider];
+}
+
 export function classifyAiProviderPath(pathId: string, model?: string | null): AiProviderInventoryEntry {
   const known = getAiProviderInventoryEntry(pathId);
   if (known) {
@@ -341,6 +386,18 @@ export function decideAiProviderCall(input: AiProviderDecisionInput): AiProvider
     reason: allowPaid ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
     allow_paid_flag: entry.allow_paid_flag,
   };
+}
+
+export function decideMemoryAdminAiChatProviderCall(input: {
+  provider: MemoryAdminAiChatProvider;
+  model?: string | null;
+  allow_paid?: boolean;
+}): AiProviderCallDecision {
+  return decideAiProviderCall({
+    path_id: getMemoryAdminAiChatPathId(input.provider),
+    model: input.model,
+    allow_paid: input.allow_paid,
+  });
 }
 
 export function publicAiProviderCostLabels(): Array<Pick<

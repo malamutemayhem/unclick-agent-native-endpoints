@@ -159,6 +159,7 @@ import {
 import { runRoutePacketConsumerDryRun, type VisibleWorker } from "./lib/route-packet-consumer.js";
 import { buildUnClickConnectDispatchRow } from "./lib/route-packet-dispatch.js";
 import { buildTetherRoutePacket } from "./lib/tether-route-packet.js";
+import { decideMemoryAdminAiChatProviderCall } from "./lib/ai-provider-inventory.js";
 import {
   buildWorkersToVisibleWorkers,
   fishbowlProfilesToVisibleWorkers,
@@ -182,7 +183,6 @@ import {
   isMemoryQuotaExemptEmail,
 } from "../packages/mcp-server/src/memory/quota-policy.js";
 import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage, type ModelMessage } from "ai";
-import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import * as crypto from "crypto";
 import * as fs from "fs";
@@ -614,6 +614,49 @@ async function resolveSessionUser(
 
 type ChatProvider = "google" | "openai" | "anthropic";
 
+interface AiChatTenantSettingsRow {
+  ai_chat_enabled: boolean | null;
+  ai_chat_provider: string | null;
+  ai_chat_model: string | null;
+  ai_chat_system_prompt: string | null;
+  ai_chat_max_turns: number | null;
+  ai_chat_api_key_encrypted: string | null;
+}
+
+interface ResolvedAiChatTenantSettings {
+  ai_chat_enabled: boolean;
+  ai_chat_provider: ChatProvider;
+  ai_chat_model: string;
+  ai_chat_system_prompt: string | null;
+  ai_chat_max_turns: number;
+  ai_chat_api_key: string | null;
+}
+
+const DEFAULT_AI_CHAT_MODELS: Record<ChatProvider, string> = {
+  google: "gemini-2.5-flash-lite",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-haiku-4-5",
+};
+
+function isChatProvider(value: unknown): value is ChatProvider {
+  return value === "google" || value === "openai" || value === "anthropic";
+}
+
+function normaliseAiChatProvider(value: unknown): ChatProvider {
+  return isChatProvider(value) ? value : "google";
+}
+
+function normaliseAiChatModel(provider: ChatProvider, value: unknown): string {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : DEFAULT_AI_CHAT_MODELS[provider];
+}
+
+function normaliseAiChatMaxTurns(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 20;
+  return Math.min(50, Math.max(1, Math.trunc(value)));
+}
+
 function deriveAiKeyEncryptionKey(): Buffer | null {
   const secret = process.env.AI_KEY_ENCRYPTION_SECRET;
   if (!secret) return null;
@@ -636,6 +679,34 @@ function decryptAiApiKey(payload: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+async function resolveTenantAiChatSettings(
+  supabase: SupabaseClient,
+  apiKeyHash: string,
+): Promise<ResolvedAiChatTenantSettings> {
+  const { data, error } = await supabase
+    .from("tenant_settings")
+    .select(
+      "ai_chat_enabled, ai_chat_provider, ai_chat_model, ai_chat_system_prompt, ai_chat_max_turns, ai_chat_api_key_encrypted",
+    )
+    .eq("api_key_hash", apiKeyHash)
+    .maybeSingle();
+  if (error) throw error;
+
+  const row = data as AiChatTenantSettingsRow | null;
+  const provider = normaliseAiChatProvider(row?.ai_chat_provider);
+  return {
+    ai_chat_enabled: row?.ai_chat_enabled ?? true,
+    ai_chat_provider: provider,
+    ai_chat_model: normaliseAiChatModel(provider, row?.ai_chat_model),
+    ai_chat_system_prompt:
+      typeof row?.ai_chat_system_prompt === "string" && row.ai_chat_system_prompt.trim()
+        ? row.ai_chat_system_prompt.trim()
+        : null,
+    ai_chat_max_turns: normaliseAiChatMaxTurns(row?.ai_chat_max_turns),
+    ai_chat_api_key: decryptAiApiKey(row?.ai_chat_api_key_encrypted),
+  };
 }
 
 /**
@@ -1308,8 +1379,8 @@ async function resolveAiChatModel(opts: {
   model: string;
   userApiKey: string | null;
 }) {
-  const fallbackKey = process.env.AI_CHAT_DEFAULT_KEY ?? undefined;
-  const apiKey = opts.userApiKey ?? fallbackKey;
+  const apiKey = opts.userApiKey?.trim();
+  if (!apiKey) throw new Error("Admin AI chat provider API key is required.");
 
   if (opts.provider === "google") {
     const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
@@ -5831,8 +5902,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
           if (typeof body.ai_chat_enabled === "boolean")
             update.ai_chat_enabled = body.ai_chat_enabled;
-          if (body.ai_chat_provider) update.ai_chat_provider = body.ai_chat_provider;
-          if (body.ai_chat_model) update.ai_chat_model = body.ai_chat_model;
+          if (body.ai_chat_provider !== undefined) {
+            if (!isChatProvider(body.ai_chat_provider)) {
+              return res.status(400).json({ error: "ai_chat_provider must be google, openai, or anthropic" });
+            }
+            update.ai_chat_provider = body.ai_chat_provider;
+          }
+          if (body.ai_chat_model !== undefined) {
+            if (typeof body.ai_chat_model !== "string" || !body.ai_chat_model.trim()) {
+              return res.status(400).json({ error: "ai_chat_model must be a non-empty string" });
+            }
+            update.ai_chat_model = body.ai_chat_model.trim();
+          }
           if (typeof body.ai_chat_system_prompt === "string")
             update.ai_chat_system_prompt = body.ai_chat_system_prompt;
           if (typeof body.ai_chat_max_turns === "number")
@@ -5890,10 +5971,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           env_enabled: envEnabled,
           settings: {
             ai_chat_enabled: row?.ai_chat_enabled ?? true,
-            ai_chat_provider: row?.ai_chat_provider ?? "google",
-            ai_chat_model: row?.ai_chat_model ?? "gemini-2.5-flash-lite",
+            ai_chat_provider: normaliseAiChatProvider(row?.ai_chat_provider),
+            ai_chat_model: normaliseAiChatModel(
+              normaliseAiChatProvider(row?.ai_chat_provider),
+              row?.ai_chat_model,
+            ),
             ai_chat_system_prompt: row?.ai_chat_system_prompt ?? null,
-            ai_chat_max_turns: row?.ai_chat_max_turns ?? 20,
+            ai_chat_max_turns: normaliseAiChatMaxTurns(row?.ai_chat_max_turns),
             has_api_key: Boolean(row?.ai_chat_api_key_encrypted),
           },
         });
@@ -5944,19 +6028,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case "admin_ai_chat": {
         if (req.method !== "POST") return res.status(405).json({ error: "POST required" });
-        if (!isAdminChatEnabled()) {
+        const envEnabled = isAdminChatEnabled();
+        if (!envEnabled) {
           return res.status(503).json({
             error: "Admin AI chat is disabled. Set AI_CHAT_ENABLED=true to turn it on.",
           });
         }
-        if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-          return res.status(503).json({
-            error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured on the server.",
-          });
-        }
 
         const body = req.body as
-          | { messages?: UIMessage[]; api_key?: string }
+          | { messages?: unknown[]; api_key?: string }
           | undefined;
         const messages = Array.isArray(body?.messages) ? body!.messages! : [];
         if (messages.length === 0) {
@@ -5971,12 +6051,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(401).json({ error: "Authorization header required" });
         }
 
-        const systemPrompt = await buildAdminChatSystemPrompt(supabase, apiKeyHash);
+        const tenantSettings = await resolveTenantAiChatSettings(supabase, apiKeyHash);
+        if (!tenantSettings.ai_chat_enabled) {
+          return res.status(403).json({
+            error: "Admin AI chat is turned off in tenant settings.",
+          });
+        }
+
+        const providerDecision = decideMemoryAdminAiChatProviderCall({
+          provider: tenantSettings.ai_chat_provider,
+          model: tenantSettings.ai_chat_model,
+          allow_paid: envEnabled && tenantSettings.ai_chat_enabled && Boolean(tenantSettings.ai_chat_api_key),
+        });
+        if (!providerDecision.allowed) {
+          return res.status(503).json({
+            error:
+              "Admin AI chat provider is not configured. Add a tenant API key in Settings before making paid provider calls.",
+            provider: providerDecision.provider,
+            model: providerDecision.model,
+            cost_tier: providerDecision.cost_tier,
+            allow_paid_flag: providerDecision.allow_paid_flag,
+          });
+        }
+
+        const systemPromptBase = await buildAdminChatSystemPrompt(supabase, apiKeyHash);
+        const systemPrompt = tenantSettings.ai_chat_system_prompt
+          ? [
+              systemPromptBase,
+              "",
+              "Tenant custom instructions:",
+              tenantSettings.ai_chat_system_prompt,
+            ].join("\n")
+          : systemPromptBase;
         const tools = buildAdminChatTools(supabase, apiKeyHash, req);
 
-        const modelMessages = await convertToModelMessages(messages);
+        const recentMessages = messages.slice(-tenantSettings.ai_chat_max_turns);
+        const modelMessages = await normaliseChatMessages(recentMessages);
+        if ("error" in modelMessages) {
+          return res.status(400).json({ error: modelMessages.error });
+        }
+        const model = await resolveAiChatModel({
+          provider: tenantSettings.ai_chat_provider,
+          model: tenantSettings.ai_chat_model,
+          userApiKey: tenantSettings.ai_chat_api_key,
+        });
         const result = streamText({
-          model: google("gemini-2.5-flash-lite"),
+          model,
           system: systemPrompt,
           messages: modelMessages,
           tools,
