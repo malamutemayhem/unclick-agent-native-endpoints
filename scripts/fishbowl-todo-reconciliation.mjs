@@ -58,6 +58,12 @@ function todoText(todo = {}) {
     todo.description,
     todo.pipeline_evidence,
     todo.pipelineEvidence,
+    todo.comments,
+    todo.comment_text,
+    todo.commentText,
+    todo.proof,
+    todo.proof_text,
+    todo.proofText,
   ).join("\n");
 }
 
@@ -143,6 +149,43 @@ function findWakePassCompletionProof(prNumber, receipts = []) {
     return {
       receipt_id: firstKnown(receipt.id, receipt.source_id, receipt.message_id),
       receipt_text: text.replace(/\s+/g, " ").trim().slice(0, 220),
+    };
+  }
+
+  return null;
+}
+
+function todoHasShipReceipt(todo = {}) {
+  const source = String(todo.pipeline_source ?? todo.pipelineSource ?? "").toLowerCase();
+  const evidence = normalizedTags({ tags: todo.pipeline_evidence ?? todo.pipelineEvidence ?? [] });
+  const progress = Number(todo.pipeline_progress ?? todo.pipelineProgress ?? 0);
+  const stageCount = Number(todo.pipeline_stage_count ?? todo.pipelineStageCount ?? 0);
+  return (
+    source.includes("receipt: ship") ||
+    evidence.includes("ship") ||
+    progress >= 100 ||
+    stageCount >= 5
+  );
+}
+
+function findMergedPrProofForTodo(todo, pullRequests, nowMs, mergedWindowDays) {
+  if (!todoHasShipReceipt(todo)) return null;
+  const mentionedPrs = extractPullRequestNumbers(todoText(todo));
+  if (mentionedPrs.length === 0) return null;
+
+  for (const pr of pullRequests) {
+    const number = Number(pr?.number ?? pr?.pr_number);
+    if (!mentionedPrs.includes(number)) continue;
+
+    const mergedAt = pr?.merged_at ?? pr?.mergedAt;
+    const mergedMs = parseTime(mergedAt);
+    if (mergedMs === null) continue;
+    if (daysBetween(nowMs, mergedMs) > mergedWindowDays) continue;
+
+    return {
+      number,
+      url: pr.url ?? pr.html_url ?? null,
+      merged_at: new Date(mergedMs).toISOString(),
     };
   }
 
@@ -242,6 +285,18 @@ export function buildInProgressReconciliationPlan({
         todo_id: todo.id,
         title: todo.title ?? "",
         pr: matchingPrs[0],
+        reason: "linked_pr_marker",
+      });
+      continue;
+    }
+
+    const proofPr = findMergedPrProofForTodo(todo, pullRequests, nowMs, mergedWindowDays);
+    if (proofPr) {
+      autoClose.push({
+        todo_id: todo.id,
+        title: todo.title ?? "",
+        pr: proofPr,
+        reason: "pipeline_ship_proof",
       });
       continue;
     }
