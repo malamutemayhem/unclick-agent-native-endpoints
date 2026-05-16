@@ -61,6 +61,94 @@ function todoText(todo = {}) {
   ).join("\n");
 }
 
+function dispatchText(dispatch = {}) {
+  return textParts(
+    dispatch.text,
+    dispatch.summary,
+    dispatch.title,
+    dispatch.source_url,
+    dispatch.sourceUrl,
+    dispatch.payload?.source_url,
+    dispatch.payload?.sourceUrl,
+    dispatch.deep_link,
+    dispatch.deepLink,
+  ).join("\n");
+}
+
+function receiptText(receipt = {}) {
+  return textParts(
+    receipt.text,
+    receipt.summary,
+    receipt.title,
+    receipt.source_url,
+    receipt.sourceUrl,
+    receipt.payload?.source_url,
+    receipt.payload?.sourceUrl,
+  ).join("\n");
+}
+
+function normalizedTags(record = {}) {
+  return (Array.isArray(record.tags) ? record.tags : [])
+    .map((tag) => String(tag ?? "").toLowerCase())
+    .filter(Boolean);
+}
+
+function hasTag(record, tag) {
+  return normalizedTags(record).includes(String(tag).toLowerCase());
+}
+
+function firstKnown(...values) {
+  return values.find((value) => value != null && String(value).length > 0) ?? null;
+}
+
+function pullRequestNumber(pr = {}) {
+  const number = Number(pr.number ?? pr.pr_number);
+  return Number.isFinite(number) ? number : null;
+}
+
+function pullRequestMergedAt(pr = {}) {
+  return parseTime(pr.merged_at ?? pr.mergedAt);
+}
+
+function pullRequestMergeCommit(pr = {}) {
+  return firstKnown(
+    pr.merge_commit_sha,
+    pr.mergeCommitSha,
+    pr.mergeCommit?.oid,
+    pr.mergeCommit?.sha,
+    pr.merge_commit?.oid,
+    pr.merge_commit?.sha,
+  );
+}
+
+function findWakePassCompletionProof(prNumber, receipts = []) {
+  for (const receipt of Array.isArray(receipts) ? receipts : []) {
+    const text = receiptText(receipt);
+    const textLower = text.toLowerCase();
+    const tags = normalizedTags(receipt);
+    if (!extractPullRequestNumbers(text).includes(prNumber)) continue;
+
+    const wakePassLike =
+      tags.includes("wakepass") ||
+      textLower.includes("wakepass") ||
+      textLower.includes("wake-pull_request-pr");
+    const completionLike =
+      tags.includes("ack") ||
+      tags.includes("done") ||
+      tags.includes("completed") ||
+      /\b(ack|merged|completed|handoff complete)\b/i.test(text);
+
+    if (!wakePassLike || !completionLike) continue;
+
+    return {
+      receipt_id: firstKnown(receipt.id, receipt.source_id, receipt.message_id),
+      receipt_text: text.replace(/\s+/g, " ").trim().slice(0, 220),
+    };
+  }
+
+  return null;
+}
+
 export function extractPullRequestNumbers(...parts) {
   const text = textParts(...parts).join("\n");
   const numbers = new Set();
@@ -293,6 +381,97 @@ export function buildJobsGithubSyncPlan({
   };
 }
 
+export function buildMergedPrDispatchReconciliationPlan({
+  dispatches = [],
+  pullRequests = [],
+  receipts = [],
+  completionReceipts = [],
+} = {}) {
+  const safePrs = Array.isArray(pullRequests) ? pullRequests : [];
+  const prByNumber = new Map(
+    safePrs
+      .map((pr) => [pullRequestNumber(pr), pr])
+      .filter(([number]) => Number.isFinite(number)),
+  );
+  const proofReceipts = [
+    ...(Array.isArray(receipts) ? receipts : []),
+    ...(Array.isArray(completionReceipts) ? completionReceipts : []),
+  ];
+  const completeDispatches = [];
+  const suppressBlockers = [];
+  const untouched = [];
+
+  for (const dispatch of Array.isArray(dispatches) ? dispatches : []) {
+    const dispatchId = firstKnown(dispatch.id, dispatch.source_id, dispatch.dispatch_id);
+    const text = dispatchText(dispatch);
+    const prNumbers = extractPullRequestNumbers(text);
+
+    if (prNumbers.length === 0) {
+      untouched.push({ dispatch_id: dispatchId, reason: "no_pr_reference" });
+      continue;
+    }
+
+    for (const prNumber of prNumbers) {
+      const pr = prByNumber.get(prNumber);
+      if (!pr) {
+        untouched.push({ dispatch_id: dispatchId, pr_number: prNumber, reason: "missing_pr" });
+        continue;
+      }
+
+      if (pr.isDraft === true || pr.draft === true) {
+        untouched.push({ dispatch_id: dispatchId, pr_number: prNumber, reason: "pr_draft" });
+        continue;
+      }
+
+      const mergedAt = pullRequestMergedAt(pr);
+      if (mergedAt === null) {
+        untouched.push({ dispatch_id: dispatchId, pr_number: prNumber, reason: "pr_not_merged" });
+        continue;
+      }
+
+      const proof = findWakePassCompletionProof(prNumber, proofReceipts);
+      if (!proof) {
+        untouched.push({
+          dispatch_id: dispatchId,
+          pr_number: prNumber,
+          reason: "missing_wakepass_completion_proof",
+        });
+        continue;
+      }
+
+      const staleBlocker =
+        String(dispatch.kind ?? "").toLowerCase() === "blocker" ||
+        hasTag(dispatch, "blocker") ||
+        hasTag(dispatch, "stale") ||
+        /\b(blocker|stale)\b/i.test(text);
+      const item = {
+        kind: staleBlocker ? "suppress_blocker" : "complete_dispatch",
+        dispatch_id: dispatchId,
+        pr_number: prNumber,
+        pr_url: firstKnown(pr.url, pr.html_url),
+        merge_commit: pullRequestMergeCommit(pr),
+        merged_at: new Date(mergedAt).toISOString(),
+        receipt_id: proof.receipt_id,
+        receipt_text: proof.receipt_text,
+      };
+
+      if (staleBlocker) {
+        suppressBlockers.push(item);
+      } else {
+        completeDispatches.push(item);
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    reason: "merged_pr_dispatch_reconciliation_plan",
+    complete_dispatches: completeDispatches,
+    suppress_blockers: suppressBlockers,
+    untouched,
+  };
+}
+
 export async function readReconciliationInput(filePath) {
   if (!filePath) return { ok: false, reason: "missing_input_path" };
   return JSON.parse(await readFile(filePath, "utf8"));
@@ -306,6 +485,14 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
           return buildJobsGithubSyncPlan({
             todos: input.todos,
             pullRequests: input.pullRequests ?? input.pull_requests,
+          });
+        }
+        if (input.mode === "merged_pr_dispatch_reconciliation") {
+          return buildMergedPrDispatchReconciliationPlan({
+            dispatches: input.dispatches,
+            pullRequests: input.pullRequests ?? input.pull_requests,
+            receipts: input.receipts,
+            completionReceipts: input.completionReceipts ?? input.completion_receipts,
           });
         }
         return buildInProgressReconciliationPlan({
