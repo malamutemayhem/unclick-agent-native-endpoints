@@ -22,6 +22,24 @@ Rule-and-evidence sanity gate for AI/worker claims. Verdict-only: does not build
 
 The worker-facing rule matrix and next candidate backlog live in `docs/commonsensepass-rule-matrix.md`.
 
+## Fixture Pack
+
+Workers can import `COMMONSENSEPASS_WORKER_FIXTURES` when they need stable local examples instead of waiting on live queue, wake, or PR state.
+
+```ts
+import {
+  COMMONSENSEPASS_WORKER_FIXTURES,
+  commonsensepassCheck,
+} from "@unclick/commonsensepass";
+
+for (const fixture of COMMONSENSEPASS_WORKER_FIXTURES) {
+  const result = fixture.reserved_result ?? commonsensepassCheck(fixture.input!);
+  console.log(fixture.id, result.verdict);
+}
+```
+
+The pack covers PASS, BLOCKER, HOLD, SUPPRESS, and the reserved ROUTE verdict. Named scenarios include false quiet, stale proof, duplicate wake, no-work-with-backlog, merge-ready-without-proof, and done-without-proof. ROUTE is included as a reserved exemplar only; R1-R5 do not emit it yet.
+
 ## Usage
 
 ```ts
