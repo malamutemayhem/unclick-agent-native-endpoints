@@ -1,0 +1,29 @@
+name: OpenHands Test Mode
+
+on:
+  workflow_dispatch:
+    inputs:
+      openhands_test_mode:
+        description: Type 1 to run the opt-in OpenHands adapter checks.
+        required: true
+        default: "0"
+
+jobs:
+  openhands-test-mode:
+    if: ${{ inputs.openhands_test_mode == '1' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OPENHANDS_TEST_MODE: "1"
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run adapter tests
+        run: node --test scripts/pinballwake-openhands-worker.test.mjs
