@@ -340,6 +340,32 @@ function getClampedLimit(value: unknown, fallback = 50, max = 200): number {
   return Math.min(Math.floor(parsed), max);
 }
 
+const BACKGROUND_RECALL_CATEGORIES = new Set(["identity", "preference", "standing_rule"]);
+const BACKGROUND_RECALL_PATTERNS = [
+  /^chris('s)?\s/i,
+  /^user\s/i,
+  /should always/i,
+  /never use/i,
+  /operator timezone/i,
+  /standing rule/i,
+  /profile/i,
+  /preference/i,
+];
+
+function annotateRecallFact<T extends { category?: string | null; fact?: string | null; access_count?: number | null }>(fact: T) {
+  const category = String(fact.category ?? "").toLowerCase();
+  const text = String(fact.fact ?? "");
+  const accessCount = Number(fact.access_count ?? 0);
+  const looksStatic = BACKGROUND_RECALL_CATEGORIES.has(category) || BACKGROUND_RECALL_PATTERNS.some((pattern) => pattern.test(text));
+  const isBackgroundHeavy = accessCount >= 100 && looksStatic;
+
+  return {
+    ...fact,
+    recall_signal: isBackgroundHeavy ? "background-heavy" : "top-of-mind",
+    recall_note: isBackgroundHeavy ? "Startup or heartbeat reads" : "Human-facing recall",
+  };
+}
+
 function getRequestBaseUrl(req: VercelRequest): string | null {
   const explicit = process.env.EMBED_API_URL?.replace(/\/$/, "");
   if (explicit) return explicit;
@@ -3864,6 +3890,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("status", "active")
           .order("access_count", { ascending: false })
           .limit(topFactsLimit);
+        const annotatedTopFacts = (topFacts ?? []).map(annotateRecallFact);
+        const topOfMindFacts = annotatedTopFacts
+          .filter((fact) => fact.recall_signal === "top-of-mind")
+          .slice(0, 10);
+        const backgroundHeavyCount = annotatedTopFacts.filter((fact) => fact.recall_signal === "background-heavy").length;
 
         return res.status(200).json({
           facts_by_day: factsByDay,
@@ -3878,8 +3909,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                    (facts.count ?? 0) + (convos.count ?? 0) + (code.count ?? 0),
           },
           top_facts_limit: topFactsLimit,
+          recall_diagnostics: {
+            inspected_top_facts: annotatedTopFacts.length,
+            background_heavy_count: backgroundHeavyCount,
+          },
           recent_decay: recentDecay ?? [],
-          top_facts: topFacts ?? [],
+          top_of_mind_facts: topOfMindFacts,
+          top_facts: annotatedTopFacts,
         });
       }
 
