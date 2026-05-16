@@ -10,6 +10,7 @@ import {
   buildMissedCheckinDispatch,
   buildWakepassAutoReroutePlan,
   buildWorkerSelfHealingSignal,
+  hasRecentWorkerSelfHealingTodoSignal,
   isMissedCheckinDispatch,
   isMissedCheckinCandidate,
   isReclaimableDispatchCandidate,
@@ -601,6 +602,61 @@ describe("worker self-healing decision plan", () => {
       },
     });
     expect(plan?.insert.payload).not.toHaveProperty("lease_token");
+  });
+
+  it("dedupes worker self-healing todo signals by action and todo id", () => {
+    const decision = planWorkerSelfHealingDecision({
+      todo: {
+        id: "todo-expired-lease",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-5",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+    const plan = planWorkerSelfHealingTodoSignal({
+      apiKeyHash: "hash_123",
+      decision,
+      emittedAt: "2026-05-01T01:22:01.000Z",
+    });
+
+    expect(plan).not.toBeNull();
+    expect(
+      hasRecentWorkerSelfHealingTodoSignal(
+        [
+          {
+            action: "worker_self_healing_reclaimable_lease",
+            payload: {
+              todo_id: "todo-expired-lease",
+            },
+          },
+        ],
+        plan!,
+      ),
+    ).toBe(true);
+    expect(
+      hasRecentWorkerSelfHealingTodoSignal(
+        [
+          {
+            action: "worker_self_healing_reclaimable_lease",
+            payload: {
+              todo_id: "other-todo",
+            },
+          },
+          {
+            action: "worker_self_healing_stale_worker",
+            payload: {
+              todo_id: "todo-expired-lease",
+            },
+          },
+        ],
+        plan!,
+      ),
+    ).toBe(false);
   });
 
   it("turns a stale worker decision into an action-needed signal with profile context", () => {

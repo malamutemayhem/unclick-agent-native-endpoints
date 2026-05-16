@@ -1,7 +1,7 @@
 /**
  * Boardroom Watcher (B1) - Vercel cron, every 15 minutes.
  *
- * Two responsibilities:
+ * Responsibilities:
  *   1. Dead-man's-switch: agents whose next_checkin_at has passed without a
  *      fresh pulse get a single mc_signals row per missed window so the human
  *      gets nudged via existing Signals delivery.
@@ -10,9 +10,12 @@
  *      the human gets a second nudge if the original push was dismissed.
  *   3. Stale status cleanup: clear old Now Playing text after 30 minutes so
  *      stale workers do not look like they are still actively holding a lane.
+ *   4. Worker self-healing todo lease sweep: expired Boardroom todo leases
+ *      emit a deduped action_needed signal without exposing lease tokens.
  *
  * Dedup: each emission checks for a recent identical-action signal so we
- * never spam (30 min for missed check-ins, 60 min for digests).
+ * never spam (30 min for missed check-ins and worker self-healing, 60 min
+ * for digests).
  *
  * Auth: Bearer ${CRON_SECRET}, same shape as signals-dispatch.ts.
  */
@@ -73,11 +76,13 @@ const CHECKIN_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 const MENTION_DIGEST_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 const MENTION_AGE_THRESHOLD_MS = 10 * 60 * 1000;
 const STATUS_STALE_WINDOW_MS = 30 * 60 * 1000;
+const WORKER_SELF_HEALING_SIGNAL_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 export const CHECKIN_ACTIVE_GRACE_MS = 30 * 60 * 1000;
 export const CHECKIN_OVERDUE_SUPPRESS_MS = 12 * 60 * 60 * 1000;
 export const CHECKIN_DORMANT_SUPPRESS_MS = 7 * 24 * 60 * 60 * 1000;
 export const CHECKIN_ACK_LEASE_SECONDS = 600;
 const STALE_DISPATCH_RECLAIM_LIMIT = 50;
+const WORKER_SELF_HEALING_TODO_SWEEP_LIMIT = 50;
 export const WAKEPASS_REROUTE_LEASE_SECONDS = 600;
 
 interface WakepassRerouteTarget {
@@ -106,6 +111,10 @@ export interface WorkerSelfHealingTodoState {
   lease_token?: string | null;
   lease_expires_at?: string | null;
   reclaim_count?: number | null;
+}
+
+interface WorkerSelfHealingTodoSweepRow extends WorkerSelfHealingTodoState {
+  api_key_hash: string;
 }
 
 export type WorkerSelfHealingAction =
@@ -371,6 +380,17 @@ export function planWorkerSelfHealingTodoSignal(params: {
       },
     },
   };
+}
+
+export function hasRecentWorkerSelfHealingTodoSignal(
+  signals: Array<{ action: string; payload: Record<string, unknown> | null }>,
+  plan: WorkerSelfHealingTodoSignalPlan,
+): boolean {
+  const todoId = plan.insert.payload.todo_id;
+  return signals.some((signal) => (
+    signal.action === plan.insert.action &&
+    signal.payload?.todo_id === todoId
+  ));
 }
 
 function dispatchToDbRow(dispatch: AgentDispatch) {
@@ -822,6 +842,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let staleDispatchesAcked = 0;
   let staleDispatchesRerouted = 0;
   let staleDispatchRerouteFailures = 0;
+  let workerSelfHealingSignalsEmitted = 0;
+  let workerSelfHealingSignalsDeduped = 0;
   let digestSignalsEmitted = 0;
   let staleStatusesCleared = 0;
 
@@ -1045,7 +1067,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     staleDispatchesReclaimed++;
   }
 
-  // ── 3. Unread mention digest ────────────────────────────────────────────
+  // 3. Worker self-healing todo lease signal sweep.
+  const { data: staleTodoLeaseRows, error: staleTodoLeaseErr } = await supabase
+    .from("mc_fishbowl_todos")
+    .select("id, api_key_hash, status, assigned_to_agent_id, lease_token, lease_expires_at, reclaim_count")
+    .in("status", ["open", "in_progress"])
+    .not("lease_expires_at", "is", null)
+    .lt("lease_expires_at", nowIso)
+    .order("lease_expires_at", { ascending: true })
+    .limit(WORKER_SELF_HEALING_TODO_SWEEP_LIMIT);
+
+  if (staleTodoLeaseErr) {
+    console.error(
+      "[fishbowl-watcher] worker self-healing todo fetch error:",
+      staleTodoLeaseErr.message,
+    );
+    return res.status(500).json({ error: staleTodoLeaseErr.message });
+  }
+
+  for (const todo of (staleTodoLeaseRows ?? []) as WorkerSelfHealingTodoSweepRow[]) {
+    const decision = planWorkerSelfHealingDecision({
+      todo,
+      profile: null,
+      latestHandoffReceiptId: null,
+      nowMs,
+    });
+    const plan = planWorkerSelfHealingTodoSignal({
+      apiKeyHash: todo.api_key_hash,
+      decision,
+      emittedAt: nowIso,
+    });
+    if (!plan) continue;
+
+    const dedupCutoff = new Date(
+      nowMs - WORKER_SELF_HEALING_SIGNAL_DEDUP_WINDOW_MS,
+    ).toISOString();
+    const { data: recentTodoSignals, error: recentTodoSignalErr } = await supabase
+      .from("mc_signals")
+      .select("action, payload, created_at")
+      .eq("api_key_hash", todo.api_key_hash)
+      .eq("tool", "fishbowl")
+      .eq("action", plan.insert.action)
+      .gt("created_at", dedupCutoff);
+
+    if (recentTodoSignalErr) {
+      console.error(
+        "[fishbowl-watcher] worker self-healing dedupe fetch error:",
+        recentTodoSignalErr.message,
+      );
+      continue;
+    }
+
+    if (
+      hasRecentWorkerSelfHealingTodoSignal(
+        (recentTodoSignals ?? []) as SignalRow[],
+        plan,
+      )
+    ) {
+      workerSelfHealingSignalsDeduped++;
+      continue;
+    }
+
+    const { error: workerSignalErr } = await supabase
+      .from("mc_signals")
+      .insert(plan.insert);
+    if (workerSignalErr) {
+      console.error(
+        "[fishbowl-watcher] worker self-healing signal insert error:",
+        workerSignalErr.message,
+      );
+    } else {
+      workerSelfHealingSignalsEmitted++;
+    }
+  }
+
+  // ── 4. Unread mention digest ────────────────────────────────────────────
   const mentionAgeCutoff = new Date(nowMs - MENTION_AGE_THRESHOLD_MS).toISOString();
   const { data: unreadMentions } = await supabase
     .from("mc_signals")
@@ -1094,7 +1190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── 4. Stale Now Playing cleanup ─────────────────────────────────────────
+  // ── 5. Stale Now Playing cleanup ─────────────────────────────────────────
   const staleStatusCutoff = new Date(nowMs - STATUS_STALE_WINDOW_MS).toISOString();
   const { data: staleStatusProfiles, error: staleStatusErr } = await supabase
     .from("mc_fishbowl_profiles")
@@ -1141,9 +1237,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     stale_dispatches_acked: staleDispatchesAcked,
     stale_dispatches_rerouted: staleDispatchesRerouted,
     stale_dispatch_reroute_failures: staleDispatchRerouteFailures,
+    worker_self_healing_signals_emitted: workerSelfHealingSignalsEmitted,
+    worker_self_healing_signals_deduped: workerSelfHealingSignalsDeduped,
     digest_signals_emitted: digestSignalsEmitted,
     stale_statuses_cleared: staleStatusesCleared,
     overdue_candidates: candidates.length,
+    worker_self_healing_candidates: (staleTodoLeaseRows ?? []).length,
     tenants_with_unread_mentions: unreadCounts.size,
     stale_status_candidates: staleStatusCandidates.length,
   });
