@@ -46,7 +46,7 @@ BLOCKER: <safe reason>; progress: <what was checked>; next: <fix>.
 If no safe task is available: BLOCKER: no clear safe task available; progress: checked live queue; next: add a scoped job.`;
 
 export const HEARTBEAT_CONNECTION_PROMPT =
-  "Run UnClick Heartbeat. Use heartbeat_protocol, then check_signals and hunt jobs with list_actionable_todos/open todos/recent dispatches. 0 active jobs is PASS only if backlog is also 0. For queue hydration failure, call nudgeonly_receipt_bridge with compact public fields, then IgniteOnly only after verified wake request, then PushOnly only with the public wake packet. Target existing Job Worker first; free API only classifies/nudges. Save one receipt to session_id='unclick-heartbeat-seat'. Never print secrets. Reply PASS/BLOCKER with brief progress.";
+  "Run UnClick Heartbeat. Call heartbeat_protocol first, then commonsensepass_protocol before any healthy, no_work, done, merge_ready, or PASS claim. Follow both returned playbooks. Check live jobs, dispatches, Boardroom, and Orchestrator before saying healthy. Save one receipt to session_id='unclick-heartbeat-seat'. Never print secrets. Reply PASS/BLOCKER with brief progress.";
 
 export function getHeartbeatCadenceLabel(value: HeartbeatCadenceValue): string {
   return HEARTBEAT_CADENCE_OPTIONS.find((option) => option.value === value)?.label ?? "15 min";

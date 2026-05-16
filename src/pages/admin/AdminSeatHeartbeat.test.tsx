@@ -20,12 +20,11 @@ describe("AdminSeatHeartbeatPage", () => {
       buildHeartbeatSchedulePrompt("15"),
     );
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Run UnClick Heartbeat");
+    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("heartbeat_protocol first");
+    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("commonsensepass_protocol");
+    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Follow both returned playbooks");
     expect(HEARTBEAT_CONNECTION_PROMPT).toContain("unclick-heartbeat-seat");
-    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("nudgeonly_receipt_bridge");
-    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("PushOnly");
-    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("compact public fields");
-    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("0 active jobs is PASS only if backlog is also 0");
-    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Target existing Job Worker first");
+    expect(HEARTBEAT_CONNECTION_PROMPT).toContain("Check live jobs");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("public policy must stay self-contained");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("master heartbeat");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("token-light");
@@ -37,6 +36,7 @@ describe("AdminSeatHeartbeatPage", () => {
     expect(HEARTBEAT_MASTER_PROMPT).toContain("bridge_id and receipt_line");
     expect(HEARTBEAT_MASTER_PROMPT).toContain("Do not POST to /admin/orchestrator");
     expect(HEARTBEAT_CONNECTION_PROMPT.length).toBeLessThan(HEARTBEAT_MASTER_PROMPT.length / 2);
+    expect(HEARTBEAT_CONNECTION_PROMPT.length).toBeLessThan(400);
   });
 
   it("updates the schedule message when cadence changes", () => {
