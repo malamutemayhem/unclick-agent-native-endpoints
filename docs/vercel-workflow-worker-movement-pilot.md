@@ -97,6 +97,16 @@ PR #816 now adds the workflow-ready planner shape before adding a live Workflow 
 - `buildWorkerMovementWorkflowPilotProofText` formats the Boardroom proof line.
 - Tests cover a safe stale candidate, a security-gated refusal, and a no-action skip.
 
+## Follow-Up Slice
+
+The next proof-only slice adds `planWorkerMovementWorkflowPilotProofSignal`, which turns a dry-run planner result into a safe `mc_signals` insert row:
+
+- Safe candidates produce `worker_movement_workflow_pilot_pass` with `severity: "info"`.
+- Refused candidates produce `worker_movement_workflow_pilot_blocker` with `severity: "action_needed"`.
+- Payloads carry candidate id, owner age, decision, next safe step, proof status, and emitted time.
+- Lease tokens remain redacted, only `has_lease_token` is exposed.
+- The helper returns null if tenant hash or emitted time is missing.
+
 ## Proof Trail
 
 - Greenlight receipt: `876f228a-38fa-45a3-8373-d24a319a0670`

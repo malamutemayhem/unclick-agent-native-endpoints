@@ -165,6 +165,10 @@ export interface WorkerSelfHealingTodoSignalPlan {
   insert: WorkerSelfHealingSignalInsertRow;
 }
 
+export type WorkerMovementWorkflowPilotProofAction =
+  | "worker_movement_workflow_pilot_pass"
+  | "worker_movement_workflow_pilot_blocker";
+
 export type WorkerMovementWorkflowPilotAction =
   | "start_dry_run"
   | "post_refusal_proof"
@@ -192,6 +196,28 @@ export interface WorkerMovementWorkflowPilotPlan {
     next_safe_step: string;
     payload: Record<string, unknown>;
   };
+}
+
+export interface WorkerMovementWorkflowPilotProofSignal {
+  action: WorkerMovementWorkflowPilotProofAction;
+  severity: "info" | "action_needed";
+  summary: string;
+  payload: Record<string, unknown>;
+}
+
+export interface WorkerMovementWorkflowPilotProofSignalInsertRow {
+  api_key_hash: string;
+  tool: "fishbowl";
+  action: WorkerMovementWorkflowPilotProofAction;
+  severity: WorkerMovementWorkflowPilotProofSignal["severity"];
+  summary: string;
+  deep_link: string;
+  payload: Record<string, unknown>;
+}
+
+export interface WorkerMovementWorkflowPilotProofSignalPlan {
+  signal: WorkerMovementWorkflowPilotProofSignal;
+  insert: WorkerMovementWorkflowPilotProofSignalInsertRow;
 }
 
 export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
@@ -510,6 +536,52 @@ export function buildWorkerMovementWorkflowPilotProofText(
     `reason ${plan.safety.reason}`,
     `next ${plan.proof.next_safe_step}`,
   ].join("; ");
+}
+
+export function planWorkerMovementWorkflowPilotProofSignal(params: {
+  apiKeyHash: string;
+  plan: WorkerMovementWorkflowPilotPlan;
+  emittedAt: string;
+  deepLink?: string;
+}): WorkerMovementWorkflowPilotProofSignalPlan | null {
+  const apiKeyHash = nonEmptyString(params.apiKeyHash);
+  const emittedAt = nonEmptyString(params.emittedAt);
+  if (!apiKeyHash || !emittedAt) return null;
+
+  const action: WorkerMovementWorkflowPilotProofAction =
+    params.plan.action === "post_refusal_proof"
+      ? "worker_movement_workflow_pilot_blocker"
+      : "worker_movement_workflow_pilot_pass";
+  const severity: WorkerMovementWorkflowPilotProofSignal["severity"] =
+    action === "worker_movement_workflow_pilot_blocker" ? "action_needed" : "info";
+  const status = action === "worker_movement_workflow_pilot_blocker"
+    ? "BLOCKER"
+    : "PASS";
+  const summary = `${status}: ${buildWorkerMovementWorkflowPilotProofText(params.plan)}`;
+  const payload = {
+    ...params.plan.proof.payload,
+    proof_status: status,
+    emitted_at: emittedAt,
+    next_safe_step: params.plan.proof.next_safe_step,
+  };
+
+  return {
+    signal: {
+      action,
+      severity,
+      summary,
+      payload,
+    },
+    insert: {
+      api_key_hash: apiKeyHash,
+      tool: "fishbowl",
+      action,
+      severity,
+      summary,
+      deep_link: params.deepLink ?? `/admin/jobs#todo-${params.plan.candidate_id}`,
+      payload,
+    },
+  };
 }
 
 function sanitizeWorkerMovementDecision(
