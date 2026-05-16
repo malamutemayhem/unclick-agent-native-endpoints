@@ -7,6 +7,7 @@ import {
   isProtectedPath,
   validateExecutorPacket,
   makePacket,
+  makeTestOnlyExecutorPacketFromScopePack,
   __consts__,
 } from "./pinballwake-executor-packet.mjs";
 
@@ -162,5 +163,71 @@ describe("makePacket", () => {
     assert.equal(p.intent, "test_only");
     assert.equal(p.xpass_advisory, false);
     assert.deepEqual(p.owned_files, ["scripts/x.mjs"]);
+  });
+});
+
+describe("makeTestOnlyExecutorPacketFromScopePack", () => {
+  test("hydrates a ready ScopePack into a v0 test-only packet", () => {
+    const packet = makeTestOnlyExecutorPacketFromScopePack({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: ["scripts/pinballwake-executor-packet.mjs", "docs/autopilot-executor-lane.md"],
+        acceptance: ["hydrate scopepack", "return a sanitized receipt"],
+      },
+      heartbeat: { tickId: "tick-1" },
+      headShaAtRequest: "d13d2d4",
+      scopePackCommentId: "comment-1",
+      packetId: "pkt-scopepack-1",
+      emittedAt: "2026-05-16T14:45:00.000Z",
+    });
+
+    assert.equal(packet.executor_packet_version, __consts__.PACKET_VERSION);
+    assert.equal(packet.packet_id, "pkt-scopepack-1");
+    assert.equal(packet.intent, "test_only");
+    assert.equal(packet.todo_id, "todo-1");
+    assert.equal(packet.scope_pack_comment_id, "comment-1");
+    assert.equal(packet.heartbeat_tick_id, "tick-1");
+    assert.equal(packet.head_sha_at_request, "d13d2d4");
+    assert.deepEqual(packet.owned_files, [
+      "scripts/pinballwake-executor-packet.mjs",
+      "docs/autopilot-executor-lane.md",
+    ]);
+    assert.deepEqual(packet.acceptance.criteria, ["hydrate scopepack", "return a sanitized receipt"]);
+    assert.equal(validateExecutorPacket(packet).ok, true);
+  });
+
+  test("turns a single verification command into test_command acceptance", () => {
+    const packet = makeTestOnlyExecutorPacketFromScopePack({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: "scripts/pinballwake-executor-packet.mjs",
+        verification: ["node --test scripts/pinballwake-executor-packet.test.mjs"],
+      },
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "d13d2d4",
+    });
+
+    assert.deepEqual(packet.owned_files, ["scripts/pinballwake-executor-packet.mjs"]);
+    assert.deepEqual(packet.acceptance, {
+      test_command: "node --test scripts/pinballwake-executor-packet.test.mjs",
+      expected_exit_code: 0,
+    });
+    assert.equal(validateExecutorPacket(packet).ok, true);
+  });
+
+  test("keeps protected owned_files refused by packet validation", () => {
+    const packet = makeTestOnlyExecutorPacketFromScopePack({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: [".github/workflows/autonomous-runner.yml"],
+        acceptance: ["do not edit protected workflows"],
+      },
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "d13d2d4",
+    });
+
+    const result = validateExecutorPacket(packet);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "owned_file_protected");
   });
 });

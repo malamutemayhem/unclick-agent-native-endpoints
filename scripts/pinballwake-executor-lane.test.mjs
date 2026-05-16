@@ -3,7 +3,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { processExecutorPacket, __testing__ } from "./pinballwake-executor-lane.mjs";
+import {
+  processExecutorPacket,
+  processScopePackTestOnlyExecutorPacket,
+  sanitizeExecutorReceipt,
+  __testing__,
+} from "./pinballwake-executor-lane.mjs";
 import { makePacket } from "./pinballwake-executor-packet.mjs";
 
 function freshPacket(overrides = {}) {
@@ -51,6 +56,78 @@ describe("processExecutorPacket test_only intent", () => {
     assert.equal(r.receipt_type, __testing__.RECEIPT_TYPE_PASS);
     assert.equal(r.evidence.intent, "test_only");
     assert.equal(r.evidence.pr_url, null);
+  });
+});
+
+describe("processScopePackTestOnlyExecutorPacket", () => {
+  test("hydrates a ScopePack and returns a sanitized PASS receipt", async () => {
+    const now = new Date("2026-05-16T14:45:00.000Z");
+    const result = await processScopePackTestOnlyExecutorPacket({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: ["scripts/pinballwake-executor-lane.mjs"],
+        acceptance: ["test-only bridge can prove the lane without writing code"],
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "d13d2d4",
+      scopePackCommentId: "comment-1",
+      fileExists: async () => true,
+      now,
+    });
+
+    assert.equal(result.packet.intent, "test_only");
+    assert.equal(result.packet.scope_pack_comment_id, "comment-1");
+    assert.equal(result.receipt.receipt_type, __testing__.RECEIPT_TYPE_PASS);
+    assert.equal(result.receipt.sanitized, true);
+    assert.equal(result.receipt.evidence.intent, "test_only");
+  });
+
+  test("returns HOLD when the required heartbeat is missing", async () => {
+    const result = await processScopePackTestOnlyExecutorPacket({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: ["scripts/pinballwake-executor-lane.mjs"],
+        acceptance: ["missing heartbeat should not act"],
+      },
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "d13d2d4",
+      fileExists: async () => true,
+      now: new Date("2026-05-16T14:45:00.000Z"),
+    });
+
+    assert.equal(result.receipt.receipt_type, __testing__.RECEIPT_TYPE_HOLD);
+    assert.equal(result.receipt.hold_reason, "gate_blocked:heartbeat_missing");
+  });
+
+  test("returns HOLD when ScopePack owned_files include protected paths", async () => {
+    const now = new Date("2026-05-16T14:45:00.000Z");
+    const result = await processScopePackTestOnlyExecutorPacket({
+      todo: { id: "todo-1" },
+      scopePack: {
+        owned_files: ["supabase/migrations/001.sql"],
+        acceptance: ["protected data paths must stay gated"],
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "d13d2d4",
+      now,
+    });
+
+    assert.equal(result.receipt.receipt_type, __testing__.RECEIPT_TYPE_HOLD);
+    assert.match(result.receipt.hold_reason, /^gate_blocked:packet_invalid:owned_file_protected/);
+  });
+
+  test("redacts secret-shaped receipt evidence", () => {
+    const safe = sanitizeExecutorReceipt({
+      receipt_type: "executor_packet_hold",
+      evidence: {
+        authorization: "Bearer plain-token",
+        output: "failed with api_key=plain-secret-value and token=raw-token",
+      },
+    });
+
+    assert.equal(safe.evidence.authorization, "[redacted]");
+    assert.match(safe.evidence.output, /api_key=\[redacted\]/);
+    assert.match(safe.evidence.output, /token=\[redacted\]/);
   });
 });
 

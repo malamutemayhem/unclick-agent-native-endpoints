@@ -134,6 +134,101 @@ export function makePacket(input = {}) {
   };
 }
 
+export function makeTestOnlyExecutorPacketFromScopePack({
+  todo = {},
+  scopePack = {},
+  heartbeat = null,
+  heartbeatTickId = "",
+  headShaAtRequest = "",
+  requestingSeatId = "pinballwake-job-runner",
+  scopePackCommentId = "",
+  packetId,
+  emittedAt,
+} = {}) {
+  const scope = scopePack && typeof scopePack === "object" ? scopePack : {};
+  const todoId = firstText(scope.todo_id, scope.todoId, todo.id, todo.todo_id);
+  const tickId = firstText(heartbeatTickId, heartbeat?.tickId, scope.heartbeat_tick_id, todo.heartbeat_tick_id);
+  const headSha = firstText(
+    headShaAtRequest,
+    scope.head_sha_at_request,
+    scope.head_sha,
+    scope.headSha,
+    todo.head_sha_at_request,
+    todo.head_sha,
+    todo.headSha,
+  );
+
+  return makePacket({
+    packet_id: packetId,
+    emitted_at: emittedAt,
+    heartbeat_tick_id: tickId || null,
+    requesting_seat_id: requestingSeatId,
+    todo_id: todoId || null,
+    scope_pack_comment_id:
+      firstText(
+        scopePackCommentId,
+        scope.scope_pack_comment_id,
+        scope.scopePackCommentId,
+        scope.comment_id,
+        todo.scope_pack_comment_id,
+        todo.scopePackCommentId,
+      ) || null,
+    intent: "test_only",
+    owned_files: listFromUnknown(scope.owned_files ?? scope.ownedFiles ?? scope.files ?? scope.paths),
+    acceptance: acceptanceFromScopePack(scope),
+    proof_required: ["scope_pack_comment_id", "head_sha_at_request", "test_run_id", "executor_seat_id"],
+    head_sha_at_request: headSha || null,
+  });
+}
+
+function acceptanceFromScopePack(scope = {}) {
+  const direct = scope.acceptance ?? scope.acceptance_criteria ?? scope.acceptanceCriteria;
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    return { ...direct };
+  }
+
+  const criteria = listFromUnknown(direct);
+  if (criteria.length > 0) {
+    return { criteria };
+  }
+
+  const expectedProof = scope.expected_proof && typeof scope.expected_proof === "object" ? scope.expected_proof : {};
+  const tests = listFromUnknown(scope.tests ?? scope.verification ?? expectedProof.tests);
+  if (tests.length === 1) {
+    return { test_command: tests[0], expected_exit_code: 0 };
+  }
+  if (tests.length > 1) {
+    return { criteria: tests.map((test) => `verification: ${test}`) };
+  }
+
+  return {};
+}
+
+function listFromUnknown(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizePath(item)).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => normalizePath(item))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizePath(value) {
+  return String(value ?? "").replace(/\\/g, "/").trim();
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
 function cryptoRandomId() {
   // Avoid pulling node:crypto for one-off id; use Math.random-shaped suffix.
   // Not security-sensitive; just disambiguation.

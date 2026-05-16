@@ -49,6 +49,15 @@ describe("commonSensePass", () => {
     assert.equal(r.reason, "heartbeat_stale");
   });
 
+  test("HOLD when heartbeat is required but missing", async () => {
+    const r = await commonSensePass({
+      packet: basePacket(),
+      requireHeartbeat: true,
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, "heartbeat_missing");
+  });
+
   test("HOLD on heartbeat too old even when tick matches", async () => {
     const now = new Date("2026-05-15T03:00:00Z");
     const oldEmitted = new Date(now.getTime() - DEFAULT_HEARTBEAT_MAX_AGE_MS - 60_000).toISOString();

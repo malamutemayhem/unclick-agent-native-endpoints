@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  createAutonomousRunnerTestOnlyExecutorReceipt,
   assertRunnerOnFreshMain,
   evaluateAutonomousRunnerCommonSensePass,
   evaluateBoardroomTodoAutoClaimEligibility,
@@ -506,6 +507,30 @@ describe("PinballWake autonomous Runner seat", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("can return a sanitized test-only executor receipt from a scoped todo", async () => {
+    const now = new Date("2026-05-16T14:45:00.000Z");
+    const result = await createAutonomousRunnerTestOnlyExecutorReceipt({
+      todo: {
+        id: "todo-executor-bridge",
+        scope_pack_comment_id: "comment-bridge-1",
+        scope_pack: {
+          owned_files: ["scripts/pinballwake-autonomous-runner.mjs"],
+          acceptance: ["runner can return a test-only executor receipt"],
+        },
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "d13d2d4",
+      fileExists: async () => true,
+      now,
+    });
+
+    assert.equal(result.packet.todo_id, "todo-executor-bridge");
+    assert.equal(result.packet.intent, "test_only");
+    assert.equal(result.packet.scope_pack_comment_id, "comment-bridge-1");
+    assert.equal(result.receipt.receipt_type, "executor_packet_pass");
+    assert.equal(result.receipt.sanitized, true);
   });
 
   it("keeps a scoped todo eligible only for the builder allowlist and open unassigned queue", () => {

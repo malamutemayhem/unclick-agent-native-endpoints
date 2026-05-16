@@ -16,6 +16,7 @@ import {
   runCodingRoomRunnerCycle,
 } from "./pinballwake-coding-room-runner.mjs";
 import { evaluateOrchestratorProofWakeGate } from "./lib/autopilotkit-liveness.mjs";
+import { processScopePackTestOnlyExecutorPacket } from "./pinballwake-executor-lane.mjs";
 import { buildScopePackHydrationReceipt } from "./pinballwake-scopepack-hydrator.mjs";
 
 export const AUTONOMOUS_RUNNER_MODES = new Set(["dry-run", "claim", "execute"]);
@@ -418,19 +419,7 @@ function listFromUnknown(value) {
 }
 
 function extractBoardroomTodoScopePack(todo = {}) {
-  const scope = firstPresentObject(
-    todo.scope_pack,
-    todo.scopePack,
-    todo.runner_scope,
-    todo.runnerScope,
-    todo.autonomous_scope,
-    todo.autonomousScope,
-    todo.coding_room_scope,
-    todo.codingRoomScope,
-    parseLabeledJsonObjectFromText(todo.description),
-    parseLabeledJsonObjectFromText(todo.body),
-    parseLabeledJsonObjectFromText(todo.notes),
-  );
+  const scope = extractBoardroomTodoScopePackObject(todo);
 
   if (!scope) {
     return {
@@ -473,6 +462,48 @@ function extractBoardroomTodoScopePack(todo = {}) {
     lane: String(scope.lane || scope.worker_lane || scope.workerLane || "").trim(),
     owner_hint: String(scope.owner_hint || scope.ownerHint || "").trim(),
   };
+}
+
+function extractBoardroomTodoScopePackObject(todo = {}) {
+  return firstPresentObject(
+    todo.scope_pack,
+    todo.scopePack,
+    todo.runner_scope,
+    todo.runnerScope,
+    todo.autonomous_scope,
+    todo.autonomousScope,
+    todo.coding_room_scope,
+    todo.codingRoomScope,
+    parseLabeledJsonObjectFromText(todo.description),
+    parseLabeledJsonObjectFromText(todo.body),
+    parseLabeledJsonObjectFromText(todo.notes),
+  );
+}
+
+export async function createAutonomousRunnerTestOnlyExecutorReceipt({
+  todo = {},
+  scopePack = null,
+  heartbeat = null,
+  heartbeatTickId = "",
+  headShaAtRequest = "",
+  requestingSeatId = "pinballwake-job-runner",
+  scopePackCommentId = "",
+  fileExists,
+  executorSeatId = "pinballwake-build-executor",
+  now = new Date(),
+} = {}) {
+  return processScopePackTestOnlyExecutorPacket({
+    todo,
+    scopePack: scopePack || extractBoardroomTodoScopePackObject(todo) || {},
+    heartbeat,
+    heartbeatTickId,
+    headShaAtRequest,
+    requestingSeatId,
+    scopePackCommentId,
+    fileExists,
+    executorSeatId,
+    now,
+  });
 }
 
 export function parseMcpEventStreamPayload(text = "") {
