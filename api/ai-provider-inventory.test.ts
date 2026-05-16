@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  decideBackstagePassConnectionProbeProviderCall,
   decideMemoryAdminAiChatProviderCall,
   decideAiProviderCall,
+  getBackstagePassConnectionProbePathId,
   getAiProviderInventoryEntry,
   listAiProviderInventory,
   publicAiProviderCostLabels,
@@ -287,6 +289,36 @@ describe("ai provider inventory", () => {
         allowed: true,
         path_id: pathId,
         model,
+        reason: "explicit_paid_allowed",
+      });
+    }
+  });
+
+  it("labels BackstagePass connection probes as explicit owner test actions", () => {
+    const expected = [
+      ["openai", "backstagepass.openai.connection-test", "OpenAI", "OpenAI /models"],
+      ["anthropic", "backstagepass.anthropic.connection-test", "Anthropic", "Anthropic /models"],
+    ] as const;
+
+    for (const [provider, pathId, providerLabel, model] of expected) {
+      expect(getBackstagePassConnectionProbePathId(provider)).toBe(pathId);
+      expect(getAiProviderInventoryEntry(pathId)).toMatchObject({
+        provider: providerLabel,
+        surface: "api/backstagepass.ts?action=testConnection",
+        call_kind: "model_listing",
+        model,
+        cost_tier: "paid_or_unknown",
+        default_allowed: false,
+        allow_paid_flag: "testConnection allow_paid + owner api_key + stored provider api_key",
+      });
+      expect(decideBackstagePassConnectionProbeProviderCall({ provider })).toMatchObject({
+        allowed: false,
+        path_id: pathId,
+        reason: "paid_or_unknown_blocked",
+      });
+      expect(decideBackstagePassConnectionProbeProviderCall({ provider, allow_paid: true })).toMatchObject({
+        allowed: true,
+        path_id: pathId,
         reason: "explicit_paid_allowed",
       });
     }

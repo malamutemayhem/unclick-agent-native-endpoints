@@ -533,7 +533,7 @@ export default function AdminKeychain() {
       const res = await fetch("/api/backstagepass?action=testConnection", {
         method:  "POST",
         headers: { ...authHeader, "Content-Type": "application/json" },
-        body:    JSON.stringify({ id: cred.id, api_key: apiKey }),
+        body:    JSON.stringify({ id: cred.id, api_key: apiKey, allow_paid: true }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {

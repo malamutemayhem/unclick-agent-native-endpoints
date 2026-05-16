@@ -59,6 +59,10 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as crypto from "crypto";
+import {
+  decideBackstagePassConnectionProbeProviderCall,
+  type BackstagePassConnectionProbeProvider,
+} from "./lib/ai-provider-inventory";
 
 // ─── Crypto helpers (mirror api/credentials.ts exactly) ───────────────────
 
@@ -130,6 +134,7 @@ function decrypt(
 const PLATFORM_PROBES: Record<string, {
   url:           string;
   buildHeaders: (values: Record<string, string>) => Record<string, string>;
+  spendProvider?: BackstagePassConnectionProbeProvider;
 }> = {
   github: {
     url: "https://api.github.com/user",
@@ -141,6 +146,7 @@ const PLATFORM_PROBES: Record<string, {
   },
   anthropic: {
     url: "https://api.anthropic.com/v1/models",
+    spendProvider: "anthropic",
     buildHeaders: (v) => ({
       "x-api-key":         v.api_key ?? "",
       "anthropic-version": "2023-06-01",
@@ -148,6 +154,7 @@ const PLATFORM_PROBES: Record<string, {
   },
   openai: {
     url: "https://api.openai.com/v1/models",
+    spendProvider: "openai",
     buildHeaders: (v) => ({
       Authorization: `Bearer ${v.api_key ?? ""}`,
     }),
@@ -713,6 +720,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const testedAt = new Date().toISOString();
+
+    if (probe.spendProvider) {
+      const providerDecision = decideBackstagePassConnectionProbeProviderCall({
+        provider: probe.spendProvider,
+        allow_paid: body.allow_paid === true,
+      });
+      if (!providerDecision.allowed) {
+        await writeAudit({
+          supabaseUrl, serviceRoleKey, tenant, req,
+          action: "test_connection", credentialId: id,
+          platformSlug: platform, label: (row.label as string) ?? null,
+          success: false,
+          metadata: {
+            reason: "ai_spend_guard_blocked",
+            path_id: providerDecision.path_id,
+            allow_paid_flag: providerDecision.allow_paid_flag,
+          },
+        });
+        return res.status(402).json({
+          ok: false,
+          platform,
+          tested_at: testedAt,
+          message: "Connection test requires explicit AI spend confirmation.",
+          spend_guard: {
+            path_id: providerDecision.path_id,
+            provider: providerDecision.provider,
+            cost_tier: providerDecision.cost_tier,
+            allow_paid_flag: providerDecision.allow_paid_flag,
+          },
+        });
+      }
+    }
+
     let ok = false;
     let status = 0;
     let message = "";

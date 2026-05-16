@@ -45,11 +45,17 @@ export interface AiProviderCallDecision {
 }
 
 export type MemoryAdminAiChatProvider = "google" | "openai" | "anthropic";
+export type BackstagePassConnectionProbeProvider = "openai" | "anthropic";
 
 const MEMORY_ADMIN_AI_CHAT_PATH_IDS: Record<MemoryAdminAiChatProvider, string> = {
   google: "memory.admin.google.ai-chat",
   openai: "memory.admin.openai.ai-chat",
   anthropic: "memory.admin.anthropic.ai-chat",
+};
+
+const BACKSTAGEPASS_CONNECTION_PROBE_PATH_IDS: Record<BackstagePassConnectionProbeProvider, string> = {
+  openai: "backstagepass.openai.connection-test",
+  anthropic: "backstagepass.anthropic.connection-test",
 };
 
 export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
@@ -150,6 +156,28 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     default_allowed: false,
     allow_paid_flag: "ARENA_ANTHROPIC_ENABLED",
     notes: "Arena bot solve uses Anthropic for live generated solutions and must require an explicit arena spend opt-in in addition to server-side credentials.",
+  },
+  {
+    id: "backstagepass.openai.connection-test",
+    provider: "OpenAI",
+    surface: "api/backstagepass.ts?action=testConnection",
+    call_kind: "model_listing",
+    model: "OpenAI /models",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "testConnection allow_paid + owner api_key + stored provider api_key",
+    notes: "BackstagePass OpenAI connection tests reach the provider models endpoint and must stay tied to an explicit owner test action.",
+  },
+  {
+    id: "backstagepass.anthropic.connection-test",
+    provider: "Anthropic",
+    surface: "api/backstagepass.ts?action=testConnection",
+    call_kind: "model_listing",
+    model: "Anthropic /models",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "testConnection allow_paid + owner api_key + stored provider api_key",
+    notes: "BackstagePass Anthropic connection tests reach the provider models endpoint and must stay tied to an explicit owner test action.",
   },
   {
     id: "memory.admin.google.ai-chat",
@@ -857,6 +885,10 @@ export function getMemoryAdminAiChatPathId(provider: MemoryAdminAiChatProvider):
   return MEMORY_ADMIN_AI_CHAT_PATH_IDS[provider];
 }
 
+export function getBackstagePassConnectionProbePathId(provider: BackstagePassConnectionProbeProvider): string {
+  return BACKSTAGEPASS_CONNECTION_PROBE_PATH_IDS[provider];
+}
+
 export function classifyAiProviderPath(pathId: string, model?: string | null): AiProviderInventoryEntry {
   const known = getAiProviderInventoryEntry(pathId);
   if (known) {
@@ -917,6 +949,16 @@ export function decideMemoryAdminAiChatProviderCall(input: {
   return decideAiProviderCall({
     path_id: getMemoryAdminAiChatPathId(input.provider),
     model: input.model,
+    allow_paid: input.allow_paid,
+  });
+}
+
+export function decideBackstagePassConnectionProbeProviderCall(input: {
+  provider: BackstagePassConnectionProbeProvider;
+  allow_paid?: boolean;
+}): AiProviderCallDecision {
+  return decideAiProviderCall({
+    path_id: getBackstagePassConnectionProbePathId(input.provider),
     allow_paid: input.allow_paid,
   });
 }
