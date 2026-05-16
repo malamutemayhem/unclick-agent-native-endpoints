@@ -2344,6 +2344,7 @@ describe("PinballWake autonomous Runner seat", () => {
     assert.match(workflow, /cron:\s*"3,13,23,33,43,53 \* \* \* \*"/);
     assert.match(workflow, /workflow_run:/);
     assert.match(workflow, /Fleet Throughput Watch/);
+    assert.match(workflow, /Tier-2 Auto-Merge Queue Check/);
     assert.match(workflow, /Prove Orchestrator seat handoff/);
     assert.match(workflow, /github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_run' && github\.event\.workflow_run\.event == 'schedule'\)/);
     assert.doesNotMatch(workflow, /if:\s*github\.event_name == 'workflow_run'\s*$/m);

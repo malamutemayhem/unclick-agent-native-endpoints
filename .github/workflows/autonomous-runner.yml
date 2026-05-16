@@ -6,6 +6,7 @@ on:
   workflow_run:
     workflows:
       - Fleet Throughput Watch
+      - Tier-2 Auto-Merge Queue Check
       - TestPass Scheduled Smoke
     types: [completed]
   workflow_dispatch:
