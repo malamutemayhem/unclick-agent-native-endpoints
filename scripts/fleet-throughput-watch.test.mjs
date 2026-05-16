@@ -6,9 +6,11 @@ import {
   buildPacketsFromInputs,
   checksAreGreen,
   chooseQueuePushRunner,
+  buildDormantOwnerPacket,
   evaluateRunnerFreshnessWatchdog,
   evaluateQueuePushDuplicateWakeGuard,
   classifyPullRequest,
+  detectDormantOwner,
   extractQueuePushPacketId,
   filterDuplicatePackets,
   jobKindForState,
@@ -56,6 +58,74 @@ const currentMainRef = {
   sha: "e12ef89c1560e0ddc842e225ce646c929844b2e5",
   committedAt: "2026-05-12T01:07:03Z",
 };
+
+describe("Dormant owner requeue detector", () => {
+  const now = Date.parse("2026-05-16T18:00:00Z");
+
+  it("emits a requeue packet for a dormant owner with a ScopePack", () => {
+    const todo = {
+      id: "todo-scope",
+      title: "Memory Profile Card v1",
+      assigned_to_agent_id: "builder-seat",
+      owner_last_seen_at: "2026-05-14T17:00:00Z",
+      scope_pack: { owned_files: ["api/memory-admin.ts"] },
+    };
+
+    const detection = detectDormantOwner(todo, now);
+    const packet = buildDormantOwnerPacket(todo, now);
+
+    assert.equal(detection?.todo_id, "todo-scope");
+    assert.equal(detection?.original_owner, "builder-seat");
+    assert.equal(detection?.hours_dormant, 49);
+    assert.equal(packet?.kind, "dormant_owner_requeue");
+    assert.equal(packet?.action, "unassign + requeue");
+    assert.equal(packet?.original_owner_id, "builder-seat");
+    assert.equal(packet?.scopepack_present, true);
+    assert.match(packet?.packetId || "", /^queuepush:v1:dormant_owner_requeue:todo-scope:[a-f0-9]{10}$/);
+    assert.match(packet?.text || "", /original_owner=builder-seat/);
+  });
+
+  it("emits a hold packet for a dormant owner without a ScopePack", () => {
+    const todo = {
+      id: "todo-no-scope",
+      title: "Needs scope",
+      assigned_to_agent_id: "builder-seat",
+      owner_last_seen_at: "2026-05-14T17:00:00Z",
+    };
+
+    const detection = detectDormantOwner(todo, now);
+    const packet = buildDormantOwnerPacket(todo, now);
+
+    assert.equal(detection?.reason, "no_scopepack");
+    assert.equal(packet?.kind, "dormant_owner_hold");
+    assert.equal(packet?.action, "hold for scopepack");
+    assert.equal(packet?.scopepack_present, false);
+  });
+
+  it("stays quiet while the owner is still inside the 48 hour window", () => {
+    const todo = {
+      id: "todo-fresh",
+      assigned_to_agent_id: "builder-seat",
+      owner_last_seen_at: "2026-05-15T18:30:00Z",
+      scope_pack: { owned_files: ["scripts/fleet-throughput-watch.mjs"] },
+    };
+
+    assert.equal(detectDormantOwner(todo, now), null);
+    assert.equal(buildDormantOwnerPacket(todo, now), null);
+  });
+
+  it("stays quiet for system bot owners", () => {
+    const todo = {
+      id: "todo-bot",
+      assigned_to_agent_id: "github-action-autoclose",
+      owner_last_seen_at: "2026-05-14T17:00:00Z",
+      scope_pack: { owned_files: ["scripts/fleet-throughput-watch.mjs"] },
+    };
+
+    assert.equal(detectDormantOwner(todo, now), null);
+    assert.equal(buildDormantOwnerPacket(todo, now), null);
+  });
+});
 
 describe("QueuePush PR classifier", () => {
   it("keeps green clean draft PRs with only Safety PASS as owner-lift packets", () => {

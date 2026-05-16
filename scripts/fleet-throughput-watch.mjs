@@ -25,6 +25,9 @@ const runnerFreshnessGraceMinutes = parseBoundedInt(
 );
 const runnerFreshnessRunLimit = parseBoundedInt(process.env.QUEUEPUSH_RUNNER_RUN_LIMIT, 20, 5, 100);
 export const QUEUEPUSH_DUPLICATE_WAKE_WINDOW_MS = 10 * 60 * 1000;
+export const DORMANT_OWNER_REQUEUE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
+const dormantOwnerTodoLimit = parseBoundedInt(process.env.QUEUEPUSH_DORMANT_OWNER_TODO_LIMIT, 50, 1, 100);
+const dormantOwnerPacketLimit = parseBoundedInt(process.env.QUEUEPUSH_DORMANT_OWNER_PACKET_LIMIT, 10, 1, 10);
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -231,6 +234,155 @@ function isReviewerSafetyHeadPassText(text) {
 function parseTime(value) {
   const time = Date.parse(String(value || ""));
   return Number.isFinite(time) ? time : null;
+}
+
+function todoId(todo) {
+  return String(todo?.id || todo?.todo_id || todo?.todoId || "").trim();
+}
+
+function todoTitle(todo) {
+  return String(todo?.title || todo?.name || "Untitled todo").trim();
+}
+
+function todoOwner(todo) {
+  return String(todo?.assigned_to_agent_id || todo?.assignedToAgentId || todo?.owner_agent_id || "").trim();
+}
+
+function todoOwnerLastSeenAt(todo) {
+  return todo?.owner_last_seen_at || todo?.ownerLastSeenAt || todo?.owner?.last_seen_at || "";
+}
+
+function todoScopePack(todo) {
+  return (
+    todo?.scope_pack ??
+    todo?.scopePack ??
+    todo?.runner_scope ??
+    todo?.runnerScope ??
+    todo?.autonomous_scope ??
+    todo?.autonomousScope ??
+    todo?.coding_room_scope ??
+    todo?.codingRoomScope ??
+    null
+  );
+}
+
+function hasScopePack(todo) {
+  const scopePack = todoScopePack(todo);
+  if (scopePack == null) return false;
+  if (typeof scopePack === "string") return scopePack.trim().length > 0;
+  if (typeof scopePack === "object") return Object.keys(scopePack).length > 0;
+  return true;
+}
+
+function isSystemBotOwner(todo) {
+  const owner = normalizeText(todoOwner(todo));
+  const kind = normalizeText(todo?.owner_kind || todo?.ownerKind || todo?.owner_type || todo?.ownerType);
+  const hash = normalizeText(todo?.owner_api_key_hash || todo?.ownerApiKeyHash || todo?.api_key_hash || "");
+  return (
+    todo?.owner_is_bot === true ||
+    todo?.ownerIsBot === true ||
+    kind === "system_bot" ||
+    kind === "bot" ||
+    hash === "system" ||
+    hash === "system_bot" ||
+    hash === "system-bot" ||
+    owner === "github-actions" ||
+    owner.startsWith("github-action-")
+  );
+}
+
+export function detectDormantOwner(todo, now = Date.now(), thresholdMs = DORMANT_OWNER_REQUEUE_THRESHOLD_MS) {
+  const id = todoId(todo);
+  const owner = todoOwner(todo);
+  if (!id || !owner || isSystemBotOwner(todo)) return null;
+
+  const lastSeenMs = parseTime(todoOwnerLastSeenAt(todo));
+  if (!Number.isFinite(lastSeenMs)) return null;
+
+  const ageMs = now - lastSeenMs;
+  if (ageMs <= thresholdMs) return null;
+
+  const scopepackPresent = hasScopePack(todo);
+  return {
+    todo_id: id,
+    original_owner: owner,
+    original_owner_id: owner,
+    owner_last_seen_at: new Date(lastSeenMs).toISOString(),
+    hours_dormant: Math.floor((ageMs / (60 * 60 * 1000)) * 10) / 10,
+    scopepack_present: scopepackPresent,
+    reason: scopepackPresent ? "owner_dormant_with_scopepack" : "no_scopepack",
+  };
+}
+
+function dormantOwnerPacketId(detection, state) {
+  const hash = createHash("sha256")
+    .update(
+      [
+        state,
+        detection.todo_id,
+        detection.original_owner_id,
+        detection.owner_last_seen_at,
+        detection.reason,
+      ].join("|"),
+    )
+    .digest("hex")
+    .slice(0, 10);
+  return `queuepush:v1:${state}:${detection.todo_id}:${hash}`;
+}
+
+export function buildDormantOwnerPacket(todo, now = Date.now()) {
+  const detection = detectDormantOwner(todo, now);
+  if (!detection) return null;
+
+  const state = detection.scopepack_present ? "dormant_owner_requeue" : "dormant_owner_hold";
+  const action = detection.scopepack_present ? "unassign + requeue" : "hold for scopepack";
+  const packetId = dormantOwnerPacketId(detection, state);
+  const worker = "🧭";
+  const source = `/admin/jobs#todo-${detection.todo_id}`;
+  const directAction = detection.scopepack_present
+    ? "Verify the owner is still dormant, then unassign and requeue while preserving original_owner metadata."
+    : "Leave this held until a narrow ScopePack exists, then rerun dormant-owner requeue.";
+  const text = [
+    `QueuePush ID: ${packetId}`,
+    detection.scopepack_present ? "DORMANT OWNER REQUEUE PACKET" : "DORMANT OWNER HOLD PACKET",
+    "Coordinator action requested. Do not edit code from this packet unless a follow-up chip says so.",
+    `worker: ${worker}`,
+    "job kind: owner_decision",
+    "requires code: no",
+    `chip: Todo ${detection.todo_id} ${state}`,
+    `context: ${compactText(`${todoTitle(todo)}; original_owner=${detection.original_owner_id}; owner_last_seen_at=${detection.owner_last_seen_at}; observed_hours=${detection.hours_dormant}`)}`,
+    "allowed files: Boardroom todo metadata only",
+    `do: ${directAction}`,
+    `expected proof: reply PASS/BLOCKER with todo_id=${detection.todo_id}, original_owner=${detection.original_owner_id}, observed_hours=${detection.hours_dormant}, action=${action}`,
+    "deadline: next worker pulse",
+    "fallback: if not ACKed after two pulses, Master/Courier may reroute.",
+    "ack: done/blocker",
+    `source: ${source}`,
+  ].join("\n");
+
+  return {
+    packetId,
+    kind: state,
+    todo_id: detection.todo_id,
+    original_owner_id: detection.original_owner_id,
+    owner_last_seen_at: detection.owner_last_seen_at,
+    scopepack_present: detection.scopepack_present,
+    action,
+    proof: {
+      reason: detection.reason,
+      threshold_hours: DORMANT_OWNER_REQUEUE_THRESHOLD_MS / (60 * 60 * 1000),
+      observed_hours: detection.hours_dormant,
+    },
+    worker,
+    jobKind: "owner_decision",
+    requiresCode: false,
+    recipient: agentMap[worker] || worker,
+    state,
+    pr: null,
+    todo: detection.todo_id,
+    text,
+    sourceUrl: source,
+  };
 }
 
 function runHeadSha(run) {
@@ -948,6 +1100,26 @@ async function buildRunnerFreshnessPackets() {
   }
 }
 
+async function fetchDormantOwnerTodoInputs() {
+  const result = await postMemoryAdmin("fishbowl_list_actionable_todos", {
+    agent_id: agentId,
+    limit: dormantOwnerTodoLimit,
+    include_description: true,
+  });
+  return result.todos || [];
+}
+
+async function buildDormantOwnerPackets() {
+  if (!unclickApiKey) return [];
+  try {
+    const todos = await fetchDormantOwnerTodoInputs();
+    return todos.map((todo) => buildDormantOwnerPacket(todo)).filter(Boolean).slice(0, dormantOwnerPacketLimit);
+  } catch (error) {
+    console.log(`Dormant owner watchdog skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
 async function postMemoryAdmin(action, body) {
   if (!unclickApiKey) {
     throw new Error("FISHBOWL_WAKE_TOKEN or FISHBOWL_AUTOCLOSE_TOKEN is required.");
@@ -1000,7 +1172,10 @@ async function postQueuePacket(packet) {
 function summarizePackets(packets) {
   if (packets.length === 0) return "QueuePush: no actionable packets.";
   return packets
-    .map((packet) => `#${packet.pr} ${packet.state} -> ${packet.recipient} (${packet.packetId})`)
+    .map((packet) => {
+      const target = packet.pr ? `#${packet.pr}` : packet.todo ? `todo ${String(packet.todo).slice(0, 8)}` : "system";
+      return `${target} ${packet.state} -> ${packet.recipient} (${packet.packetId})`;
+    })
     .join("\n");
 }
 
@@ -1030,6 +1205,8 @@ function prioritizePackets(packets) {
     blocked_chris_only: 3,
     missing_review_safety_ack: 4,
     missing_final_qc_ack: 5,
+    dormant_owner_requeue: 5,
+    dormant_owner_hold: 6,
     ready_for_qc: 6,
     draft_green_needs_owner_lift: 7,
   };
@@ -1041,9 +1218,13 @@ function prioritizePackets(packets) {
 }
 
 export async function main() {
-  const [inputs, runnerFreshnessPackets] = await Promise.all([fetchOpenPrInputs(), buildRunnerFreshnessPackets()]);
+  const [inputs, runnerFreshnessPackets, dormantOwnerPackets] = await Promise.all([
+    fetchOpenPrInputs(),
+    buildRunnerFreshnessPackets(),
+    buildDormantOwnerPackets(),
+  ]);
   const prPackets = await buildPacketsFromInputs(inputs);
-  const rawPackets = prioritizePackets([...runnerFreshnessPackets, ...prPackets]);
+  const rawPackets = prioritizePackets([...runnerFreshnessPackets, ...dormantOwnerPackets, ...prPackets]);
   const boundedPackets = rawPackets.slice(0, maxPackets);
 
   if (dryRun) {
