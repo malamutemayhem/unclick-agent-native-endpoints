@@ -110,6 +110,22 @@ describe("ai provider inventory", () => {
       "mcp.mistral.tool.embedding",
       "mcp.mistral.tool.model-listing",
       "mcp.perplexity.tool.chat",
+      "mcp.higgsfield.tool.generate-video",
+      "mcp.higgsfield.tool.generate-image",
+      "mcp.higgsfield.tool.style-listing",
+      "mcp.higgsfield.tool.generation-status",
+      "mcp.heygen.tool.avatar-video",
+      "mcp.heygen.tool.avatar-listing",
+      "mcp.heygen.tool.video-status",
+      "mcp.heygen.tool.voice-listing",
+      "mcp.runway.tool.generate-video",
+      "mcp.runway.tool.generation-status",
+      "mcp.runway.tool.model-listing",
+      "mcp.pika.tool.generate-video",
+      "mcp.pika.tool.generation-status",
+      "mcp.pika.tool.style-listing",
+      "mcp.kling.tool.generate-video",
+      "mcp.kling.tool.generation-status",
     ];
 
     for (const pathId of expected) {
@@ -124,6 +140,52 @@ describe("ai provider inventory", () => {
         allow_paid_flag: "api_key argument",
       });
     }
+  });
+
+  it("labels AI media provider operations with blocked generation and status metadata", () => {
+    const expected = [
+      ["mcp.higgsfield.tool.generate-video", "Higgsfield", "video_generation", "paid"],
+      ["mcp.higgsfield.tool.generate-image", "Higgsfield", "image_generation", "paid"],
+      ["mcp.higgsfield.tool.style-listing", "Higgsfield", "model_listing", "paid_or_unknown"],
+      ["mcp.higgsfield.tool.generation-status", "Higgsfield", "prediction", "paid_or_unknown"],
+      ["mcp.heygen.tool.avatar-video", "HeyGen", "video_generation", "paid"],
+      ["mcp.heygen.tool.avatar-listing", "HeyGen", "model_listing", "paid_or_unknown"],
+      ["mcp.heygen.tool.video-status", "HeyGen", "prediction", "paid_or_unknown"],
+      ["mcp.heygen.tool.voice-listing", "HeyGen", "model_listing", "paid_or_unknown"],
+      ["mcp.runway.tool.generate-video", "Runway", "video_generation", "paid"],
+      ["mcp.runway.tool.generation-status", "Runway", "prediction", "paid_or_unknown"],
+      ["mcp.runway.tool.model-listing", "Runway", "model_listing", "paid_or_unknown"],
+      ["mcp.pika.tool.generate-video", "Pika", "video_generation", "paid"],
+      ["mcp.pika.tool.generation-status", "Pika", "prediction", "paid_or_unknown"],
+      ["mcp.pika.tool.style-listing", "Pika", "model_listing", "paid_or_unknown"],
+      ["mcp.kling.tool.generate-video", "Kling AI", "video_generation", "paid"],
+      ["mcp.kling.tool.generation-status", "Kling AI", "prediction", "paid_or_unknown"],
+    ] as const;
+
+    for (const [pathId, provider, callKind, costTier] of expected) {
+      expect(getAiProviderInventoryEntry(pathId)).toMatchObject({
+        provider,
+        call_kind: callKind,
+        cost_tier: costTier,
+        default_allowed: false,
+        allow_paid_flag: "api_key argument",
+      });
+      expect(decideAiProviderCall({ path_id: pathId })).toMatchObject({
+        allowed: false,
+        provider,
+        cost_tier: costTier,
+        reason: "paid_or_unknown_blocked",
+        allow_paid_flag: "api_key argument",
+      });
+    }
+
+    expect(decideAiProviderCall({
+      path_id: "mcp.runway.tool.generate-video",
+      allow_paid: true,
+    })).toMatchObject({
+      allowed: true,
+      reason: "explicit_paid_allowed",
+    });
   });
 
   it("labels token-gated Replicate provider operations separately", () => {
