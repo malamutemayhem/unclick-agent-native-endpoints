@@ -16,7 +16,7 @@ describe("ai provider inventory", () => {
     expect(inventory.some((entry) => entry.id === "memory.mcp.openai.embeddings")).toBe(true);
     expect(inventory.some((entry) => entry.id === "memory.mcp.openai.fact-extraction")).toBe(true);
     expect(inventory.every((entry) => ["free", "paid", "paid_or_unknown"].includes(entry.cost_tier))).toBe(true);
-    expect(inventory.filter((entry) => entry.default_allowed).map((entry) => entry.cost_tier)).toEqual(["free"]);
+    expect(inventory.filter((entry) => entry.default_allowed).every((entry) => entry.cost_tier === "free")).toBe(true);
   });
 
   it("allows explicitly labelled free default paths", () => {
@@ -185,6 +185,51 @@ describe("ai provider inventory", () => {
     })).toMatchObject({
       allowed: true,
       reason: "explicit_paid_allowed",
+    });
+  });
+
+  it("labels external web API provider operations with visible cost gates", () => {
+    const expected = [
+      ["mcp.web-search.tavily.search", "Tavily", "web_search", "TAVILY_API_KEY"],
+      ["mcp.web-search.exa.search", "Exa", "web_search", "EXA_API_KEY"],
+      ["mcp.web-search.brave.search", "Brave Search", "web_search", "BRAVE_SEARCH_API_KEY"],
+      ["mcp.web-scrape.firecrawl.scrape", "Firecrawl", "web_scrape", "FIRECRAWL_API_KEY"],
+      ["mcp.web-scrape.tavily.extract", "Tavily", "web_scrape", "TAVILY_API_KEY"],
+    ] as const;
+
+    for (const [pathId, provider, callKind, allowPaidFlag] of expected) {
+      expect(getAiProviderInventoryEntry(pathId)).toMatchObject({
+        provider,
+        surface: "packages/mcp-server/src/web-tools.ts",
+        call_kind: callKind,
+        cost_tier: "paid_or_unknown",
+        default_allowed: false,
+        allow_paid_flag: allowPaidFlag,
+      });
+      expect(decideAiProviderCall({ path_id: pathId })).toMatchObject({
+        allowed: false,
+        provider,
+        reason: "paid_or_unknown_blocked",
+        allow_paid_flag: allowPaidFlag,
+      });
+      expect(decideAiProviderCall({ path_id: pathId, allow_paid: true })).toMatchObject({
+        allowed: true,
+        provider,
+        reason: "explicit_paid_allowed",
+      });
+    }
+
+    expect(getAiProviderInventoryEntry("mcp.search-docs.context7.lookup")).toMatchObject({
+      provider: "Context7",
+      surface: "packages/mcp-server/src/web-tools.ts",
+      call_kind: "web_search",
+      cost_tier: "free",
+      default_allowed: true,
+    });
+    expect(decideAiProviderCall({ path_id: "mcp.search-docs.context7.lookup" })).toMatchObject({
+      allowed: true,
+      provider: "Context7",
+      reason: "free_default_allowed",
     });
   });
 

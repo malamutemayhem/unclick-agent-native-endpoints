@@ -11,7 +11,9 @@ export type AiProviderCallKind =
   | "classification"
   | "reranking"
   | "prediction"
-  | "model_listing";
+  | "model_listing"
+  | "web_search"
+  | "web_scrape";
 
 export interface AiProviderInventoryEntry {
   id: string;
@@ -775,6 +777,71 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     default_allowed: false,
     allow_paid_flag: "api_key argument",
     notes: "MCP Kling AI task status reaches provider run state and requires an explicit caller key.",
+  },
+  {
+    id: "mcp.web-search.tavily.search",
+    provider: "Tavily",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_search",
+    model: "Tavily /search",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "TAVILY_API_KEY",
+    notes: "webSearch can call Tavily when TAVILY_API_KEY is present, so external search API spend stays labelled and blocked by default.",
+  },
+  {
+    id: "mcp.web-search.exa.search",
+    provider: "Exa",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_search",
+    model: "Exa /search",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "EXA_API_KEY",
+    notes: "webSearch can call Exa when EXA_API_KEY is present, so external search API spend stays labelled and blocked by default.",
+  },
+  {
+    id: "mcp.web-search.brave.search",
+    provider: "Brave Search",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_search",
+    model: "Brave Search /res/v1/web/search",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "BRAVE_SEARCH_API_KEY",
+    notes: "webSearch can call Brave Search when BRAVE_SEARCH_API_KEY is present, so external search API spend stays labelled and blocked by default.",
+  },
+  {
+    id: "mcp.web-scrape.firecrawl.scrape",
+    provider: "Firecrawl",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_scrape",
+    model: "Firecrawl /scrape",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "FIRECRAWL_API_KEY",
+    notes: "webScrape can call Firecrawl when FIRECRAWL_API_KEY is present, so external scrape API spend stays labelled and blocked by default.",
+  },
+  {
+    id: "mcp.web-scrape.tavily.extract",
+    provider: "Tavily",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_scrape",
+    model: "Tavily /extract",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "TAVILY_API_KEY",
+    notes: "webScrape can call Tavily extract when TAVILY_API_KEY is present, so external scrape API spend stays labelled and blocked by default.",
+  },
+  {
+    id: "mcp.search-docs.context7.lookup",
+    provider: "Context7",
+    surface: "packages/mcp-server/src/web-tools.ts",
+    call_kind: "web_search",
+    model: "Context7 resolve-library-id and get-library-docs",
+    cost_tier: "free",
+    default_allowed: true,
+    notes: "searchDocs uses Context7 without a configured key and remains visible as a free documentation lookup.",
   },
 ] as const;
 
