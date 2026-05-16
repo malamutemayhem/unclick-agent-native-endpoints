@@ -3,7 +3,7 @@
 //
 // Inventory script for the AI Spend Guardrails todo. Scans the working tree
 // for AI provider call sites (OpenAI, Anthropic, Cohere, Groq, etc.) so each
-// can be wrapped with withSpendGuard from src/lib/aiSpendGuard.ts.
+// can be covered by a spend guardrail before it reaches a provider.
 //
 // Informational only, always exits 0.
 
@@ -36,8 +36,21 @@ const MAX_FILE_BYTES = 2_000_000;
 const EXPECTED_REFS = [
   /\baiSpendGuard\.ts$/i,
   /\baiSpendGuard\.test\.ts$/i,
+  /\bai-provider-inventory\.ts$/i,
+  /\bai-provider-inventory\.test\.ts$/i,
   /\baudit-ai-call-sites\.mjs$/i,
   /\baudit-ai-call-sites\.test\.mjs$/i,
+  /\bpackages\/mcp-server\/src\/tool-wiring\.ts$/i,
+  /\bpackages\/mcp-server\/src\/keychain-secure-input\.ts$/i,
+  /\bsrc\/components\/Tools\.tsx$/i,
+  /\bsrc\/pages\/BackstagePass\.tsx$/i,
+];
+
+const GUARD_MARKERS = [
+  { kind: "withSpendGuard", re: /\bwithSpendGuard\b/ },
+  { kind: "provider-inventory", re: /\bdecideAiProviderCall\b/ },
+  { kind: "provider-decision-helper", re: /\bdecide(?!AiProviderCall\b)[A-Za-z0-9_]*ProviderCall\b/ },
+  { kind: "explicit-env-gate", re: /\b(?:MEMORY_OPENAI_EMBEDDINGS_ENABLED|MEMORY_OPENAI_FACT_EXTRACTION_ENABLED|MEMORY_AI_FACT_EXTRACTION_ENABLED|ARENA_ANTHROPIC_ENABLED|OPENROUTER_WAKE_ALLOW_PAID|AI_CHAT_ENABLED|NUDGEONLY_OPENROUTER_ALLOW_PAID)\b/ },
 ];
 
 function getArg(name, fallback) {
@@ -56,7 +69,14 @@ function shouldScan(file) {
 }
 
 function isExpected(rel) {
-  return EXPECTED_REFS.some((re) => re.test(rel));
+  const normalized = rel.replace(/\\/g, "/");
+  return EXPECTED_REFS.some((re) => re.test(normalized));
+}
+
+function detectGuard(body) {
+  return GUARD_MARKERS
+    .filter((marker) => marker.re.test(body))
+    .map((marker) => marker.kind);
 }
 
 async function* walk(dir, root, depth = 0) {
@@ -99,10 +119,12 @@ export async function auditCallSites(root) {
     }
     if (fileHits.length === 0) continue;
 
-    // Detect whether the file ALREADY wraps with withSpendGuard.
-    const guarded = /\bwithSpendGuard\b/.test(body);
+    // Detect whether the file already routes the provider request through one
+    // of the accepted spend guardrail helpers.
+    const guardMarkers = detectGuard(body);
+    const guarded = guardMarkers.length > 0;
 
-    const record = { file: rel.replace(/\\/g, "/"), guarded, hits: fileHits };
+    const record = { file: rel.replace(/\\/g, "/"), guarded, guardMarkers, hits: fileHits };
     if (isExpected(rel)) expectedHits.push(record);
     else callSites.push(record);
   }
@@ -153,7 +175,7 @@ function renderText(report) {
 
   const ungarded = report.callSites.filter((cs) => !cs.guarded);
   if (ungarded.length > 0) {
-    lines.push(`Call sites needing withSpendGuard wrapping (${ungarded.length}):`);
+    lines.push(`Call sites needing spend guardrail wrapping (${ungarded.length}):`);
     for (const cs of ungarded) {
       lines.push("");
       lines.push(`  ${cs.file}`);
@@ -162,7 +184,7 @@ function renderText(report) {
       }
     }
   } else {
-    lines.push("[ok] All AI call sites are already wrapped with withSpendGuard.");
+    lines.push("[ok] All AI call sites are already covered by a spend guardrail.");
   }
   return lines.join("\n");
 }
@@ -186,4 +208,4 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
   main();
 }
 
-export { PATTERNS, isExpected, shouldScan, renderText };
+export { PATTERNS, detectGuard, isExpected, shouldScan, renderText };
