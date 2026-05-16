@@ -6,6 +6,7 @@ describe("runtime tool schema validation", () => {
   const probes: Array<{ name: string; args: Record<string, unknown> }> = [
     { name: "load_memory", args: { num_sessions: 1, bogus_field: "should reject" } },
     { name: "search_memory", args: { query: "strict schema probe", bogus_field: "should reject" } },
+    { name: "search_typed_links", args: { query: "PR #890", bogus_field: "should reject" } },
     {
       name: "save_conversation_turn",
       args: {
@@ -95,6 +96,10 @@ describe("runtime tool schema validation", () => {
     expect(validateToolArgumentsForRuntime("unclick_call", {
       endpoint_id: "memory.search_memory",
       params: { query: "strict schema probe" },
+    })).toBeNull();
+    expect(validateToolArgumentsForRuntime("search_typed_links", {
+      query: "PR #890",
+      max_results: 5,
     })).toBeNull();
   });
 });

@@ -391,6 +391,23 @@ export const VISIBLE_TOOLS = [
     },
   },
   {
+    name: "search_typed_links",
+    title: "Search typed memory links",
+    description:
+      "Searches stored graph-style links extracted from Memory facts and conversation turns. " +
+      "Use this when a worker needs to find connections between people, jobs, PRs, receipts, files, tools, and decisions. " +
+      "Prefer search_memory for broad recall and search_typed_links for relationship lookups.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", description: "Link search query" },
+        max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "save_identity",
     title: "Save my identity",
     description:
