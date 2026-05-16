@@ -66,6 +66,68 @@ Example:
 
 `nudgebridge_abc -> Builder -> Issue #706 -> missing_proof -> commit, PR, run ID, or blocker -> proof pointer check`
 
+## Wake Packet Contract
+
+An IgniteOnly wake packet is a resume card, not a command. It gives the next seat enough context to pick up a verified handoff without rereading the whole thread.
+
+Required packet fields:
+
+- `ignite_id`: stable `igniteonly_<hash>` ID derived from source pointer, target, worker, and painpoint.
+- `created_at`: ISO timestamp for freshness checks.
+- `expires_at`: ISO timestamp for the latest safe wake time.
+- `source_kind`: source category such as `todo`, `pull_request`, `dispatch`, `checkin`, `signal`, or `boardroom_message`.
+- `source_id`: source record ID with no secret-shaped values.
+- `source_url`: public or internal pointer when available.
+- `target`: concise item being resumed, such as `todo 50383b82` or `PR #880`.
+- `worker`: known worker lane expected to act.
+- `painpoint`: approved bucket from the worker route table.
+- `expected_receipt`: smallest proof the worker should return.
+- `verifier`: deterministic verifier, trusted bridge, or explicit verified flag.
+- `owner_hint`: current owner or `unassigned` when a claim is needed.
+- `redaction_state`: `public_clean`, `internal_clean`, or `blocked_secret_risk`.
+- `authority`: always `ignite_only_wake_request_no_build_no_merge`.
+
+Optional packet fields:
+
+- `bridge_id`: upstream NudgeOnly bridge ID when present.
+- `dedupe_key`: stable key for duplicate wake suppression.
+- `prior_attempts`: compact count or IDs for recent related wakes.
+- `notes`: one short sentence, no raw secrets, no broad instructions.
+
+## Breadcrumb Location
+
+Breadcrumbs live on the source item, not in a loose chat thread.
+
+- For Jobs work, add the packet as a todo comment and include the todo ID in `source_id`.
+- For PR work, add the packet as a PR comment or check note and include the PR number in `target`.
+- For Orchestrator-only continuity, save the packet to the session receipt and point `source_kind` at the original event.
+- For duplicate wake suppression, store and compare `dedupe_key` before emitting a new packet.
+
+Do not create a new job just to hold an IgniteOnly breadcrumb. If no source item exists, return `blocked_verification_required` with the missing source named.
+
+## Proof, Owner, And Expiry Rules
+
+- Proof is the worker's next expected receipt, not the IgniteOnly packet itself.
+- Owner stays with the existing source owner unless the source is unassigned and the target worker is the Job Manager.
+- A packet may suggest a claim, but it must not assign ownership by itself.
+- Default expiry is 30 minutes for stale ACK, missing proof, duplicate wake, and noisy thread packets.
+- Default expiry is 60 minutes for dormant worker and unclear owner packets.
+- Expired packets should be ignored unless the source still shows the same blocker after a fresh read.
+- If the verifier changes, emit a new packet with a new `ignite_id` and leave the old packet as superseded.
+
+## Lane Choice
+
+Use the lowest-force lane that can produce the needed next receipt.
+
+| Situation | Lane | Allowed result |
+| --- | --- | --- |
+| Weak signal, missing context, or a reminder only | NudgeOnly | Receipt request or advisory note. |
+| Verified handoff needs a worker to wake and resume | IgniteOnly | Public wake packet with expected receipt. |
+| Verified packet must be delivered into an existing worker push channel | PushOnly | Worker push envelope only. |
+| Build, review, merge, close, or mutate source truth | Trusted worker lane | Actual work plus proof receipt. |
+
+If the lane choice is unclear, fall back to NudgeOnly or return `blocked_verification_required`. IgniteOnly should never upgrade itself into PushOnly or a trusted worker action.
+
 ## Worker Routes
 
 | Painpoint | Worker | Reason |
