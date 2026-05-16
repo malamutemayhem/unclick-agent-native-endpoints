@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decideMemoryAdminAiChatProviderCall,
   decideAiProviderCall,
   getAiProviderInventoryEntry,
   listAiProviderInventory,
@@ -65,6 +66,35 @@ describe("ai provider inventory", () => {
         allowed: false,
         reason: "paid_or_unknown_blocked",
         allow_paid_flag: "api_key argument",
+      });
+    }
+  });
+
+  it("labels Memory Admin AI chat provider paths with tenant-key spend gates", () => {
+    const expected = [
+      ["memory.admin.google.ai-chat", "google", "gemini-2.5-flash-lite"],
+      ["memory.admin.openai.ai-chat", "openai", "gpt-4o-mini"],
+      ["memory.admin.anthropic.ai-chat", "anthropic", "claude-haiku-4-5"],
+    ] as const;
+
+    for (const [pathId, provider, model] of expected) {
+      expect(getAiProviderInventoryEntry(pathId)).toMatchObject({
+        call_kind: "chat_completion",
+        cost_tier: "paid",
+        default_allowed: false,
+        allow_paid_flag: "AI_CHAT_ENABLED + tenant ai_chat_enabled + tenant ai_chat_api_key",
+      });
+      expect(decideMemoryAdminAiChatProviderCall({ provider, model })).toMatchObject({
+        allowed: false,
+        path_id: pathId,
+        model,
+        reason: "paid_or_unknown_blocked",
+      });
+      expect(decideMemoryAdminAiChatProviderCall({ provider, model, allow_paid: true })).toMatchObject({
+        allowed: true,
+        path_id: pathId,
+        model,
+        reason: "explicit_paid_allowed",
       });
     }
   });
