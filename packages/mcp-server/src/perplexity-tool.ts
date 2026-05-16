@@ -32,6 +32,71 @@ interface PerplexityChatResponse {
   related_questions?: string[];
 }
 
+export type PerplexityToolOperation = "chat-completion";
+
+type PerplexityToolCostTier = "paid";
+
+interface PerplexityToolDecisionInput {
+  path_id: string;
+  model: string;
+  allow_paid?: boolean;
+}
+
+export interface PerplexityToolDecision {
+  allowed: boolean;
+  path_id: string;
+  provider: "Perplexity";
+  model: string;
+  cost_tier: PerplexityToolCostTier;
+  default_allowed: false;
+  reason: "explicit_paid_allowed" | "paid_or_unknown_blocked";
+  allow_paid_flag: "api_key argument";
+}
+
+// --- Spend guard -------------------------------------------------------------
+
+const PERPLEXITY_TOOL_PATH_IDS: Record<PerplexityToolOperation, string> = {
+  "chat-completion": "mcp.perplexity.tool.chat-completion",
+};
+
+const PERPLEXITY_TOOL_COST_TIERS: Record<PerplexityToolOperation, PerplexityToolCostTier> = {
+  "chat-completion": "paid",
+};
+
+function decideAiProviderCall(input: PerplexityToolDecisionInput): PerplexityToolDecision {
+  const allowed = input.allow_paid === true;
+
+  return {
+    allowed,
+    path_id: input.path_id,
+    provider: "Perplexity",
+    model: input.model,
+    cost_tier: PERPLEXITY_TOOL_COST_TIERS["chat-completion"],
+    default_allowed: false,
+    reason: allowed ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: "api_key argument",
+  };
+}
+
+export function decidePerplexityToolProviderCall(
+  operation: PerplexityToolOperation,
+  model: string,
+  apiKey: string,
+): PerplexityToolDecision {
+  return decideAiProviderCall({
+    path_id: PERPLEXITY_TOOL_PATH_IDS[operation],
+    model,
+    allow_paid: Boolean(apiKey),
+  });
+}
+
+function requirePerplexitySpendAllowed(operation: PerplexityToolOperation, model: string, apiKey: string): void {
+  const decision = decidePerplexityToolProviderCall(operation, model, apiKey);
+  if (!decision.allowed) {
+    throw new Error(`AI spend guard blocked ${decision.path_id}: ${decision.allow_paid_flag} is required.`);
+  }
+}
+
 // --- Auth validation ---------------------------------------------------------
 
 function requireKey(args: Record<string, unknown>): string {
@@ -67,6 +132,7 @@ export async function perplexityChatCompletion(args: Record<string, unknown>): P
   try {
     const apiKey = requireKey(args);
     const model = String(args.model ?? "sonar");
+    requirePerplexitySpendAllowed("chat-completion", model, apiKey);
 
     // Parse messages
     let messages: PerplexityMessage[];
