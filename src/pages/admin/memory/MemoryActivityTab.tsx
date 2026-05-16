@@ -2,6 +2,18 @@ import { useEffect, useState, useCallback } from "react";
 import { Activity, ChevronsDown, TrendingUp, Zap } from "lucide-react";
 import EmptyState from "./EmptyState";
 
+type RecallSignal = "top-of-mind" | "background-heavy";
+
+interface RecallFact {
+  id: string;
+  fact: string;
+  category: string;
+  access_count: number;
+  decay_tier: string;
+  recall_signal?: RecallSignal;
+  recall_note?: string;
+}
+
 interface ActivityData {
   facts_by_day: Record<string, number>;
   storage: {
@@ -20,13 +32,12 @@ interface ActivityData {
     decay_tier: string;
     updated_at: string;
   }>;
-  top_facts: Array<{
-    id: string;
-    fact: string;
-    category: string;
-    access_count: number;
-    decay_tier: string;
-  }>;
+  top_of_mind_facts?: RecallFact[];
+  top_facts: RecallFact[];
+  recall_diagnostics?: {
+    inspected_top_facts: number;
+    background_heavy_count: number;
+  };
 }
 
 const DECAY_COLORS: Record<string, string> = {
@@ -40,6 +51,34 @@ const EXTENDED_TOP_FACTS_LIMIT = 110;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function RecallFactRow({ fact, showSignal = false }: { fact: RecallFact; showSignal?: boolean }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-white/40">
+        {fact.access_count}x
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-white/60 line-clamp-1">{fact.fact}</p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-white/25">{fact.category}</span>
+          <span className="flex items-center gap-1 text-[10px] text-white/25">
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${DECAY_COLORS[fact.decay_tier] ?? "bg-gray-500"}`} />
+            {fact.decay_tier}
+          </span>
+          {showSignal && fact.recall_signal === "background-heavy" && (
+            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200/70">
+              Background-heavy
+            </span>
+          )}
+          {showSignal && fact.recall_note && (
+            <span className="text-[10px] text-white/25">{fact.recall_note}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function MemoryActivityTab({ apiKey }: { apiKey: string }) {
@@ -84,6 +123,7 @@ export default function MemoryActivityTab({ apiKey }: { apiKey: string }) {
 
   const sortedDays = Object.entries(data.facts_by_day).sort(([a], [b]) => a.localeCompare(b));
   const maxCount = Math.max(1, ...sortedDays.map(([, c]) => c));
+  const topOfMindFacts = data.top_of_mind_facts ?? [];
 
   return (
     <div className="space-y-6">
@@ -111,6 +151,20 @@ export default function MemoryActivityTab({ apiKey }: { apiKey: string }) {
         </div>
       )}
 
+      {topOfMindFacts.length > 0 && (
+        <div className="rounded-lg border border-[#61C1C4]/20 bg-[#61C1C4]/[0.04] p-4">
+          <h3 className="flex items-center gap-2 text-xs font-semibold text-[#61C1C4]/80 uppercase tracking-wider mb-3">
+            <TrendingUp className="h-3.5 w-3.5" />
+            Top of Mind
+          </h3>
+          <div className="space-y-2">
+            {topOfMindFacts.map((fact) => (
+              <RecallFactRow key={fact.id} fact={fact} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Top accessed facts */}
       {data.top_facts.length > 0 && (
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
@@ -120,21 +174,7 @@ export default function MemoryActivityTab({ apiKey }: { apiKey: string }) {
           </h3>
           <div className="space-y-2">
             {data.top_facts.map((f) => (
-              <div key={f.id} className="flex items-start gap-3">
-                <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-white/40">
-                  {f.access_count}x
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-white/60 line-clamp-1">{f.fact}</p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-[10px] text-white/25">{f.category}</span>
-                    <span className="flex items-center gap-1 text-[10px] text-white/25">
-                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${DECAY_COLORS[f.decay_tier] ?? "bg-gray-500"}`} />
-                      {f.decay_tier}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <RecallFactRow key={f.id} fact={f} showSignal />
             ))}
           </div>
           {topFactsLimit < EXTENDED_TOP_FACTS_LIMIT && data.top_facts.length >= INITIAL_TOP_FACTS_LIMIT && (
