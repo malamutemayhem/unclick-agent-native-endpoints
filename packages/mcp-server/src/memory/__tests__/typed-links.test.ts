@@ -2,9 +2,13 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { persistTypedLinksForMemoryWrite } from "../handlers.js";
-import { extractMemoryTypedLinkCandidates } from "../typed-links.js";
+import {
+  extractMemoryTypedLinkCandidates,
+  filterAndRankMemoryTypedLinks,
+  memoryTypedLinkStoredRowToCandidate,
+} from "../typed-links.js";
 import type { SaveTypedLinkCandidatesResult } from "../types.js";
-import type { MemoryTypedLinkCandidate } from "../typed-links.js";
+import type { MemoryTypedLinkCandidate, MemoryTypedLinkStoredRow } from "../typed-links.js";
 
 describe("memory typed-link extraction", () => {
   test("extracts deterministic references from fact text", () => {
@@ -131,6 +135,64 @@ describe("memory typed-link extraction", () => {
       console.error = originalError;
     }
   });
+
+  test("search helper ranks exact targets before evidence-only matches", () => {
+    const rows: MemoryTypedLinkStoredRow[] = [
+      storedLink({
+        id: "older-evidence",
+        target_text: "Memory",
+        evidence_text: "PR #889 persisted typed links for Memory.",
+        created_at: "2026-05-16T20:00:00.000Z",
+      }),
+      storedLink({
+        id: "exact-pr",
+        target_kind: "pr",
+        target_text: "PR #889",
+        evidence_text: "PR #889 persisted typed links.",
+        created_at: "2026-05-16T19:00:00.000Z",
+      }),
+      storedLink({
+        id: "unrelated",
+        target_text: "Passport",
+        evidence_text: "Passport owns Git connections.",
+        created_at: "2026-05-16T21:00:00.000Z",
+      }),
+    ];
+
+    const results = filterAndRankMemoryTypedLinks(rows, "PR #889", 10);
+
+    assert.deepEqual(results.map((result) => result.id), ["exact-pr", "older-evidence"]);
+    assert.equal(results[0].target_text, "PR #889");
+    assert.equal(results[0].match_score > results[1].match_score, true);
+  });
+
+  test("search helper converts stored rows back to candidate evidence", () => {
+    const row = storedLink({
+      id: "stored-1",
+      source_kind: "conversation_turn",
+      source_id: "turn-9",
+      target_kind: "receipt",
+      target_text: "588aef27-646d-4359-9973-66394f2c0171",
+      evidence_start: 4,
+      evidence_end: 58,
+      evidence_text: "Receipt 588aef27-646d-4359-9973-66394f2c0171 shipped proof.",
+    });
+
+    assert.deepEqual(memoryTypedLinkStoredRowToCandidate(row), {
+      source_kind: "conversation_turn",
+      source_id: "turn-9",
+      relation: "references",
+      target_kind: "receipt",
+      target_text: "588aef27-646d-4359-9973-66394f2c0171",
+      confidence: 0.9,
+      evidence_span: {
+        start: 4,
+        end: 58,
+        text: "Receipt 588aef27-646d-4359-9973-66394f2c0171 shipped proof.",
+      },
+      redaction_state: "clean",
+    });
+  });
 });
 
 function findTarget(
@@ -138,4 +200,22 @@ function findTarget(
   targetText: string
 ): ReturnType<typeof extractMemoryTypedLinkCandidates>[number] | undefined {
   return links.find((link) => link.target_text === targetText);
+}
+
+function storedLink(overrides: Partial<MemoryTypedLinkStoredRow>): MemoryTypedLinkStoredRow {
+  return {
+    id: "link-1",
+    source_kind: "fact",
+    source_id: "fact-1",
+    relation: "references",
+    target_kind: "tool",
+    target_text: "Memory",
+    confidence: 0.9,
+    evidence_start: 0,
+    evidence_end: 20,
+    evidence_text: "Memory references PR #889.",
+    redaction_state: "clean",
+    created_at: "2026-05-16T20:00:00.000Z",
+    ...overrides,
+  };
 }

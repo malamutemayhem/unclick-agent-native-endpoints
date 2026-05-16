@@ -39,6 +39,27 @@ export interface MemoryTypedLinkCandidate {
   redaction_state: MemoryTypedLinkRedactionState;
 }
 
+export interface MemoryTypedLinkStoredRow {
+  id: string;
+  source_kind: MemoryTypedLinkSourceKind;
+  source_id: string;
+  relation: MemoryTypedLinkRelation;
+  target_kind: MemoryTypedLinkTargetKind;
+  target_text: string;
+  confidence: number;
+  evidence_start: number;
+  evidence_end: number;
+  evidence_text: string;
+  redaction_state: MemoryTypedLinkRedactionState;
+  created_at: string;
+}
+
+export interface MemoryTypedLinkSearchResult extends MemoryTypedLinkCandidate {
+  id: string;
+  created_at: string;
+  match_score: number;
+}
+
 export interface ExtractMemoryTypedLinkCandidatesInput {
   source_kind: MemoryTypedLinkSourceKind;
   source_id: string;
@@ -111,6 +132,39 @@ export function extractMemoryTypedLinkCandidates(
     .map((match) => buildCandidate(input.source_kind, sourceId, text, match));
 
   return dedupeCandidates(candidates);
+}
+
+export function filterAndRankMemoryTypedLinks(
+  rows: MemoryTypedLinkStoredRow[],
+  query: string,
+  maxResults: number
+): MemoryTypedLinkSearchResult[] {
+  const normalizedQuery = normalizeSearchText(query);
+  const limit = Math.max(1, Math.min(Math.floor(maxResults) || 10, 50));
+  if (!normalizedQuery) return [];
+
+  return rows
+    .map((row) => memoryTypedLinkStoredRowToSearchResult(row, normalizedQuery))
+    .filter((row) => row.match_score > 0)
+    .sort(compareSearchResults)
+    .slice(0, limit);
+}
+
+export function memoryTypedLinkStoredRowToCandidate(row: MemoryTypedLinkStoredRow): MemoryTypedLinkCandidate {
+  return {
+    source_kind: row.source_kind,
+    source_id: row.source_id,
+    relation: row.relation,
+    target_kind: row.target_kind,
+    target_text: row.target_text,
+    confidence: row.confidence,
+    evidence_span: {
+      start: row.evidence_start,
+      end: row.evidence_end,
+      text: row.evidence_text,
+    },
+    redaction_state: row.redaction_state,
+  };
 }
 
 function extractReferenceMatches(text: string): LinkMatch[] {
@@ -353,6 +407,54 @@ function stripTrailingPunctuation(value: string): string {
 
 function normalizePerson(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function memoryTypedLinkStoredRowToSearchResult(
+  row: MemoryTypedLinkStoredRow,
+  normalizedQuery: string
+): MemoryTypedLinkSearchResult {
+  return {
+    ...memoryTypedLinkStoredRowToCandidate(row),
+    id: row.id,
+    created_at: row.created_at,
+    match_score: scoreStoredTypedLink(row, normalizedQuery),
+  };
+}
+
+function scoreStoredTypedLink(row: MemoryTypedLinkStoredRow, normalizedQuery: string): number {
+  const target = normalizeSearchText(row.target_text);
+  const evidence = normalizeSearchText(row.evidence_text);
+  const relation = normalizeSearchText(row.relation);
+  const targetKind = normalizeSearchText(row.target_kind);
+  const sourceKind = normalizeSearchText(row.source_kind);
+  const terms = normalizedQuery.split(" ").filter(Boolean);
+  let score = 0;
+
+  if (target === normalizedQuery) score += 100;
+  if (target.includes(normalizedQuery)) score += 80;
+  if (evidence.includes(normalizedQuery)) score += 45;
+  if (relation === normalizedQuery || targetKind === normalizedQuery || sourceKind === normalizedQuery) score += 30;
+
+  for (const term of terms) {
+    if (target.includes(term)) score += 12;
+    if (evidence.includes(term)) score += 5;
+    if (relation === term || targetKind === term || sourceKind === term) score += 4;
+  }
+
+  if (score > 0) score += Math.max(0, Math.min(row.confidence, 1)) * 10;
+  return Number(score.toFixed(3));
+}
+
+function compareSearchResults(left: MemoryTypedLinkSearchResult, right: MemoryTypedLinkSearchResult): number {
+  const scoreDelta = right.match_score - left.match_score;
+  if (scoreDelta !== 0) return scoreDelta;
+  const dateDelta = new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+  if (dateDelta !== 0) return dateDelta;
+  return left.id.localeCompare(right.id);
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 function compareMatches(left: LinkMatch, right: LinkMatch): number {

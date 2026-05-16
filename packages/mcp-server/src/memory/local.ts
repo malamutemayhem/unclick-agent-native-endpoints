@@ -25,7 +25,12 @@ import type {
   MemoryTaxonomySnapshotWriteResult,
   SaveTypedLinkCandidatesResult,
 } from "./types.js";
-import type { MemoryTypedLinkCandidate } from "./typed-links.js";
+import {
+  filterAndRankMemoryTypedLinks,
+  type MemoryTypedLinkCandidate,
+  type MemoryTypedLinkSearchResult,
+  type MemoryTypedLinkStoredRow,
+} from "./typed-links.js";
 import { writeMemoryTaxonomySnapshotsToLibrary } from "./supabase.js";
 
 const DATA_DIR = path.join(os.homedir(), ".unclick", "memory");
@@ -147,18 +152,18 @@ interface ConversationRow {
   created_at: string;
 }
 
-interface TypedLinkRow {
+interface TypedLinkRow extends MemoryTypedLinkStoredRow {
   id: string;
-  source_kind: string;
+  source_kind: MemoryTypedLinkStoredRow["source_kind"];
   source_id: string;
-  relation: string;
-  target_kind: string;
+  relation: MemoryTypedLinkStoredRow["relation"];
+  target_kind: MemoryTypedLinkStoredRow["target_kind"];
   target_text: string;
   confidence: number;
   evidence_start: number;
   evidence_end: number;
   evidence_text: string;
-  redaction_state: string;
+  redaction_state: MemoryTypedLinkStoredRow["redaction_state"];
   created_at: string;
 }
 
@@ -404,6 +409,10 @@ export class LocalBackend implements MemoryBackend {
 
     if (saved > 0) writeTable("memory_typed_links", rows);
     return { saved };
+  }
+
+  async searchTypedLinks(query: string, maxResults: number): Promise<MemoryTypedLinkSearchResult[]> {
+    return filterAndRankMemoryTypedLinks(readTable<TypedLinkRow>("memory_typed_links"), query, maxResults);
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {

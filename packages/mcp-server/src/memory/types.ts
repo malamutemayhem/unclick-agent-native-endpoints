@@ -1,4 +1,4 @@
-import type { MemoryTypedLinkCandidate } from "./typed-links.js";
+import type { MemoryTypedLinkCandidate, MemoryTypedLinkSearchResult } from "./typed-links.js";
 
 /**
  * Shared types for UnClick Memory backends (local + Supabase).
@@ -207,6 +207,9 @@ export interface MemoryBackend {
 
   /** Persist deterministic typed-link candidates extracted from Memory writes. */
   saveTypedLinkCandidates(candidates: MemoryTypedLinkCandidate[]): Promise<SaveTypedLinkCandidatesResult>;
+
+  /** Search persisted typed links extracted from Memory writes. */
+  searchTypedLinks(query: string, maxResults: number): Promise<MemoryTypedLinkSearchResult[]>;
 
   /** Get full conversation log for a session. */
   getConversationDetail(sessionId: string): Promise<unknown>;
