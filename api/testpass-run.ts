@@ -13,22 +13,22 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { probeServer } from "../packages/testpass/src/probe.js";
 import {
-  createRun,
+  computeVerdictSummary,
   createEvidence,
+  createRun,
+  loadPackFromFile,
+  probeServer,
+  runAgentChecks,
+  runDeterministicChecks,
   seedPendingItems,
   updateRunStatus,
-  computeVerdictSummary,
-} from "../packages/testpass/src/run-manager.js";
-import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
-import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
-import { loadPackFromFile } from "../packages/testpass/src/pack-loader.js";
+} from "./lib/testpass-boundary.js";
 import { emitSignal } from "../packages/mcp-server/src/signals/emit.js";
 import * as path from "node:path";
 import * as url from "node:url";
 import { createHash } from "node:crypto";
-import type { RunProfile, RunTarget } from "../packages/testpass/src/types.js";
+import type { RunProfile, RunTarget } from "./lib/testpass-boundary.js";
 import {
   buildTestPassBackgroundFailureDispatchRow,
   DEFAULT_TESTPASS_BACKGROUND_HANDOFF_AGENT_ID,
