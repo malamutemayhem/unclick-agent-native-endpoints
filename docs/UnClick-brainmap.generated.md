@@ -50,7 +50,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | packages/mcp-server/src/alphavantage-tool.ts | 98a37153078d | 7591 |
 | packages/mcp-server/src/amazon-tool.ts | fb1e936b7c9a | 14913 |
 | packages/mcp-server/src/amber-tool.ts | 6d020b798469 | 4138 |
-| packages/mcp-server/src/anthropic-tool.ts | 84db1d498f00 | 5308 |
+| packages/mcp-server/src/anthropic-tool.ts | fd197643eefb | 7766 |
 | packages/mcp-server/src/asana-tool.ts | 3f5d880c119d | 8078 |
 | packages/mcp-server/src/assemblyai-tool.ts | 8eaea963f072 | 6080 |
 | packages/mcp-server/src/australiapost-tool.ts | 6fc5a927873d | 5148 |

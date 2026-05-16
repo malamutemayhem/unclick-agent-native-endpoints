@@ -9,6 +9,27 @@ const ANTHROPIC_VERSION = "2023-06-01";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type AnthropicToolOperation = "chat" | "model-listing";
+
+type AnthropicToolCostTier = "paid" | "paid_or_unknown";
+
+interface AnthropicToolDecisionInput {
+  path_id: string;
+  model: string;
+  allow_paid?: boolean;
+}
+
+export interface AnthropicToolDecision {
+  allowed: boolean;
+  path_id: string;
+  provider: "Anthropic";
+  model: string;
+  cost_tier: AnthropicToolCostTier;
+  default_allowed: false;
+  reason: "explicit_paid_allowed" | "paid_or_unknown_blocked";
+  allow_paid_flag: "api_key argument";
+}
+
 interface AnthropicMessage {
   role: "user" | "assistant";
   content: string | Array<{ type: string; text?: string }>;
@@ -38,6 +59,58 @@ interface AnthropicModel {
   id: string;
   display_name: string;
   created_at: string;
+}
+
+// ─── Spend guard ──────────────────────────────────────────────────────────────
+
+const ANTHROPIC_TOOL_PATH_IDS: Record<AnthropicToolOperation, string> = {
+  chat: "mcp.anthropic.tool.chat",
+  "model-listing": "mcp.anthropic.tool.model-listing",
+};
+
+const ANTHROPIC_TOOL_OPERATION_BY_PATH_ID: Record<string, AnthropicToolOperation> =
+  Object.fromEntries(
+    Object.entries(ANTHROPIC_TOOL_PATH_IDS).map(([operation, pathId]) => [pathId, operation]),
+  ) as Record<string, AnthropicToolOperation>;
+
+const ANTHROPIC_TOOL_COST_TIERS: Record<AnthropicToolOperation, AnthropicToolCostTier> = {
+  chat: "paid",
+  "model-listing": "paid_or_unknown",
+};
+
+function decideAiProviderCall(input: AnthropicToolDecisionInput): AnthropicToolDecision {
+  const operation = ANTHROPIC_TOOL_OPERATION_BY_PATH_ID[input.path_id];
+  const allowed = input.allow_paid === true;
+
+  return {
+    allowed,
+    path_id: input.path_id,
+    provider: "Anthropic",
+    model: input.model,
+    cost_tier: operation ? ANTHROPIC_TOOL_COST_TIERS[operation] : "paid_or_unknown",
+    default_allowed: false,
+    reason: allowed ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: "api_key argument",
+  };
+}
+
+export function decideAnthropicToolProviderCall(
+  operation: AnthropicToolOperation,
+  model: string,
+  apiKey: string,
+): AnthropicToolDecision {
+  return decideAiProviderCall({
+    path_id: ANTHROPIC_TOOL_PATH_IDS[operation],
+    model,
+    allow_paid: Boolean(apiKey),
+  });
+}
+
+function requireAnthropicSpendAllowed(operation: AnthropicToolOperation, model: string, apiKey: string): void {
+  const decision = decideAnthropicToolProviderCall(operation, model, apiKey);
+  if (!decision.allowed) {
+    throw new Error(`AI spend guard blocked ${decision.path_id}: ${decision.allow_paid_flag} is required.`);
+  }
 }
 
 // ─── Auth validation ──────────────────────────────────────────────────────────
@@ -94,6 +167,7 @@ export async function anthropicCreateMessage(args: Record<string, unknown>): Pro
   const apiKey = requireKey(args);
   const model = String(args.model ?? "claude-sonnet-4-6");
   const maxTokens = Math.min(8192, Math.max(1, Number(args.max_tokens ?? 1024)));
+  requireAnthropicSpendAllowed("chat", model, apiKey);
 
   // Parse messages
   let messages: AnthropicMessage[];
@@ -145,6 +219,7 @@ export async function anthropicCreateMessage(args: Record<string, unknown>): Pro
 
 export async function anthropicListModels(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireAnthropicSpendAllowed("model-listing", "Anthropic /models", apiKey);
   const data = await anthropicGet<{ data: AnthropicModel[]; has_more: boolean; first_id?: string; last_id?: string }>(
     apiKey, "/models"
   );
