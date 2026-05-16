@@ -460,6 +460,121 @@ describe("orchestrator context", () => {
     expect(JSON.stringify(context.current_state_card.blockers)).not.toContain("superseded_status_comment");
   });
 
+  it("suppresses stale WakePass PR dispatch blockers after merged PR ACK proof", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-16T14:30:00.000Z",
+      profiles: [],
+      messages: [
+        {
+          id: "msg-wakepass-ack-864",
+          author_agent_id: "github-action-autoclose",
+          text: "ACK wake-pull_request-pr-864-d8bcb0c7aa0c merged PR #864; WakePass handoff complete.",
+          tags: ["wakepass", "ack"],
+          created_at: "2026-05-16T14:18:54.000Z",
+        },
+      ],
+      todos: [
+        {
+          id: "todo-active-security",
+          title: "Active security job",
+          description: "Keep active jobs visible while WakePass proof is reconciled.",
+          status: "in_progress",
+          priority: "high",
+          created_by_agent_id: "codex",
+          assigned_to_agent_id: "chatgpt-codex-fleet-seat",
+          created_at: "2026-05-16T13:00:00.000Z",
+          updated_at: "2026-05-16T14:00:00.000Z",
+        },
+      ],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-pr-864-stale",
+          source: "wakepass",
+          target_agent_id: "reviewer",
+          task_ref: "wake-pull_request-pr-864-d8bcb0c7aa0c",
+          status: "stale",
+          payload: {
+            source_url: "https://github.com/malamutemayhem/unclick/pull/864",
+            wake_reason: "PR #864 is ready for review",
+          },
+          created_at: "2026-05-16T14:18:33.000Z",
+          updated_at: "2026-05-16T14:25:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    const dispatchEvent = context.continuity_events.find((event) => event.source_id === "dispatch-pr-864-stale");
+
+    expect(dispatchEvent?.kind).toBe("blocker");
+    expect(dispatchEvent?.tags).toEqual(expect.arrayContaining(["merged_pr_ack", "bridge_status:suppress"]));
+    expect(context.rolling_snapshot.active_blockers.map((event) => event.source_id)).not.toContain(
+      "dispatch-pr-864-stale",
+    );
+    expect(context.current_state_card.blocker_count).toBe(0);
+    expect(context.seat_handshake.active_blocker).toBeNull();
+  });
+
+  it("keeps stale WakePass PR dispatch blockers active without matching merged PR ACK proof", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: "2026-05-16T14:30:00.000Z",
+      profiles: [],
+      messages: [
+        {
+          id: "msg-wakepass-ack-other",
+          author_agent_id: "github-action-autoclose",
+          text: "ACK wake-pull_request-pr-863-b5cdf7f55fe9 merged PR #863; WakePass handoff complete.",
+          tags: ["wakepass", "ack"],
+          created_at: "2026-05-16T14:18:54.000Z",
+        },
+      ],
+      todos: [
+        {
+          id: "todo-active-security",
+          title: "Active security job",
+          description: "Keep active jobs visible while unrelated WakePass proof is ignored.",
+          status: "in_progress",
+          priority: "high",
+          created_by_agent_id: "codex",
+          assigned_to_agent_id: "chatgpt-codex-fleet-seat",
+          created_at: "2026-05-16T13:00:00.000Z",
+          updated_at: "2026-05-16T14:00:00.000Z",
+        },
+      ],
+      comments: [],
+      dispatches: [
+        {
+          dispatch_id: "dispatch-pr-864-stale",
+          source: "wakepass",
+          target_agent_id: "reviewer",
+          task_ref: "wake-pull_request-pr-864-d8bcb0c7aa0c",
+          status: "stale",
+          payload: {
+            source_url: "https://github.com/malamutemayhem/unclick/pull/864",
+            wake_reason: "PR #864 is ready for review",
+          },
+          created_at: "2026-05-16T14:18:33.000Z",
+          updated_at: "2026-05-16T14:25:00.000Z",
+        },
+      ],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.rolling_snapshot.active_blockers.map((event) => event.source_id)).toContain(
+      "dispatch-pr-864-stale",
+    );
+    expect(context.current_state_card.blocker_count).toBe(1);
+  });
+
   it("keeps heartbeat prompt bodies out of continuity summaries", () => {
     const context = buildOrchestratorContext({
       generatedAt: "2026-05-09T23:45:00.000Z",

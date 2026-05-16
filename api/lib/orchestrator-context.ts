@@ -399,10 +399,13 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     now_ms: nowMs,
   });
 
+  const mergedPrWakePassProofs = buildMergedPrWakePassProofs(input.messages);
   const messageEvents = input.messages.map(messageToEvent);
   const todoEvents = activeTodos.map(todoToEvent);
   const commentEvents = input.comments.map(commentToEvent);
-  const dispatchEvents = input.dispatches.map(dispatchToEvent);
+  const dispatchEvents = input.dispatches.map((dispatch) =>
+    dispatchToEvent(dispatch, mergedPrWakePassProofs),
+  );
   const signalEvents = input.signals.map(signalToEvent);
   const conversationEvents = input.conversationTurns.map(conversationTurnToEvent);
   const sessionEvents = input.sessions.map(sessionToEvent);
@@ -916,8 +919,51 @@ function commentToEvent(comment: OrchestratorCommentRow): OrchestratorContinuity
   };
 }
 
-function dispatchToEvent(dispatch: OrchestratorDispatchRow): OrchestratorContinuityEvent {
+interface WakePassMergedPrProof {
+  prNumber: number;
+  receiptId: string;
+  createdAt: string;
+}
+
+function buildMergedPrWakePassProofs(messages: OrchestratorMessageRow[]): Map<number, WakePassMergedPrProof> {
+  const proofs = new Map<number, WakePassMergedPrProof>();
+
+  for (const message of messages) {
+    const tags = normalizeTags(message.tags).map((tag) => tag.toLowerCase());
+    if (!tags.includes("wakepass")) continue;
+    if (!tags.includes("ack") && !tags.includes("completed") && !tags.includes("done")) continue;
+
+    const text = message.text ?? "";
+    const mergedAck = /\bmerged\s+PR\s+#(\d+)\b/i.exec(text);
+    const completedAfterMerge = /\bWakePass\s+completed\s+PR\s+#(\d+)\b/i.exec(text);
+    const prNumber = Number(mergedAck?.[1] ?? completedAfterMerge?.[1]);
+    if (!Number.isFinite(prNumber)) continue;
+
+    const lowerText = text.toLowerCase();
+    const hasCompletionProof =
+      lowerText.includes("wakepass handoff complete") ||
+      (lowerText.includes("wakepass completed") && lowerText.includes("merge proof"));
+    if (!hasCompletionProof) continue;
+
+    const existing = proofs.get(prNumber);
+    if (!existing || compareIsoDesc(message.created_at, existing.createdAt) < 0) {
+      proofs.set(prNumber, {
+        prNumber,
+        receiptId: message.id,
+        createdAt: message.created_at,
+      });
+    }
+  }
+
+  return proofs;
+}
+
+function dispatchToEvent(
+  dispatch: OrchestratorDispatchRow,
+  mergedPrWakePassProofs: Map<number, WakePassMergedPrProof> = new Map(),
+): OrchestratorContinuityEvent {
   const payloadTags = dispatchPayloadEvidenceTags(dispatch.payload);
+  const proofTags = dispatchMergedPrProofTags(dispatch, mergedPrWakePassProofs);
   const detail = [
     dispatch.source,
     dispatch.status,
@@ -934,8 +980,59 @@ function dispatchToEvent(dispatch: OrchestratorDispatchRow): OrchestratorContinu
     kind: dispatch.status === "leased" ? "handoff" : dispatch.status === "failed" || dispatch.status === "stale" ? "blocker" : "status",
     actor_agent_id: dispatch.lease_owner ?? dispatch.target_agent_id,
     summary: compactText(detail, 240),
-    tags: ["dispatch", dispatch.source, dispatch.status, ...payloadTags],
+    tags: ["dispatch", dispatch.source, dispatch.status, ...payloadTags, ...proofTags],
   };
+}
+
+function dispatchMergedPrProofTags(
+  dispatch: OrchestratorDispatchRow,
+  proofs: Map<number, WakePassMergedPrProof>,
+): string[] {
+  if (dispatch.source !== "wakepass") return [];
+  if (dispatch.status === "completed" || dispatch.status === "cancelled") return [];
+
+  const prNumbers = extractWakePassPrNumbers(dispatch);
+  if (prNumbers.length === 0) return [];
+
+  const dispatchCreatedMs = Date.parse(dispatch.created_at);
+  for (const prNumber of prNumbers) {
+    const proof = proofs.get(prNumber);
+    if (!proof) continue;
+
+    const proofCreatedMs = Date.parse(proof.createdAt);
+    if (
+      Number.isFinite(dispatchCreatedMs) &&
+      Number.isFinite(proofCreatedMs) &&
+      proofCreatedMs < dispatchCreatedMs
+    ) {
+      continue;
+    }
+
+    return ["merged_pr_ack", "bridge_status:suppress"];
+  }
+
+  return [];
+}
+
+function extractWakePassPrNumbers(dispatch: OrchestratorDispatchRow): number[] {
+  const text = [
+    dispatch.dispatch_id,
+    dispatch.task_ref,
+    dispatch.payload ? compactText(dispatch.payload, 1000) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const numbers = new Set<number>();
+  const patterns = [/\bPR\s*#\s*(\d+)\b/gi, /\bpr-(\d+)\b/gi, /\/pull\/(\d+)\b/gi];
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const number = Number(match[1]);
+      if (Number.isFinite(number)) numbers.add(number);
+    }
+  }
+
+  return Array.from(numbers);
 }
 
 function dispatchPayloadEvidenceTags(payload: OrchestratorDispatchRow["payload"]): string[] {
