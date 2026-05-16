@@ -44,6 +44,7 @@ const PROTECTED_NAME_MATCHES = [
   "pnpm-lock.yaml",
   "yarn.lock",
 ];
+const UNSAFE_TEST_COMMAND_CHARS = /[;&|`]/;
 
 export const __consts__ = {
   PACKET_VERSION,
@@ -134,8 +135,114 @@ export function makePacket(input = {}) {
   };
 }
 
+export function makeTestOnlyPacketFromScopePack(input = {}) {
+  const scopepack = input.scopepack ?? input.scopePack ?? null;
+  if (!scopepack || typeof scopepack !== "object") {
+    return { ok: false, reason: "missing_scopepack" };
+  }
+
+  const todo = input.todo ?? {};
+  const todoId = input.todo_id ?? input.todoId ?? todo.id ?? todo.todo_id ?? todo.todoId ?? null;
+  if (!todoId) return { ok: false, reason: "missing_todo_id" };
+  if (!input.heartbeat_tick_id && !input.heartbeatTickId) {
+    return { ok: false, reason: "missing_heartbeat_tick_id" };
+  }
+  if (!input.head_sha_at_request && !input.headShaAtRequest) {
+    return { ok: false, reason: "missing_head_sha_at_request" };
+  }
+
+  const criteria = firstList(
+    scopepack.acceptance,
+    scopepack.acceptance_criteria,
+    scopepack.acceptanceCriteria,
+  );
+  const verification = firstList(
+    scopepack.verification,
+    scopepack.verification_commands,
+    scopepack.verificationCommands,
+    scopepack.tests,
+  );
+  const testCommand = firstSafeTestCommand(verification);
+  const acceptance = {};
+  if (criteria.length > 0) acceptance.criteria = criteria;
+  if (testCommand) {
+    acceptance.test_command = testCommand;
+    acceptance.expected_exit_code = 0;
+  }
+  if (verification.length > 0) acceptance.verification = verification;
+
+  const packet = makePacket({
+    packet_id: input.packet_id ?? input.packetId,
+    emitted_at: input.emitted_at ?? input.emittedAt,
+    heartbeat_tick_id: input.heartbeat_tick_id ?? input.heartbeatTickId,
+    requesting_seat_id: input.requesting_seat_id ?? input.requestingSeatId ?? "pinballwake-job-runner",
+    todo_id: todoId,
+    scope_pack_comment_id:
+      input.scope_pack_comment_id ??
+      input.scopePackCommentId ??
+      scopepack.scope_pack_comment_id ??
+      scopepack.scopePackCommentId ??
+      null,
+    intent: "test_only",
+    owned_files: firstList(scopepack.owned_files, scopepack.ownedFiles, scopepack.files, scopepack.paths).map(
+      normalizePath,
+    ),
+    acceptance,
+    proof_required: Array.isArray(scopepack.proof_required)
+      ? scopepack.proof_required
+      : Array.isArray(scopepack.proofRequired)
+        ? scopepack.proofRequired
+        : undefined,
+    xpass_advisory: input.xpass_advisory ?? input.xpassAdvisory ?? true,
+    head_sha_at_request: input.head_sha_at_request ?? input.headShaAtRequest,
+  });
+
+  const validation = validateExecutorPacket(packet);
+  if (!validation.ok) {
+    return { ok: false, reason: `packet_invalid:${validation.reason}`, validation, packet };
+  }
+
+  return { ok: true, packet };
+}
+
 function cryptoRandomId() {
   // Avoid pulling node:crypto for one-off id; use Math.random-shaped suffix.
   // Not security-sensitive; just disambiguation.
   return `pkt-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
+
+function normalizePath(value) {
+  return String(value ?? "").replace(/\\/g, "/").trim();
+}
+
+function firstList(...values) {
+  for (const value of values) {
+    const list = safeList(value);
+    if (list.length > 0) return list;
+  }
+  return [];
+}
+
+function safeList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function firstSafeTestCommand(commands) {
+  for (const command of commands) {
+    const text = String(command ?? "").trim();
+    if (!text || UNSAFE_TEST_COMMAND_CHARS.test(text) || /rm\s+-rf/i.test(text)) continue;
+    if (/^(node\s+--test|npm\s+(?:run\s+)?test|pnpm\s+(?:run\s+)?test|yarn\s+(?:run\s+)?test)\b/i.test(text)) {
+      return text;
+    }
+  }
+  return "";
 }

@@ -7,6 +7,7 @@ import {
   isProtectedPath,
   validateExecutorPacket,
   makePacket,
+  makeTestOnlyPacketFromScopePack,
   __consts__,
 } from "./pinballwake-executor-packet.mjs";
 
@@ -162,5 +163,95 @@ describe("makePacket", () => {
     assert.equal(p.intent, "test_only");
     assert.equal(p.xpass_advisory, false);
     assert.deepEqual(p.owned_files, ["scripts/x.mjs"]);
+  });
+});
+
+describe("makeTestOnlyPacketFromScopePack", () => {
+  function scopePack(overrides = {}) {
+    return {
+      owned_files: ["scripts/pinballwake-executor-packet.mjs"],
+      acceptance: ["packet validates", "packet uses test_only intent"],
+      verification: ["node --test scripts/pinballwake-executor-packet.test.mjs"],
+      ...overrides,
+    };
+  }
+
+  test("builds a valid test_only packet from hydrated ScopePack fields", () => {
+    const result = makeTestOnlyPacketFromScopePack({
+      todo: { id: "todo-123" },
+      scopepack: scopePack(),
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "abc12345",
+      requestingSeatId: "unclick-heartbeat-seat",
+      scopePackCommentId: "comment-123",
+      packetId: "pkt-scopepack",
+      emittedAt: "2026-05-16T14:55:00.000Z",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.packet.packet_id, "pkt-scopepack");
+    assert.equal(result.packet.intent, "test_only");
+    assert.equal(result.packet.todo_id, "todo-123");
+    assert.equal(result.packet.scope_pack_comment_id, "comment-123");
+    assert.deepEqual(result.packet.owned_files, ["scripts/pinballwake-executor-packet.mjs"]);
+    assert.equal(result.packet.acceptance.test_command, "node --test scripts/pinballwake-executor-packet.test.mjs");
+    assert.deepEqual(result.packet.acceptance.criteria, ["packet validates", "packet uses test_only intent"]);
+    assert.equal(validateExecutorPacket(result.packet).ok, true);
+  });
+
+  test("refuses missing heartbeat or head SHA", () => {
+    const missingHeartbeat = makeTestOnlyPacketFromScopePack({
+      todo: { id: "todo-123" },
+      scopepack: scopePack(),
+      headShaAtRequest: "abc12345",
+    });
+    assert.equal(missingHeartbeat.ok, false);
+    assert.equal(missingHeartbeat.reason, "missing_heartbeat_tick_id");
+
+    const missingHead = makeTestOnlyPacketFromScopePack({
+      todo: { id: "todo-123" },
+      scopepack: scopePack(),
+      heartbeatTickId: "tick-1",
+    });
+    assert.equal(missingHead.ok, false);
+    assert.equal(missingHead.reason, "missing_head_sha_at_request");
+  });
+
+  test("refuses protected owned files", () => {
+    const result = makeTestOnlyPacketFromScopePack({
+      todo: { id: "todo-123" },
+      scopepack: scopePack({ owned_files: ["scripts/x.mjs", "vercel.json"] }),
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "abc12345",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "packet_invalid:owned_file_protected");
+    assert.equal(result.validation.file, "vercel.json");
+  });
+
+  test("preserves ScopePack comment id from the ScopePack object", () => {
+    const result = makeTestOnlyPacketFromScopePack({
+      todo_id: "todo-123",
+      scopepack: scopePack({ scope_pack_comment_id: "comment-from-scopepack" }),
+      heartbeat_tick_id: "tick-1",
+      head_sha_at_request: "abc12345",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.packet.scope_pack_comment_id, "comment-from-scopepack");
+  });
+
+  test("does not promote unsafe verification commands into test_command", () => {
+    const result = makeTestOnlyPacketFromScopePack({
+      todo: { id: "todo-123" },
+      scopepack: scopePack({ verification: ["node --test scripts/a.test.mjs && rm -rf tmp"] }),
+      heartbeatTickId: "tick-1",
+      headShaAtRequest: "abc12345",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.packet.acceptance.test_command, undefined);
+    assert.deepEqual(result.packet.acceptance.criteria, ["packet validates", "packet uses test_only intent"]);
   });
 });
