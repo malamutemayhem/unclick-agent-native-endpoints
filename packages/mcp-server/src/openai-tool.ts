@@ -6,6 +6,32 @@ const OPENAI_API_BASE = "https://api.openai.com/v1";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type OpenAiToolOperation =
+  | "chat"
+  | "embedding"
+  | "image-generation"
+  | "transcription"
+  | "model-listing";
+
+type OpenAiToolCostTier = "paid" | "paid_or_unknown";
+
+interface OpenAiToolDecisionInput {
+  path_id: string;
+  model: string;
+  allow_paid?: boolean;
+}
+
+export interface OpenAiToolDecision {
+  allowed: boolean;
+  path_id: string;
+  provider: "OpenAI";
+  model: string;
+  cost_tier: OpenAiToolCostTier;
+  default_allowed: false;
+  reason: "explicit_paid_allowed" | "paid_or_unknown_blocked";
+  allow_paid_flag: "api_key argument";
+}
+
 interface OpenAiMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -52,6 +78,64 @@ interface OpenAiModel {
   object: string;
   created: number;
   owned_by: string;
+}
+
+// ─── Spend guard ──────────────────────────────────────────────────────────────
+
+const OPENAI_TOOL_PATH_IDS: Record<OpenAiToolOperation, string> = {
+  chat: "mcp.openai.tool.chat",
+  embedding: "mcp.openai.tool.embedding",
+  "image-generation": "mcp.openai.tool.image-generation",
+  transcription: "mcp.openai.tool.transcription",
+  "model-listing": "mcp.openai.tool.model-listing",
+};
+
+const OPENAI_TOOL_OPERATION_BY_PATH_ID: Record<string, OpenAiToolOperation> =
+  Object.fromEntries(
+    Object.entries(OPENAI_TOOL_PATH_IDS).map(([operation, pathId]) => [pathId, operation]),
+  ) as Record<string, OpenAiToolOperation>;
+
+const OPENAI_TOOL_COST_TIERS: Record<OpenAiToolOperation, OpenAiToolCostTier> = {
+  chat: "paid",
+  embedding: "paid",
+  "image-generation": "paid",
+  transcription: "paid",
+  "model-listing": "paid_or_unknown",
+};
+
+function decideAiProviderCall(input: OpenAiToolDecisionInput): OpenAiToolDecision {
+  const operation = OPENAI_TOOL_OPERATION_BY_PATH_ID[input.path_id];
+  const allowed = input.allow_paid === true;
+
+  return {
+    allowed,
+    path_id: input.path_id,
+    provider: "OpenAI",
+    model: input.model,
+    cost_tier: operation ? OPENAI_TOOL_COST_TIERS[operation] : "paid_or_unknown",
+    default_allowed: false,
+    reason: allowed ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: "api_key argument",
+  };
+}
+
+export function decideOpenAiToolProviderCall(
+  operation: OpenAiToolOperation,
+  model: string,
+  apiKey: string,
+): OpenAiToolDecision {
+  return decideAiProviderCall({
+    path_id: OPENAI_TOOL_PATH_IDS[operation],
+    model,
+    allow_paid: Boolean(apiKey),
+  });
+}
+
+function requireOpenAiSpendAllowed(operation: OpenAiToolOperation, model: string, apiKey: string): void {
+  const decision = decideOpenAiToolProviderCall(operation, model, apiKey);
+  if (!decision.allowed) {
+    throw new Error(`AI spend guard blocked ${decision.path_id}: ${decision.allow_paid_flag} is required.`);
+  }
 }
 
 // ─── Auth validation ──────────────────────────────────────────────────────────
@@ -108,6 +192,7 @@ export async function openaiChatCompletion(args: Record<string, unknown>): Promi
   const apiKey = requireKey(args);
   const model = String(args.model ?? "gpt-4o-mini");
   const orgId = args.org_id ? String(args.org_id) : undefined;
+  requireOpenAiSpendAllowed("chat", model, apiKey);
 
   // Parse messages
   let messages: OpenAiMessage[];
@@ -156,6 +241,7 @@ export async function openaiCreateEmbedding(args: Record<string, unknown>): Prom
   const apiKey = requireKey(args);
   const model = String(args.model ?? "text-embedding-3-small");
   const orgId = args.org_id ? String(args.org_id) : undefined;
+  requireOpenAiSpendAllowed("embedding", model, apiKey);
 
   let input: string | string[];
   if (typeof args.input === "string") {
@@ -191,6 +277,7 @@ export async function openaiGenerateImage(args: Record<string, unknown>): Promis
   const quality = String(args.quality ?? "standard");
   const style = args.style ? String(args.style) : undefined;
   const responseFormat = String(args.response_format ?? "url");
+  requireOpenAiSpendAllowed("image-generation", model, apiKey);
 
   const body: Record<string, unknown> = { model, prompt, n, size, quality, response_format: responseFormat };
   if (style) body.style = style;
@@ -213,6 +300,7 @@ export async function openaiCreateTranscription(args: Record<string, unknown>): 
   const model = String(args.model ?? "whisper-1");
   const language = args.language ? String(args.language) : undefined;
   const responseFormat = String(args.response_format ?? "json");
+  requireOpenAiSpendAllowed("transcription", model, apiKey);
 
   // Fetch the audio file
   const audioRes = await fetch(audioUrl);
@@ -260,6 +348,7 @@ export async function openaiCreateTranscription(args: Record<string, unknown>): 
 
 export async function openaiListModels(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireOpenAiSpendAllowed("model-listing", "OpenAI /models", apiKey);
   const data = await openaiGet<{ data: OpenAiModel[] }>(apiKey, "/models");
 
   const models = data.data ?? [];
