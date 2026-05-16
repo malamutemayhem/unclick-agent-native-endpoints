@@ -46,6 +46,90 @@ interface ElHistoryItem {
   state: string;
 }
 
+export type ElevenLabsToolOperation =
+  | "voice-listing"
+  | "voice-read"
+  | "text-to-speech"
+  | "model-listing"
+  | "history-listing";
+
+type ElevenLabsToolCostTier = "paid" | "paid_or_unknown";
+
+interface ElevenLabsToolDecisionInput {
+  path_id: string;
+  model: string;
+  allow_paid?: boolean;
+}
+
+export interface ElevenLabsToolDecision {
+  allowed: boolean;
+  path_id: string;
+  provider: "ElevenLabs";
+  model: string;
+  cost_tier: ElevenLabsToolCostTier;
+  default_allowed: false;
+  reason: "explicit_paid_allowed" | "paid_or_unknown_blocked";
+  allow_paid_flag: "api_key argument";
+}
+
+// ─── Spend guard ──────────────────────────────────────────────────────────────
+
+const ELEVENLABS_TOOL_PATH_IDS: Record<ElevenLabsToolOperation, string> = {
+  "voice-listing": "mcp.elevenlabs.tool.voice-listing",
+  "voice-read": "mcp.elevenlabs.tool.voice-read",
+  "text-to-speech": "mcp.elevenlabs.tool.text-to-speech",
+  "model-listing": "mcp.elevenlabs.tool.model-listing",
+  "history-listing": "mcp.elevenlabs.tool.history-listing",
+};
+
+const ELEVENLABS_TOOL_OPERATION_BY_PATH_ID: Record<string, ElevenLabsToolOperation> =
+  Object.fromEntries(
+    Object.entries(ELEVENLABS_TOOL_PATH_IDS).map(([operation, pathId]) => [pathId, operation]),
+  ) as Record<string, ElevenLabsToolOperation>;
+
+const ELEVENLABS_TOOL_COST_TIERS: Record<ElevenLabsToolOperation, ElevenLabsToolCostTier> = {
+  "voice-listing": "paid_or_unknown",
+  "voice-read": "paid_or_unknown",
+  "text-to-speech": "paid",
+  "model-listing": "paid_or_unknown",
+  "history-listing": "paid_or_unknown",
+};
+
+function decideAiProviderCall(input: ElevenLabsToolDecisionInput): ElevenLabsToolDecision {
+  const operation = ELEVENLABS_TOOL_OPERATION_BY_PATH_ID[input.path_id];
+  const allowed = input.allow_paid === true;
+
+  return {
+    allowed,
+    path_id: input.path_id,
+    provider: "ElevenLabs",
+    model: input.model,
+    cost_tier: operation ? ELEVENLABS_TOOL_COST_TIERS[operation] : "paid_or_unknown",
+    default_allowed: false,
+    reason: allowed ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: "api_key argument",
+  };
+}
+
+export function decideElevenLabsToolProviderCall(
+  operation: ElevenLabsToolOperation,
+  model: string,
+  apiKey: string,
+): ElevenLabsToolDecision {
+  return decideAiProviderCall({
+    path_id: ELEVENLABS_TOOL_PATH_IDS[operation],
+    model,
+    allow_paid: Boolean(apiKey),
+  });
+}
+
+function requireElevenLabsSpendAllowed(operation: ElevenLabsToolOperation, model: string, apiKey: string): void {
+  const decision = decideElevenLabsToolProviderCall(operation, model, apiKey);
+  if (!decision.allowed) {
+    throw new Error(`AI spend guard blocked ${decision.path_id}: ${decision.allow_paid_flag} is required.`);
+  }
+}
+
 // ─── Auth validation ──────────────────────────────────────────────────────────
 
 function requireKey(args: Record<string, unknown>): string {
@@ -101,6 +185,7 @@ async function elPost<T>(apiKey: string, path: string, body: unknown): Promise<T
 
 export async function elevenlabsListVoices(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireElevenLabsSpendAllowed("voice-listing", "ElevenLabs /voices", apiKey);
   const data = await elGet<{ voices: ElVoice[] }>(apiKey, "/voices");
 
   return {
@@ -122,6 +207,7 @@ export async function elevenlabsGetVoice(args: Record<string, unknown>): Promise
   if (!voiceId) throw new Error("voice_id is required.");
 
   const withSettings = args.with_settings === true;
+  requireElevenLabsSpendAllowed("voice-read", "ElevenLabs /voices/{voice_id}", apiKey);
   const path = `/voices/${encodeURIComponent(voiceId)}${withSettings ? "?with_settings=true" : ""}`;
   const voice = await elGet<ElVoice & { settings?: ElVoiceSettings }>(apiKey, path);
 
@@ -146,6 +232,7 @@ export async function elevenlabsTextToSpeech(args: Record<string, unknown>): Pro
 
   const modelId = String(args.model_id ?? "eleven_monolingual_v1");
   const outputFormat = String(args.output_format ?? "mp3_44100_128");
+  requireElevenLabsSpendAllowed("text-to-speech", modelId, apiKey);
 
   const voiceSettings: ElVoiceSettings = {
     stability: Math.min(1, Math.max(0, Number(args.stability ?? 0.5))),
@@ -180,6 +267,7 @@ export async function elevenlabsTextToSpeech(args: Record<string, unknown>): Pro
 
 export async function elevenlabsGetModels(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireElevenLabsSpendAllowed("model-listing", "ElevenLabs /models", apiKey);
   const models = await elGet<ElModel[]>(apiKey, "/models");
 
   return {
@@ -197,6 +285,7 @@ export async function elevenlabsGetModels(args: Record<string, unknown>): Promis
 
 export async function elevenlabsGetHistory(args: Record<string, unknown>): Promise<unknown> {
   const apiKey = requireKey(args);
+  requireElevenLabsSpendAllowed("history-listing", "ElevenLabs /history", apiKey);
   const pageSize = Math.min(1000, Math.max(1, Number(args.page_size ?? 30)));
   const params = new URLSearchParams({ page_size: String(pageSize) });
   if (args.start_after_history_item_id) {
