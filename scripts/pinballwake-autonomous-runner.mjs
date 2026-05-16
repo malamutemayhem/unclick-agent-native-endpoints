@@ -130,9 +130,40 @@ export function parseAutonomousRunnerGitStatusPorcelain(statusText = "") {
     }));
 }
 
+function normalizeGitStatusPath(value) {
+  return normalizePath(value).replace(/^\.?\//, "").replace(/\/+$/, "");
+}
+
+function buildAutonomousRunnerGitHygieneIgnoredPaths({ ledgerPath = "" } = {}) {
+  const normalizedLedger = normalizeGitStatusPath(ledgerPath);
+  if (!normalizedLedger) return [];
+
+  const ignored = new Set([normalizedLedger]);
+  const parts = normalizedLedger.split("/").filter(Boolean);
+  if (parts.length > 1 && parts[0] === ".pinballwake") {
+    ignored.add(parts[0]);
+  }
+
+  return [...ignored];
+}
+
+function isIgnoredGitStatusPath(path, ignoredPaths = []) {
+  const normalizedPath = normalizeGitStatusPath(path);
+  if (!normalizedPath) return false;
+
+  return ignoredPaths.some((ignored) => {
+    const normalizedIgnored = normalizeGitStatusPath(ignored);
+    return (
+      normalizedPath === normalizedIgnored ||
+      normalizedPath.startsWith(`${normalizedIgnored}/`) ||
+      normalizedIgnored.startsWith(`${normalizedPath}/`)
+    );
+  });
+}
+
 export async function readAutonomousRunnerGitStatus({ cwd = process.cwd() } = {}) {
   return new Promise((resolve) => {
-    execFile("git", ["status", "--porcelain"], { cwd }, (error, stdout, stderr) => {
+    execFile("git", ["status", "--porcelain", "--untracked-files=all"], { cwd }, (error, stdout, stderr) => {
       const code = error?.code;
       resolve({
         ok: !error,
@@ -147,6 +178,7 @@ export async function readAutonomousRunnerGitStatus({ cwd = process.cwd() } = {}
 export async function evaluateAutonomousRunnerGitHygiene({
   cwd = process.cwd(),
   gitStatusImpl = readAutonomousRunnerGitStatus,
+  ignoredPaths = [],
 } = {}) {
   const status = await gitStatusImpl({ cwd });
   if (!status?.ok) {
@@ -161,15 +193,23 @@ export async function evaluateAutonomousRunnerGitHygiene({
   }
 
   const dirty = parseAutonomousRunnerGitStatusPorcelain(status.stdout);
-  if (dirty.length === 0) {
-    return { ok: true, reason: "git_hygiene_clean", dirty_files: [] };
+  const ignored = dirty.filter((entry) => isIgnoredGitStatusPath(entry.path, ignoredPaths));
+  const blocking = dirty.filter((entry) => !isIgnoredGitStatusPath(entry.path, ignoredPaths));
+  if (blocking.length === 0) {
+    return {
+      ok: true,
+      reason: ignored.length > 0 ? "git_hygiene_generated_only" : "git_hygiene_clean",
+      dirty_files: [],
+      ignored_files: ignored.map((entry) => entry.path),
+    };
   }
 
   return {
     ok: false,
     reason: "git_hygiene_dirty_worktree",
-    dirty_files: dirty.map((entry) => entry.path),
-    dirty_count: dirty.length,
+    dirty_files: blocking.map((entry) => entry.path),
+    dirty_count: blocking.length,
+    ignored_files: ignored.map((entry) => entry.path),
   };
 }
 
@@ -2152,6 +2192,7 @@ export async function runAutonomousRunnerFile({
   gitHygienePreflight = false,
   gitStatusImpl = readAutonomousRunnerGitStatus,
   worktreeCwd = process.cwd(),
+  gitHygieneIgnoredPaths = [],
 } = {}) {
   if (orchestratorProof) {
     return runOrchestratorSeatHandshakeProof({
@@ -2205,6 +2246,10 @@ export async function runAutonomousRunnerFile({
     gitHygiene = await evaluateAutonomousRunnerGitHygiene({
       cwd: worktreeCwd,
       gitStatusImpl,
+      ignoredPaths: [
+        ...buildAutonomousRunnerGitHygieneIgnoredPaths({ ledgerPath }),
+        ...gitHygieneIgnoredPaths,
+      ],
     });
     if (!gitHygiene.ok) {
       return {
