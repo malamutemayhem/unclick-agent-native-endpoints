@@ -3,7 +3,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { commonSensePass, DEFAULT_HEARTBEAT_MAX_AGE_MS } from "./pinballwake-commonsense-pass.mjs";
+import {
+  commonSensePass,
+  commonSensePassSync,
+  DEFAULT_HEARTBEAT_MAX_AGE_MS,
+} from "./pinballwake-commonsense-pass.mjs";
 import { makePacket } from "./pinballwake-executor-packet.mjs";
 
 function basePacket(overrides = {}) {
@@ -122,6 +126,13 @@ describe("commonSensePass", () => {
   test("PASS with criteria-only acceptance (no test_command)", async () => {
     const r = await commonSensePass({
       packet: basePacket({ acceptance: { criteria: ["lints", "types"] } }),
+    });
+    assert.equal(r.ok, true);
+  });
+
+  test("sync gate PASSes static packet checks for receipt-only callers", () => {
+    const r = commonSensePassSync({
+      packet: basePacket({ acceptance: { criteria: ["focused proof attached"] } }),
     });
     assert.equal(r.ok, true);
   });

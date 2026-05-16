@@ -41,6 +41,9 @@ describe("PinballWake Continuous Improvement Room", () => {
     assert.match(result.receipt.next_action, /Improve ACK handoff/);
     assert.match(result.receipt.proof_required, /pinballwake-merge-room.test.mjs/);
     assert(result.receipt.xpass_advisory.includes("CommonSensePass"));
+    assert.equal(result.commonsensepass.verdict, "PASS");
+    assert.equal(result.receipt.commonsensepass.verdict, "PASS");
+    assert.equal(result.packet.commonsensepass.verdict, "PASS");
     assert.deepEqual(result.packet.evidence, result.receipt.evidence);
     assert.equal(result.packet.next_action, result.receipt.next_action);
     assert.equal(result.packet.proof_required, result.receipt.proof_required);
@@ -70,6 +73,8 @@ describe("PinballWake Continuous Improvement Room", () => {
     assert.equal(result.job, undefined);
     assert.equal(result.receipt.receipt_type, "native_improver_hold");
     assert.equal(result.receipt.source, "heartbeat");
+    assert.equal(result.commonsensepass.verdict, "SUPPRESS");
+    assert.equal(result.receipt.commonsensepass.verdict, "SUPPRESS");
     assert.match(result.receipt.next_action, /duplicate build job/);
   });
 

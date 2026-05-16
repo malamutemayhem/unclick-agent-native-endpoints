@@ -3,6 +3,8 @@
 import { readFile } from "node:fs/promises";
 
 import { createCodingRoomJob } from "./pinballwake-coding-room.mjs";
+import { commonSensePassSync } from "./pinballwake-commonsense-pass.mjs";
+import { makePacket } from "./pinballwake-executor-packet.mjs";
 
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -71,11 +73,12 @@ function proofRequiredFor(tests = []) {
   return `Patch, non-overlap note, Boardroom proof, and tests: ${testText}`;
 }
 
-function nativeImproverReceipt({ top, job, tests, now, source }) {
+function nativeImproverReceipt({ top, job, tests, now, source, commonsensepass }) {
   return {
     receipt_type: "native_improver_opportunity",
     emitted_at: now,
     source,
+    commonsensepass,
     improvement_kind: top.kind,
     score: top.score,
     evidence: evidenceFor(top),
@@ -85,11 +88,12 @@ function nativeImproverReceipt({ top, job, tests, now, source }) {
   };
 }
 
-function nativeImproverHoldReceipt({ top, now, source }) {
+function nativeImproverHoldReceipt({ top, now, source, commonsensepass }) {
   return {
     receipt_type: "native_improver_hold",
     emitted_at: now,
     source,
+    commonsensepass,
     improvement_kind: top.kind,
     score: top.score,
     evidence: evidenceFor(top),
@@ -229,6 +233,45 @@ function expectedTestsFor(files = []) {
     .map((file) => `node --test ${file}`);
 }
 
+function commonSenseVerdictFromResult(result = {}) {
+  return {
+    verdict: result.ok ? "PASS" : "HOLD",
+    reason_code: result.reason || "commonsensepass_pass",
+  };
+}
+
+function duplicateCoverageCommonSensePass(coverage) {
+  return {
+    verdict: "SUPPRESS",
+    rule_id: "R3",
+    reason_code: coverageReasonKey(coverage),
+    evidence: [`${coverage.kind}=${coverage.ref}`],
+  };
+}
+
+function buildCommonSensePacketForJob({ job, tests, now, source, signal = {} }) {
+  const firstTest = tests[0] || "";
+  return makePacket({
+    packet_id: `continuous-qc:${job.job_id}`,
+    emitted_at: now,
+    heartbeat_tick_id: `continuous-qc:${source}:${now}`,
+    requesting_seat_id: "unclick-heartbeat-seat",
+    todo_id: job.job_id,
+    intent: "modify",
+    owned_files: job.owned_files,
+    acceptance: firstTest
+      ? {
+          test_command: firstTest,
+          expected_exit_code: 0,
+          criteria: ["Continuous QC routed finding has owned files and focused proof."],
+        }
+      : {
+          criteria: ["Continuous QC routed finding has owned files and focused proof."],
+        },
+    head_sha_at_request: signal.head_sha || signal.headSha || "continuous-qc-snapshot",
+  });
+}
+
 function chipFor(kind, signal = {}) {
   const title = compactText(signal.title || signal.summary || signal.reason || signal.blocker || signalText(signal), 90);
   const prefix = {
@@ -286,6 +329,7 @@ export function evaluateContinuousImprovementRoom({
 
   const duplicateCoverage = signalCoverage(top.signal);
   if (duplicateCoverage) {
+    const commonsensepass = duplicateCoverageCommonSensePass(duplicateCoverage);
     return {
       ok: true,
       action: "continuous_improvement_room",
@@ -295,7 +339,8 @@ export function evaluateContinuousImprovementRoom({
       improvement_kind: top.kind,
       signal: top.signal,
       duplicate_coverage: duplicateCoverage,
-      receipt: nativeImproverHoldReceipt({ top, now, source }),
+      commonsensepass,
+      receipt: nativeImproverHoldReceipt({ top, now, source, commonsensepass }),
     };
   }
 
@@ -317,7 +362,41 @@ export function evaluateContinuousImprovementRoom({
     },
     createdAt: now,
   });
-  const receipt = nativeImproverReceipt({ top, job, tests, now, source });
+  const commonSensePacket = buildCommonSensePacketForJob({
+    job,
+    tests,
+    now,
+    source,
+    signal: top.signal,
+  });
+  const commonSenseResult = commonSensePassSync({
+    packet: commonSensePacket,
+    now: new Date(now),
+    heartbeat: {
+      tickId: commonSensePacket.heartbeat_tick_id,
+      emittedAt: now,
+    },
+  });
+  const commonsensepass = {
+    ...commonSenseVerdictFromResult(commonSenseResult),
+    packet_id: commonSensePacket.packet_id,
+  };
+
+  if (!commonSenseResult.ok) {
+    return {
+      ok: true,
+      action: "continuous_improvement_room",
+      result: "hold",
+      reason: "commonsensepass_hold",
+      highest_score: top.score,
+      improvement_kind: top.kind,
+      signal: top.signal,
+      commonsensepass,
+      receipt: nativeImproverHoldReceipt({ top, now, source, commonsensepass }),
+    };
+  }
+
+  const receipt = nativeImproverReceipt({ top, job, tests, now, source, commonsensepass });
 
   return {
     ok: true,
@@ -328,6 +407,7 @@ export function evaluateContinuousImprovementRoom({
     improvement_kind: top.kind,
     score: top.score,
     signal: top.signal,
+    commonsensepass,
     recommended_insertion: "prepend_to_coding_room_ledger",
     job,
     receipt,
@@ -340,6 +420,7 @@ export function evaluateContinuousImprovementRoom({
       next_action: receipt.next_action,
       proof_required: receipt.proof_required,
       xpass_advisory: receipt.xpass_advisory,
+      commonsensepass,
       expected_proof: tests.length
         ? `Patch the smallest safe improvement and run: ${tests.join("; ")}`
         : "Patch the smallest safe improvement and run focused proof.",

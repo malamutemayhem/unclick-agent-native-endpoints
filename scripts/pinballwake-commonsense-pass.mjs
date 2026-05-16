@@ -17,33 +17,19 @@ export const DEFAULT_ALLOWED_REQUESTER_SEATS = new Set([
   "claude-cowork-coordinator-seat",
 ]);
 
-/**
- * Run all CommonSensePass checks against a packet.
- *
- * @param {object} args
- * @param {object} args.packet                 the executor packet (post `makePacket`)
- * @param {object} [args.now]                  current Date; defaults to new Date()
- * @param {object} [args.heartbeat]            `{ tickId, emittedAt }` of the latest known tick
- * @param {Set<string>} [args.allowedRequesterSeats]
- * @param {function} [args.fileExists]         async (file) => boolean, used for owned_files presence checks. Defaults to a noop that returns true (skip the check) so this can be unit-tested without filesystem.
- * @returns {Promise<{ok: boolean, reason?: string, [k: string]: any}>}
- */
-export async function commonSensePass({
+function runStaticCommonSensePassGates({
   packet,
   now = new Date(),
   heartbeat = null,
   requireHeartbeat = false,
   allowedRequesterSeats = DEFAULT_ALLOWED_REQUESTER_SEATS,
-  fileExists = async () => true,
   heartbeatMaxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
 } = {}) {
-  // 1. Schema gate (delegates to the packet validator).
   const v = validateExecutorPacket(packet);
   if (!v.ok) {
     return { ok: false, reason: `packet_invalid:${v.reason}`, evidence: v };
   }
 
-  // 2. Authority gate: only allowlisted seats may emit packets.
   if (!allowedRequesterSeats.has(packet.requesting_seat_id)) {
     return {
       ok: false,
@@ -91,9 +77,61 @@ export async function commonSensePass({
     }
   }
 
-  // 5. Owned-files existence check (skipped when fileExists is the default noop).
-  //    For `intent: "create"`, the test target need not exist yet because that's the point.
-  //    For `intent: "modify"` or `"test_only"`, all owned_files must exist.
+  return { ok: true };
+}
+
+function runAcceptanceCommonSensePassGate(packet) {
+  if (packet.acceptance.test_command !== undefined) {
+    if (typeof packet.acceptance.test_command !== "string" || !packet.acceptance.test_command.trim()) {
+      return { ok: false, reason: "acceptance_test_command_must_be_non_empty_string" };
+    }
+    // Sanity: reject obviously dangerous shell payloads.
+    if (/[;&|`]/.test(packet.acceptance.test_command) || /rm\s+-rf/i.test(packet.acceptance.test_command)) {
+      return { ok: false, reason: "acceptance_test_command_unsafe" };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function commonSensePassSync(args = {}) {
+  const staticResult = runStaticCommonSensePassGates(args);
+  if (!staticResult.ok) return staticResult;
+  return runAcceptanceCommonSensePassGate(args.packet);
+}
+
+/**
+ * Run all CommonSensePass checks against a packet.
+ *
+ * @param {object} args
+ * @param {object} args.packet                 the executor packet (post `makePacket`)
+ * @param {object} [args.now]                  current Date; defaults to new Date()
+ * @param {object} [args.heartbeat]            `{ tickId, emittedAt }` of the latest known tick
+ * @param {Set<string>} [args.allowedRequesterSeats]
+ * @param {function} [args.fileExists]         async (file) => boolean, used for owned_files presence checks. Defaults to a noop that returns true (skip the check) so this can be unit-tested without filesystem.
+ * @returns {Promise<{ok: boolean, reason?: string, [k: string]: any}>}
+ */
+export async function commonSensePass({
+  packet,
+  now = new Date(),
+  heartbeat = null,
+  requireHeartbeat = false,
+  allowedRequesterSeats = DEFAULT_ALLOWED_REQUESTER_SEATS,
+  fileExists = async () => true,
+  heartbeatMaxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+} = {}) {
+  const staticResult = runStaticCommonSensePassGates({
+    packet,
+    now,
+    heartbeat,
+    requireHeartbeat,
+    allowedRequesterSeats,
+    heartbeatMaxAgeMs,
+  });
+  if (!staticResult.ok) return staticResult;
+
+  // For `intent: "create"`, the test target need not exist yet because that is the point.
+  // For `intent: "modify"` or `"test_only"`, all owned_files must exist.
   if (packet.intent !== "create") {
     for (const file of packet.owned_files) {
       const exists = await fileExists(file);
@@ -107,16 +145,5 @@ export async function commonSensePass({
     }
   }
 
-  // 6. Acceptance sanity: when test_command is present, it must be a string.
-  if (packet.acceptance.test_command !== undefined) {
-    if (typeof packet.acceptance.test_command !== "string" || !packet.acceptance.test_command.trim()) {
-      return { ok: false, reason: "acceptance_test_command_must_be_non_empty_string" };
-    }
-    // Sanity: reject obviously dangerous shell payloads.
-    if (/[;&|`]/.test(packet.acceptance.test_command) || /rm\s+-rf/i.test(packet.acceptance.test_command)) {
-      return { ok: false, reason: "acceptance_test_command_unsafe" };
-    }
-  }
-
-  return { ok: true };
+  return runAcceptanceCommonSensePassGate(packet);
 }
