@@ -139,6 +139,22 @@ The proof-write gate adds a second opt-in around signal insertion:
 - If proof writes are disabled, the route does not call `hasRecentProof` or `insertProof`.
 - Focused tests cover safe PASS planning, BLOCKER refusal planning, explicit proof-write env parsing, and the existing insert path.
 
+## Observe-Only Rollout Checklist
+
+Use this checklist before enabling proof writes or adding Railway.
+
+1. Confirm the latest worker movement pilot PR is merged to `main` and deployed.
+2. Set only `WORKER_MOVEMENT_PILOT_ENABLED=1` in Vercel.
+3. Leave `WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED` unset or false.
+4. Wait for one scheduled cron tick, or call `/api/worker-movement-pilot` from a private operator shell with `CRON_SECRET`.
+5. Expected safe responses are `skip_no_candidate` or `proof_planned`.
+6. For `proof_planned`, confirm `proof_inserted=false`, `proof_deduped=false`, and the response includes one candidate id, one proof status, and a next safe step.
+7. If the candidate is security gated, owner-auth gated, billing, DNS, secrets, production deploy, data deletion, or pending a human decision, the expected proof status is BLOCKER.
+8. If the route returns `candidate_fetch_failed`, `proof_planning_failed`, a 500, or any unexpected proof insert, unset `WORKER_MOVEMENT_PILOT_ENABLED` and keep the existing cron watcher as fallback.
+9. Enable `WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED=1` only after the observe-only output looks safe for at least two cron ticks.
+
+This rollout does not reclaim, release, reassign, complete, or mutate todo leases. It only proves whether Vercel can keep the worker movement loop fresh enough before UnClick needs a Railway worker.
+
 ## Proof Trail
 
 - Greenlight receipt: `876f228a-38fa-45a3-8373-d24a319a0670`
