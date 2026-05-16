@@ -31,6 +31,42 @@ on:
         description: Maximum runner cycles for this invocation.
         required: false
         default: "1"
+      wake_source:
+        description: Who is waking this run. Trusted fallback is reserved for scheduled UnClick heartbeat rescue.
+        required: false
+        default: "manual"
+        type: choice
+        options:
+          - manual
+          - trusted_unclick_fallback
+      last_scheduled_proof_at:
+        description: Last GitHub scheduled proof timestamp when using trusted fallback.
+        required: false
+        default: ""
+      trusted_fallback_source:
+        description: Trusted fallback source, usually unclick_heartbeat.
+        required: false
+        default: ""
+      trusted_fallback_at:
+        description: Trusted fallback timestamp.
+        required: false
+        default: ""
+      trusted_fallback_id:
+        description: Trusted fallback receipt id.
+        required: false
+        default: ""
+      proof_expected_every_minutes:
+        description: Expected scheduled proof cadence for trusted fallback gating.
+        required: false
+        default: "15"
+      proof_grace_minutes:
+        description: Grace window before trusted fallback may tap the runner.
+        required: false
+        default: "15"
+      trusted_fallback_fresh_minutes:
+        description: Maximum trusted fallback age.
+        required: false
+        default: "10"
 
 permissions:
   contents: read
@@ -55,10 +91,20 @@ jobs:
           fi
 
       - name: Prove Orchestrator seat handoff
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule')
+        if: >-
+          github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule') ||
+          (github.event_name == 'workflow_dispatch' && inputs.wake_source == 'trusted_unclick_fallback')
         env:
           AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF: "true"
-          AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF_SOURCE: ${{ github.event_name == 'workflow_run' && 'workflow_run_schedule' || 'github_schedule' }}
+          AUTONOMOUS_RUNNER_ORCHESTRATOR_PROOF_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.wake_source || github.event_name == 'workflow_run' && 'workflow_run_schedule' || 'github_schedule' }}
+          AUTONOMOUS_RUNNER_LAST_SCHEDULED_PROOF_AT: ${{ inputs.last_scheduled_proof_at || '' }}
+          AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_SOURCE: ${{ inputs.trusted_fallback_source || '' }}
+          AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_AT: ${{ inputs.trusted_fallback_at || '' }}
+          AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_ID: ${{ inputs.trusted_fallback_id || '' }}
+          AUTONOMOUS_RUNNER_PROOF_EXPECTED_EVERY_MINUTES: ${{ inputs.proof_expected_every_minutes || '15' }}
+          AUTONOMOUS_RUNNER_PROOF_GRACE_MINUTES: ${{ inputs.proof_grace_minutes || '15' }}
+          AUTONOMOUS_RUNNER_TRUSTED_FALLBACK_FRESH_MINUTES: ${{ inputs.trusted_fallback_fresh_minutes || '10' }}
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
           UNCLICK_MCP_URL: ${{ vars.UNCLICK_MCP_URL || 'https://unclick.world/api/mcp' }}
           UNCLICK_API_KEY: ${{ secrets.UNCLICK_API_KEY || secrets.FISHBOWL_AUTOCLOSE_TOKEN || secrets.FISHBOWL_WAKE_TOKEN }}
@@ -69,7 +115,7 @@ jobs:
           CODING_ROOM_LEDGER_PATH: ${{ vars.CODING_ROOM_LEDGER_PATH || '.pinballwake/coding-room-ledger.json' }}
           CODING_ROOM_LEASE_SECONDS: ${{ vars.CODING_ROOM_LEASE_SECONDS || '1800' }}
           AUTONOMOUS_RUNNER_QUEUE_SOURCE: ${{ vars.AUTONOMOUS_RUNNER_QUEUE_SOURCE || 'unclick' }}
-          AUTONOMOUS_RUNNER_WAKE_SOURCE: ${{ github.event_name == 'workflow_run' && 'queuepush' || github.event_name }}
+          AUTONOMOUS_RUNNER_WAKE_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.wake_source || github.event_name == 'workflow_run' && 'queuepush' || github.event_name }}
           AUTONOMOUS_RUNNER_TODO_LIMIT: ${{ vars.AUTONOMOUS_RUNNER_TODO_LIMIT || '10' }}
           AUTONOMOUS_RUNNER_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || vars.AUTONOMOUS_RUNNER_MODE || 'claim' }}
           AUTONOMOUS_RUNNER_DISABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.kill_switch == 'true' && 'true' || vars.AUTONOMOUS_RUNNER_DISABLED || 'false' }}
