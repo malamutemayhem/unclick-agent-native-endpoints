@@ -28,27 +28,27 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as crypto from "node:crypto";
-import { probeServer } from "../packages/testpass/src/probe.js";
 import {
-  createRun,
-  createEvidence,
-  seedPendingItems,
-  updateRunStatus,
   computeVerdictSummary,
-} from "../packages/testpass/src/run-manager.js";
-import {
+  createEvidence,
+  createRun,
   generateHtmlReport,
   generateJsonReport,
   generateMarkdownFixList,
-} from "../packages/testpass/src/reporter.js";
-import { runDeterministicChecks } from "../packages/testpass/src/runner/deterministic.js";
-import { runAgentChecks } from "../packages/testpass/src/runner/agent.js";
-import { runMultiPass } from "../packages/testpass/src/runner/controller.js";
-import { healFailedChecks } from "../packages/testpass/src/runner/healer.js";
-import { loadPackFromFile, loadPackFromYaml, packToJsonb } from "../packages/testpass/src/pack-loader.js";
+  healFailedChecks,
+  loadPackFromFile,
+  loadPackFromYaml,
+  packToJsonb,
+  probeServer,
+  runAgentChecks,
+  runDeterministicChecks,
+  runMultiPass,
+  seedPendingItems,
+  updateRunStatus,
+} from "./lib/testpass-boundary.js";
 import * as path from "node:path";
 import * as url from "node:url";
-import type { RunTarget, RunProfile } from "../packages/testpass/src/types.js";
+import type { RunTarget, RunProfile } from "./lib/testpass-boundary.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
