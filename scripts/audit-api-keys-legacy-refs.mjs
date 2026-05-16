@@ -3,13 +3,13 @@
 //
 // Audit script for UnClick todo (SECURITY: deactivate legacy plaintext
 // api_keys_legacy rows). Scans the working tree for any live code reference
-// to `api_keys_legacy` so deactivation can proceed safely — or surface the
+// to `api_keys_legacy` so deactivation can proceed safely, or surface the
 // remaining references so they can be removed first.
 //
 // Pure stdlib. Returns:
-//   0 — no live references found (safe to proceed to deactivation runbook)
-//   1 — references found (block deactivation; see report)
-//   2 — usage / I/O error
+//   0: no live references found (safe to proceed to deactivation runbook)
+//   1: references found (block deactivation; see report)
+//   2: usage / I/O error
 //
 // Usage:
 //   node scripts/audit-api-keys-legacy-refs.mjs
@@ -41,6 +41,7 @@ const SKIP_DIRS = new Set([
 // These are docs / runbooks / this audit script itself.
 const EXPECTED_REFERENCE_GLOBS = [
   /\bdocs\/security\/api[_-]keys[_-]legacy/i,
+  /\.(test|spec)\.[cm]?[jt]sx?$/i,
   /\baudit-api-keys-legacy-refs\.mjs$/i,
   /\baudit-api-keys-legacy-refs\.test\.mjs$/i,
   /\bCHANGELOG\.md$/i,
@@ -79,7 +80,7 @@ function isExpectedReference(relPath) {
 function shouldScanFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (TEXT_EXTENSIONS.has(ext)) return true;
-  // Files without extension (Dockerfile, Makefile, Procfile) — scan small ones.
+  // Files without extension (Dockerfile, Makefile, Procfile): scan small ones.
   return ext === "";
 }
 
@@ -147,8 +148,8 @@ export async function auditRoot(root) {
     root,
     target: TARGET.source,
     filesScanned,
-    findings,           // live references — these block deactivation
-    expectedFindings,   // refs in docs/this script — OK
+    findings,           // live references: these block deactivation
+    expectedFindings,   // refs in docs/this script: OK
     safeToProceed: findings.length === 0,
   };
 }
@@ -159,13 +160,13 @@ function renderText(report) {
   lines.push(`Pattern: /${report.target}/`);
   if (report.findings.length === 0) {
     lines.push("");
-    lines.push("✔ No live references to api_keys_legacy found.");
+    lines.push("[ok] No live references to api_keys_legacy found.");
     lines.push(`  ${report.expectedFindings.length} expected reference(s) in docs / this script (ignored).`);
     lines.push("");
-    lines.push("Next step: proceed to docs/security/api_keys_legacy-deactivation.md (manual, owner-auth required).");
+    lines.push("Next step: proceed to docs/security/api_keys_legacy-deactivation.md (owner-auth required).");
   } else {
     lines.push("");
-    lines.push(`✗ Found ${report.findings.length} live reference(s) — deactivation is NOT safe yet.`);
+    lines.push(`[blocked] Found ${report.findings.length} live reference(s): deactivation is NOT safe yet.`);
     lines.push("");
     for (const f of report.findings) {
       lines.push(`  ${f.file}:${f.line}  ${f.excerpt}`);

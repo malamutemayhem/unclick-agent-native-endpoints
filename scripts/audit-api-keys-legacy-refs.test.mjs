@@ -12,7 +12,7 @@ let tmp;
 
 before(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "audit-akl-"));
-  // Files with live references — should be blocking.
+  // Files with live references: should be blocking.
   await fs.mkdir(path.join(tmp, "src", "lib"), { recursive: true });
   await fs.writeFile(
     path.join(tmp, "src", "lib", "users.ts"),
@@ -23,7 +23,7 @@ before(async () => {
     `// SQL: SELECT api_keys_legacy FROM credentials;\n`,
   );
 
-  // Doc reference — should NOT block.
+  // Doc reference: should NOT block.
   await fs.mkdir(path.join(tmp, "docs", "security"), { recursive: true });
   await fs.writeFile(
     path.join(tmp, "docs", "security", "api_keys_legacy-deactivation.md"),
@@ -74,6 +74,10 @@ describe("isExpectedReference", () => {
   });
   test("recognises CHANGELOG", () => {
     assert.equal(isExpectedReference("CHANGELOG.md"), true);
+  });
+  test("recognises test and spec files as non-live references", () => {
+    assert.equal(isExpectedReference("api/fishbowl-watcher.test.ts"), true);
+    assert.equal(isExpectedReference("src/lib/foo.spec.tsx"), true);
   });
   test("does NOT recognise regular code files", () => {
     assert.equal(isExpectedReference("src/lib/users.ts"), false);

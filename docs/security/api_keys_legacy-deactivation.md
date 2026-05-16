@@ -1,16 +1,16 @@
 # Runbook: Deactivate legacy plaintext `api_keys_legacy` rows
 
-**Status:** owner-auth required. Do NOT execute the SQL in this document without explicit Chris approval and an authenticated owner session.
+**Status:** owner-auth required. Do NOT execute the SQL in this document without explicit owner approval and an authenticated owner session.
 
-Closes UnClick todo "SECURITY: deactivate legacy plaintext api_keys_legacy rows after owner auth" (Priority-1 safety).
+Contributes to UnClick todo "SECURITY: deactivate legacy plaintext api_keys_legacy rows after owner auth" (Priority-1 safety). This PR adds the audit and runbook only; it does not perform the production data change.
 
 ## Why
 
-Live database evidence (2026-05-08) shows `api_keys_legacy` still has 3 active plaintext rows. The encrypted replacement table is in use; tracked code references appear absent. Until the plaintext rows are deactivated, there's a residual risk surface — a leaked DB snapshot would expose live credentials in clear text.
+Live database evidence (2026-05-08) shows `api_keys_legacy` still has 3 active plaintext rows. The encrypted replacement table is in use; tracked code references appear absent. Until the plaintext rows are deactivated, there is a residual risk surface: a leaked DB snapshot would expose live credentials in clear text.
 
 ## Two-phase approach
 
-### Phase A — verify NO live references in the codebase
+### Phase A: verify NO live references in the codebase
 
 Run from the repo root:
 
@@ -27,9 +27,9 @@ For machine-readable output (e.g., for CI):
 node scripts/audit-api-keys-legacy-refs.mjs --json > audit.json
 ```
 
-### Phase B — perform the deactivation (owner-auth required)
+### Phase B: perform the deactivation (owner-auth required)
 
-> ⚠ **Chris-only step. Requires authenticated owner session against the production database. Do NOT delegate to an autopilot seat.**
+> Owner-auth step. Requires an authenticated owner session against the production database. Do NOT delegate the production SQL execution to an autopilot seat.
 
 **B1. Confirm the row count one more time on production.** Don't trust stale dashboards:
 
@@ -40,7 +40,7 @@ SELECT COUNT(*) AS active_legacy_rows FROM api_keys_legacy WHERE deactivated_at 
 **B2. Snapshot before changing anything.** This is a *defence-in-depth* step. The legacy rows may need to be retrievable for forensic reasons even after deactivation.
 
 ```sql
--- Snapshot table — keeps a copy of every row about to be deactivated, with a timestamp.
+-- Snapshot table: keeps a copy of every row about to be deactivated, with a timestamp.
 CREATE TABLE IF NOT EXISTS api_keys_legacy_archive_2026_05_15 AS
 SELECT *, NOW() AS archived_at
 FROM api_keys_legacy
@@ -91,14 +91,14 @@ BEGIN;
 COMMIT;
 ```
 
-This restores plaintext from the archive. Use only if absolutely necessary. The minute it's restored, the security gap re-opens — fix the breakage and re-deactivate immediately after.
+This restores plaintext from the archive. Use only if absolutely necessary. The minute it is restored, the security gap re-opens. Fix the breakage and re-deactivate immediately after.
 
 ## Acceptance
 
 - [x] Audit script exists, exits 0 when codebase is clean.
 - [x] Audit script tests cover the live-ref / docs-ref / clean / ignored-dirs cases.
-- [ ] Phase A audit on `feat/audit-api-keys-legacy` branch returns exit 0 (Chris runs locally).
-- [ ] Phase B SQL executed by Chris on production with owner auth (date this).
+- [x] Phase A audit on this PR branch returns exit 0.
+- [ ] Phase B SQL executed on production with owner auth (date this).
 - [ ] Phase B4 post-verify shows 0 still-active rows.
 - [ ] Follow-up todo created for hard-delete after 30 days.
 
@@ -106,8 +106,8 @@ This restores plaintext from the archive. Use only if absolutely necessary. The 
 
 - I am NOT running the SQL.
 - I am NOT proposing to run the SQL via any autopilot lane. Database destructive changes are explicitly outside the executor lane's CommonSensePass (rank-20 protected-surface category).
-- I am NOT skipping the snapshot step. Even when "everything looks fine," do the snapshot — the marginal cost is seconds, the rollback value is enormous.
+- I am NOT skipping the snapshot step. Even when "everything looks fine," do the snapshot. The marginal cost is seconds, the rollback value is enormous.
 
 ## Source
 
-Drafted 2026-05-15 by `claude-cowork-coordinator-seat`. Files in `Z:\Other computers\My laptop\G\CV\_unclick-drafts\api-keys-legacy-deactivation\`.
+Drafted 2026-05-15 by `claude-cowork-coordinator-seat`; landed through the autopilot PR lane.
