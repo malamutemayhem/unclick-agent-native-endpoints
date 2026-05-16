@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "liquid/lfm-2.5-1.2b-instruct:free";
+const NUDGEONLY_OPENROUTER_ALLOW_PAID_FLAG = "NUDGEONLY_OPENROUTER_ALLOW_PAID";
 const DEFAULT_MAX_TOKENS = 260;
 const MAX_INPUT_CHARS = 6000;
 const PAINPOINT_TYPES = [
@@ -312,6 +313,37 @@ function apiKeyFrom(args: Record<string, unknown>): string {
     throw new Error("api_key is required unless OPENROUTER_API_KEY is set.");
   }
   return key;
+}
+
+export function isNudgeOnlyFreeOpenRouterModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized.endsWith(":free") || normalized === "openrouter/free" || normalized.startsWith("openrouter/free/");
+}
+
+function isExplicitSpendOptIn(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value !== "string") return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+export function decideNudgeOnlyOpenRouterCall(args: {
+  model?: unknown;
+  allow_paid?: unknown;
+} = {}) {
+  const model = String(args.model ?? process.env.NUDGEONLY_OPENROUTER_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const freeDefault = isNudgeOnlyFreeOpenRouterModel(model);
+  const explicitPaid = isExplicitSpendOptIn(args.allow_paid ?? process.env[NUDGEONLY_OPENROUTER_ALLOW_PAID_FLAG]);
+  const costTier = freeDefault ? "free" : "paid_or_unknown";
+
+  return {
+    allowed: freeDefault || explicitPaid,
+    provider: "OpenRouter",
+    model,
+    cost_tier: costTier,
+    default_allowed: freeDefault,
+    reason: freeDefault ? "free_default_allowed" : explicitPaid ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: freeDefault ? undefined : NUDGEONLY_OPENROUTER_ALLOW_PAID_FLAG,
+  } as const;
 }
 
 function trimInput(value: unknown): string {
@@ -718,7 +750,16 @@ export async function nudgeonlyApi(args: Record<string, unknown>): Promise<unkno
   const painpointHint = trimInput(args.painpoint_hint);
   const sourceId = trimInput(args.source_id);
   const sourceUrl = trimInput(args.source_url);
-  const model = String(args.model ?? process.env.NUDGEONLY_OPENROUTER_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const providerDecision = decideNudgeOnlyOpenRouterCall({
+    model: args.model,
+    allow_paid: args.allow_paid,
+  });
+  if (!providerDecision.allowed) {
+    throw new Error(
+      `NudgeOnly OpenRouter model ${providerDecision.model} is paid or unknown. Set ${NUDGEONLY_OPENROUTER_ALLOW_PAID_FLAG}=1 or pass allow_paid=true to use non-free models.`,
+    );
+  }
+  const model = providerDecision.model;
   const maxTokens = Math.min(asNumber(args.max_tokens, DEFAULT_MAX_TOKENS), 500);
   const inputDigest = shortHash(JSON.stringify({
     event_text: eventText,
@@ -791,6 +832,7 @@ export async function nudgeonlyApi(args: Record<string, unknown>): Promise<unkno
       router: "OpenRouter",
       requested_model: model,
       resolved_model: result.model ?? model,
+      provider_decision: providerDecision,
       openrouter_id: result.id ?? null,
       verifier_required: true,
       verifier_rule: NUDGEONLY_POLICY.verifier_rule,

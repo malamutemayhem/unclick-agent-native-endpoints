@@ -59,6 +59,17 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     notes: "PinballWake NudgeOnly default route is explicitly labelled free and remains advisory-only.",
   },
   {
+    id: "nudgeonly.openrouter.custom-model",
+    provider: "OpenRouter",
+    surface: "packages/mcp-server/src/nudgeonly-tool.ts",
+    call_kind: "classification",
+    model: "caller supplied or NUDGEONLY_OPENROUTER_MODEL",
+    cost_tier: "paid_or_unknown",
+    default_allowed: false,
+    allow_paid_flag: "NUDGEONLY_OPENROUTER_ALLOW_PAID or allow_paid argument",
+    notes: "Custom or env-selected NudgeOnly models can be paid or unknown and must require explicit paid opt-in. Free :free routes remain under nudgeonly.openrouter.free-default.",
+  },
+  {
     id: "event-wake-router.openrouter.classifier",
     provider: "OpenRouter",
     surface: "scripts/event-wake-router.mjs",

@@ -1,9 +1,33 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { nudgeonlyApi, nudgeonlyPolicy, nudgeonlyReceiptBridge, NUDGEONLY_POLICY } from "./nudgeonly-tool.js";
+import {
+  decideNudgeOnlyOpenRouterCall,
+  nudgeonlyApi,
+  nudgeonlyPolicy,
+  nudgeonlyReceiptBridge,
+  NUDGEONLY_POLICY,
+} from "./nudgeonly-tool.js";
+
+const ORIGINAL_NUDGEONLY_MODEL = process.env.NUDGEONLY_OPENROUTER_MODEL;
+const ORIGINAL_NUDGEONLY_ALLOW_PAID = process.env.NUDGEONLY_OPENROUTER_ALLOW_PAID;
+
+beforeEach(() => {
+  delete process.env.NUDGEONLY_OPENROUTER_MODEL;
+  delete process.env.NUDGEONLY_OPENROUTER_ALLOW_PAID;
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  if (ORIGINAL_NUDGEONLY_MODEL === undefined) {
+    delete process.env.NUDGEONLY_OPENROUTER_MODEL;
+  } else {
+    process.env.NUDGEONLY_OPENROUTER_MODEL = ORIGINAL_NUDGEONLY_MODEL;
+  }
+  if (ORIGINAL_NUDGEONLY_ALLOW_PAID === undefined) {
+    delete process.env.NUDGEONLY_OPENROUTER_ALLOW_PAID;
+  } else {
+    process.env.NUDGEONLY_OPENROUTER_ALLOW_PAID = ORIGINAL_NUDGEONLY_ALLOW_PAID;
+  }
 });
 
 describe("NudgeOnlyAPI policy", () => {
@@ -215,6 +239,75 @@ describe("NudgeOnlyAPI policy", () => {
     } else {
       process.env.OPENROUTER_API_KEY = previous;
     }
+  });
+
+  it("blocks custom paid or unknown OpenRouter models by default", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "wakepass stale ack",
+      model: "anthropic/claude-sonnet-4",
+    })).rejects.toThrow("paid or unknown");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(decideNudgeOnlyOpenRouterCall({ model: "anthropic/claude-sonnet-4" })).toMatchObject({
+      allowed: false,
+      provider: "OpenRouter",
+      model: "anthropic/claude-sonnet-4",
+      cost_tier: "paid_or_unknown",
+      default_allowed: false,
+      reason: "paid_or_unknown_blocked",
+      allow_paid_flag: "NUDGEONLY_OPENROUTER_ALLOW_PAID",
+    });
+  });
+
+  it("allows custom OpenRouter models only with explicit paid opt-in", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({
+        id: "or-nudge-paid-test",
+        model: "anthropic/claude-sonnet-4",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              painpoint_detected: true,
+              painpoint_type: "stale_ack",
+              nudge: "Possible stale ACK. Suggest checking the WakePass receipt before taking action.",
+              suggested_check: "Run the WakePass ACK verifier for the source dispatch.",
+              confidence: "medium",
+            }),
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(nudgeonlyApi({
+      api_key: "test-key",
+      event_text: "wakepass stale ack for PR #705",
+      model: "anthropic/claude-sonnet-4",
+      allow_paid: true,
+    })).resolves.toMatchObject({
+      model: "anthropic/claude-sonnet-4",
+      evidence: {
+        requested_model: "anthropic/claude-sonnet-4",
+        provider_decision: {
+          allowed: true,
+          reason: "explicit_paid_allowed",
+          allow_paid_flag: "NUDGEONLY_OPENROUTER_ALLOW_PAID",
+        },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({
+      model: "anthropic/claude-sonnet-4",
+    });
   });
 
   it("uses the free OpenRouter nudge lane without granting authority", async () => {
