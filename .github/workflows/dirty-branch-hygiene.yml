@@ -1,0 +1,58 @@
+name: dirty-branch-hygiene
+
+# Chip-firer dirty-branch hygiene.
+# Closes UnClick todo "Chip-firer dirty-branch hygiene: 3 PRs in a row leaking
+# api/memory-admin.ts + server.ts" (efficiency sweep 2026-05-07).
+#
+# Runs scripts/check-dirty-branch.mjs against the PR's changed files. If a
+# leak-prone file is touched without a scope mention in title/body, this step
+# emits a warning annotation. Non-blocking by default (continue-on-error:true)
+# so it doesn't fail the merge gate, but the warning surfaces in checks UI.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  hygiene:
+    name: Dirty-branch hygiene
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compute base ref
+        id: base
+        run: |
+          base="origin/${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=200
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Run dirty-branch check
+        id: check
+        continue-on-error: true
+        env:
+          PR_BODY: ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+        run: |
+          node scripts/check-dirty-branch.mjs --base "${{ steps.base.outputs.base }}" --pr-body "$PR_BODY"
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outcome }}" = "failure" ]; then
+            echo "Dirty-branch hygiene: WARNING — leak-prone files were touched without scope mention. See logs above." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "If the changes are intentional, update the PR title/body to reference the file(s). If unintentional, revert them per the script's printed git checkout instructions." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Dirty-branch hygiene: OK." >> "$GITHUB_STEP_SUMMARY"
+          fi
