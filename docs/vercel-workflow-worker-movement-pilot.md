@@ -125,8 +125,19 @@ The scheduler-ready slice adds a quiet Vercel cron call to `/api/worker-movement
 
 - The endpoint still requires `Bearer ${CRON_SECRET}`.
 - The endpoint now also requires `WORKER_MOVEMENT_PILOT_ENABLED` to be `1`, `true`, or `enabled`.
-- With the env unset, the cron call returns `skip_disabled` without querying todos or inserting proof.
-- This lets production exercise the protected route safely before Chris or an operator enables proof inserts.
+- With `WORKER_MOVEMENT_PILOT_ENABLED` unset, the cron call returns `skip_disabled` without querying todos or inserting proof.
+- With `WORKER_MOVEMENT_PILOT_ENABLED` enabled but `WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED` unset, the route can fetch and plan one expired candidate, then returns `proof_planned` without dedupe checks or `mc_signals` inserts.
+- `mc_signals` proof writes require `WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED` to be `1`, `true`, or `enabled`.
+- This lets production exercise the protected route and candidate planner safely before Chris or an operator enables proof inserts.
+
+## Proof-Write Gate Slice
+
+The proof-write gate adds a second opt-in around signal insertion:
+
+- `WORKER_MOVEMENT_PILOT_ENABLED` means the pilot may read one expired lease candidate and build a dry-run plan.
+- `WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED` means the pilot may dedupe and insert PASS or BLOCKER proof into `mc_signals`.
+- If proof writes are disabled, the route does not call `hasRecentProof` or `insertProof`.
+- Focused tests cover safe PASS planning, BLOCKER refusal planning, explicit proof-write env parsing, and the existing insert path.
 
 ## Proof Trail
 

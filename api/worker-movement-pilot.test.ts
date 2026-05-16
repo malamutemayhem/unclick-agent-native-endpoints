@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import handler, {
   isWorkerMovementPilotEnabled,
   isWorkerMovementPilotHttpMethodAllowed,
+  isWorkerMovementPilotProofWriteEnabled,
   runWorkerMovementPilotDryRun,
   type WorkerMovementPilotStore,
   type WorkerMovementPilotTodoRow,
@@ -150,6 +151,16 @@ describe("worker movement pilot API dry-run", () => {
     expect(isWorkerMovementPilotEnabled("enabled")).toBe(true);
   });
 
+  it("accepts only explicit enabled values for proof writes", () => {
+    expect(isWorkerMovementPilotProofWriteEnabled(undefined)).toBe(false);
+    expect(isWorkerMovementPilotProofWriteEnabled("")).toBe(false);
+    expect(isWorkerMovementPilotProofWriteEnabled("0")).toBe(false);
+    expect(isWorkerMovementPilotProofWriteEnabled("false")).toBe(false);
+    expect(isWorkerMovementPilotProofWriteEnabled("1")).toBe(true);
+    expect(isWorkerMovementPilotProofWriteEnabled("true")).toBe(true);
+    expect(isWorkerMovementPilotProofWriteEnabled("enabled")).toBe(true);
+  });
+
   it("allows only cron GET and manual POST methods", () => {
     expect(isWorkerMovementPilotHttpMethodAllowed(undefined)).toBe(true);
     expect(isWorkerMovementPilotHttpMethodAllowed("GET")).toBe(true);
@@ -269,6 +280,61 @@ describe("worker movement pilot API dry-run", () => {
       },
     });
     expect(JSON.stringify(inserted[0])).not.toContain("lease-secret");
+  });
+
+  it("plans proof without dedupe or insert when proof writes are disabled", async () => {
+    const { store, inserted, dedupeChecks } = buildStore({
+      candidate: expiredLeaseCandidate(),
+    });
+
+    const result = await runWorkerMovementPilotDryRun({
+      store,
+      nowMs,
+      proofWritesEnabled: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: "proof_planned",
+      candidate_id: "todo-expired-lease",
+      action: "start_dry_run",
+      proof_signal_action: "worker_movement_workflow_pilot_pass",
+      proof_status: "PASS",
+      proof_inserted: false,
+      proof_deduped: false,
+      next_safe_step:
+        "enable WORKER_MOVEMENT_PILOT_PROOF_WRITES_ENABLED=true after planned proof looks safe",
+    });
+    expect(dedupeChecks).toEqual([]);
+    expect(inserted).toEqual([]);
+  });
+
+  it("plans blocker proof without insert when proof writes are disabled", async () => {
+    const { store, inserted, dedupeChecks } = buildStore({
+      candidate: expiredLeaseCandidate({
+        id: "todo-security",
+        title: "SECURITY: deactivate legacy plaintext api_keys_legacy rows after owner auth",
+      }),
+    });
+
+    const result = await runWorkerMovementPilotDryRun({
+      store,
+      nowMs,
+      proofWritesEnabled: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: "proof_planned",
+      candidate_id: "todo-security",
+      action: "post_refusal_proof",
+      proof_signal_action: "worker_movement_workflow_pilot_blocker",
+      proof_status: "BLOCKER",
+      proof_inserted: false,
+      proof_deduped: false,
+    });
+    expect(dedupeChecks).toEqual([]);
+    expect(inserted).toEqual([]);
   });
 
   it("inserts BLOCKER proof for an owner or security gated candidate", async () => {
