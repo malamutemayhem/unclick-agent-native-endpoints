@@ -23,7 +23,9 @@ import type {
   MemoryTaxonomySnapshotSource,
   MemoryTaxonomySnapshotWriteOptions,
   MemoryTaxonomySnapshotWriteResult,
+  SaveTypedLinkCandidatesResult,
 } from "./types.js";
+import type { MemoryTypedLinkCandidate } from "./typed-links.js";
 import { writeMemoryTaxonomySnapshotsToLibrary } from "./supabase.js";
 
 const DATA_DIR = path.join(os.homedir(), ".unclick", "memory");
@@ -142,6 +144,21 @@ interface ConversationRow {
   role: string;
   content: string;
   has_code: boolean;
+  created_at: string;
+}
+
+interface TypedLinkRow {
+  id: string;
+  source_kind: string;
+  source_id: string;
+  relation: string;
+  target_kind: string;
+  target_text: string;
+  confidence: number;
+  evidence_start: number;
+  evidence_end: number;
+  evidence_text: string;
+  redaction_state: string;
   created_at: string;
 }
 
@@ -352,6 +369,41 @@ export class LocalBackend implements MemoryBackend {
       role: data.role,
       receipt_id: id,
     };
+  }
+
+  async saveTypedLinkCandidates(
+    candidates: MemoryTypedLinkCandidate[]
+  ): Promise<SaveTypedLinkCandidatesResult> {
+    if (candidates.length === 0) return { saved: 0 };
+
+    const rows = readTable<TypedLinkRow>("memory_typed_links");
+    const existing = new Set(rows.map(typedLinkKey));
+    let saved = 0;
+
+    for (const candidate of candidates) {
+      const row: TypedLinkRow = {
+        id: uuid(),
+        source_kind: candidate.source_kind,
+        source_id: candidate.source_id,
+        relation: candidate.relation,
+        target_kind: candidate.target_kind,
+        target_text: candidate.target_text,
+        confidence: candidate.confidence,
+        evidence_start: candidate.evidence_span.start,
+        evidence_end: candidate.evidence_span.end,
+        evidence_text: candidate.evidence_span.text,
+        redaction_state: candidate.redaction_state,
+        created_at: now(),
+      };
+      const key = typedLinkKey(row);
+      if (existing.has(key)) continue;
+      existing.add(key);
+      rows.push(row);
+      saved += 1;
+    }
+
+    if (saved > 0) writeTable("memory_typed_links", rows);
+    return { saved };
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {
@@ -565,4 +617,8 @@ export class LocalBackend implements MemoryBackend {
   async invalidateFact(_input: InvalidateFactInput): Promise<{ invalidated_at: string }> {
     throw new Error("invalidate_fact is not supported in local (zero-config) mode. Connect to Supabase to use this feature.");
   }
+}
+
+function typedLinkKey(row: Pick<TypedLinkRow, "source_kind" | "source_id" | "relation" | "target_kind" | "target_text">): string {
+  return [row.source_kind, row.source_id, row.relation, row.target_kind, row.target_text.toLowerCase()].join(":");
 }

@@ -1,7 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
+import { persistTypedLinksForMemoryWrite } from "../handlers.js";
 import { extractMemoryTypedLinkCandidates } from "../typed-links.js";
+import type { SaveTypedLinkCandidatesResult } from "../types.js";
+import type { MemoryTypedLinkCandidate } from "../typed-links.js";
 
 describe("memory typed-link extraction", () => {
   test("extracts deterministic references from fact text", () => {
@@ -78,6 +81,55 @@ describe("memory typed-link extraction", () => {
     };
 
     assert.deepEqual(extractMemoryTypedLinkCandidates(input), extractMemoryTypedLinkCandidates(input));
+  });
+
+  test("persists extracted links after a memory write", async () => {
+    const saved: MemoryTypedLinkCandidate[][] = [];
+    const result = await persistTypedLinksForMemoryWrite(
+      {
+        async saveTypedLinkCandidates(candidates): Promise<SaveTypedLinkCandidatesResult> {
+          saved.push(candidates);
+          return { saved: candidates.length };
+        },
+      },
+      {
+        source_kind: "fact",
+        source_id: "fact-5",
+        text: "PR #901 shipped with receipt 588aef27-646d-4359-9973-66394f2c0171.",
+      }
+    );
+
+    assert.equal(result.saved, 2);
+    assert.deepEqual(
+      saved[0].map((link) => [link.relation, link.target_kind, link.target_text]),
+      [
+        ["ships", "pr", "PR #901"],
+        ["references", "receipt", "588aef27-646d-4359-9973-66394f2c0171"],
+      ]
+    );
+  });
+
+  test("persistence helper keeps primary write safe on storage failure", async () => {
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      const result = await persistTypedLinksForMemoryWrite(
+        {
+          async saveTypedLinkCandidates(): Promise<SaveTypedLinkCandidatesResult> {
+            throw new Error("storage offline");
+          },
+        },
+        {
+          source_kind: "conversation_turn",
+          source_id: "turn-2",
+          text: "CommonSensePass referenced PR #902.",
+        }
+      );
+
+      assert.deepEqual(result, { saved: 0, skipped: "persistence_failed" });
+    } finally {
+      console.error = originalError;
+    }
   });
 });
 
