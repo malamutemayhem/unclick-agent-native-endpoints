@@ -18,7 +18,7 @@ Rule-and-evidence sanity gate for AI/worker claims. Verdict-only: does not build
 | R2   | `pass`            | Head SHA freshness: PASS authored on `commented_on_sha` that does not match `current_head_sha` is stale. |
 | R3   | `duplicate_wake`  | Wake suppression: same `id` and `state_fingerprint` emitted within the duplicate-wake window. |
 | R4   | `done`            | Done-without-proof: requires `pipeline === 100` AND a `closing_ref` on the subject todo. |
-| R5   | `merge_ready`     | Merge-ready-without-proof: PR must be mergeable, checks green, and have a Reviewer PASS authored on the current head SHA. |
+| R5   | `merge_ready`     | Merge-ready-without-proof: PR must be mergeable, checks green, and have Reviewer PASS plus Safety PASS authored on the current head SHA. |
 
 ## Usage
 

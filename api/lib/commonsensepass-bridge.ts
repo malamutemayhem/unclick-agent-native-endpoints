@@ -12,6 +12,8 @@ import {
   type ClaimContext,
   type ClaimKind,
   type CommonSensePassResult,
+  type PRSnapshot,
+  type ReviewSnapshot,
   type TodoSnapshot,
   type TodoStatus,
 } from "../../packages/commonsensepass/src/index.js";
@@ -20,6 +22,8 @@ export interface OrchestratorTodoShape {
   id: string;
   status: string;
   assigned_to_agent_id?: string | null;
+  pipeline?: number | null;
+  closing_ref?: string | null;
 }
 
 export interface OrchestratorProfileShape {
@@ -37,6 +41,36 @@ export interface InspectActiveStateInput {
   profiles: OrchestratorProfileShape[];
   /** Active_jobs count the worker is about to claim (the v9 formula output). */
   active_jobs: number;
+  /** Current timestamp in ms; defaults to Date.now() if absent. */
+  now_ms?: number;
+}
+
+export interface InspectDoneClaimInput {
+  /** Worker-shaped todos with pipeline and closing proof attached. */
+  todos: OrchestratorTodoShape[];
+  /** Target todo id for the done claim. Defaults to the first todo. */
+  subject_todo_id?: string;
+  /** Current timestamp in ms; defaults to Date.now() if absent. */
+  now_ms?: number;
+}
+
+export interface WorkerReviewShape {
+  verdict?: string | null;
+  sha?: string | null;
+}
+
+export interface WorkerPRShape {
+  number: number;
+  head_sha?: string | null;
+  mergeable?: boolean | null;
+  checks_state?: string | null;
+  reviewer_pass?: WorkerReviewShape | null;
+  safety_pass?: WorkerReviewShape | null;
+}
+
+export interface InspectMergeReadyClaimInput {
+  /** PR snapshot assembled by the worker before merge or lift. */
+  pr: WorkerPRShape;
   /** Current timestamp in ms; defaults to Date.now() if absent. */
   now_ms?: number;
 }
@@ -100,8 +134,39 @@ export function toTodoSnapshots(
     if (typeof ownerLastSeen === "number") {
       snapshot.owner_last_seen_ms = ownerLastSeen;
     }
+    if (typeof todo.pipeline === "number") {
+      snapshot.pipeline = todo.pipeline;
+    }
+    if (typeof todo.closing_ref === "string" && todo.closing_ref.trim()) {
+      snapshot.closing_ref = todo.closing_ref.trim();
+    }
     return snapshot;
   });
+}
+
+function normalizeChecksState(value: string): PRSnapshot["checks_state"] {
+  const normalized = value.trim().toLowerCase();
+  if (["success", "passed", "green"].includes(normalized)) return "success";
+  if (["failure", "failed", "cancelled", "timed_out", "action_required"].includes(normalized)) {
+    return "failure";
+  }
+  if (["neutral", "skipped"].includes(normalized)) return "neutral";
+  return "pending";
+}
+
+function toReviewSnapshot(review?: WorkerReviewShape | null): ReviewSnapshot | undefined {
+  if (!review?.sha) return undefined;
+  if (
+    review.verdict !== "PASS" &&
+    review.verdict !== "BLOCKER" &&
+    review.verdict !== "HOLD"
+  ) {
+    return undefined;
+  }
+  return {
+    verdict: review.verdict,
+    sha: review.sha,
+  };
 }
 
 /**
@@ -127,4 +192,77 @@ export function inspectOrchestratorActiveState(
     active_jobs: input.active_jobs,
   };
   return commonsensepassCheck({ claim, context });
+}
+
+/**
+ * Run R4 against worker-shaped todo proof before marking a todo done.
+ *
+ * PASS = pipeline is complete and a closing PR or commit is present.
+ * BLOCKER = do not mark done until the missing proof is attached.
+ */
+export function inspectDoneClaim(
+  input: InspectDoneClaimInput,
+): CommonSensePassResult {
+  const context: ClaimContext = {
+    now_ms: input.now_ms ?? Date.now(),
+    todos: toTodoSnapshots(input.todos, []),
+    subject_todo_id: input.subject_todo_id,
+  };
+  return commonsensepassCheck({ claim: "done", context });
+}
+
+/**
+ * Run R5 against worker-shaped PR proof before marking merge-ready.
+ *
+ * PASS = mergeable, checks green, Reviewer PASS on head, and Safety PASS on head.
+ * HOLD = required proof is missing.
+ * BLOCKER = proof contradicts the merge-ready claim.
+ */
+export function inspectMergeReadyClaim(
+  input: InspectMergeReadyClaimInput,
+): CommonSensePassResult {
+  const headSha = input.pr.head_sha?.trim();
+  if (!headSha) {
+    return {
+      verdict: "HOLD",
+      rule_id: "R5",
+      reason: `merge_ready claim on PR #${input.pr.number} missing head SHA.`,
+      evidence: [{ kind: "context", ref: "head_sha=missing" }],
+      next_action: "include_current_head_sha",
+    };
+  }
+  if (typeof input.pr.mergeable !== "boolean") {
+    return {
+      verdict: "HOLD",
+      rule_id: "R5",
+      reason: `merge_ready claim on PR #${input.pr.number} missing mergeable state.`,
+      evidence: [{ kind: "context", ref: "mergeable=missing" }],
+      next_action: "include_mergeable_state",
+    };
+  }
+  if (!input.pr.checks_state?.trim()) {
+    return {
+      verdict: "HOLD",
+      rule_id: "R5",
+      reason: `merge_ready claim on PR #${input.pr.number} missing checks state.`,
+      evidence: [{ kind: "context", ref: "checks_state=missing" }],
+      next_action: "include_checks_state",
+    };
+  }
+
+  const pr: PRSnapshot = {
+    number: input.pr.number,
+    head_sha: headSha,
+    mergeable: input.pr.mergeable,
+    checks_state: normalizeChecksState(input.pr.checks_state),
+    reviewer_pass: toReviewSnapshot(input.pr.reviewer_pass),
+    safety_pass: toReviewSnapshot(input.pr.safety_pass),
+  };
+  return commonsensepassCheck({
+    claim: "merge_ready",
+    context: {
+      now_ms: input.now_ms ?? Date.now(),
+      pr,
+    },
+  });
 }

@@ -278,6 +278,7 @@ describe("commonsensepassCheck - R5 merge-ready without proof", () => {
           mergeable: false,
           checks_state: "success",
           reviewer_pass: { verdict: "PASS", sha: headSha },
+          safety_pass: { verdict: "PASS", sha: headSha },
         },
       }),
     });
@@ -295,6 +296,7 @@ describe("commonsensepassCheck - R5 merge-ready without proof", () => {
           mergeable: true,
           checks_state: "failure",
           reviewer_pass: { verdict: "PASS", sha: headSha },
+          safety_pass: { verdict: "PASS", sha: headSha },
         },
       }),
     });
@@ -328,6 +330,7 @@ describe("commonsensepassCheck - R5 merge-ready without proof", () => {
           mergeable: true,
           checks_state: "success",
           reviewer_pass: { verdict: "PASS", sha: staleSha },
+          safety_pass: { verdict: "PASS", sha: headSha },
         },
       }),
     });
@@ -345,11 +348,49 @@ describe("commonsensepassCheck - R5 merge-ready without proof", () => {
           mergeable: true,
           checks_state: "success",
           reviewer_pass: { verdict: "PASS", sha: headSha },
+          safety_pass: { verdict: "PASS", sha: headSha },
         },
       }),
     });
     expect(result.verdict).toBe("PASS");
     expect(result.rule_id).toBe("R5");
+  });
+
+  it("HOLD when Safety PASS is missing", () => {
+    const result = commonsensepassCheck({
+      claim: "merge_ready",
+      context: ctx({
+        pr: {
+          number: 105,
+          head_sha: headSha,
+          mergeable: true,
+          checks_state: "success",
+          reviewer_pass: { verdict: "PASS", sha: headSha },
+        },
+      }),
+    });
+    expect(result.verdict).toBe("HOLD");
+    expect(result.rule_id).toBe("R5");
+    expect(result.next_action).toBe("request_safety_pass");
+  });
+
+  it("BLOCKER when Safety PASS is on a stale SHA", () => {
+    const result = commonsensepassCheck({
+      claim: "merge_ready",
+      context: ctx({
+        pr: {
+          number: 106,
+          head_sha: headSha,
+          mergeable: true,
+          checks_state: "success",
+          reviewer_pass: { verdict: "PASS", sha: headSha },
+          safety_pass: { verdict: "PASS", sha: staleSha },
+        },
+      }),
+    });
+    expect(result.verdict).toBe("BLOCKER");
+    expect(result.rule_id).toBe("R5");
+    expect(result.next_action).toBe("re_run_safety_check_on_current_head");
   });
 
   it("HOLD when PR snapshot is missing", () => {

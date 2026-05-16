@@ -257,6 +257,7 @@ export function checkR4(input: ClaimInput): CommonSensePassResult | null {
  *   - PR is mergeable
  *   - checks_state === "success"
  *   - Reviewer PASS present and authored on the PR's current head SHA.
+ *   - Safety PASS present and authored on the PR's current head SHA.
  */
 export function checkR5(input: ClaimInput): CommonSensePassResult | null {
   if (input.claim !== "merge_ready") return null;
@@ -318,14 +319,43 @@ export function checkR5(input: ClaimInput): CommonSensePassResult | null {
       next_action: "re_review_on_current_head",
     };
   }
+  const safety = pr.safety_pass;
+  if (!safety || safety.verdict !== "PASS") {
+    return {
+      verdict: "HOLD",
+      rule_id: "R5",
+      reason: `PR #${pr.number} has no Safety PASS.`,
+      evidence: [
+        {
+          kind: "pr",
+          ref: `#${pr.number}`,
+          note: `safety=${safety?.verdict ?? "missing"}`,
+        },
+      ],
+      next_action: "request_safety_pass",
+    };
+  }
+  if (safety.sha !== pr.head_sha) {
+    return {
+      verdict: "BLOCKER",
+      rule_id: "R5",
+      reason: `Safety PASS on PR #${pr.number} authored on ${safety.sha.slice(0, 7)} but head is ${pr.head_sha.slice(0, 7)}.`,
+      evidence: [
+        { kind: "sha", ref: safety.sha, note: "safety_pass_sha" },
+        { kind: "sha", ref: pr.head_sha, note: "head_sha" },
+      ],
+      next_action: "re_run_safety_check_on_current_head",
+    };
+  }
   return {
     verdict: "PASS",
     rule_id: "R5",
-    reason: `PR #${pr.number} is merge-ready: mergeable, checks green, Reviewer PASS on head.`,
+    reason: `PR #${pr.number} is merge-ready: mergeable, checks green, Reviewer PASS and Safety PASS on head.`,
     evidence: [
       { kind: "pr", ref: `#${pr.number}`, note: "mergeable" },
       { kind: "pr", ref: `#${pr.number}`, note: "checks=success" },
       { kind: "sha", ref: pr.head_sha, note: "reviewer_pass_on_head" },
+      { kind: "sha", ref: pr.head_sha, note: "safety_pass_on_head" },
     ],
   };
 }

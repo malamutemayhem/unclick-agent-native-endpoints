@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  inspectDoneClaim,
+  inspectMergeReadyClaim,
   inspectOrchestratorActiveState,
   toTodoSnapshots,
 } from "./lib/commonsensepass-bridge.js";
@@ -7,6 +9,8 @@ import {
 const NOW = Date.parse("2026-05-12T22:00:00Z");
 const oneHourAgo = new Date(NOW - 60 * 60 * 1000).toISOString();
 const twoDaysAgo = new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+const headSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const staleSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 describe("commonsensepass-bridge / toTodoSnapshots", () => {
   it("maps orchestrator status open -> actionable", () => {
@@ -52,6 +56,15 @@ describe("commonsensepass-bridge / toTodoSnapshots", () => {
       [],
     );
     expect(snaps[0].status).toBe("done");
+  });
+
+  it("carries done proof fields into snapshots", () => {
+    const snaps = toTodoSnapshots(
+      [{ id: "t5", status: "in_progress", pipeline: 100, closing_ref: " #886 " }],
+      [],
+    );
+    expect(snaps[0].pipeline).toBe(100);
+    expect(snaps[0].closing_ref).toBe("#886");
   });
 });
 
@@ -163,5 +176,102 @@ describe("commonsensepass-bridge / inspectOrchestratorActiveState", () => {
       expect(verdict.verdict).toBe("BLOCKER");
       expect(verdict.rule_id).toBe("R1");
     }
+  });
+});
+
+describe("commonsensepass-bridge / inspectDoneClaim", () => {
+  it("BLOCKER when a done claim lacks closing proof", () => {
+    const verdict = inspectDoneClaim({
+      todos: [{ id: "done-1", status: "in_progress", pipeline: 100 }],
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("BLOCKER");
+    expect(verdict.rule_id).toBe("R4");
+    expect(verdict.next_action).toBe("attach_closing_pr_or_commit_and_set_pipeline_100");
+  });
+
+  it("PASS when a done claim has full proof", () => {
+    const verdict = inspectDoneClaim({
+      todos: [
+        { id: "other", status: "open" },
+        {
+          id: "done-2",
+          status: "in_progress",
+          pipeline: 100,
+          closing_ref: "#886",
+        },
+      ],
+      subject_todo_id: "done-2",
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("PASS");
+    expect(verdict.rule_id).toBe("R4");
+  });
+});
+
+describe("commonsensepass-bridge / inspectMergeReadyClaim", () => {
+  it("HOLD when the worker omits current head SHA", () => {
+    const verdict = inspectMergeReadyClaim({
+      pr: {
+        number: 886,
+        mergeable: true,
+        checks_state: "success",
+        reviewer_pass: { verdict: "PASS", sha: headSha },
+        safety_pass: { verdict: "PASS", sha: headSha },
+      },
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("HOLD");
+    expect(verdict.rule_id).toBe("R5");
+    expect(verdict.next_action).toBe("include_current_head_sha");
+  });
+
+  it("HOLD when Safety PASS is missing", () => {
+    const verdict = inspectMergeReadyClaim({
+      pr: {
+        number: 887,
+        head_sha: headSha,
+        mergeable: true,
+        checks_state: "green",
+        reviewer_pass: { verdict: "PASS", sha: headSha },
+      },
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("HOLD");
+    expect(verdict.rule_id).toBe("R5");
+    expect(verdict.next_action).toBe("request_safety_pass");
+  });
+
+  it("BLOCKER when Safety PASS is stale", () => {
+    const verdict = inspectMergeReadyClaim({
+      pr: {
+        number: 888,
+        head_sha: headSha,
+        mergeable: true,
+        checks_state: "success",
+        reviewer_pass: { verdict: "PASS", sha: headSha },
+        safety_pass: { verdict: "PASS", sha: staleSha },
+      },
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("BLOCKER");
+    expect(verdict.rule_id).toBe("R5");
+    expect(verdict.next_action).toBe("re_run_safety_check_on_current_head");
+  });
+
+  it("PASS when merge-ready proof is current and complete", () => {
+    const verdict = inspectMergeReadyClaim({
+      pr: {
+        number: 889,
+        head_sha: headSha,
+        mergeable: true,
+        checks_state: "passed",
+        reviewer_pass: { verdict: "PASS", sha: headSha },
+        safety_pass: { verdict: "PASS", sha: headSha },
+      },
+      now_ms: NOW,
+    });
+    expect(verdict.verdict).toBe("PASS");
+    expect(verdict.rule_id).toBe("R5");
   });
 });
