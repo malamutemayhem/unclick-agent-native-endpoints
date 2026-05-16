@@ -30,6 +30,34 @@ External-seat continuity must follow:
 
 If a seat cannot log or cannot read context after logging, it must fail loud with `UNTETHERED` or `CONTEXT_UNREAD` and include any safe receipt ids it captured.
 
+## Standard Trace Packet
+
+Every important seat action should attach or make queryable one compact packet. This packet is the shared shape for Orchestrator comments, Boardroom proof, trace rows, and dashboard summaries.
+
+Required fields:
+
+- `trace_id`: stable id for the action or wake.
+- `seat_id`: acting seat or worker.
+- `source_kind`: heartbeat, human_turn, boardroom_todo, pr, dispatch, or tool.
+- `source_id`: source row, todo, PR, run, or receipt id.
+- `accepted_at`: when the seat accepted the instruction.
+- `context_read`: sources read before action, with receipt ids where possible.
+- `owned_obligation`: lane, job, or next action the seat believed it owned.
+- `assumptions`: compact list of assumptions, empty when none.
+- `tool_attempts`: tool names, success state, and safe error class only.
+- `decision`: PASS, HOLD, BLOCKER, ROUTE, SUPPRESS, or ESCALATE.
+- `changed_surfaces`: files, todos, PRs, database tables, or docs changed.
+- `proof_refs`: tests, PRs, comments, run ids, or sanitized counts.
+- `redaction_state`: clean, redacted, or blocked_secret_risk.
+- `next_safe_step`: one bounded follow-up.
+
+Rules:
+
+- Do not store secrets, raw tokens, passwords, or plaintext key material.
+- Store counts, ids, hashes, policy names, and timestamps instead of sensitive values.
+- If a context read fails after a saved turn, emit `CONTEXT_UNREAD` with the saved receipt.
+- If no continuity write path is available, emit `UNTETHERED` with any safe proof captured.
+
 ## First Git-Synced Slice
 
 The first active slice is the heartbeat and tether observability hardening on branch `codex/master-heartbeat-self-contained`.
@@ -64,5 +92,6 @@ Visible debt states include `waiting_for_owner`, `no_live_owner`, `expired`, `ig
 
 - The Agent Observability issue has a tracked repo artifact.
 - The first implementation slice has a branch and PR linked to issue #693.
+- A standard trace packet exists so workers can prove what they knew, did, changed, and could not safely do.
 - A seat can no longer claim that the heartbeat policy lacks a write target.
 - Orchestrator can distinguish missing connector, missing auth, write failure, context unreadable, blocked work, and accepted proof.
