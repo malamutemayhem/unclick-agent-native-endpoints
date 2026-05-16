@@ -16,6 +16,8 @@ This file does not enable production code-writing. The adapter is opt-in and req
 6. The gate accepts only changed files inside the owned set.
 7. The adapter emits `openhands_worker_pass` or `openhands_worker_hold`.
 
+`scripts/pinballwake-openhands-proof-runner.mjs` is the v1 binding for proof runs. It can use a real OpenHands CLI command supplied through `OPENHANDS_COMMAND`, or a docs-only fixture runner when `OPENHANDS_PROOF_FIXTURE_PATCH=1` is set for local and workflow tests. OpenHands CLI docs describe `--task`, `--headless`, and `--json` at https://docs.openhands.dev/openhands/usage/cli/command-reference. The OpenHands environment reference is https://docs.openhands.dev/openhands/usage/environment-variables.
+
 ## Guardrails
 
 - Test mode is required by default.
@@ -30,6 +32,9 @@ This file does not enable production code-writing. The adapter is opt-in and req
 For real OpenHands use, the worker that provides the `openHands` function should own its secrets outside the repo:
 
 - `OPENHANDS_TEST_MODE=1`
+- optional `OPENHANDS_COMMAND`, defaulting to `openhands`
+- optional `OPENHANDS_ARGS`, defaulting to `--headless --json --task {prompt}`
+- optional `OPENHANDS_PATCH_FILE` when the runner writes a patch file instead of printing a unified diff
 - model provider key, stored only in CI or worker secret storage
 - repo-scoped token for draft PR creation, stored only in CI or worker secret storage
 - an external cost or spend limit guard
@@ -39,6 +44,7 @@ The repository should not store OpenHands provider keys or GitHub tokens.
 ## Acceptance
 
 - `node --test scripts/pinballwake-openhands-worker.test.mjs` passes.
+- `node --test scripts/pinballwake-openhands-proof-runner.test.mjs` passes.
 - A tiny test todo can produce a patch through the injected runner.
 - The coding room gate refuses a patch outside the todo's owned files.
 - A pass receipt contains changed files, patch size, optional PR URL, optional head SHA, and optional test run id.
