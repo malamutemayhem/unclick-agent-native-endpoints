@@ -119,6 +119,15 @@ The next slice adds `/api/worker-movement-pilot` as a protected dry-run entrypoi
 - It does not reclaim, release, reassign, complete, or mutate the todo lease.
 - A later Workflow wrapper can call this route once the proof-only behavior is stable.
 
+## Scheduler Gate Slice
+
+The scheduler-ready slice adds a quiet Vercel cron call to `/api/worker-movement-pilot` every 15 minutes.
+
+- The endpoint still requires `Bearer ${CRON_SECRET}`.
+- The endpoint now also requires `WORKER_MOVEMENT_PILOT_ENABLED` to be `1`, `true`, or `enabled`.
+- With the env unset, the cron call returns `skip_disabled` without querying todos or inserting proof.
+- This lets production exercise the protected route safely before Chris or an operator enables proof inserts.
+
 ## Proof Trail
 
 - Greenlight receipt: `876f228a-38fa-45a3-8373-d24a319a0670`

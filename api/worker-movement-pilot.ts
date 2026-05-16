@@ -36,6 +36,7 @@ export interface WorkerMovementPilotStore {
 }
 
 export type WorkerMovementPilotRunStatus =
+  | "skip_disabled"
   | "skip_no_candidate"
   | "proof_inserted"
   | "proof_recently_emitted"
@@ -102,10 +103,36 @@ export function createWorkerMovementPilotStore(
   };
 }
 
+export function isWorkerMovementPilotEnabled(value: string | undefined): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "enabled";
+}
+
+export function buildWorkerMovementPilotDisabledResult(): WorkerMovementPilotRunResult {
+  return {
+    ok: true,
+    mode: "dry_run",
+    status: "skip_disabled",
+    candidate_id: null,
+    action: null,
+    proof_signal_action: null,
+    proof_status: null,
+    proof_inserted: false,
+    proof_deduped: false,
+    summary: "Worker movement pilot is disabled by WORKER_MOVEMENT_PILOT_ENABLED.",
+    next_safe_step: "set WORKER_MOVEMENT_PILOT_ENABLED=true after safety review",
+  };
+}
+
 export async function runWorkerMovementPilotDryRun(params: {
   store: WorkerMovementPilotStore;
   nowMs?: number;
+  enabled?: boolean;
 }): Promise<WorkerMovementPilotRunResult> {
+  if (params.enabled === false) {
+    return buildWorkerMovementPilotDisabledResult();
+  }
+
   const nowMs = params.nowMs ?? Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const candidateResult = await params.store.fetchCandidate(nowIso);
@@ -234,6 +261,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  const enabled = isWorkerMovementPilotEnabled(
+    process.env.WORKER_MOVEMENT_PILOT_ENABLED,
+  );
+  if (!enabled) {
+    return res.status(200).json(buildWorkerMovementPilotDisabledResult());
+  }
+
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey) {
@@ -243,6 +277,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const supabase = createClient(supabaseUrl, supabaseKey);
   const result = await runWorkerMovementPilotDryRun({
     store: createWorkerMovementPilotStore(supabase),
+    enabled,
   });
   return res.status(result.ok ? 200 : 500).json(result);
 }
@@ -250,7 +285,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 function failureResult(params: {
   status: Exclude<
     WorkerMovementPilotRunStatus,
-    "skip_no_candidate" | "proof_inserted" | "proof_recently_emitted"
+    "skip_disabled" | "skip_no_candidate" | "proof_inserted" | "proof_recently_emitted"
   >;
   candidateId?: string | null;
   action?: WorkerMovementWorkflowPilotAction | null;
