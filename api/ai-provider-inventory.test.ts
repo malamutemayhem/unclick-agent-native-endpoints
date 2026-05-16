@@ -36,6 +36,61 @@ describe("ai provider inventory", () => {
     });
   });
 
+  it("labels MCP provider tool operations with explicit caller-key gates", () => {
+    const expected = [
+      "mcp.openai.tool.chat",
+      "mcp.openai.tool.embedding",
+      "mcp.openai.tool.image-generation",
+      "mcp.openai.tool.transcription",
+      "mcp.openai.tool.model-listing",
+      "mcp.anthropic.tool.chat",
+      "mcp.anthropic.tool.model-listing",
+      "mcp.groq.tool.chat",
+      "mcp.groq.tool.model-listing",
+      "mcp.cohere.tool.chat",
+      "mcp.cohere.tool.generate",
+      "mcp.cohere.tool.embedding",
+      "mcp.cohere.tool.rerank",
+      "mcp.cohere.tool.classify",
+      "mcp.cohere.tool.model-listing",
+    ];
+
+    for (const pathId of expected) {
+      const entry = getAiProviderInventoryEntry(pathId);
+      expect(entry).toMatchObject({
+        default_allowed: false,
+        allow_paid_flag: "api_key argument",
+      });
+      expect(decideAiProviderCall({ path_id: pathId })).toMatchObject({
+        allowed: false,
+        reason: "paid_or_unknown_blocked",
+        allow_paid_flag: "api_key argument",
+      });
+    }
+  });
+
+  it("keeps MCP model listing paths blocked as paid or unknown by default", () => {
+    expect(decideAiProviderCall({ path_id: "mcp.groq.tool.model-listing" })).toMatchObject({
+      allowed: false,
+      provider: "Groq",
+      cost_tier: "paid_or_unknown",
+      default_allowed: false,
+      reason: "paid_or_unknown_blocked",
+    });
+    expect(getAiProviderInventoryEntry("mcp.groq.tool.model-listing")).toMatchObject({
+      provider: "Groq",
+      call_kind: "model_listing",
+      cost_tier: "paid_or_unknown",
+      default_allowed: false,
+    });
+    expect(getAiProviderInventoryEntry("mcp.cohere.tool.model-listing")).toMatchObject({
+      provider: "Cohere",
+      call_kind: "model_listing",
+      cost_tier: "paid_or_unknown",
+      default_allowed: false,
+    });
+  });
+
   it("allows paid paths only when an explicit allow-paid decision is present", () => {
     expect(decideAiProviderCall({
       path_id: "memory.mcp.openai.embeddings",
