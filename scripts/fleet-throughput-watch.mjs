@@ -24,6 +24,7 @@ const runnerFreshnessGraceMinutes = parseBoundedInt(
   180,
 );
 const runnerFreshnessRunLimit = parseBoundedInt(process.env.QUEUEPUSH_RUNNER_RUN_LIMIT, 20, 5, 100);
+export const QUEUEPUSH_DUPLICATE_WAKE_WINDOW_MS = 10 * 60 * 1000;
 const agentId = "github-action-queuepush";
 const agentEmoji = "📬";
 const agentDisplayName = "QueuePush";
@@ -747,6 +748,118 @@ function messageCreatedAt(message) {
   return Number.isFinite(time) ? time : null;
 }
 
+export function extractQueuePushPacketId(text) {
+  return String(text || "").match(/\bQueuePush ID:\s*(queuepush:[^\s]+)/)?.[1] || "";
+}
+
+export function queuePushWakeStateFingerprint(packetId) {
+  const parts = String(packetId || "").split(":").filter(Boolean);
+  if (parts[0] !== "queuepush" || parts.length < 4) return "";
+  const basis =
+    parts[2]?.startsWith("pr-") && parts.length >= 5
+      ? parts.slice(2, 5).join("|")
+      : parts.slice(2, -1).join("|");
+  return createHash("sha256")
+    .update(basis || packetId)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+export function queuePushWakeFromPacket(packet, emittedMs = Date.now()) {
+  const id = String(packet?.packetId || "").trim();
+  const stateFingerprint = queuePushWakeStateFingerprint(id);
+  if (!id || !stateFingerprint) return null;
+  return {
+    id,
+    state_fingerprint: stateFingerprint,
+    emitted_ms: emittedMs,
+  };
+}
+
+export function recentQueuePushWakesFromMessages(messages = []) {
+  return messages
+    .map((message) => {
+      const id = extractQueuePushPacketId(message?.text);
+      const emittedMs = messageCreatedAt(message);
+      const stateFingerprint = queuePushWakeStateFingerprint(id);
+      if (!id || !stateFingerprint || !Number.isFinite(emittedMs)) return null;
+      return {
+        id,
+        state_fingerprint: stateFingerprint,
+        emitted_ms: emittedMs,
+      };
+    })
+    .filter(Boolean);
+}
+
+export function commonsensepassCheck(input = {}) {
+  if (input.claim !== "duplicate_wake") {
+    return {
+      verdict: "PASS",
+      rule_id: null,
+      reason: `Claim "${input.claim || ""}" matched no QueuePush rule; default PASS.`,
+      evidence: input.evidence ?? [],
+    };
+  }
+
+  const current = input.context?.current_wake;
+  const recent = input.context?.recent_wakes ?? [];
+  if (!current) {
+    return {
+      verdict: "HOLD",
+      rule_id: "R3",
+      reason: "duplicate_wake claim missing current_wake context.",
+      evidence: [{ kind: "context", ref: "current_wake=missing" }],
+      next_action: "include_current_wake",
+    };
+  }
+
+  const nowMs = Number(input.context?.now_ms);
+  const duplicate = recent.find(
+    (wake) =>
+      wake.id === current.id &&
+      wake.state_fingerprint === current.state_fingerprint &&
+      Number.isFinite(nowMs) &&
+      nowMs - wake.emitted_ms <= QUEUEPUSH_DUPLICATE_WAKE_WINDOW_MS,
+  );
+
+  if (duplicate) {
+    return {
+      verdict: "SUPPRESS",
+      rule_id: "R3",
+      reason: `Wake ${current.id} already emitted within 10min with matching state fingerprint.`,
+      evidence: [
+        { kind: "wake", ref: duplicate.id, note: `prior emitted_ms=${duplicate.emitted_ms}` },
+        { kind: "wake", ref: current.id, note: `now emitted_ms=${current.emitted_ms}` },
+        { kind: "fingerprint", ref: current.state_fingerprint },
+      ],
+    };
+  }
+
+  return {
+    verdict: "PASS",
+    rule_id: "R3",
+    reason: "Wake is not a duplicate of any recent wake with matching state.",
+    evidence: [{ kind: "wake", ref: current.id, note: current.state_fingerprint }],
+  };
+}
+
+export function evaluateQueuePushDuplicateWakeGuard(
+  packet,
+  fishbowlMessages = [],
+  { now = Date.now(), commonsensepassCheckFn = commonsensepassCheck } = {},
+) {
+  const currentWake = queuePushWakeFromPacket(packet, now);
+  return commonsensepassCheckFn({
+    claim: "duplicate_wake",
+    context: {
+      now_ms: now,
+      current_wake: currentWake,
+      recent_wakes: recentQueuePushWakesFromMessages(fishbowlMessages),
+    },
+  });
+}
+
 export function filterDuplicatePackets(
   packets,
   fishbowlMessages = [],
@@ -754,6 +867,8 @@ export function filterDuplicatePackets(
 ) {
   const retryMs = retryAfterMinutes * 60 * 1000;
   return packets.filter((packet) => {
+    const guard = evaluateQueuePushDuplicateWakeGuard(packet, fishbowlMessages, { now });
+    if (guard.verdict === "SUPPRESS" || guard.verdict === "HOLD") return false;
     const matches = fishbowlMessages.filter((message) => String(message.text || "").includes(packet.packetId));
     if (matches.length === 0) return true;
     const newest = Math.max(...matches.map((message) => messageCreatedAt(message) ?? now));

@@ -7,10 +7,13 @@ import {
   checksAreGreen,
   chooseQueuePushRunner,
   evaluateRunnerFreshnessWatchdog,
+  evaluateQueuePushDuplicateWakeGuard,
   classifyPullRequest,
+  extractQueuePushPacketId,
   filterDuplicatePackets,
   jobKindForState,
   latestCommentSignals,
+  queuePushWakeFromPacket,
   resolveQueuePushRunnerRoster,
   routeWorkerForPr,
   runnerCanAcceptQueuePushJob,
@@ -745,6 +748,62 @@ describe("QueuePush routing and packets", () => {
 
     const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
     assert.deepEqual(remaining, []);
+  });
+
+  it("runs CommonSensePass duplicate wake guard before keeping a packet", () => {
+    const packet = buildQueuePacket({
+      pr: pr({ number: 873, draft: false, title: "feat(autopilot): add OpenHands test-mode adapter" }),
+      state: "ready_for_qc",
+      reason: "Non-draft PR is green, clean, and has proof.",
+      files: [{ filename: "scripts/pinballwake-openhands-worker.mjs" }],
+    });
+    const now = Date.parse("2026-05-16T16:20:00Z");
+    const messages = [
+      {
+        text: packet.text,
+        created_at: "2026-05-16T16:14:31Z",
+      },
+    ];
+
+    const guard = evaluateQueuePushDuplicateWakeGuard(packet, messages, { now });
+    const remaining = filterDuplicatePackets([packet], messages, { now, retryAfterMinutes: 180 });
+
+    assert.equal(guard.verdict, "SUPPRESS");
+    assert.equal(guard.rule_id, "R3");
+    assert.deepEqual(remaining, []);
+  });
+
+  it("does not suppress a changed QueuePush state with the duplicate wake guard", () => {
+    const oldPacket = buildQueuePacket({
+      pr: pr({ number: 873, draft: true, title: "feat(autopilot): add OpenHands test-mode adapter" }),
+      state: "missing_review_safety_ack",
+      reason: "Draft PR is green and clean with proof; Reviewer/Safety PASS is missing.",
+      files: [{ filename: "scripts/pinballwake-openhands-worker.mjs" }],
+    });
+    const newPacket = buildQueuePacket({
+      pr: pr({ number: 873, draft: false, title: "feat(autopilot): add OpenHands test-mode adapter" }),
+      state: "ready_for_qc",
+      reason: "Non-draft PR is green, clean, and has proof.",
+      files: [{ filename: "scripts/pinballwake-openhands-worker.mjs" }],
+    });
+    const now = Date.parse("2026-05-16T16:20:00Z");
+    const guard = evaluateQueuePushDuplicateWakeGuard(
+      newPacket,
+      [{ text: oldPacket.text, created_at: "2026-05-16T16:14:31Z" }],
+      { now },
+    );
+
+    assert.equal(extractQueuePushPacketId(oldPacket.text), oldPacket.packetId);
+    assert.notDeepEqual(queuePushWakeFromPacket(oldPacket, now), queuePushWakeFromPacket(newPacket, now));
+    assert.equal(guard.verdict, "PASS");
+  });
+
+  it("holds instead of posting when duplicate wake context cannot be built", () => {
+    const now = Date.parse("2026-05-16T16:20:00Z");
+    const guard = evaluateQueuePushDuplicateWakeGuard({ packetId: "" }, [], { now });
+
+    assert.equal(guard.verdict, "HOLD");
+    assert.deepEqual(filterDuplicatePackets([{ packetId: "" }], [], { now }), []);
   });
 
   it("prioritizes missing final QC before routine owner lift", async () => {
