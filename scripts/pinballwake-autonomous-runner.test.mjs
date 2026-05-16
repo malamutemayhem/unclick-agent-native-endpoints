@@ -12,6 +12,7 @@ import {
 import {
   createCodingRoomJobFromBoardroomTodo,
   createAutonomousRunner,
+  createAutonomousRunnerTestOnlyExecutorReceipt,
   assertRunnerOnFreshMain,
   evaluateAutonomousRunnerCommonSensePass,
   evaluateBoardroomTodoAutoClaimEligibility,
@@ -576,6 +577,30 @@ describe("PinballWake autonomous Runner seat", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("can return a sanitized test-only executor receipt from a scoped todo", async () => {
+    const now = new Date("2026-05-16T14:58:00.000Z");
+    const result = await createAutonomousRunnerTestOnlyExecutorReceipt({
+      todo: {
+        id: "todo-executor-bridge",
+        scope_pack_comment_id: "comment-bridge-1",
+        scope_pack: {
+          owned_files: ["scripts/pinballwake-autonomous-runner.mjs"],
+          acceptance: ["runner can return a test-only executor receipt"],
+          verification: ["node --test scripts/pinballwake-autonomous-runner.test.mjs"],
+        },
+      },
+      heartbeat: { tickId: "tick-1", emittedAt: now.toISOString() },
+      headShaAtRequest: "2e0d9c2",
+      fileExists: async () => true,
+      now,
+    });
+
+    assert.equal(result.packet.todo_id, "todo-executor-bridge");
+    assert.equal(result.packet.intent, "test_only");
+    assert.equal(result.receipt.receipt_type, "executor_packet_pass");
+    assert.equal(result.receipt.sanitized, true);
   });
 
   it("keeps a scoped todo eligible only for the builder allowlist and open unassigned queue", () => {
@@ -1923,10 +1948,12 @@ describe("PinballWake autonomous Runner seat", () => {
       assert.equal(result.action, "scopepack_hydrated");
       assert.equal(result.reason, "boardroom_todo_scopepack_hydrated");
       assert.equal(result.todo_scoping_sync.scopepack_hydration.action, "scopepack_hydrated");
+      assert.equal(result.todo_scoping_sync.test_only_executor_packet.receipt.receipt_type, "executor_packet_hold");
 
       const commentCall = calls.find((call) => call.body.params.name === "comment_on");
       assert.match(commentCall.body.params.arguments.text, /PASS: scopepack_hydrated/);
       assert.match(commentCall.body.params.arguments.text, /PinballWake Executor Lane comment ScopePack parsing/);
+      assert.match(commentCall.body.params.arguments.text, /executor_packet=executor_packet_hold/);
       assert.match(commentCall.body.params.arguments.text, /No production writes/);
     } finally {
       await rm(dir, { recursive: true, force: true });
