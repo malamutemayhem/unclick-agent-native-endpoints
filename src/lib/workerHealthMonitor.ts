@@ -1,6 +1,6 @@
 // src/lib/workerHealthMonitor.ts
 //
-// Worker self-healing — heartbeat-timeout detection + reclaim recommendations
+// Worker self-healing: heartbeat-timeout detection + reclaim recommendations
 // + resume-safe classification.
 //
 // Closes UnClick todo "Worker self-healing: heartbeat timeout, reclaim, and
@@ -11,7 +11,7 @@
 // module makes it deterministic:
 //
 //   evaluateFleetHealth({ seats, now, options })
-//     → { healthy, idle, stale, suspected_dead, reclaim_recommendations }
+//     -> { healthy, idle, stale, suspected_dead, reclaim_recommendations }
 //
 // Reclaim recommendations are paired with each seat's open claims so the
 // caller can act on the runbook's authority surface (post comment + clear
@@ -30,12 +30,12 @@ export interface SeatSnapshot {
     /** Optional ETA the seat declared on claim. */
     eta: string | null;
     /**
-     * Whether the open work is resume-safe — i.e., another seat can pick up
+     * Whether the open work is resume-safe, meaning another seat can pick up
      * mid-stream without losing data. Defaults to false when unknown.
      */
     resume_safe?: boolean;
   }>;
-  /** Optional override — if true, the seat is treated as healthy regardless of last_seen. */
+  /** Optional override: if true, the seat is treated as healthy regardless of last_seen. */
   pinned_healthy?: boolean;
 }
 
@@ -51,7 +51,7 @@ export interface WorkerHealth {
 
 export interface ReclaimRecommendation {
   todo_id: string;
-  /** Reason class — caller can route on this. */
+  /** Reason class: caller can route on this. */
   reason:
     | "seat_stale"
     | "seat_suspected_dead"
@@ -64,11 +64,11 @@ export interface ReclaimRecommendation {
 }
 
 export interface HealthOptions {
-  /** Milliseconds before a seat moves from healthy → idle. Default 30 min. */
+  /** Milliseconds before a seat moves from healthy to idle. Default 30 min. */
   idleThresholdMs?: number;
-  /** Milliseconds before idle → stale. Default 4 hours. */
+  /** Milliseconds before idle to stale. Default 4 hours. */
   staleThresholdMs?: number;
-  /** Milliseconds before stale → suspected_dead. Default 24 hours. */
+  /** Milliseconds before stale to suspected_dead. Default 24 hours. */
   deadThresholdMs?: number;
   /** Milliseconds after a claim's ETA before it's considered "expired" (regardless of seat health). Default 1 hour. */
   etaGraceMs?: number;
@@ -112,7 +112,7 @@ export function evaluateSeatHealth(
         todo_id: claim.todo_id,
         reason: "seat_stale",
         safe_to_release: Boolean(claim.resume_safe),
-        detail: `seat ${seat.id} last seen ${seat.last_seen ?? "unknown"} (age ${humaniseMs(ageMs)}); claim is stale per fleet policy.`,
+        detail: `seat ${seat.id} last seen ${seat.last_seen ?? "unknown"} (age ${formatMs(ageMs)}); claim is stale per fleet policy.`,
       });
       continue;
     }
@@ -122,7 +122,7 @@ export function evaluateSeatHealth(
         reason: "seat_suspected_dead",
         // Suspected-dead seats are safer to reclaim because the original is unlikely to return.
         safe_to_release: true,
-        detail: `seat ${seat.id} last seen ${seat.last_seen ?? "unknown"} (age ${humaniseMs(ageMs)}); presumed dead per fleet policy.`,
+        detail: `seat ${seat.id} last seen ${seat.last_seen ?? "unknown"} (age ${formatMs(ageMs)}); presumed dead per fleet policy.`,
       });
       continue;
     }
@@ -135,7 +135,7 @@ export function evaluateSeatHealth(
           todo_id: claim.todo_id,
           reason: "claim_eta_expired",
           safe_to_release: Boolean(claim.resume_safe),
-          detail: `claim ETA was ${claim.eta}; ${humaniseMs(now.getTime() - etaTime)} past with no PASS receipt.`,
+          detail: `claim ETA was ${claim.eta}; ${formatMs(now.getTime() - etaTime)} past with no PASS receipt.`,
         });
       }
     }
@@ -148,7 +148,7 @@ export interface FleetHealthReport {
   evaluated_at: string;
   options: Required<HealthOptions>;
   per_seat: WorkerHealth[];
-  /** Convenience buckets — same objects, grouped. */
+  /** Convenience buckets: same objects, grouped. */
   buckets: {
     healthy: WorkerHealth[];
     idle: WorkerHealth[];
@@ -197,14 +197,14 @@ export function safeReleaseTargets(report: FleetHealthReport): string[] {
 }
 
 /**
- * Convenience: list of todo_ids that need a human OK before release
+ * Convenience: list of todo_ids that need coordinator review before release
  * (stale seats with non-resume-safe claims).
  */
-export function pendingChrisDecision(report: FleetHealthReport): ReclaimRecommendation[] {
+export function pendingCoordinatorReview(report: FleetHealthReport): ReclaimRecommendation[] {
   return report.reclaim_recommendations.filter((r) => !r.safe_to_release);
 }
 
-function humaniseMs(ms: number | null): string {
+function formatMs(ms: number | null): string {
   if (ms === null) return "unknown";
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
@@ -216,4 +216,4 @@ function humaniseMs(ms: number | null): string {
   return `${d}d${h % 24 ? ` ${h % 24}h` : ""}`;
 }
 
-export const __testing__ = { DEFAULT_OPTIONS, humaniseMs };
+export const __testing__ = { DEFAULT_OPTIONS, formatMs };

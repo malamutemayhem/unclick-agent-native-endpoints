@@ -5,7 +5,7 @@ import {
   evaluateSeatHealth,
   evaluateFleetHealth,
   safeReleaseTargets,
-  pendingChrisDecision,
+  pendingCoordinatorReview,
   __testing__,
   type SeatSnapshot,
 } from "./workerHealthMonitor";
@@ -19,13 +19,13 @@ function isoMinus(ms: number): string {
 function seat(overrides: Partial<SeatSnapshot> & { id: string }): SeatSnapshot {
   return {
     id: overrides.id,
-    last_seen: overrides.last_seen ?? NOW.toISOString(),
+    last_seen: "last_seen" in overrides ? overrides.last_seen ?? null : NOW.toISOString(),
     open_claims: overrides.open_claims ?? [],
     pinned_healthy: overrides.pinned_healthy,
   };
 }
 
-describe("evaluateSeatHealth — status thresholds", () => {
+describe("evaluateSeatHealth - status thresholds", () => {
   test("healthy when last_seen within idle threshold", () => {
     const r = evaluateSeatHealth(seat({ id: "A", last_seen: isoMinus(15 * 60 * 1000) }), NOW);
     expect(r.status).toBe("healthy");
@@ -61,8 +61,8 @@ describe("evaluateSeatHealth — status thresholds", () => {
   });
 });
 
-describe("evaluateSeatHealth — reclaim recommendations", () => {
-  test("stale seat with resume-safe claim → safe_to_release true", () => {
+describe("evaluateSeatHealth - reclaim recommendations", () => {
+  test("stale seat with resume-safe claim -> safe_to_release true", () => {
     const r = evaluateSeatHealth(
       seat({
         id: "A",
@@ -76,7 +76,7 @@ describe("evaluateSeatHealth — reclaim recommendations", () => {
     expect(r.reclaim[0].safe_to_release).toBe(true);
   });
 
-  test("stale seat with non-resume-safe claim → safe_to_release false (needs human OK)", () => {
+  test("stale seat with non-resume-safe claim -> safe_to_release false (needs coordinator review)", () => {
     const r = evaluateSeatHealth(
       seat({
         id: "A",
@@ -88,7 +88,7 @@ describe("evaluateSeatHealth — reclaim recommendations", () => {
     expect(r.reclaim[0].safe_to_release).toBe(false);
   });
 
-  test("suspected_dead seat — always safe_to_release true", () => {
+  test("suspected_dead seat - always safe_to_release true", () => {
     const r = evaluateSeatHealth(
       seat({
         id: "A",
@@ -101,7 +101,7 @@ describe("evaluateSeatHealth — reclaim recommendations", () => {
     expect(r.reclaim[0].safe_to_release).toBe(true);
   });
 
-  test("healthy seat but ETA expired → claim_eta_expired recommendation", () => {
+  test("healthy seat but ETA expired -> claim_eta_expired recommendation", () => {
     const r = evaluateSeatHealth(
       seat({
         id: "A",
@@ -117,7 +117,7 @@ describe("evaluateSeatHealth — reclaim recommendations", () => {
     expect(r.reclaim[0].reason).toBe("claim_eta_expired");
   });
 
-  test("ETA recently passed but inside grace window → no recommendation", () => {
+  test("ETA recently passed but inside grace window -> no recommendation", () => {
     const r = evaluateSeatHealth(
       seat({
         id: "A",
@@ -131,7 +131,7 @@ describe("evaluateSeatHealth — reclaim recommendations", () => {
     expect(r.reclaim.length).toBe(0);
   });
 
-  test("healthy seat with no claims → no recommendations", () => {
+  test("healthy seat with no claims -> no recommendations", () => {
     const r = evaluateSeatHealth(seat({ id: "A" }), NOW);
     expect(r.reclaim).toEqual([]);
   });
@@ -185,7 +185,7 @@ describe("evaluateFleetHealth", () => {
   });
 });
 
-describe("safeReleaseTargets and pendingChrisDecision", () => {
+describe("safeReleaseTargets and pendingCoordinatorReview", () => {
   test("safeReleaseTargets only lists todos with safe_to_release true", () => {
     const report = evaluateFleetHealth(
       [
@@ -203,18 +203,18 @@ describe("safeReleaseTargets and pendingChrisDecision", () => {
       NOW,
     );
     expect(safeReleaseTargets(report)).toEqual(["T1"]);
-    expect(pendingChrisDecision(report).map((r) => r.todo_id)).toEqual(["T2"]);
+    expect(pendingCoordinatorReview(report).map((r) => r.todo_id)).toEqual(["T2"]);
   });
 });
 
-describe("humaniseMs (internal)", () => {
-  const { humaniseMs } = __testing__;
+describe("formatMs (internal)", () => {
+  const { formatMs } = __testing__;
   test("renders seconds / minutes / hours / days", () => {
-    expect(humaniseMs(null)).toBe("unknown");
-    expect(humaniseMs(30 * 1000)).toBe("30s");
-    expect(humaniseMs(5 * 60 * 1000)).toBe("5m");
-    expect(humaniseMs(3 * 60 * 60 * 1000)).toBe("3h");
-    expect(humaniseMs((3 * 60 + 15) * 60 * 1000)).toMatch(/^3h.*15m/);
-    expect(humaniseMs(72 * 60 * 60 * 1000)).toMatch(/^3d/);
+    expect(formatMs(null)).toBe("unknown");
+    expect(formatMs(30 * 1000)).toBe("30s");
+    expect(formatMs(5 * 60 * 1000)).toBe("5m");
+    expect(formatMs(3 * 60 * 60 * 1000)).toBe("3h");
+    expect(formatMs((3 * 60 + 15) * 60 * 1000)).toMatch(/^3h.*15m/);
+    expect(formatMs(72 * 60 * 60 * 1000)).toMatch(/^3d/);
   });
 });
