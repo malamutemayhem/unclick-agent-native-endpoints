@@ -9,8 +9,12 @@ import { fileURLToPath } from "node:url";
 import {
   buildReliabilityDispatchHandoffSyncRequest,
   buildReliabilityDispatchRequest,
+  cheapTriage,
   deriveAckThresholds,
+  decideWakeOpenRouterProviderCall,
   deriveWakeStatus,
+  isFreeOpenRouterModel,
+  isWakeOpenRouterPaidEnabled,
   normalizeHandoffMessageId,
   normalizeDispatchOwner,
   shouldFailMissingHandoffMessageId,
@@ -79,6 +83,85 @@ describe("event wake router reliability dispatch", () => {
 
     assert.equal(first, second);
     assert.match(first, /^dispatch_[a-f0-9]{32}$/);
+  });
+
+  it("labels OpenRouter free wake models as default-allowed", () => {
+    const decision = decideWakeOpenRouterProviderCall("liquid/lfm-2.5-1.2b-instruct:free");
+
+    assert.equal(isFreeOpenRouterModel("openrouter/free"), true);
+    assert.equal(isFreeOpenRouterModel("liquid/lfm-2.5-1.2b-instruct:free"), true);
+    assert.equal(isFreeOpenRouterModel("openai/gpt-4o-mini"), false);
+    assert.equal(decision.allowed, true);
+    assert.equal(decision.path_id, "event-wake-router.openrouter.classifier");
+    assert.equal(decision.provider, "OpenRouter");
+    assert.equal(decision.cost_tier, "free");
+    assert.equal(decision.reason, "free_default_allowed");
+    assert.equal(decision.allow_paid_flag, "OPENROUTER_WAKE_ALLOW_PAID");
+  });
+
+  it("blocks OpenRouter paid or unknown wake models until explicitly allowed", () => {
+    const blocked = decideWakeOpenRouterProviderCall("anthropic/claude-3.5-sonnet", false);
+    const allowed = decideWakeOpenRouterProviderCall("anthropic/claude-3.5-sonnet", true);
+
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.cost_tier, "paid_or_unknown");
+    assert.equal(blocked.reason, "paid_or_unknown_blocked");
+    assert.equal(allowed.allowed, true);
+    assert.equal(allowed.reason, "explicit_paid_allowed");
+  });
+
+  it("treats only true or 1 as explicit OpenRouter wake paid opt-in", () => {
+    assert.equal(isWakeOpenRouterPaidEnabled(undefined), false);
+    assert.equal(isWakeOpenRouterPaidEnabled(""), false);
+    assert.equal(isWakeOpenRouterPaidEnabled("0"), false);
+    assert.equal(isWakeOpenRouterPaidEnabled("false"), false);
+    assert.equal(isWakeOpenRouterPaidEnabled("1"), true);
+    assert.equal(isWakeOpenRouterPaidEnabled("true"), true);
+    assert.equal(isWakeOpenRouterPaidEnabled(" TRUE "), true);
+  });
+
+  it("does not fetch OpenRouter when paid wake triage is blocked by spend guardrail", async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    const savedModel = process.env.OPENROUTER_WAKE_MODEL;
+    const savedAllow = process.env.OPENROUTER_WAKE_ALLOW_PAID;
+    const savedFetch = globalThis.fetch;
+    let fetched = false;
+
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    process.env.OPENROUTER_WAKE_MODEL = "anthropic/claude-3.5-sonnet";
+    delete process.env.OPENROUTER_WAKE_ALLOW_PAID;
+    globalThis.fetch = async () => {
+      fetched = true;
+      throw new Error("fetch should not run");
+    };
+
+    try {
+      const triage = await cheapTriage(
+        { event_name: "issue_comment" },
+        {
+          wake: true,
+          owner: "🧭",
+          urgency: "high",
+          reason: "Manual wake needs model triage",
+          eventCreatedAt: "2026-04-30T15:00:00Z",
+          needsTriage: true,
+        },
+      );
+
+      assert.equal(fetched, false);
+      assert.equal(triage.used, false);
+      assert.equal(triage.skipped, "spend_guardrail");
+      assert.equal(triage.provider_decision.reason, "paid_or_unknown_blocked");
+      assert.equal(triage.provider_decision.allow_paid_flag, "OPENROUTER_WAKE_ALLOW_PAID");
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = savedKey;
+      if (savedModel === undefined) delete process.env.OPENROUTER_WAKE_MODEL;
+      else process.env.OPENROUTER_WAKE_MODEL = savedModel;
+      if (savedAllow === undefined) delete process.env.OPENROUTER_WAKE_ALLOW_PAID;
+      else process.env.OPENROUTER_WAKE_ALLOW_PAID = savedAllow;
+      globalThis.fetch = savedFetch;
+    }
   });
 
   it("marks wake handoffs as ACK-required WakePass dispatches", () => {

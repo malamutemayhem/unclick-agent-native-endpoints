@@ -25,6 +25,8 @@ const receivedAt = new Date().toISOString();
 const ledgerDir = process.env.WAKE_LEDGER_DIR || ".wake-ledger";
 const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY || "";
 const DEFAULT_WAKE_OWNER = "🧭";
+const WAKE_OPENROUTER_PROVIDER_PATH_ID = "event-wake-router.openrouter.classifier";
+const WAKE_OPENROUTER_ALLOW_PAID_FLAG = "OPENROUTER_WAKE_ALLOW_PAID";
 const CURRENT_WAKE_OWNERS = new Set(["🧭", "🛠️", "🧪", "🔍", "🛡️", "📣", "👁️", "🩹", "🚀", "all"]);
 const LEGACY_WAKE_OWNER_ALIASES = new Map([
   ["🤖", "🧭"],
@@ -142,6 +144,30 @@ function safeWakeOwner(owner, fallback = DEFAULT_WAKE_OWNER) {
   if (CURRENT_WAKE_OWNERS.has(normalized)) return normalized;
   const normalizedFallback = normalizeDispatchOwner(fallback);
   return CURRENT_WAKE_OWNERS.has(normalizedFallback) ? normalizedFallback : DEFAULT_WAKE_OWNER;
+}
+
+export function isWakeOpenRouterPaidEnabled(value = process.env.OPENROUTER_WAKE_ALLOW_PAID) {
+  return parseBooleanFlag(value);
+}
+
+export function isFreeOpenRouterModel(model) {
+  const normalized = String(model ?? "").trim().toLowerCase();
+  return normalized === "openrouter/free" || normalized.endsWith(":free");
+}
+
+export function decideWakeOpenRouterProviderCall(model, allowPaid = isWakeOpenRouterPaidEnabled()) {
+  const selectedModel = String(model ?? "").trim();
+  const freeModel = isFreeOpenRouterModel(selectedModel);
+  return {
+    allowed: freeModel || allowPaid === true,
+    path_id: WAKE_OPENROUTER_PROVIDER_PATH_ID,
+    provider: "OpenRouter",
+    model: selectedModel || "OPENROUTER_WAKE_MODEL",
+    cost_tier: freeModel ? "free" : "paid_or_unknown",
+    default_allowed: freeModel,
+    reason: freeModel ? "free_default_allowed" : allowPaid === true ? "explicit_paid_allowed" : "paid_or_unknown_blocked",
+    allow_paid_flag: WAKE_OPENROUTER_ALLOW_PAID_FLAG,
+  };
 }
 
 export function normalizeHandoffMessageId(messageId) {
@@ -283,11 +309,20 @@ function eventBrief(event, decision) {
   };
 }
 
-async function cheapTriage(brief, decision) {
+export async function cheapTriage(brief, decision) {
   const apiKey = process.env.OPENROUTER_API_KEY || "";
   const model = process.env.OPENROUTER_WAKE_MODEL || "";
   if (!apiKey || !model || !decision.wake) return { used: false, decision };
   if (decision.needsTriage === false) return { used: false, decision };
+  const providerDecision = decideWakeOpenRouterProviderCall(model);
+  if (!providerDecision.allowed) {
+    return {
+      used: false,
+      skipped: "spend_guardrail",
+      provider_decision: providerDecision,
+      decision,
+    };
+  }
 
   const prompt = [
     "Return only compact JSON.",
@@ -329,12 +364,13 @@ async function cheapTriage(brief, decision) {
     return {
       used: true,
       model,
-        usage: json?.usage ?? null,
-        decision: {
-          wake: Boolean(parsed.wake),
-          owner: safeWakeOwner(parsed.owner, decision.owner),
-          urgency: ["low", "normal", "high", "urgent"].includes(parsed.urgency) ? parsed.urgency : decision.urgency,
-          reason: compactText(parsed.reason || decision.reason, 240),
+      provider_decision: providerDecision,
+      usage: json?.usage ?? null,
+      decision: {
+        wake: Boolean(parsed.wake),
+        owner: safeWakeOwner(parsed.owner, decision.owner),
+        urgency: ["low", "normal", "high", "urgent"].includes(parsed.urgency) ? parsed.urgency : decision.urgency,
+        reason: compactText(parsed.reason || decision.reason, 240),
         eventCreatedAt: decision.eventCreatedAt,
       },
     };
@@ -622,6 +658,8 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, ha
     cheap_triage: {
       used: Boolean(triage.used),
       model: triage.model || null,
+      skipped: triage.skipped || null,
+      provider_decision: triage.provider_decision || null,
       error: triage.error || null,
       usage: triage.usage || null,
     },
@@ -671,7 +709,7 @@ function writeLedger({ eventId, event, decision, triage, result, reliability, ha
     `- Event-to-router: ${eventSeconds === null ? "unknown" : `${eventSeconds}s`}`,
     `- Boardroom posted: ${result?.posted ? "yes" : result?.dry_run ? "dry run" : "no"}`,
     `- Reliability dispatch: ${reliability?.registered ? reliability.dispatch_id : reliability?.dry_run ? "dry run" : "not registered"}`,
-    `- Cheap triage: ${triage.used ? triage.error ? `error (${triage.error})` : "used" : "skipped"}`,
+    `- Cheap triage: ${triage.used ? triage.error ? `error (${triage.error})` : "used" : triage.skipped || "skipped"}`,
     "",
   ].join("\n");
 

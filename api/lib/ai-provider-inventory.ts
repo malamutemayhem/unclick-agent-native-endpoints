@@ -56,8 +56,8 @@ export const AI_PROVIDER_INVENTORY: AiProviderInventoryEntry[] = [
     model: "OPENROUTER_WAKE_MODEL",
     cost_tier: "paid_or_unknown",
     default_allowed: false,
-    allow_paid_flag: "OPENROUTER_WAKE_MODEL plus explicit runner approval",
-    notes: "Wake classifier model is environment-selected and must fail closed unless a runner opts into the selected paid or unknown route.",
+    allow_paid_flag: "OPENROUTER_WAKE_ALLOW_PAID",
+    notes: "Wake classifier model is environment-selected. Models explicitly ending in :free may run by default; paid or unknown routes must require the wake allow-paid flag.",
   },
   {
     id: "memory.mcp.openai.embeddings",
