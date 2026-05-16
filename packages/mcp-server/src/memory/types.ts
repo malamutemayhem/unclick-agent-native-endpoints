@@ -52,6 +52,20 @@ export interface MemoryProfileCard {
   source_receipts: MemoryProfileCardReceipt[];
 }
 
+export interface MemoryRetrievalPlanStep {
+  step: number;
+  layer: string;
+  use: string;
+}
+
+export interface MemoryRetrievalPlan {
+  mode: "cheap_first";
+  startup_order: string[];
+  steps: MemoryRetrievalPlanStep[];
+  source_lookup: string;
+  semantic_lookup: string;
+}
+
 export interface InvalidateFactInput {
   fact_id: string;
   reason?: string;

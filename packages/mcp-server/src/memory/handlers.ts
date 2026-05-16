@@ -19,6 +19,7 @@ import type {
   MemoryProfileCard,
   MemoryProfileCardReceipt,
   MemoryProfileCardSourceKind,
+  MemoryRetrievalPlan,
   MemoryReceiptRedactionState,
 } from "./types.js";
 
@@ -130,6 +131,10 @@ function activeFactPenalty(value: unknown): number {
   if (typeof row.fact === "string" && textMatchesOperationalSelfReport(row.fact)) return 1;
   if (typeof row.category === "string" && textMatchesOperationalSelfReport(row.category)) return 1;
   return 0;
+}
+
+function isEligibleStartupFact(value: unknown): boolean {
+  return activeFactPenalty(value) === 0;
 }
 
 const PROFILE_CARD_SOURCE_PATHS: Record<MemoryProfileCardSourceKind, string> = {
@@ -382,6 +387,29 @@ function buildMemoryProfileCard(params: {
   };
 }
 
+function buildMemoryRetrievalPlan(): MemoryRetrievalPlan {
+  return {
+    mode: "cheap_first",
+    startup_order: [
+      "business_context",
+      "profile_card",
+      "active_facts",
+      "knowledge_library_index",
+      "search_memory",
+      "semantic_retrieval",
+    ],
+    steps: [
+      { step: 1, layer: "business_context + profile_card", use: "identity, rules, current work" },
+      { step: 2, layer: "active_facts", use: "durable facts only" },
+      { step: 3, layer: "knowledge_library_index", use: "snapshot pointers" },
+      { step: 4, layer: "search_memory", use: "raw source detail" },
+      { step: 5, layer: "semantic_retrieval", use: "only after cheap miss" },
+    ],
+    source_lookup: "search_memory after compact miss",
+    semantic_lookup: "vector or graph only after deterministic miss",
+  };
+}
+
 export function normalizeActiveFactsForLoadMemory(value: unknown): unknown {
   const context = asRecord(value);
   if (!context || !Array.isArray(context.active_facts)) return value;
@@ -414,19 +442,25 @@ export function compactStartupContextForStrictClients(
   const context = asRecord(normalizeActiveFactsForLoadMemory(value));
   if (!context) return value;
 
-  const out: Record<string, unknown> = { ...context };
+  const out: Record<string, unknown> = {};
   const business = Array.isArray(context.business_context) ? context.business_context : [];
   const library = Array.isArray(context.knowledge_library_index) ? context.knowledge_library_index : [];
   const sessions = Array.isArray(context.recent_sessions) ? context.recent_sessions : [];
   const facts = Array.isArray(context.active_facts) ? context.active_facts : [];
+  const startupFacts = facts.filter(isEligibleStartupFact);
 
   out.business_context = business.slice(0, 6).map((row) => {
     const r = asRecord(row) ?? {};
-    return { category: r.category, key: r.key, value: compactJsonValue(r.value, 150), priority: r.priority };
+    return { category: r.category, key: r.key, value: compactJsonValue(r.value, 130), priority: r.priority };
+  });
+  out.profile_card = buildMemoryProfileCard({ business, facts: startupFacts, sessions, includeSessionSummaries });
+  out.active_facts = startupFacts.slice(0, 12).map((row) => {
+    const r = asRecord(row) ?? {};
+    return { fact: typeof r.fact === "string" ? capText(r.fact, 44) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
   });
   out.knowledge_library_index = library.slice(0, 6).map((row) => {
     const r = asRecord(row) ?? {};
-    return { slug: r.slug, title: typeof r.title === "string" ? capText(r.title, 90) : r.title, category: r.category, tags: compactStringArray(r.tags, 3, 32), updated_at: r.updated_at };
+    return { slug: r.slug, title: typeof r.title === "string" ? capText(r.title, 60) : r.title, category: r.category, tags: compactStringArray(r.tags, 3, 32), updated_at: r.updated_at };
   });
   out.recent_sessions = includeSessionSummaries
     ? sessions.slice(0, 3).map((row) => {
@@ -442,20 +476,21 @@ export function compactStartupContextForStrictClients(
         };
       })
     : [];
-  out.active_facts = facts.slice(0, 12).map((row) => {
-    const r = asRecord(row) ?? {};
-    return { fact: typeof r.fact === "string" ? capText(r.fact, 74) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
-  });
-  out.profile_card = buildMemoryProfileCard({ business, facts, sessions, includeSessionSummaries });
+  out.retrieval_plan = buildMemoryRetrievalPlan();
   out.response_bounds = {
     compact: true,
     business_context_returned: Math.min(business.length, 6),
     knowledge_library_returned: Math.min(library.length, 6),
     recent_sessions_returned: includeSessionSummaries ? Math.min(sessions.length, 3) : 0,
     recent_sessions_available_in_loaded_window: sessions.length,
-    active_facts_returned: Math.min(facts.length, 12),
+    active_facts_returned: Math.min(startupFacts.length, 12),
     active_facts_available_in_loaded_window: facts.length,
+    active_facts_eligible_for_startup: startupFacts.length,
+    active_facts_excluded_from_startup: facts.length - startupFacts.length,
   };
+  for (const [key, value] of Object.entries(context)) {
+    if (!(key in out)) out[key] = value;
+  }
   return out;
 }
 

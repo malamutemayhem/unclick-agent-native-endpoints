@@ -53,6 +53,13 @@ describe("strict-client memory response bounds", () => {
     assert.ok(profileCard.source_receipts.length > 0);
     assert.ok(profileCard.source_receipts.every((receipt) => receipt.redaction_state === "clean"));
     assert.equal(JSON.stringify(profileCard).includes(long("summary", 1000)), false);
+
+    const keys = Object.keys(compact as Record<string, unknown>);
+    assert.deepEqual(keys.slice(0, 4), ["business_context", "profile_card", "active_facts", "knowledge_library_index"]);
+    assert.deepEqual(
+      (compact as { retrieval_plan: { startup_order: string[] } }).retrieval_plan.startup_order,
+      ["business_context", "profile_card", "active_facts", "knowledge_library_index", "search_memory", "semantic_retrieval"]
+    );
   });
 
   test("load_memory non-lite mode returns truncated session summaries", () => {
@@ -222,6 +229,50 @@ describe("strict-client memory response bounds", () => {
       facts.slice(0, 3),
       ["durable-user-fact-0", "durable-user-fact-1", "durable-user-fact-2"]
     );
+  });
+
+  test("load_memory excludes operational self-report rows from compact startup facts", () => {
+    const compact = compactStartupContextForStrictClients({
+      active_facts: [
+        {
+          fact: "No Fishbowl write tools were available in this environment.",
+          category: "memory",
+          confidence: 0.99,
+          created_at: "2026-04-27T10:00:00Z",
+        },
+        {
+          fact: "Heartbeat resolved after scheduled cron re-run.",
+          category: "ops",
+          confidence: 0.98,
+          created_at: "2026-04-27T10:01:00Z",
+        },
+        {
+          fact: "Chris prefers compact memory first.",
+          category: "preference",
+          confidence: 0.9,
+          created_at: "2026-04-29T00:00:00Z",
+        },
+      ],
+    }) as {
+      active_facts: Array<{ fact: string }>;
+      profile_card: { working_now: string[] };
+      response_bounds: {
+        active_facts_returned: number;
+        active_facts_available_in_loaded_window: number;
+        active_facts_eligible_for_startup: number;
+        active_facts_excluded_from_startup: number;
+      };
+    };
+
+    const payload = JSON.stringify(compact);
+    assert.equal(compact.active_facts.length, 1);
+    assert.equal(compact.active_facts[0].fact, "Chris prefers compact memory first.");
+    assert.equal(payload.includes("No Fishbowl write tools"), false);
+    assert.equal(payload.includes("Heartbeat resolved after scheduled cron"), false);
+    assert.equal(compact.response_bounds.active_facts_returned, 1);
+    assert.equal(compact.response_bounds.active_facts_available_in_loaded_window, 3);
+    assert.equal(compact.response_bounds.active_facts_eligible_for_startup, 1);
+    assert.equal(compact.response_bounds.active_facts_excluded_from_startup, 2);
   });
 
   test("search_memory caps content previews by default", () => {
