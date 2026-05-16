@@ -23,6 +23,14 @@ export interface Evidence {
   kind: string;
   ref: string;
   note?: string;
+  source_kind?: string;
+  source_id?: string;
+  fetched_at?: string;
+  head_sha?: string;
+  run_id?: string;
+  proof_refs?: string[];
+  evidence_fingerprint?: string;
+  freshness_window_ms?: number;
 }
 
 export interface CommonSensePassResult {

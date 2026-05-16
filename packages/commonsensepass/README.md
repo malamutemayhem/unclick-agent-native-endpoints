@@ -40,6 +40,34 @@ for (const fixture of COMMONSENSEPASS_WORKER_FIXTURES) {
 
 The pack covers PASS, BLOCKER, HOLD, SUPPRESS, and the reserved ROUTE verdict. Named scenarios include false quiet, stale proof, duplicate wake, no-work-with-backlog, merge-ready-without-proof, and done-without-proof. ROUTE is included as a reserved exemplar only; R1-R5 do not emit it yet.
 
+## Evidence Receipts
+
+Workers can wrap proof in a deterministic evidence envelope before claiming PASS, done, or merge-ready.
+
+```ts
+import {
+  checkEvidenceEnvelope,
+  finalizeEvidenceReceipt,
+} from "@unclick/commonsensepass";
+
+const receipt = finalizeEvidenceReceipt({
+  source_kind: "pr",
+  source_id: "893",
+  fetched_at: new Date().toISOString(),
+  head_sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  run_id: "run-893",
+  proof_refs: ["checks:success", "pr:893"],
+  freshness_window_ms: 30 * 60 * 1000,
+});
+
+const verdict = checkEvidenceEnvelope(
+  { created_at: receipt.fetched_at, receipts: [receipt] },
+  { now_ms: Date.now(), current_head_sha: receipt.head_sha },
+);
+```
+
+The accepted receipt fields are `source_kind`, `source_id`, `fetched_at`, `head_sha`, `run_id`, `proof_refs`, `evidence_fingerprint`, and `freshness_window_ms`. Missing required proof returns `HOLD`; stale timestamps, stale head SHA, or fingerprint mismatch return `BLOCKER`.
+
 ## Usage
 
 ```ts
