@@ -603,6 +603,11 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
     return db.searchFacts(str(args.query));
   },
 
+  async search_typed_links(args) {
+    const db = await getBackend();
+    return db.searchTypedLinks(str(args.query), num(args.max_results, 10));
+  },
+
   async search_library(args) {
     const db = await getBackend();
     return db.searchLibrary(str(args.query));

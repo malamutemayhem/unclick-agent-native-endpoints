@@ -1962,6 +1962,22 @@ export const CATALOG: ToolDef[] = [
         },
       },
       {
+        id: "memory.search_typed_links",
+        name: "Search Typed Links",
+        description: "Search Typed Links - Search stored graph-style links extracted from facts and conversation turns.",
+        method: "POST",
+        path: "/v1/memory/typed-links/search",
+        requiresAuth: false,
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+            max_results: { type: "number", minimum: 1, maximum: 50, default: 10 },
+          },
+          required: ["query"],
+        },
+      },
+      {
         id: "memory.search_library",
         name: "Search Knowledge Library",
         description: "Search Knowledge Library - Search versioned reference documents in the Knowledge Library.",

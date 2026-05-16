@@ -33,7 +33,12 @@ import type {
   MemoryTaxonomySnapshotSource,
   SaveTypedLinkCandidatesResult,
 } from "./types.js";
-import type { MemoryTypedLinkCandidate } from "./typed-links.js";
+import {
+  filterAndRankMemoryTypedLinks,
+  type MemoryTypedLinkCandidate,
+  type MemoryTypedLinkSearchResult,
+  type MemoryTypedLinkStoredRow,
+} from "./typed-links.js";
 import { shouldEnforceManagedMemoryCaps } from "./quota-policy.js";
 
 function pgError(context: string, err: unknown): Error {
@@ -1122,6 +1127,42 @@ export class SupabaseBackend implements MemoryBackend {
     }
 
     return { saved: Array.isArray(data) ? data.length : rows.length };
+  }
+
+  async searchTypedLinks(query: string, maxResults: number): Promise<MemoryTypedLinkSearchResult[]> {
+    const limit = Math.max(1, Math.min(Math.floor(maxResults) || 10, 50));
+    let request = this.client
+      .from(this.tables.memory_typed_links)
+      .select(
+        [
+          "id",
+          "source_kind",
+          "source_id",
+          "relation",
+          "target_kind",
+          "target_text",
+          "confidence",
+          "evidence_start",
+          "evidence_end",
+          "evidence_text",
+          "redaction_state",
+          "created_at",
+        ].join(",")
+      )
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Math.max(limit * 10, 50), 250));
+
+    if (this.tenancy.mode === "managed") {
+      request = request.eq("api_key_hash", this.tenancy.apiKeyHash);
+    }
+
+    const { data, error } = await request;
+    if (error) {
+      if (isTypedLinkSchemaUnavailable(error)) return [];
+      throw pgError("searchTypedLinks select", error);
+    }
+
+    return filterAndRankMemoryTypedLinks((data ?? []) as unknown as MemoryTypedLinkStoredRow[], query, limit);
   }
 
   async getConversationDetail(sessionId: string): Promise<unknown> {
