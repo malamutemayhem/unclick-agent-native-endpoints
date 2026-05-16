@@ -1,137 +1,142 @@
-import { readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+#!/usr/bin/env node
+// scripts/review-dry-run.mjs
+//
+// Local wrapper for Build E's review enforcement check. Runs the same body
+// check the CI workflow runs, so authors can dry-run before pushing.
+//
+// Usage:
+//   node scripts/review-dry-run.mjs --body-file PATH       # read body from file
+//   node scripts/review-dry-run.mjs --pr 797               # fetch via gh CLI
+//   git log -1 --pretty=%B | node scripts/review-dry-run.mjs --stdin   # check a commit message
+//   node scripts/review-dry-run.mjs < my-pr-body.md        # piped stdin
+//
+// Exit codes:
+//   0 = all markers present
+//   1 = one or more markers missing (warning, not fatal — match CI's non-blocking shape)
+//   2 = usage / I/O error
 
-const REQUIRED_SECTIONS = [
-  "summary",
-  "changes",
-  "owner and lift status",
-  "review handoff",
-  "testing",
+import { promises as fs } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileP = promisify(execFile);
+
+const CHECKS = [
+  {
+    id: "closes_or_refs",
+    re: /(?:Closes:|Refs:)\s*\S+/i,
+    message: "Missing 'Closes:' or 'Refs:' line linking the UnClick todo.",
+  },
+  {
+    id: "reviewer_pass",
+    re: /Reviewer PASS|Reviewer\/Safety PASS/i,
+    message: "Missing 'Reviewer PASS <SHA>' marker (can be added as a PR comment after review).",
+  },
+  {
+    id: "safety_pass",
+    re: /Safety PASS|Reviewer\/Safety PASS/i,
+    message: "Missing 'Safety PASS <SHA>' marker (can be added as a PR comment after review).",
+  },
+  {
+    id: "test_command",
+    re: /\b(node\s+--test|npm\s+test|pnpm\s+test|vitest|playwright)\b/i,
+    message: "No test command found in PR body. Paste the smallest meaningful check.",
+  },
 ];
 
-function compact(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function stripHtmlComments(value) {
-  return String(value || "").replace(/<!--[\s\S]*?-->/g, "");
-}
-
-function normaliseHeading(value) {
-  return compact(value).toLowerCase();
-}
-
-export function extractMarkdownSections(markdown) {
-  const sections = new Map();
-  let current = null;
-  let buffer = [];
-
-  for (const line of String(markdown || "").split(/\r?\n/)) {
-    const heading = line.match(/^##\s+(.+?)\s*$/);
-    if (heading) {
-      if (current) sections.set(current, buffer.join("\n"));
-      current = normaliseHeading(heading[1]);
-      buffer = [];
-      continue;
-    }
-    if (current) buffer.push(line);
+function getArg(name, fallback = undefined) {
+  const prefix = `--${name}=`;
+  const found = process.argv.find((a) => a === `--${name}` || a.startsWith(prefix));
+  if (!found) return fallback;
+  if (found === `--${name}`) {
+    const idx = process.argv.indexOf(found);
+    return process.argv[idx + 1] ?? fallback;
   }
-
-  if (current) sections.set(current, buffer.join("\n"));
-  return sections;
+  return found.slice(prefix.length);
 }
 
-export function hasMeaningfulSectionContent(value) {
-  const stripped = stripHtmlComments(value)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => line !== "-")
-    .filter((line) => !/^-?\s*(owner|non-overlap|status|reviewer or lane|human decision pending|merge policy)\s*:\s*$/i.test(line));
-
-  return stripped.length > 0;
+async function readStdin() {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("error", reject);
+  });
 }
 
-export function validateReviewBody(markdown, options = {}) {
-  const requiredSections = options.requiredSections || REQUIRED_SECTIONS;
-  const sections = extractMarkdownSections(markdown);
-  const missing_sections = [];
-  const empty_sections = [];
-
-  for (const section of requiredSections) {
-    if (!sections.has(section)) {
-      missing_sections.push(section);
-      continue;
-    }
-    if (!hasMeaningfulSectionContent(sections.get(section))) {
-      empty_sections.push(section);
-    }
-  }
-
-  return {
-    ok: missing_sections.length === 0 && empty_sections.length === 0,
-    required_sections: [...requiredSections],
-    missing_sections,
-    empty_sections,
-  };
-}
-
-export async function readReviewBodyFromArgs(args, cwd = process.cwd()) {
-  const bodyFileIndex = args.indexOf("--body-file");
-  if (bodyFileIndex !== -1) {
-    const file = args[bodyFileIndex + 1];
-    if (!file) throw new Error("--body-file requires a path");
-    return readFile(file, "utf8");
-  }
-
-  const githubEventIndex = args.indexOf("--github-event");
-  if (githubEventIndex !== -1) {
-    const file = args[githubEventIndex + 1];
-    if (!file) throw new Error("--github-event requires a path");
-    const event = JSON.parse(await readFile(file, "utf8"));
-    return event.pull_request?.body || "";
-  }
-
-  const templateIndex = args.indexOf("--template");
-  if (templateIndex !== -1) {
-    const file = args[templateIndex + 1] || `${cwd}/.github/PULL_REQUEST_TEMPLATE.md`;
-    return readFile(file, "utf8");
-  }
-
-  throw new Error("Usage: node scripts/review-dry-run.mjs --body-file <path> | --github-event <event.json> | --template [path]");
-}
-
-function formatList(items) {
-  return items.length ? items.join(", ") : "none";
-}
-
-function emitWarning(message) {
-  if (process.env.GITHUB_ACTIONS === "true") {
-    console.log(`::warning title=Review enforcement::${message}`);
+async function fetchPrBody(prNumber) {
+  try {
+    const { stdout } = await execFileP("gh", ["pr", "view", String(prNumber), "--json", "body", "-q", ".body"], {
+      encoding: "utf8",
+    });
+    return stdout;
+  } catch (err) {
+    throw new Error(`gh CLI failed to fetch PR #${prNumber}: ${err?.stderr ?? err?.message ?? err}`);
   }
 }
 
-export async function main(args = process.argv.slice(2)) {
+async function getBody() {
+  const bodyFile = getArg("body-file");
+  if (bodyFile) {
+    return await fs.readFile(bodyFile, "utf8");
+  }
+  const pr = getArg("pr");
+  if (pr) {
+    return await fetchPrBody(pr);
+  }
+  if (process.argv.includes("--stdin") || !process.stdin.isTTY) {
+    return await readStdin();
+  }
+  throw new Error(
+    "No input. Use one of:\n" +
+    "  --body-file PATH   read body from a file\n" +
+    "  --pr NUMBER        fetch via gh CLI\n" +
+    "  --stdin            (or pipe content) read from stdin",
+  );
+}
+
+function checkBody(body) {
+  const present = [];
+  const missing = [];
+  for (const check of CHECKS) {
+    if (check.re.test(body)) present.push(check.id);
+    else missing.push({ id: check.id, message: check.message });
+  }
+  return { present, missing };
+}
+
+function render(report) {
+  const lines = [];
+  if (report.missing.length === 0) {
+    lines.push("✔ Review enforcement: all markers present.");
+  } else {
+    lines.push(`⚠ Review enforcement: ${report.missing.length} marker(s) missing.`);
+    for (const m of report.missing) lines.push(`  - ${m.message}`);
+    lines.push("");
+    lines.push("Markers found: " + (report.present.length ? report.present.join(", ") : "(none)"));
+    lines.push("");
+    lines.push("This is a non-blocking warning. Merge is gated by Reviewer/Safety PASS on the latest HEAD SHA, not by this check.");
+  }
+  return lines.join("\n");
+}
+
+async function main() {
   let body;
   try {
-    body = await readReviewBodyFromArgs(args);
-  } catch (error) {
-    console.error(error.message);
-    return 2;
+    body = await getBody();
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
   }
-
-  const result = validateReviewBody(body);
-  if (result.ok) {
-    console.log(`PASS: review dry-run found required sections: ${formatList(result.required_sections)}`);
-    return 0;
-  }
-
-  const message = `Missing sections: ${formatList(result.missing_sections)}. Empty sections: ${formatList(result.empty_sections)}.`;
-  emitWarning(message);
-  console.error(`HOLD: review dry-run incomplete. ${message}`);
-  return 1;
+  const report = checkBody(body);
+  console.log(render(report));
+  process.exit(report.missing.length === 0 ? 0 : 1);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = await main();
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
+  main();
 }
+
+// Exports for unit testing.
+export { CHECKS, checkBody, render };

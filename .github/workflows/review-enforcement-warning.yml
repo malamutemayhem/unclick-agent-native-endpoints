@@ -1,21 +1,78 @@
-name: Review enforcement warning
+name: review-enforcement-warning
+
+# Build E: non-blocking warning that surfaces when a PR body lacks the
+# Reviewer/Safety enforcement markers from .github/PULL_REQUEST_TEMPLATE.md.
+# Failure is reported as a warning annotation, NOT a check failure — Build E
+# is opt-in throughput tooling, not a merge gate. (Merge gates live in the
+# Reviewer/Safety/Coordinator workflow per rank-10.)
+#
+# To upgrade this to a hard gate later, change `continue-on-error: true` to
+# false in the body-check step.
 
 on:
   pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
 
-concurrency:
-  group: review-enforcement-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+permissions:
+  pull-requests: read
+  contents: read
 
 jobs:
-  review-dry-run:
-    name: Review dry-run warning
+  body-check:
+    name: Review enforcement body check
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "20"
-      - name: Check PR review and proof sections
-        run: node scripts/review-dry-run.mjs --github-event "$GITHUB_EVENT_PATH"
+      - name: Fetch PR body
+        id: fetch
+        run: |
+          cat <<'EOF' > /tmp/pr-body.txt
+          ${{ github.event.pull_request.body }}
+          EOF
+          echo "body_path=/tmp/pr-body.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Run body-check
+        id: check
         continue-on-error: true
+        run: |
+          set -e
+          body="$(cat /tmp/pr-body.txt)"
+          fail=0
+          missing=""
+
+          if ! grep -qiE 'Closes:|Refs:' /tmp/pr-body.txt; then
+            fail=1
+            missing="$missing\n- Missing 'Closes:' or 'Refs:' line linking the UnClick todo."
+          fi
+
+          if ! grep -qiE 'Reviewer PASS|Reviewer/Safety PASS' /tmp/pr-body.txt; then
+            fail=1
+            missing="$missing\n- Missing 'Reviewer PASS <SHA>' marker (can be added as a PR comment after review)."
+          fi
+
+          if ! grep -qiE 'Safety PASS|Reviewer/Safety PASS' /tmp/pr-body.txt; then
+            fail=1
+            missing="$missing\n- Missing 'Safety PASS <SHA>' marker (can be added as a PR comment after review)."
+          fi
+
+          if ! grep -qiE 'node --test|npm test|pnpm test|vitest|playwright' /tmp/pr-body.txt; then
+            fail=1
+            missing="$missing\n- No test command found in PR body. Paste the smallest meaningful check."
+          fi
+
+          if [ "$fail" -eq 1 ]; then
+            echo "::warning title=Review enforcement::PR body missing required markers:$missing"
+            echo "result=warn" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=ok" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.result }}" = "warn" ]; then
+            echo "Review enforcement: WARNING (non-blocking). Update the PR body or comments to satisfy markers." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "PRs without markers may still merge, but Reviewer/Safety PASS comments are required on the latest HEAD SHA for the autopilot merge gate." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Review enforcement: OK — required markers present." >> "$GITHUB_STEP_SUMMARY"
+          fi
