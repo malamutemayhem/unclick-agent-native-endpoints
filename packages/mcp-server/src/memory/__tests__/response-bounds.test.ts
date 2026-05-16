@@ -47,6 +47,11 @@ describe("strict-client memory response bounds", () => {
     const text = JSON.stringify(compact);
     assert.ok(text.length < 8000, `payload was ${text.length} chars`);
     assert.equal((compact as { recent_sessions: unknown[] }).recent_sessions.length, 0);
+
+    const profileCard = (compact as { profile_card: { source_receipts: unknown[] } }).profile_card;
+    assert.ok(profileCard);
+    assert.ok(profileCard.source_receipts.length > 0);
+    assert.equal(JSON.stringify(profileCard).includes(long("summary", 1000)), false);
   });
 
   test("load_memory non-lite mode returns truncated session summaries", () => {
@@ -57,6 +62,93 @@ describe("strict-client memory response bounds", () => {
     assert.equal(compact.recent_sessions.length, 1);
     assert.ok(compact.recent_sessions[0].summary.length < 500);
     assert.match(compact.recent_sessions[0].summary, /truncated/);
+  });
+
+  test("load_memory compact mode adds profile card with safe receipts", () => {
+    const compact = compactStartupContextForStrictClients({
+      business_context: [
+        {
+          id: "auto-tz",
+          category: "timezone",
+          key: "detected_timezone",
+          value: { timezone: "America/New_York", source: "automatic" },
+          priority: 100,
+        },
+        {
+          id: "manual-tz",
+          category: "preference",
+          key: "operator_timezone",
+          value: {
+            timezone: "Australia/Sydney",
+            utc_offset: "UTC+10",
+            privacy: "timezone-only",
+            source: "manual",
+          },
+          priority: 1,
+        },
+        {
+          id: "guardrail",
+          category: "workflow",
+          key: "user_decision_rule",
+          value: "Do not ask Chris unless there is a real access decision.",
+          priority: 2,
+        },
+      ],
+      recent_sessions: [
+        {
+          session_id: "s-private",
+          summary: "Session body should stay hidden in lite mode.",
+          created_at: "2026-04-28T00:00:00Z",
+        },
+      ],
+      active_facts: [
+        {
+          id: "fact-stale",
+          fact: "stale active job",
+          category: "job",
+          confidence: 1,
+          created_at: "2026-04-28T00:00:00Z",
+          invalidated_at: "2026-04-29T00:00:00Z",
+        },
+        {
+          id: "fact-live",
+          fact: "Current Memory Profile Card job is active.",
+          category: "job",
+          confidence: 0.91,
+          created_at: "2026-04-30T00:00:00Z",
+          invalidated_at: null,
+        },
+        {
+          id: "fact-sensitive",
+          fact: "api key token should not be surfaced",
+          category: "secret",
+          confidence: 0.95,
+          created_at: "2026-04-30T00:01:00Z",
+          invalidated_at: null,
+        },
+      ],
+    }) as {
+      profile_card: {
+        timezone_context?: string;
+        working_now: string[];
+        do_not_repeat: string[];
+        source_receipts: Array<{ memory_id: string; source_kind: string }>;
+      };
+    };
+
+    const profileCard = compact.profile_card;
+    assert.match(profileCard.timezone_context ?? "", /Australia\/Sydney/);
+    assert.doesNotMatch(profileCard.timezone_context ?? "", /America\/New_York/);
+    assert.ok(profileCard.working_now.some((line) => line.includes("Memory Profile Card job")));
+    assert.ok(profileCard.do_not_repeat.some((line) => line.includes("Do not ask Chris")));
+
+    const profileText = JSON.stringify(profileCard);
+    assert.doesNotMatch(profileText, /stale active job/);
+    assert.doesNotMatch(profileText, /api key token/);
+    assert.doesNotMatch(profileText, /Session body should stay hidden/);
+    assert.ok(profileCard.source_receipts.some((receipt) => receipt.memory_id === "fact:fact-live"));
+    assert.equal(profileCard.source_receipts.some((receipt) => receipt.memory_id === "fact:fact-stale"), false);
+    assert.equal(profileCard.source_receipts.some((receipt) => receipt.source_kind === "session_summary"), false);
   });
 
   test("load_memory filters invalidated active facts before compact ranking", () => {

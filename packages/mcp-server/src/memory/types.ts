@@ -31,6 +31,25 @@ export interface FactInput {
 
 export type StartupFactKind = "durable" | "operational" | "excluded" | "legacy_unspecified";
 
+export type MemoryProfileCardSourceKind = "business_context" | "fact" | "session_summary";
+
+export interface MemoryProfileCardReceipt {
+  memory_id: string;
+  source_kind: MemoryProfileCardSourceKind;
+  source_uri: string;
+  confidence?: number;
+  last_verified_at?: string | null;
+}
+
+export interface MemoryProfileCard {
+  profile_summary: string[];
+  working_now: string[];
+  do_not_repeat: string[];
+  timezone_context?: string;
+  memory_health: string[];
+  source_receipts: MemoryProfileCardReceipt[];
+}
+
 export interface InvalidateFactInput {
   fact_id: string;
   reason?: string;

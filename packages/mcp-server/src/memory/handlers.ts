@@ -15,6 +15,11 @@ import {
 import { resolveAgent, filterContextByLayers } from "./agent.js";
 import { emitSignal } from "../signals/emit.js";
 import { buildSearchMemoryCard } from "../cards/search-memory-card.js";
+import type {
+  MemoryProfileCard,
+  MemoryProfileCardReceipt,
+  MemoryProfileCardSourceKind,
+} from "./types.js";
 
 function currentApiKeyHash(): string | null {
   return process.env.UNCLICK_API_KEY_HASH ?? null;
@@ -126,6 +131,246 @@ function activeFactPenalty(value: unknown): number {
   return 0;
 }
 
+const PROFILE_CARD_SOURCE_PATHS: Record<MemoryProfileCardSourceKind, string> = {
+  business_context: "/admin/memory?tab=business-context",
+  fact: "/admin/memory?tab=facts",
+  session_summary: "/admin/memory?tab=sessions",
+};
+
+const SENSITIVE_MEMORY_PATTERN = /\b(secret|token|password|credential|private key|api[_ -]?key|plaintext)\b/i;
+const GUARDRAIL_PATTERN = /\b(do not|don't|never|avoid|blocked|blocker|owner auth|human decision|no secrets|no billing|no dns|no production deploy)\b/i;
+const CURRENT_WORK_PATTERN = /\b(active|current|now|todo|job|pr|blocker|blocked|next|in progress|priority|scope)\b/i;
+
+function stringifyForProfile(value: unknown, max = 120): string {
+  if (typeof value === "string") return capText(value, max);
+  if (value === null || value === undefined) return "";
+  if (typeof value !== "object") return capText(String(value), max);
+  try {
+    return capText(JSON.stringify(value), max);
+  } catch {
+    return "";
+  }
+}
+
+function hasSensitiveMemorySignal(...values: unknown[]): boolean {
+  return values.some((value) => SENSITIVE_MEMORY_PATTERN.test(stringifyForProfile(value, 300)));
+}
+
+function compactProfileLine(line: string, max = 160): string {
+  return capText(line.replace(/\s+/g, " ").trim(), max);
+}
+
+function profileRowId(
+  row: Record<string, unknown>,
+  sourceKind: MemoryProfileCardSourceKind,
+  index: number
+): string {
+  const rawId =
+    str(row.id) ||
+    str(row.fact_id) ||
+    str(row.session_id) ||
+    str(row.slug) ||
+    str(row.key) ||
+    `${sourceKind}-${index}`;
+  return compactProfileLine(`${sourceKind}:${rawId}`, 100);
+}
+
+function profileReceipt(
+  row: Record<string, unknown>,
+  sourceKind: MemoryProfileCardSourceKind,
+  index: number
+): MemoryProfileCardReceipt {
+  const memoryId = profileRowId(row, sourceKind, index);
+  const receipt: MemoryProfileCardReceipt = {
+    memory_id: memoryId,
+    source_kind: sourceKind,
+    source_uri: PROFILE_CARD_SOURCE_PATHS[sourceKind],
+  };
+  const lastVerified = str(row.last_verified_at) || str(row.updated_at) || str(row.created_at);
+  if (lastVerified) receipt.last_verified_at = lastVerified;
+  if (typeof row.confidence === "number" && Number.isFinite(row.confidence)) {
+    receipt.confidence = row.confidence;
+  }
+  return receipt;
+}
+
+function businessProfileScore(row: Record<string, unknown>): number {
+  const category = str(row.category).toLowerCase();
+  const key = str(row.key).toLowerCase();
+  const priority = num(row.priority, 0);
+  let score = priority;
+  if (category.includes("identity") || key.includes("identity")) score += 8;
+  if (category.includes("preference") || key.includes("preference")) score += 6;
+  if (category.includes("workflow") || key.includes("workflow")) score += 6;
+  if (category.includes("rule") || key.includes("rule")) score += 5;
+  if (category.includes("context") || key.includes("context")) score += 3;
+  if (category.includes("timezone") || key.includes("timezone")) score -= 2;
+  return score;
+}
+
+function businessProfileLine(row: Record<string, unknown>): string | null {
+  if (hasSensitiveMemorySignal(row.category, row.key, row.value)) return null;
+  const category = str(row.category, "context");
+  const key = str(row.key, "item");
+  const value = stringifyForProfile(row.value, 60);
+  return compactProfileLine(value ? `${category}/${key}: ${value}` : `${category}/${key}`, 110);
+}
+
+function factProfileLine(row: Record<string, unknown>): string | null {
+  if (typeof row.fact !== "string" || hasSensitiveMemorySignal(row.fact, row.category)) return null;
+  const category = str(row.category);
+  const prefix = category ? `${category}: ` : "";
+  return compactProfileLine(`${prefix}${row.fact}`, 110);
+}
+
+function timezoneRowScore(row: Record<string, unknown>): number {
+  const valueText = stringifyForProfile(row.value, 400).toLowerCase();
+  const key = str(row.key).toLowerCase();
+  const category = str(row.category).toLowerCase();
+  const haystack = `${category} ${key} ${valueText}`;
+  if (!/(timezone|time zone|utc|gmt|operator_timezone|australia\/sydney)/i.test(haystack)) return -1;
+
+  let score = 1;
+  if (key === "operator_timezone") score += 10;
+  if (key.includes("timezone") || category.includes("timezone")) score += 4;
+  const value = asRecord(row.value);
+  if (value) {
+    if (str(value.source).toLowerCase() === "manual") score += 8;
+    if (str(value.timezone) || str(value.tz)) score += 3;
+    if (str(value.utc_offset) || str(value.offset)) score += 2;
+  }
+  return score;
+}
+
+function buildTimezoneContext(business: unknown[]): string | undefined {
+  const rows = business
+    .map((row, index) => ({ row: asRecord(row), index }))
+    .filter((item): item is { row: Record<string, unknown>; index: number } => item.row !== null)
+    .map((item) => ({ ...item, score: timezoneRowScore(item.row) }))
+    .filter((item) => item.score >= 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+
+  const chosen = rows[0]?.row;
+  if (!chosen || hasSensitiveMemorySignal(chosen.key, chosen.value)) return undefined;
+
+  const value = asRecord(chosen.value);
+  if (value) {
+    const timezone = str(value.timezone) || str(value.tz);
+    const offset = str(value.utc_offset) || str(value.offset);
+    const privacy = str(value.privacy) || str(value.privacy_level);
+    const source = str(value.source);
+    const parts = [
+      timezone || stringifyForProfile(chosen.value, 80),
+      offset ? `(${offset})` : "",
+      privacy ? `privacy ${privacy}` : "",
+      source ? `${source} source` : "",
+    ].filter(Boolean);
+    if (parts.length > 0) return compactProfileLine(`Operator timezone: ${parts.join(", ")}`, 140);
+  }
+
+  const label = businessProfileLine(chosen);
+  return label ? compactProfileLine(`Operator timezone: ${label}`, 140) : undefined;
+}
+
+function uniqueProfileItems<T extends { line: string | null | undefined }>(
+  items: T[],
+  limit: number
+): Array<T & { line: string }> {
+  const seen = new Set<string>();
+  const out: Array<T & { line: string }> = [];
+  for (const item of items) {
+    const line = item.line;
+    if (!line || seen.has(line)) continue;
+    seen.add(line);
+    out.push({ ...item, line });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function buildMemoryProfileCard(params: {
+  business: unknown[];
+  facts: unknown[];
+  sessions: unknown[];
+  includeSessionSummaries: boolean;
+}): MemoryProfileCard {
+  const businessRows = params.business
+    .map((row, index) => ({ row: asRecord(row), index }))
+    .filter((item): item is { row: Record<string, unknown>; index: number } => item.row !== null);
+  const factRows = params.facts
+    .map((row, index) => ({ row: asRecord(row), index }))
+    .filter((item): item is { row: Record<string, unknown>; index: number } => item.row !== null);
+  const sessionRows = params.sessions
+    .map((row, index) => ({ row: asRecord(row), index }))
+    .filter((item): item is { row: Record<string, unknown>; index: number } => item.row !== null);
+
+  const profileSummaryItems = uniqueProfileItems(
+    businessRows
+      .slice()
+      .sort((left, right) => businessProfileScore(right.row) - businessProfileScore(left.row) || left.index - right.index)
+      .map((item) => ({
+        ...item,
+        sourceKind: "business_context" as const,
+        line: businessProfileLine(item.row),
+      })),
+    3
+  );
+  const profileSummary = profileSummaryItems.map((item) => item.line);
+
+  const factLineItems = factRows.map((item) => ({
+    ...item,
+    sourceKind: "fact" as const,
+    line: factProfileLine(item.row),
+  }));
+  const currentFactItems = factLineItems.filter((item) => item.line && CURRENT_WORK_PATTERN.test(item.line));
+  const workingItems = uniqueProfileItems([...currentFactItems, ...factLineItems], 3);
+  const workingNow = workingItems.map((item) => item.line);
+
+  const guardrailItems = uniqueProfileItems(
+    [
+      ...businessRows.map((item) => ({
+        ...item,
+        sourceKind: "business_context" as const,
+        line: businessProfileLine(item.row),
+      })),
+      ...factLineItems,
+    ].filter((item) => item.line && GUARDRAIL_PATTERN.test(item.line)),
+    3
+  );
+  const doNotRepeat = guardrailItems.map((item) => item.line);
+
+  const sourceReceipts: MemoryProfileCardReceipt[] = [];
+  const receiptIds = new Set<string>();
+  for (const item of [...profileSummaryItems.slice(0, 2), ...workingItems.slice(0, 2), ...guardrailItems.slice(0, 1)]) {
+    const receipt = profileReceipt(item.row, item.sourceKind, item.index);
+    if (receiptIds.has(receipt.memory_id)) continue;
+    receiptIds.add(receipt.memory_id);
+    sourceReceipts.push(receipt);
+    if (sourceReceipts.length >= 4) break;
+  }
+  if (params.includeSessionSummaries && sourceReceipts.length < 5) {
+    const session = sessionRows[0];
+    if (session) sourceReceipts.push(profileReceipt(session.row, "session_summary", session.index));
+  }
+
+  const sessionHealth = params.includeSessionSummaries
+    ? `${Math.min(params.sessions.length, 3)} of ${params.sessions.length} recent session summaries returned`
+    : "Recent session bodies omitted in lite mode";
+
+  return {
+    profile_summary: profileSummary,
+    working_now: workingNow,
+    do_not_repeat: doNotRepeat,
+    timezone_context: buildTimezoneContext(params.business),
+    memory_health: [
+      `${Math.min(params.business.length, 6)} of ${params.business.length} business context rows returned`,
+      `${Math.min(params.facts.length, 12)} of ${params.facts.length} active facts returned`,
+      sessionHealth,
+    ],
+    source_receipts: sourceReceipts,
+  };
+}
+
 export function normalizeActiveFactsForLoadMemory(value: unknown): unknown {
   const context = asRecord(value);
   if (!context || !Array.isArray(context.active_facts)) return value;
@@ -166,11 +411,11 @@ export function compactStartupContextForStrictClients(
 
   out.business_context = business.slice(0, 6).map((row) => {
     const r = asRecord(row) ?? {};
-    return { category: r.category, key: r.key, value: compactJsonValue(r.value, 250), priority: r.priority };
+    return { category: r.category, key: r.key, value: compactJsonValue(r.value, 150), priority: r.priority };
   });
   out.knowledge_library_index = library.slice(0, 6).map((row) => {
     const r = asRecord(row) ?? {};
-    return { slug: r.slug, title: typeof r.title === "string" ? capText(r.title, 120) : r.title, category: r.category, tags: compactStringArray(r.tags, 4, 50), updated_at: r.updated_at };
+    return { slug: r.slug, title: typeof r.title === "string" ? capText(r.title, 90) : r.title, category: r.category, tags: compactStringArray(r.tags, 3, 32), updated_at: r.updated_at };
   });
   out.recent_sessions = includeSessionSummaries
     ? sessions.slice(0, 3).map((row) => {
@@ -188,8 +433,9 @@ export function compactStartupContextForStrictClients(
     : [];
   out.active_facts = facts.slice(0, 12).map((row) => {
     const r = asRecord(row) ?? {};
-    return { fact: typeof r.fact === "string" ? capText(r.fact, 140) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
+    return { fact: typeof r.fact === "string" ? capText(r.fact, 80) : r.fact, category: r.category, confidence: r.confidence, created_at: r.created_at };
   });
+  out.profile_card = buildMemoryProfileCard({ business, facts, sessions, includeSessionSummaries });
   out.response_bounds = {
     compact: true,
     business_context_returned: Math.min(business.length, 6),
