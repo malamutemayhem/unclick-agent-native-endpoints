@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
+import { access } from "node:fs/promises";
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   createCodingRoomJobLedger,
   createCodingRoomJob,
@@ -17,6 +19,8 @@ import {
 } from "./pinballwake-coding-room-runner.mjs";
 import { evaluateOrchestratorProofWakeGate } from "./lib/autopilotkit-liveness.mjs";
 import { buildScopePackHydrationReceipt } from "./pinballwake-scopepack-hydrator.mjs";
+import { makeTestOnlyPacketFromScopePack } from "./pinballwake-executor-packet.mjs";
+import { processExecutorPacket } from "./pinballwake-executor-lane.mjs";
 
 export const AUTONOMOUS_RUNNER_MODES = new Set(["dry-run", "claim", "execute"]);
 
@@ -1434,6 +1438,7 @@ function createQuietWindowAutonomyProofReceipt({
   finalAction = "",
   finalReason = "",
   commonsensepass = {},
+  executorPacketSync = {},
 } = {}) {
   const triggerSource = normalizeQuietWindowToken(wakeSource || "unknown");
   const imported = numberOption(queueSourceResult.imported, 0);
@@ -1472,11 +1477,28 @@ function createQuietWindowAutonomyProofReceipt({
     });
   }
 
+  if (executorPacketSync?.packet || executorPacketSync?.action === "execution_packet") {
+    events.push({
+      rung: "execution_packet",
+      at: now,
+      packet_id: executorPacketSync.packet?.packet_id || null,
+      receipt_type: executorPacketSync.receipt?.receipt_type || null,
+    });
+  }
+
   if (blockedResult || commonsensepass.verdict !== "PASS") {
     events.push({
       rung: "commonsensepass_blocker",
       at: now,
       reason: blockedResult?.reason || commonsensepass.reason_code || finalReason || "runner_blocked",
+    });
+  }
+
+  if (executorPacketSync?.action === "executor_packet_hold") {
+    events.push({
+      rung: "commonsensepass_blocker",
+      at: now,
+      reason: executorPacketSync.receipt?.hold_reason || executorPacketSync.reason || "executor_packet_hold",
     });
   }
 
@@ -1736,6 +1758,258 @@ export async function syncBoardroomTodoScopingRequestToUnClick({
     comment_id: comment.ok ? comment.data?.comment?.id || null : null,
     comment_detail: comment.ok ? null : comment.reason || comment.error || null,
     scopepack_hydration: hydration.action === "needs_manual_scoping" ? null : hydration,
+  };
+}
+
+function scopePackCommentIdFromTodo(todo = {}) {
+  const comments = Array.isArray(todo.recent_comments)
+    ? todo.recent_comments
+    : Array.isArray(todo.comments)
+      ? todo.comments
+      : [];
+
+  const found = comments.find((comment) => /scope\s*pack|scopepack/i.test(`${comment?.body || ""}\n${comment?.text || ""}`));
+  return String(
+    found?.id ||
+      found?.comment_id ||
+      todo.scope_pack_comment_id ||
+      todo.scopePackCommentId ||
+      "",
+  ).trim();
+}
+
+function buildAutonomousRunnerHeartbeatTickId({ wakeSource = "unknown", now = new Date().toISOString() } = {}) {
+  const source = normalizeQuietWindowToken(wakeSource || "unknown") || "unknown";
+  const parsed = Date.parse(String(now || ""));
+  const time = Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(now || "unknown-time").trim();
+  return `autonomous-runner:${source}:${time}`;
+}
+
+function resolveExecutorPacketHeadSha({ checkedOutSha = "", mainFreshnessCanary = {} } = {}) {
+  const check = mainFreshnessCanary?.check || {};
+  if (check && check.ok === false) {
+    return { ok: false, reason: "stale_runner_main", head_sha_at_request: "" };
+  }
+
+  const head = String(
+    checkedOutSha ||
+      check.checked_out_sha ||
+      check.current_main_sha ||
+      mainFreshnessCanary?.current_main_sha ||
+      "",
+  ).trim();
+  if (!head) {
+    return { ok: false, reason: "missing_checked_out_sha", head_sha_at_request: "" };
+  }
+
+  return { ok: true, reason: "head_sha_ready", head_sha_at_request: head };
+}
+
+function createAutonomousRunnerFileExists({ worktreeCwd = process.cwd() } = {}) {
+  const base = resolve(worktreeCwd || process.cwd());
+  return async (file) => {
+    const raw = String(file || "").trim();
+    if (!raw) return false;
+    const target = resolve(base, raw);
+    const relativeTarget = relative(base, target);
+    if (!relativeTarget || relativeTarget.startsWith("..") || isAbsolute(relativeTarget)) {
+      return false;
+    }
+
+    try {
+      await access(target);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
+
+function buildExecutorPacketCommentText({ emission = {} } = {}) {
+  const packet = emission.packet || {};
+  const receipt = emission.receipt || {};
+  const verb = receipt.receipt_type === "executor_packet_hold" || emission.action === "executor_packet_hold"
+    ? "HOLD"
+    : "PASS";
+  const testCommand = compact(packet.acceptance?.test_command || "none", 220);
+  const reason = compact(receipt.hold_reason || emission.reason || "test_only_executor_packet_pass", 220);
+  return compact(
+    [
+      `${verb}: execution_packet.`,
+      `packet_id=${packet.packet_id || "none"}.`,
+      `receipt_type=${receipt.receipt_type || "none"}.`,
+      `intent=${packet.intent || "test_only"}.`,
+      `todo_id=${packet.todo_id || emission.todo_id || "unknown"}.`,
+      `head_sha_at_request=${packet.head_sha_at_request || "unknown"}.`,
+      `owned_files=${(packet.owned_files || []).join(" | ") || "none"}.`,
+      `test_command=${testCommand}.`,
+      `reason=${reason}.`,
+      `next=${receipt.next_action || emission.next_action || "reviewer_safety_pass"}.`,
+    ].join(" "),
+    1600,
+  );
+}
+
+export async function createAutonomousRunnerTestOnlyExecutorReceipt({
+  todo,
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  now = new Date().toISOString(),
+  wakeSource = "unknown",
+  checkedOutSha = "",
+  mainFreshnessCanary = {},
+  fileExists,
+  worktreeCwd = process.cwd(),
+} = {}) {
+  const todoId = String(todo?.id || todo?.todo_id || "").trim();
+  if (!todoId) {
+    return { ok: true, skipped: true, reason: "missing_todo_id" };
+  }
+
+  const head = resolveExecutorPacketHeadSha({ checkedOutSha, mainFreshnessCanary });
+  if (!head.ok) {
+    return { ok: true, skipped: true, reason: head.reason, todo_id: todoId };
+  }
+
+  const hydration = buildScopePackHydrationReceipt(todo, { headSha: head.head_sha_at_request });
+  if (hydration.action === "needs_manual_scoping") {
+    return { ok: true, skipped: true, reason: "no_hydratable_scopepack", todo_id: todoId };
+  }
+  if (hydration.action === "blocker") {
+    return {
+      ok: true,
+      action: "executor_packet_hold",
+      reason: hydration.reason,
+      todo_id: todoId,
+      scopepack_hydration: hydration,
+      receipt: {
+        receipt_type: "executor_packet_hold",
+        emitted_at: now,
+        packet_id: null,
+        hold_reason: hydration.reason,
+        evidence: { missing_fields: hydration.missing_fields || [] },
+        next_action: "rescope_owned_files",
+      },
+    };
+  }
+
+  const scopepack = hydration.scopepack || {};
+  if (!scopepack.owned_files?.length) {
+    return {
+      ok: true,
+      action: "executor_packet_hold",
+      reason: "missing_owned_files",
+      todo_id: todoId,
+      scopepack_hydration: hydration,
+      receipt: {
+        receipt_type: "executor_packet_hold",
+        emitted_at: now,
+        packet_id: null,
+        hold_reason: "missing_owned_files",
+        evidence: { owned_modules: scopepack.owned_modules || [] },
+        next_action: "rescope_owned_files",
+      },
+    };
+  }
+
+  const heartbeat = {
+    tickId: buildAutonomousRunnerHeartbeatTickId({ wakeSource, now }),
+    emittedAt: now,
+  };
+  const packetResult = makeTestOnlyPacketFromScopePack({
+    todo,
+    scopepack,
+    heartbeatTickId: heartbeat.tickId,
+    headShaAtRequest: head.head_sha_at_request,
+    requestingSeatId: boardroomClaimAgentId(runner),
+    scopePackCommentId: scopePackCommentIdFromTodo(todo),
+    emittedAt: now,
+  });
+  if (!packetResult.ok) {
+    return {
+      ok: true,
+      action: "executor_packet_hold",
+      reason: packetResult.reason,
+      todo_id: todoId,
+      scopepack_hydration: hydration,
+      packet: packetResult.packet || null,
+      receipt: {
+        receipt_type: "executor_packet_hold",
+        emitted_at: now,
+        packet_id: packetResult.packet?.packet_id || null,
+        hold_reason: packetResult.reason,
+        evidence: packetResult.validation || {},
+        next_action: "rescope_owned_files",
+      },
+    };
+  }
+
+  const packet = packetResult.packet;
+  const receipt = await processExecutorPacket({
+    packet,
+    heartbeat,
+    now: new Date(now),
+    fileExists: fileExists || createAutonomousRunnerFileExists({ worktreeCwd }),
+  });
+
+  return {
+    ok: true,
+    action: receipt.receipt_type === "executor_packet_hold" ? "executor_packet_hold" : "execution_packet",
+    reason: receipt.hold_reason || "test_only_executor_packet_pass",
+    todo_id: todoId,
+    heartbeat,
+    packet,
+    receipt,
+    scopepack_hydration: hydration,
+    next_action: receipt.next_action || "reviewer_safety_pass",
+  };
+}
+
+export async function syncAutonomousRunnerExecutorPacketToUnClick({
+  todo,
+  runner = DEFAULT_AUTONOMOUS_RUNNER,
+  mcpUrl = DEFAULT_UNCLICK_MCP_URL,
+  apiKey = "",
+  fetchImpl = globalThis.fetch,
+  now = new Date().toISOString(),
+  wakeSource = "unknown",
+  checkedOutSha = "",
+  mainFreshnessCanary = {},
+  fileExists,
+  worktreeCwd = process.cwd(),
+} = {}) {
+  const emission = await createAutonomousRunnerTestOnlyExecutorReceipt({
+    todo,
+    runner,
+    now,
+    wakeSource,
+    checkedOutSha,
+    mainFreshnessCanary,
+    fileExists,
+    worktreeCwd,
+  });
+
+  if (emission.skipped) {
+    return emission;
+  }
+
+  const comment = await callUnClickMcpTool({
+    mcpUrl,
+    apiKey,
+    fetchImpl,
+    toolName: "comment_on",
+    arguments: {
+      agent_id: boardroomClaimAgentId(runner),
+      target_kind: "todo",
+      target_id: emission.todo_id,
+      text: buildExecutorPacketCommentText({ emission }),
+    },
+  });
+
+  return {
+    ...emission,
+    comment_ok: comment.ok,
+    comment_id: comment.ok ? comment.data?.comment?.id || null : null,
+    comment_detail: comment.ok ? null : comment.reason || comment.error || null,
   };
 }
 
@@ -2230,6 +2504,7 @@ export async function runAutonomousRunnerFile({
   gitStatusImpl = readAutonomousRunnerGitStatus,
   worktreeCwd = process.cwd(),
   gitHygieneIgnoredPaths = [],
+  executorPacketFileExists,
 } = {}) {
   if (orchestratorProof) {
     return runOrchestratorSeatHandshakeProof({
@@ -2368,6 +2643,7 @@ export async function runAutonomousRunnerFile({
   const last = results[results.length - 1] || { ok: true, action: "idle", reason: "no_cycle_run", ledger };
   let todoClaimSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
   let todoScopingSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
+  let executorPacketSync = { ok: true, skipped: true, reason: "sync_not_applicable" };
   const todoForScoping = selectBoardroomTodoForScoping({ queueSourceResult, lastResult: last });
   let finalAction = todoForScoping && shouldPersist ? "scoping_requested" : last.action;
   let finalReason = todoForScoping && shouldPersist ? "boardroom_todo_reopened_for_scoping" : last.reason;
@@ -2411,6 +2687,38 @@ export async function runAutonomousRunnerFile({
         todo_claim_sync: todoClaimSync,
         main_freshness_canary: mainFreshnessCanary,
       };
+    }
+
+    const claimedTodoId = extractBoardroomTodoIdFromCodingRoomJob(last.job);
+    const todoForExecutorPacket = (queueSourceResult.todos || []).find((todo) =>
+      String(todo.id || todo.todo_id || "").trim() === claimedTodoId
+    );
+    if (todoForExecutorPacket) {
+      executorPacketSync = await syncAutonomousRunnerExecutorPacketToUnClick({
+        todo: todoForExecutorPacket,
+        runner,
+        apiKey: unclickApiKey,
+        mcpUrl: unclickMcpUrl,
+        fetchImpl,
+        now,
+        wakeSource,
+        checkedOutSha,
+        mainFreshnessCanary,
+        fileExists: executorPacketFileExists,
+        worktreeCwd,
+      });
+
+      if (!executorPacketSync.skipped) {
+        finalAction = executorPacketSync.action || finalAction;
+        finalReason = executorPacketSync.reason || finalReason;
+        claimabilityScorecard = buildRunClaimabilityScorecard({
+          queueSourceResult,
+          results,
+          lastResult: last,
+          finalAction,
+          finalReason,
+        });
+      }
     }
   }
 
@@ -2492,6 +2800,7 @@ export async function runAutonomousRunnerFile({
     finalAction,
     finalReason,
     commonsensepass,
+    executorPacketSync,
   });
   claimabilityScorecard = {
     ...claimabilityScorecard,
@@ -2506,7 +2815,12 @@ export async function runAutonomousRunnerFile({
 
   return {
     ...last,
-    ok: commonsensepass.verdict === "PASS" && results.every((result) => result.ok) && todoClaimSync.ok && todoScopingSync.ok,
+    ok:
+      commonsensepass.verdict === "PASS" &&
+      results.every((result) => result.ok) &&
+      todoClaimSync.ok &&
+      todoScopingSync.ok &&
+      executorPacketSync.ok,
     action: finalAction,
     reason: finalReason,
     mode: safeMode,
@@ -2521,6 +2835,7 @@ export async function runAutonomousRunnerFile({
     quiet_window_autonomy_proof: quietWindowAutonomyProof,
     todo_claim_sync: todoClaimSync,
     todo_scoping_sync: todoScopingSync,
+    executor_packet_sync: executorPacketSync,
     git_hygiene: gitHygiene,
     main_freshness_canary: mainFreshnessCanary,
   };

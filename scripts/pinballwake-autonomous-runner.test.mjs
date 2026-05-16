@@ -1380,6 +1380,152 @@ describe("PinballWake autonomous Runner seat", () => {
     }
   });
 
+  it("emits a test-only executor packet after claiming a scoped UnClick todo", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
+    const ledgerPath = join(dir, "ledger.json");
+    try {
+      await writeCodingRoomJobLedger(ledgerPath, createCodingRoomJobLedger());
+
+      const packetRunner = createAutonomousRunner({
+        id: "pinballwake-job-runner",
+        readiness: "builder_ready",
+        capabilities: ["implementation", "test_fix", "docs_update"],
+      });
+      const calls = [];
+      const fetchImpl = async (_url, init = {}) => {
+        calls.push({ body: JSON.parse(init.body) });
+        const toolName = calls.at(-1).body.params.name;
+        if (toolName === "list_actionable_todos") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todos: [
+                          {
+                            id: "todo-executor-packet-1",
+                            title: "Emit executor packet for scoped job",
+                            status: "open",
+                            priority: "urgent",
+                            assigned_to_agent_id: null,
+                            actionability_reason: "unassigned_open",
+                            scope_pack: {
+                              lane: "autopilot_executor",
+                              owner_hint: "builder_or_pinballwake_build_executor",
+                              owned_files: ["scripts/pinballwake-executor-packet.mjs"],
+                              acceptance: ["Runner emits a test-only executor packet"],
+                              verification: ["node --test scripts/pinballwake-executor-packet.test.mjs"],
+                              stop_conditions: ["Stop before enabling execute mode"],
+                              proof_required: "Boardroom receipt with execution_packet PASS or HOLD",
+                              out_of_scope: ["No code-writing executor invocation", "No merge authority expansion"],
+                            },
+                          },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "update_todo") {
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        todo: {
+                          id: "todo-executor-packet-1",
+                          status: "in_progress",
+                          assigned_to_agent_id: "pinballwake-job-runner",
+                        },
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        if (toolName === "comment_on") {
+          const commentIndex = calls.filter((call) => call.body.params.name === "comment_on").length;
+          return {
+            ok: true,
+            async json() {
+              return {
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ comment: { id: `comment-${commentIndex}` } }),
+                    },
+                  ],
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`unexpected tool ${toolName}`);
+      };
+
+      const result = await runAutonomousRunnerFile({
+        ledgerPath,
+        runner: packetRunner,
+        mode: "claim",
+        queueSource: "unclick",
+        unclickApiKey: "uc_test",
+        unclickMcpUrl: "https://unclick.test/api/mcp",
+        fetchImpl,
+        now: "2026-05-16T15:20:00.000Z",
+        wakeSource: "schedule",
+        checkedOutSha: "abc12345",
+        executorPacketFileExists: async (file) => file === "scripts/pinballwake-executor-packet.mjs",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.action, "execution_packet");
+      assert.equal(result.reason, "test_only_executor_packet_pass");
+      assert.equal(result.executor_packet_sync.action, "execution_packet");
+      assert.equal(result.executor_packet_sync.packet.intent, "test_only");
+      assert.equal(result.executor_packet_sync.packet.todo_id, "todo-executor-packet-1");
+      assert.equal(result.executor_packet_sync.packet.head_sha_at_request, "abc12345");
+      assert.equal(result.executor_packet_sync.receipt.receipt_type, "executor_packet_pass");
+      assert.equal(result.executor_packet_sync.comment_ok, true);
+      assert.deepEqual(calls.map((call) => call.body.params.name), [
+        "list_actionable_todos",
+        "update_todo",
+        "comment_on",
+        "comment_on",
+      ]);
+      assert.match(calls.at(-1).body.params.arguments.text, /PASS: execution_packet/);
+      assert.match(calls.at(-1).body.params.arguments.text, /receipt_type=executor_packet_pass/);
+      assert.deepEqual(result.quiet_window_autonomy_proof.evidence.observed_rungs, [
+        "tick",
+        "buildbait_crumb",
+        "claim_or_lease",
+        "execution_packet",
+      ]);
+      assert.equal(
+        result.quiet_window_autonomy_proof.first_missing_rung,
+        "build_attempt_or_commonsense_blocker",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("emits a quiet-window proof receipt that rejects manual runner triggers", async () => {
     const dir = await mkdtemp(join(tmpdir(), "autonomous-runner-"));
     const ledgerPath = join(dir, "ledger.json");
