@@ -82,7 +82,7 @@ Internal admin only. Auto-generated from tracked source so new AI seats can unde
 | packages/mcp-server/src/domain-tool.ts | 1beecc106e80 | 6076 |
 | packages/mcp-server/src/ebay-tool.ts | 10dffe36315f | 7595 |
 | packages/mcp-server/src/ebird-tool.ts | 3deedf3fde19 | 6262 |
-| packages/mcp-server/src/elevenlabs-tool.ts | dcb54be4833d | 7692 |
+| packages/mcp-server/src/elevenlabs-tool.ts | efcaeeff39d6 | 10833 |
 
 ## UnClick Structure
 
