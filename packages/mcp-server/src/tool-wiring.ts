@@ -9577,6 +9577,7 @@ export const ADDITIONAL_TOOLS = [
         source_id: { type: "string", description: "Optional upstream event, dispatch, PR, issue, or wake identifier for trace evidence." },
         source_url: { type: "string", description: "Optional upstream URL for trace evidence." },
         model: { type: "string", description: "OpenRouter model ID. Default: liquid/lfm-2.5-1.2b-instruct:free. Use openrouter/free only when auto-rotation is desired." },
+        allow_paid: { type: "boolean", description: "Explicit opt-in required for paid or unknown OpenRouter model IDs. Free :free models do not need this." },
         max_tokens: { type: "number", description: "Maximum output tokens. Hard capped at 500. Default: 260." },
       },
       required: ["event_text"],

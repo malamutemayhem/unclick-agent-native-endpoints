@@ -12,6 +12,7 @@ describe("ai provider inventory", () => {
     const inventory = listAiProviderInventory();
 
     expect(inventory.some((entry) => entry.id === "nudgeonly.openrouter.free-default")).toBe(true);
+    expect(inventory.some((entry) => entry.id === "nudgeonly.openrouter.custom-model")).toBe(true);
     expect(inventory.some((entry) => entry.id === "memory.mcp.openai.embeddings")).toBe(true);
     expect(inventory.every((entry) => ["free", "paid", "paid_or_unknown"].includes(entry.cost_tier))).toBe(true);
     expect(inventory.filter((entry) => entry.default_allowed).map((entry) => entry.cost_tier)).toEqual(["free"]);
@@ -23,6 +24,35 @@ describe("ai provider inventory", () => {
       cost_tier: "free",
       reason: "free_default_allowed",
       default_allowed: true,
+    });
+  });
+
+  it("blocks NudgeOnly custom model paths by default", () => {
+    expect(getAiProviderInventoryEntry("nudgeonly.openrouter.custom-model")).toMatchObject({
+      provider: "OpenRouter",
+      call_kind: "classification",
+      cost_tier: "paid_or_unknown",
+      default_allowed: false,
+      allow_paid_flag: "NUDGEONLY_OPENROUTER_ALLOW_PAID or allow_paid argument",
+    });
+    expect(decideAiProviderCall({
+      path_id: "nudgeonly.openrouter.custom-model",
+      model: "anthropic/claude-sonnet-4",
+    })).toMatchObject({
+      allowed: false,
+      provider: "OpenRouter",
+      model: "anthropic/claude-sonnet-4",
+      cost_tier: "paid_or_unknown",
+      reason: "paid_or_unknown_blocked",
+      allow_paid_flag: "NUDGEONLY_OPENROUTER_ALLOW_PAID or allow_paid argument",
+    });
+    expect(decideAiProviderCall({
+      path_id: "nudgeonly.openrouter.custom-model",
+      model: "anthropic/claude-sonnet-4",
+      allow_paid: true,
+    })).toMatchObject({
+      allowed: true,
+      reason: "explicit_paid_allowed",
     });
   });
 
