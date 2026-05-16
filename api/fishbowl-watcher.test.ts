@@ -8,6 +8,7 @@ import {
   WAKEPASS_REROUTE_LEASE_SECONDS,
   buildDispatchReclaimSignal,
   buildMissedCheckinDispatch,
+  buildWorkerMovementWorkflowPilotProofText,
   buildWakepassAutoReroutePlan,
   buildWorkerSelfHealingSignal,
   hasRecentWorkerSelfHealingTodoSignal,
@@ -16,6 +17,7 @@ import {
   isReclaimableDispatchCandidate,
   isWakepassAutoRerouteEligible,
   messageAcknowledgesDispatch,
+  planWorkerMovementWorkflowPilot,
   planWorkerSelfHealingDecision,
   planWorkerSelfHealingTodoSignal,
   resolveWakepassRerouteTarget,
@@ -715,5 +717,128 @@ describe("worker self-healing decision plan", () => {
         emittedAt: "2026-05-01T01:22:01.000Z",
       }),
     ).toBeNull();
+  });
+});
+
+describe("Vercel worker movement workflow pilot plan", () => {
+  it("builds a dry-run start plan for one safe expired lease candidate", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "Worker self-healing: heartbeat timeout, reclaim, and resume-safe queue behavior",
+      todo: {
+        id: "todo-expired-lease",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 2,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-8",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    expect(plan).toMatchObject({
+      mode: "dry_run",
+      action: "start_dry_run",
+      candidate_id: "todo-expired-lease",
+      safety: {
+        allowed: true,
+        reason: "safe_proof_only_candidate",
+      },
+      owner_age_minutes: 12,
+      decision: {
+        action: "expired_lease_reclaimable",
+        latest_handoff_receipt_id: "handoff-latest-8",
+      },
+      signal: {
+        action: "worker_self_healing_reclaimable_lease",
+      },
+      proof: {
+        next_safe_step: "start Vercel Workflow in dry-run mode and post proof only",
+        payload: {
+          proof_mode: "dry_run",
+          action: "start_dry_run",
+          has_lease_token: true,
+          planned_signal_action: "worker_self_healing_reclaimable_lease",
+        },
+      },
+    });
+    expect(plan.workflow_key).toContain("todo-expired-lease");
+    expect(JSON.stringify(plan.proof.payload)).not.toContain("lease-secret");
+    expect(buildWorkerMovementWorkflowPilotProofText(plan)).toContain(
+      "Vercel worker movement pilot start_dry_run",
+    );
+  });
+
+  it("refuses security-gated candidates even when the stale lease is detectable", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "SECURITY: deactivate legacy plaintext api_keys_legacy rows after owner auth",
+      todo: {
+        id: "todo-security",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: "lease-secret",
+        lease_expires_at: "2026-05-01T01:10:00.000Z",
+        reclaim_count: 0,
+      },
+      profile: null,
+      latestHandoffReceiptId: "handoff-latest-9",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    expect(plan).toMatchObject({
+      mode: "dry_run",
+      action: "post_refusal_proof",
+      candidate_id: "todo-security",
+      safety: {
+        allowed: false,
+        reason: "owner_or_security_gated_job",
+      },
+      signal: null,
+      proof: {
+        next_safe_step:
+          "post refusal proof and leave the job with its owner (owner_or_security_gated_job)",
+        payload: {
+          action: "post_refusal_proof",
+          planned_signal_action: "worker_self_healing_reclaimable_lease",
+        },
+      },
+    });
+    expect(JSON.stringify(plan)).not.toContain("lease-secret");
+  });
+
+  it("skips workflow start when existing planner finds no movement needed", () => {
+    const plan = planWorkerMovementWorkflowPilot({
+      title: "Worker self-healing: heartbeat timeout, reclaim, and resume-safe queue behavior",
+      todo: {
+        id: "todo-current-worker",
+        status: "in_progress",
+        assigned_to_agent_id: "worker-1",
+        lease_token: null,
+        lease_expires_at: null,
+        reclaim_count: 0,
+      },
+      profile: {
+        ...baseProfile,
+        last_seen_at: "2026-05-01T01:21:00.000Z",
+        next_checkin_at: "2026-05-01T01:30:00.000Z",
+      },
+      latestHandoffReceiptId: "handoff-latest-10",
+      nowMs: Date.parse("2026-05-01T01:22:00.000Z"),
+    });
+
+    expect(plan).toMatchObject({
+      mode: "dry_run",
+      action: "skip_no_action",
+      safety: {
+        allowed: false,
+        reason: "no_stale_worker_or_reclaimable_lease",
+      },
+      signal: null,
+      owner_age_minutes: 0,
+      proof: {
+        next_safe_step: "skip workflow start and keep cron watcher as fallback",
+      },
+    });
   });
 });

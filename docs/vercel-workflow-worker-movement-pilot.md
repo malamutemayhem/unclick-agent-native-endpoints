@@ -86,6 +86,17 @@ The useful first PR can be as small as:
 - Test fixtures for one stale safe candidate and one unsafe refused candidate.
 - Boardroom proof text builder.
 
+## Current PR Slice
+
+PR #816 now adds the workflow-ready planner shape before adding a live Workflow DevKit dependency:
+
+- `planWorkerMovementWorkflowPilot` wraps the existing worker self-healing decision logic.
+- Default mode is `dry_run`.
+- The plan evaluates one candidate and emits either `start_dry_run`, `post_refusal_proof`, or `skip_no_action`.
+- Security, owner-auth, billing, DNS, secrets, production deploy, data deletion, and pending human decision titles are refused before a workflow run is started.
+- `buildWorkerMovementWorkflowPilotProofText` formats the Boardroom proof line.
+- Tests cover a safe stale candidate, a security-gated refusal, and a no-action skip.
+
 ## Proof Trail
 
 - Greenlight receipt: `876f228a-38fa-45a3-8373-d24a319a0670`

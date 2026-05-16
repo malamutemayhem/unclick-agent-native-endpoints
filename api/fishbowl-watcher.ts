@@ -165,6 +165,35 @@ export interface WorkerSelfHealingTodoSignalPlan {
   insert: WorkerSelfHealingSignalInsertRow;
 }
 
+export type WorkerMovementWorkflowPilotAction =
+  | "start_dry_run"
+  | "post_refusal_proof"
+  | "skip_no_action";
+
+export type WorkerMovementWorkflowPilotDecision =
+  Omit<WorkerSelfHealingDecision, "lease_token"> & {
+    has_lease_token: boolean;
+  };
+
+export interface WorkerMovementWorkflowPilotPlan {
+  mode: "dry_run";
+  action: WorkerMovementWorkflowPilotAction;
+  candidate_id: string;
+  workflow_key: string;
+  decision: WorkerMovementWorkflowPilotDecision;
+  signal: WorkerSelfHealingSignal | null;
+  safety: {
+    allowed: boolean;
+    reason: string;
+  };
+  owner_age_minutes: number | null;
+  proof: {
+    summary: string;
+    next_safe_step: string;
+    payload: Record<string, unknown>;
+  };
+}
+
 export function isMissedCheckinCandidate(profile: ProfileRow, nowMs: number): boolean {
   if (!profile.next_checkin_at) return false;
   const dueMs = new Date(profile.next_checkin_at).getTime();
@@ -393,6 +422,106 @@ export function hasRecentWorkerSelfHealingTodoSignal(
   ));
 }
 
+export function planWorkerMovementWorkflowPilot(params: {
+  todo: WorkerSelfHealingTodoState;
+  title?: string | null;
+  profile?: ProfileRow | null;
+  latestHandoffReceiptId?: string | null;
+  nowMs: number;
+}): WorkerMovementWorkflowPilotPlan {
+  const rawDecision = planWorkerSelfHealingDecision({
+    todo: params.todo,
+    profile: params.profile,
+    latestHandoffReceiptId: params.latestHandoffReceiptId,
+    nowMs: params.nowMs,
+  });
+  const decision = sanitizeWorkerMovementDecision(rawDecision);
+  const plannedSignal = buildWorkerSelfHealingSignal(rawDecision);
+  const blockedReason = workerMovementBlockedReason(params.title);
+  const hasActionableSignal = plannedSignal?.severity === "action_needed";
+  const action: WorkerMovementWorkflowPilotAction = blockedReason
+    ? "post_refusal_proof"
+    : hasActionableSignal
+      ? "start_dry_run"
+      : "skip_no_action";
+  const safety = action === "start_dry_run"
+    ? { allowed: true, reason: "safe_proof_only_candidate" }
+    : { allowed: false, reason: blockedReason ?? decision.reason };
+  const ownerAgeMinutes = workerMovementOwnerAgeMinutes(
+    decision,
+    params.nowMs,
+    params.profile,
+  );
+  const nextSafeStep = workerMovementNextSafeStep(action, safety.reason);
+  const workflowKey = [
+    "worker-movement",
+    decision.todo_id,
+    decision.action,
+    decision.lease_expires_at ?? decision.next_checkin_at ?? "no-due",
+  ].join(":");
+  const signal = blockedReason ? null : plannedSignal;
+  const proofPayload: Record<string, unknown> = {
+    proof_mode: "dry_run",
+    candidate_id: decision.todo_id,
+    workflow_key: workflowKey,
+    action,
+    safety_reason: safety.reason,
+    owner_age_minutes: ownerAgeMinutes,
+    decision_action: decision.action,
+    assigned_to_agent_id: decision.assigned_to_agent_id,
+    has_lease_token: decision.has_lease_token,
+    lease_expires_at: decision.lease_expires_at,
+    reclaim_count: decision.reclaim_count,
+    next_reclaim_count: decision.next_reclaim_count,
+    latest_handoff_receipt_id: decision.latest_handoff_receipt_id,
+    next_checkin_at: decision.next_checkin_at ?? null,
+    last_seen_at: decision.last_seen_at ?? null,
+    planned_signal_action: plannedSignal?.action ?? null,
+  };
+
+  return {
+    mode: "dry_run",
+    action,
+    candidate_id: decision.todo_id,
+    workflow_key: workflowKey,
+    decision,
+    signal,
+    safety,
+    owner_age_minutes: ownerAgeMinutes,
+    proof: {
+      summary: `Vercel worker movement pilot ${action} for todo ${decision.todo_id}.`,
+      next_safe_step: nextSafeStep,
+      payload: proofPayload,
+    },
+  };
+}
+
+export function buildWorkerMovementWorkflowPilotProofText(
+  plan: WorkerMovementWorkflowPilotPlan,
+): string {
+  const ownerAge = plan.owner_age_minutes === null
+    ? "unknown"
+    : `${plan.owner_age_minutes}m`;
+  return [
+    `Vercel worker movement pilot ${plan.action}`,
+    `candidate ${plan.candidate_id}`,
+    `owner age ${ownerAge}`,
+    `decision ${plan.decision.action}`,
+    `reason ${plan.safety.reason}`,
+    `next ${plan.proof.next_safe_step}`,
+  ].join("; ");
+}
+
+function sanitizeWorkerMovementDecision(
+  decision: WorkerSelfHealingDecision,
+): WorkerMovementWorkflowPilotDecision {
+  const { lease_token: leaseToken, ...safeDecision } = decision;
+  return {
+    ...safeDecision,
+    has_lease_token: Boolean(leaseToken),
+  };
+}
+
 function dispatchToDbRow(dispatch: AgentDispatch) {
   return {
     api_key_hash: dispatch.apiKeyHash,
@@ -423,6 +552,47 @@ function nonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function workerMovementBlockedReason(title: unknown): string | null {
+  const text = String(title ?? "").toLowerCase();
+  if (!text) return null;
+  if (/\bsecurity\b|owner auth|owner-auth/.test(text)) {
+    return "owner_or_security_gated_job";
+  }
+  if (/\bbilling\b|\bdns\b|\bsecret(s)?\b|production deploy|data deletion|human decision/.test(text)) {
+    return "high_risk_job_requires_human_or_owner";
+  }
+  return null;
+}
+
+function workerMovementOwnerAgeMinutes(
+  decision: WorkerMovementWorkflowPilotDecision,
+  nowMs: number,
+  profile?: ProfileRow | null,
+): number | null {
+  const timestamp = decision.lease_expires_at
+    ?? decision.next_checkin_at
+    ?? decision.last_seen_at
+    ?? profile?.next_checkin_at
+    ?? profile?.last_seen_at;
+  if (!timestamp) return null;
+  const eventMs = new Date(timestamp).getTime();
+  if (Number.isNaN(eventMs)) return null;
+  return Math.max(0, Math.round((nowMs - eventMs) / 60_000));
+}
+
+function workerMovementNextSafeStep(
+  action: WorkerMovementWorkflowPilotAction,
+  reason: string,
+): string {
+  if (action === "start_dry_run") {
+    return "start Vercel Workflow in dry-run mode and post proof only";
+  }
+  if (action === "post_refusal_proof") {
+    return `post refusal proof and leave the job with its owner (${reason})`;
+  }
+  return "skip workflow start and keep cron watcher as fallback";
 }
 
 function ackTokenForDispatch(row: DispatchRow): string | null {
