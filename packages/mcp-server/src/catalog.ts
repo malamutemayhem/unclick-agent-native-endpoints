@@ -2166,6 +2166,23 @@ export const CATALOG: ToolDef[] = [
         },
       },
       {
+        id: "memory.refresh_taxonomy_snapshots",
+        name: "Refresh Memory Taxonomy Snapshots",
+        description: "Refresh Memory Taxonomy Snapshots - Build source-linked Memory Library taxonomy snapshots from active facts and sessions. Defaults to dry-run; pass dry_run=false to write snapshots.",
+        method: "POST",
+        path: "/v1/memory/taxonomy/refresh",
+        requiresAuth: false,
+        inputSchema: {
+          type: "object",
+          properties: {
+            dry_run: { type: "boolean", default: true },
+            max_sources: { type: "number", minimum: 1, maximum: 250, default: 80 },
+            max_snapshots: { type: "number", minimum: 1, maximum: 12, default: 12 },
+            max_sources_per_snapshot: { type: "number", minimum: 1, maximum: 12, default: 8 },
+          },
+        },
+      },
+      {
         id: "memory.manage_decay",
         name: "Run Memory Decay",
         description: "Run Memory Decay - Run the memory decay manager. Promotes/demotes items between hot/warm/cold tiers.",

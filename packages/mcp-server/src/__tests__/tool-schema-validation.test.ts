@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ENDPOINT_MAP } from "../catalog.js";
 import { validateToolArgumentsForRuntime } from "../server.js";
 
 describe("runtime tool schema validation", () => {
@@ -103,5 +104,21 @@ describe("runtime tool schema validation", () => {
       query: "PR #890",
       max_results: 5,
     })).toBeNull();
+  });
+
+  it("exposes Memory taxonomy snapshot refresh as a dry-run-first catalog endpoint", () => {
+    const entry = ENDPOINT_MAP.get("memory.refresh_taxonomy_snapshots");
+
+    expect(entry?.tool.slug).toBe("memory");
+    expect(entry?.endpoint.path).toBe("/v1/memory/taxonomy/refresh");
+    expect(entry?.endpoint.inputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        dry_run: { type: "boolean", default: true },
+        max_sources: { type: "number", minimum: 1, maximum: 250, default: 80 },
+        max_snapshots: { type: "number", minimum: 1, maximum: 12, default: 12 },
+        max_sources_per_snapshot: { type: "number", minimum: 1, maximum: 12, default: 8 },
+      },
+    });
   });
 });
