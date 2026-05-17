@@ -113,6 +113,7 @@ const STATUS_STYLE: Record<JobTodo["status"], string> = {
 const ACTION_BUTTONS = {
   stale: ["Push workers", "(talk to owning AI seat)", "Escalate"],
   unowned: ["Claim / assign", "Push workers", "Drop priority"],
+  blocked: ["Attach proof", "Reopen", "Audit"],
 } as const;
 
 const STAGES = ["Brief", "Build", "Proof", "Review", "Ship"] as const;
@@ -259,6 +260,27 @@ function statusLabel(status: JobTodo["status"]): string {
   return status.replace("_", " ");
 }
 
+function hasProofWarning(todo: JobTodo): boolean {
+  return (
+    todo.pipeline_evidence?.includes("proof_missing") === true ||
+    /proof\s*:\s*missing|reopened\s*:\s*proof\s*reset/i.test(todo.pipeline_source ?? "")
+  );
+}
+
+function isVisuallyShipped(todo: JobTodo): boolean {
+  return todo.status === "done" && !hasProofWarning(todo);
+}
+
+function displayStatusLabel(todo: JobTodo): string {
+  if (hasProofWarning(todo)) return "blocked";
+  return statusLabel(todo.status);
+}
+
+function displayStatusStyle(todo: JobTodo): string {
+  if (hasProofWarning(todo)) return "border-red-300/30 bg-red-500/10 text-red-200";
+  return STATUS_STYLE[todo.status];
+}
+
 function progressFor(todo: JobTodo): number {
   if (Number.isFinite(todo.pipeline_progress)) return Number(todo.pipeline_progress);
   if (todo.status === "done") return 100;
@@ -293,7 +315,7 @@ function StageStrip({ todo }: { todo: JobTodo }) {
             title={stage}
             className={`flex h-4 min-w-0 items-center justify-center text-[7px] font-semibold uppercase ${
               index < active
-                ? todo.status === "done"
+                ? isVisuallyShipped(todo)
                   ? "bg-green-400/85 text-black/70"
                   : "bg-[#61C1C4]/90 text-black/70"
                 : "bg-white/[0.08] text-white/30"
@@ -434,12 +456,19 @@ function isStaleActive(todo: JobTodo): boolean {
 }
 
 function needsAttention(todo: JobTodo): boolean {
+  if (hasProofWarning(todo)) return true;
   if (todo.status === "done" || todo.status === "dropped") return false;
   if (isStaleActive(todo)) return true;
   return todo.priority === "urgent" && !todo.assigned_to_agent_id;
 }
 
 function attentionCopy(todo: JobTodo): { message: string; actions: readonly string[] } {
+  if (hasProofWarning(todo)) {
+    return {
+      message: "Job says done but proof is missing or reset.",
+      actions: ACTION_BUTTONS.blocked,
+    };
+  }
   if (isStaleActive(todo)) {
     return {
       message: "Active job has not moved recently.",
@@ -691,7 +720,7 @@ function JobRow({
           title={todo.title}
         >
           <p
-            className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${todo.status === "done" ? "text-white/35 line-through" : "text-white/85"}`}
+            className={`truncate text-[11px] font-semibold leading-4 hover:text-white ${isVisuallyShipped(todo) ? "text-white/35 line-through" : "text-white/85"}`}
             data-testid="job-row-title"
           >
             {highlightSearchText(displayCopy.title, searchQuery)}
@@ -703,9 +732,9 @@ function JobRow({
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:contents">
           <span
-            className={`inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-[4px] border px-1 py-px text-[9px] font-semibold uppercase ${STATUS_STYLE[todo.status]}`}
+            className={`inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-[4px] border px-1 py-px text-[9px] font-semibold uppercase ${displayStatusStyle(todo)}`}
           >
-            {statusLabel(todo.status)}
+            {displayStatusLabel(todo)}
           </span>
           <span
             className={`inline-flex min-w-0 items-center justify-center whitespace-nowrap rounded-[4px] border px-1 py-px text-[9px] font-semibold uppercase ${PRIORITY_STYLE[todo.priority]}`}
@@ -722,9 +751,9 @@ function JobRow({
           </span>
           <span className="flex items-center gap-1 text-[11px] text-white/45">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${isStaleActive(todo) ? "bg-red-300" : todo.status === "done" ? "bg-green-300" : "bg-green-400"}`}
+              className={`h-1.5 w-1.5 rounded-full ${hasProofWarning(todo) || isStaleActive(todo) ? "bg-red-300" : isVisuallyShipped(todo) ? "bg-green-300" : "bg-green-400"}`}
             />
-            {todo.status === "done" ? "ship" : isStaleActive(todo) ? "stale" : "live"}
+            {hasProofWarning(todo) ? "blocked" : isVisuallyShipped(todo) ? "ship" : isStaleActive(todo) ? "stale" : "live"}
           </span>
           <span className="text-[11px] font-medium text-white/55">
             <StageStrip todo={todo} />
