@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminJobs from "./AdminJobs";
@@ -46,6 +46,8 @@ const jobs = [
   },
 ] as const;
 
+let currentJobs: unknown[] = [];
+
 function jsonResponse(body: unknown) {
   return Promise.resolve({
     ok: true,
@@ -55,6 +57,7 @@ function jsonResponse(body: unknown) {
 
 describe("AdminJobs", () => {
   beforeEach(() => {
+    currentJobs = [...jobs];
     vi.spyOn(Date, "now").mockReturnValue(new Date("2026-05-14T13:00:00.000Z").getTime());
     vi.stubGlobal(
       "fetch",
@@ -64,7 +67,7 @@ describe("AdminJobs", () => {
           return jsonResponse({ profile: { agent_id: "human-test" } });
         }
         if (url.includes("fishbowl_list_todos")) {
-          return jsonResponse({ todos: jobs });
+          return jsonResponse({ todos: currentJobs });
         }
         return jsonResponse({});
       }),
@@ -100,5 +103,34 @@ describe("AdminJobs", () => {
         "Zulu stale job",
       ]);
     });
+  });
+
+  it("flags waiting jobs as an alert when the worker belt is idle", async () => {
+    currentJobs = [
+      {
+        id: "waiting-job",
+        title: "Waiting build job",
+        description: "Ready for a worker.",
+        status: "open",
+        priority: "normal",
+        created_by_agent_id: "tester",
+        assigned_to_agent_id: null,
+        created_at: "2026-05-14T12:00:00.000Z",
+        completed_at: null,
+        updated_at: "2026-05-14T12:00:00.000Z",
+        comment_count: 0,
+        pipeline_stage_count: 1,
+        pipeline_progress: 10,
+        pipeline_evidence: [],
+      },
+    ];
+
+    render(React.createElement(AdminJobs));
+
+    expect(await screen.findByText("Worker belt is idle while jobs are waiting.")).toBeInTheDocument();
+    expect(screen.getByText("Waiting")).toBeInTheDocument();
+    const alertsCard = screen.getByText("Alerts").closest("div");
+    expect(alertsCard).not.toBeNull();
+    expect(within(alertsCard as HTMLElement).getByText("1")).toBeInTheDocument();
   });
 });

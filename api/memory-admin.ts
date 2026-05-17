@@ -8144,13 +8144,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (searchPattern) {
           todosQuery = todosQuery.or(`title.ilike.${searchPattern},description.ilike.${searchPattern}`);
         }
-        const inProgressTodosQuery = supabase
+        const activeTodosQuery = supabase
           .from("mc_fishbowl_todos")
           .select(todoSelect)
           .eq("api_key_hash", apiKeyHash)
-          .eq("status", "in_progress")
+          .in("status", ["open", "in_progress"])
           .order("updated_at", { ascending: false })
-          .limit(100);
+          .limit(300);
 
         let commentsQuery = supabase
           .from("mc_fishbowl_comments")
@@ -8196,7 +8196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           profilesResult,
           messagesResult,
           todosResult,
-          inProgressTodosResult,
+          activeTodosResult,
           commentsResult,
           dispatchesResult,
           signalsResult,
@@ -8214,7 +8214,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .limit(smallerLimit),
           messagesQuery,
           todosQuery,
-          inProgressTodosQuery,
+          activeTodosQuery,
           commentsQuery,
           supabase
             .from("mc_agent_dispatches")
@@ -8244,7 +8244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           profilesResult.error,
           messagesResult.error,
           todosResult.error,
-          inProgressTodosResult.error,
+          activeTodosResult.error,
           commentsResult.error,
           dispatchesResult.error,
           signalsResult.error,
@@ -8283,7 +8283,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .slice(0, smallerLimit);
         const todos = mergeOrchestratorTodoRows(
           (todosResult.data ?? []) as OrchestratorTodoRow[],
-          (inProgressTodosResult.data ?? []) as OrchestratorTodoRow[],
+          (activeTodosResult.data ?? []) as OrchestratorTodoRow[],
         );
 
         return res.status(200).json({
