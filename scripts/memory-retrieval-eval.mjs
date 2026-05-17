@@ -195,8 +195,15 @@ export async function runMemoryRetrievalEval({
   resultSets = DEFAULT_TYPED_LINK_REPLAY_RESULTS,
   runner,
   k = DEFAULT_TOP_K,
+  allowSeededResults = false,
   clock = () => performance.now(),
 } = {}) {
+  if (!runner && resultSets === DEFAULT_TYPED_LINK_REPLAY_RESULTS && !allowSeededResults) {
+    throw new Error(
+      "seeded_replay_results_not_live_proof: pass a runner or --results from a real retrieval run",
+    );
+  }
+
   const perQuery = [];
 
   for (const fixture of fixtures.map(validateFixture)) {
@@ -244,6 +251,7 @@ function parseArgs(argv) {
     if (arg === "--fixtures") args.fixturesPath = argv[++index];
     else if (arg === "--results") args.resultsPath = argv[++index];
     else if (arg === "--k") args.k = Number.parseInt(argv[++index], 10);
+    else if (arg === "--allow-seeded-results") args.allowSeededResults = true;
     else if (arg === "--help") args.help = true;
     else throw new Error(`unknown_arg:${arg}`);
   }
@@ -253,13 +261,18 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log("Usage: node scripts/memory-retrieval-eval.mjs [--fixtures path.jsonl] [--results path.json] [--k 5]");
+    console.log("Usage: node scripts/memory-retrieval-eval.mjs [--fixtures path.jsonl] [--results path.json] [--k 5] [--allow-seeded-results]");
     return;
   }
 
   const fixtures = args.fixturesPath ? await loadJsonlFile(args.fixturesPath) : DEFAULT_TYPED_LINK_REPLAY_FIXTURES;
   const resultSets = args.resultsPath ? await loadResultsFile(args.resultsPath) : DEFAULT_TYPED_LINK_REPLAY_RESULTS;
-  const report = await runMemoryRetrievalEval({ fixtures, resultSets, k: args.k });
+  const report = await runMemoryRetrievalEval({
+    fixtures,
+    resultSets,
+    k: args.k,
+    allowSeededResults: args.allowSeededResults,
+  });
   console.log(JSON.stringify(report, null, 2));
   if (!report.aggregate.passed) process.exitCode = 1;
 }
