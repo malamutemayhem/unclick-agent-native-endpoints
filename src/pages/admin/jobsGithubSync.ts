@@ -26,6 +26,9 @@ const GITHUB_RUN_URL_RE = /https:\/\/github\.com\/([^\s/)]+\/[^\s/)]+)\/actions\
 const VERCEL_URL_RE = /https:\/\/(?:vercel\.com|[^\s/)]+\.vercel\.app)[^\s)]*/gi;
 const PR_NUMBER_RE = /\bPR\s*#(\d{1,7})\b/gi;
 const FAILED_DEPLOY_RE = /\b(failed preview deployment|deployment failed|failed deployment|preview deployment failed|vercel failed)\b/i;
+const PROOF_RESET_RE = /\b(reopened|re-opened|proof\s+reset|false\s+completion|partial\s+completion|proof_missing)\b/i;
+const PROOF_MISSING_RE =
+  /\b(no|missing|needs?|needed|waiting for|without|incomplete|stale)\s+(?:live\s+)?proof\b|\bproof\s+(?:missing|needed|incomplete|stale|not available)\b/i;
 
 function uniqueByLabel(refs: JobGithubReference[]): JobGithubReference[] {
   const seen = new Set<string>();
@@ -88,6 +91,17 @@ export function jobHasDeploymentFailure(job: JobGithubSyncInput): boolean {
   return FAILED_DEPLOY_RE.test(jobSyncText(job));
 }
 
+export function jobHasProofReset(job: JobGithubSyncInput): boolean {
+  const evidence = job.pipeline_evidence ?? [];
+  const hasCurrentProgressEvidence = evidence.some((item) => /\b(build|proof|review|ship)\b/i.test(item));
+  const hasResetEvidence = evidence.some((item) => PROOF_RESET_RE.test(item) || PROOF_MISSING_RE.test(item));
+  if (hasCurrentProgressEvidence && !hasResetEvidence) return false;
+  if (hasResetEvidence) return true;
+
+  const text = jobSyncText(job);
+  return PROOF_RESET_RE.test(text) || PROOF_MISSING_RE.test(text);
+}
+
 export function buildJobGithubSyncSignal(job: JobGithubSyncInput): JobGithubSyncSignal {
   const refs = extractJobGithubReferences(job);
   const firstPr = refs.find((ref) => ref.kind === "pull_request");
@@ -101,6 +115,14 @@ export function buildJobGithubSyncSignal(job: JobGithubSyncInput): JobGithubSync
       detail: "A linked deployment needs attention.",
       tone: "alert",
       href: firstLink?.url,
+    };
+  }
+
+  if (jobHasProofReset(job)) {
+    return {
+      label: "Proof reset",
+      detail: "This job was reopened or blocked because proof is stale or missing.",
+      tone: "alert",
     };
   }
 
