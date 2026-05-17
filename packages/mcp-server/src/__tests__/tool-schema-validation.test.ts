@@ -8,6 +8,7 @@ describe("runtime tool schema validation", () => {
     { name: "load_memory", args: { num_sessions: 1, bogus_field: "should reject" } },
     { name: "search_memory", args: { query: "strict schema probe", bogus_field: "should reject" } },
     { name: "search_typed_links", args: { query: "PR #890", bogus_field: "should reject" } },
+    { name: "refresh_taxonomy_snapshots", args: { dry_run: true, bogus_field: "should reject" } },
     {
       name: "save_conversation_turn",
       args: {
@@ -103,6 +104,12 @@ describe("runtime tool schema validation", () => {
     expect(validateToolArgumentsForRuntime("search_typed_links", {
       query: "PR #890",
       max_results: 5,
+    })).toBeNull();
+    expect(validateToolArgumentsForRuntime("refresh_taxonomy_snapshots", {
+      dry_run: true,
+      max_sources: 12,
+      max_snapshots: 4,
+      max_sources_per_snapshot: 3,
     })).toBeNull();
   });
 
