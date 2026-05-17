@@ -8538,6 +8538,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             update.status = s;
             if (s === "done") update.completed_at = new Date().toISOString();
+            if (s !== "done") update.completed_at = null;
           }
           if (body.priority != null) {
             const p = String(body.priority);
@@ -8814,6 +8815,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .join("\n")
               .toLowerCase();
             const status = String(todo.status ?? "");
+            const isReopened = status !== "done" && (todo.completed_at != null || /\breopened\b/i.test(corpus));
             let activeCount = status === "done" ? stageRank.ship : status === "in_progress" ? stageRank.build : 1;
             let source = status === "done" ? "status: done" : status === "in_progress" ? "status: active" : "status: open";
             const evidence: string[] = [];
@@ -8860,6 +8862,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               activeCount = Math.max(activeCount, stageRank.ship);
               evidence.push("ship");
               source = "receipt: ship";
+            }
+
+            if (isReopened) {
+              activeCount = Math.min(activeCount, status === "in_progress" ? stageRank.build : stageRank.brief);
+              evidence.push("reopened");
+              source = "reopened: proof reset";
             }
 
             return {
