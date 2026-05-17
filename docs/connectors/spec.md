@@ -73,6 +73,8 @@ New `plugboard_connections` table alongside the existing user_credentials infras
 
 End-to-end GitHub OAuth: connect, list connections, test connection, disconnect. Proves the entire connection flow shape that Phases 3 and onward will follow.
 
+Passport Git durable connection model: see `docs/connectors/passport-git-durable-connection-model.md` for the cross-device GitHub connection boundary, reconnect path, revoke path, agent usage path, and manual token fallback rules.
+
 ### Phase 3 — Bulk OAuth integrations
 
 Slack, Google (Gmail + Calendar + Drive), Notion, Linear, Stripe. Each follows the GitHub pattern. Six platforms total at the end of Phase 3.
