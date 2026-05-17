@@ -1263,18 +1263,18 @@ export default function AdminJobs() {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white">Jobs</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-            One work list for active, next, queued, and completed jobs. GitHub and deployment links appear as proof when code work moves.
+            One work list for jobs being worked, open backlog, in-line work, and completed proof.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-            <p className="text-xs text-white/35">Active</p>
+            <p className="text-xs text-white/35">Being worked</p>
             <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-[#E2B93B]">
               {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : activeCount}
             </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-            <p className="text-xs text-white/35">Waiting</p>
+            <p className="text-xs text-white/35">Open backlog</p>
             <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-white/80">
               {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : queueCount}
             </p>
@@ -1292,9 +1292,9 @@ export default function AdminJobs() {
         <div className="flex items-start gap-3 rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-200" aria-hidden="true" />
           <div>
-            <p className="font-medium">Worker belt is idle while jobs are waiting.</p>
+            <p className="font-medium">No jobs are being worked while backlog is waiting.</p>
             <p className="mt-1 text-red-100/70">
-              Autopilot should pull one waiting job into active work before this board can be green.
+              Autopilot should claim one backlog job before this board can be green.
             </p>
           </div>
         </div>
