@@ -62,8 +62,15 @@ describe("memory retrieval eval", () => {
     assert.equal(report.ok, false);
   });
 
-  test("runs the seeded typed-link replay fixtures with deterministic results", async () => {
-    const report = await runMemoryRetrievalEval();
+  test("rejects seeded replay results as live proof by default", async () => {
+    await assert.rejects(
+      () => runMemoryRetrievalEval(),
+      /seeded_replay_results_not_live_proof/,
+    );
+  });
+
+  test("can run seeded typed-link replay fixtures when explicitly allowed", async () => {
+    const report = await runMemoryRetrievalEval({ allowSeededResults: true });
 
     assert.equal(report.aggregate.passed, true);
     assert.equal(report.aggregate.query_count, 5);
