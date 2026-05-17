@@ -127,8 +127,8 @@ describe("AdminJobs", () => {
 
     render(React.createElement(AdminJobs));
 
-    expect(await screen.findByText("Worker belt is idle while jobs are waiting.")).toBeInTheDocument();
-    expect(screen.getByText("Waiting")).toBeInTheDocument();
+    expect(await screen.findByText("No jobs are being worked while backlog is waiting.")).toBeInTheDocument();
+    expect(screen.getByText("Open backlog")).toBeInTheDocument();
     const alertsCard = screen.getByText("Alerts").closest("div");
     expect(alertsCard).not.toBeNull();
     expect(within(alertsCard as HTMLElement).getByText("1")).toBeInTheDocument();
