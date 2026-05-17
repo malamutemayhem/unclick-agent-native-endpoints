@@ -757,7 +757,7 @@ export const MEMORY_HANDLERS: Record<string, (args: Args) => Promise<unknown>> =
   async refresh_taxonomy_snapshots(args) {
     const db = await getBackend();
     return db.refreshTaxonomySnapshots({
-      dry_run: bool(args.dry_run, false),
+      dry_run: bool(args.dry_run, true),
       max_sources: num(args.max_sources, 80),
       max_snapshots: num(args.max_snapshots, 12),
       max_sources_per_snapshot: num(args.max_sources_per_snapshot, 8),
