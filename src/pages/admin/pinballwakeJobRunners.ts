@@ -36,11 +36,37 @@ export interface PinballWakeJobRunner {
   nextProbe: string;
 }
 
+export type BenchReadinessClass =
+  | "ready"
+  | "context_only"
+  | "review_only"
+  | "needs_probe"
+  | "offline";
+
 export interface PinballWakeJobRequest {
   kind: PinballWakeJobKind;
   lane: string;
   title: string;
   requiresCode?: boolean;
+}
+
+export interface BenchReadinessReport {
+  runnerId: string;
+  readiness: BenchReadinessClass;
+  canImplement: boolean;
+  canReview: boolean;
+  canCoordinate: boolean;
+  reason: string;
+  nextProbe: string;
+}
+
+export interface BenchCallUpDecision {
+  status: "PASS" | "BLOCKER";
+  job: PinballWakeJobRequest;
+  runner?: PinballWakeJobRunner;
+  readiness?: BenchReadinessClass;
+  reason: string;
+  nextProbe?: string;
 }
 
 export const PINBALLWAKE_JOB_RUNNERS: PinballWakeJobRunner[] = [
@@ -150,6 +176,40 @@ export const PINBALLWAKE_JOB_RUNNERS: PinballWakeJobRunner[] = [
   },
 ];
 
+export function classifyBenchReadiness(runner: PinballWakeJobRunner): BenchReadinessClass {
+  if (runner.readiness === "offline") return "offline";
+  if (runner.readiness === "needs_probe") return "needs_probe";
+  if (runner.readiness === "review_only") return "review_only";
+  if (runner.readiness === "context_only") return "context_only";
+  return "ready";
+}
+
+export function describeBenchReadiness(runner: PinballWakeJobRunner): BenchReadinessReport {
+  const readiness = classifyBenchReadiness(runner);
+
+  return {
+    runnerId: runner.id,
+    readiness,
+    canImplement: runner.readiness === "builder_ready" || runner.readiness === "scoped_builder",
+    canReview: runner.capabilities.includes("qc_review") && runner.readiness !== "offline",
+    canCoordinate:
+      runner.capabilities.includes("queue_management") ||
+      runner.capabilities.includes("owner_decision") ||
+      runner.capabilities.includes("status_relay"),
+    reason:
+      readiness === "ready"
+        ? "Ready for scoped code packets with normal proof."
+        : readiness === "needs_probe"
+          ? "Needs a no-risk repo-access probe before implementation."
+          : readiness === "offline"
+            ? "Offline or dormant. Do not route fresh packets here."
+            : readiness === "review_only"
+              ? "Ready for review, proof, and safety reads only."
+              : "Ready for context, owner decisions, queue work, and status relay.",
+    nextProbe: runner.nextProbe,
+  };
+}
+
 export function runnerCanAcceptJob(
   runner: PinballWakeJobRunner,
   job: PinballWakeJobRequest,
@@ -160,6 +220,89 @@ export function runnerCanAcceptJob(
     return runner.readiness === "builder_ready" || runner.readiness === "scoped_builder";
   }
   return runner.readiness !== "needs_probe" || job.kind === "status_relay";
+}
+
+function chooseJobsWorkerFirst(runners: PinballWakeJobRunner[]): PinballWakeJobRunner | undefined {
+  return runners.find((runner) => runner.id === "jobs-worker");
+}
+
+function choosePassContextRunner(
+  job: PinballWakeJobRequest,
+  runners: PinballWakeJobRunner[],
+): PinballWakeJobRunner | undefined {
+  const lane = job.lane.toLowerCase();
+  if (job.kind !== "status_relay" || (!lane.includes("xpass") && !lane.includes("pass"))) {
+    return undefined;
+  }
+
+  return runners.find(
+    (runner) =>
+      runner.safeFor.some((safeLane) => safeLane.toLowerCase().includes("xpass")) &&
+      runnerCanAcceptJob(runner, job),
+  );
+}
+
+function findBlockedSpecialist(
+  job: PinballWakeJobRequest,
+  runners: PinballWakeJobRunner[],
+): PinballWakeJobRunner | undefined {
+  const candidates = runners.filter((runner) => runner.capabilities.includes(job.kind));
+  const lane = job.lane.toLowerCase();
+  const laneMatch = candidates.find((runner) =>
+    runner.safeFor.some((safeLane) => lane.includes(safeLane.toLowerCase())),
+  );
+  const ordered = laneMatch ? [laneMatch, ...candidates.filter((runner) => runner !== laneMatch)] : candidates;
+
+  return (
+    ordered.find((runner) => runner.readiness === "needs_probe") ??
+    ordered.find((runner) => runner.readiness === "offline")
+  );
+}
+
+export function chooseBenchCallUp(
+  job: PinballWakeJobRequest,
+  runners = PINBALLWAKE_JOB_RUNNERS,
+): BenchCallUpDecision {
+  const jobsWorker = chooseJobsWorkerFirst(runners);
+  const passContextRunner = choosePassContextRunner(job, runners);
+  const shouldStartWithJobsWorker = job.kind === "queue_management" || job.kind === "owner_decision";
+  const runner =
+    shouldStartWithJobsWorker && jobsWorker && runnerCanAcceptJob(jobsWorker, job)
+      ? jobsWorker
+      : passContextRunner
+        ? passContextRunner
+        : choosePinballWakeJobRunner(job, runners);
+
+  if (runner) {
+    const report = describeBenchReadiness(runner);
+    return {
+      status: "PASS",
+      job,
+      runner,
+      readiness: report.readiness,
+      reason: `${runner.name} can take ${job.kind} work. ${report.reason}`,
+      nextProbe: runner.nextProbe,
+    };
+  }
+
+  const blocked = findBlockedSpecialist(job, runners);
+  if (blocked) {
+    const report = describeBenchReadiness(blocked);
+    return {
+      status: "BLOCKER",
+      job,
+      runner: blocked,
+      readiness: report.readiness,
+      reason: `BLOCKER: ${blocked.name} matches this lane but is ${report.readiness}. ${report.reason}`,
+      nextProbe: blocked.nextProbe,
+    };
+  }
+
+  return {
+    status: "BLOCKER",
+    job,
+    reason: `BLOCKER: no eligible bench specialist can take ${job.kind} work for ${job.lane}.`,
+  };
 }
 
 export function choosePinballWakeJobRunner(

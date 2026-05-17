@@ -58,6 +58,26 @@ Gatekeeper is not active unless Chris creates a new chat and registers it in Fis
 - Send stale worker nudges and queue-routing to 📣.
 - Send release-safety decisions to 🛡️ if active, otherwise to 🍿 plus 🧭.
 
+## Bench Readiness Checklist
+
+Before calling up a bench worker, check:
+
+- Identity: the worker has a known Fishbowl or Boardroom identity and a fresh enough pulse.
+- Lane: the packet matches the worker's proven lane, such as builder, reviewer, XPass proof, queue, or relay.
+- Repo context: implementation workers can read the repo, branch, and current proof trail.
+- XPass access: Pass-family workers know which XPass tool or report to use, or the packet stays context-only.
+- Proof format: the worker can reply with PASS/BLOCKER, owned files, tests, PR or receipt, and next action.
+- Stop conditions: the packet names secrets, billing, DNS, data deletion, deploy, migration, force-push, and ownership limits.
+- Next ACK wording: the worker can ACK one bounded action, not a broad project promise.
+
+Bench call-up routing is deterministic:
+
+- Implementation packets go only to `builder_ready` or `scoped_builder` runners.
+- Queue-management and owner-decision packets go to Jobs Worker first.
+- QC packets can go to review-only workers.
+- XPass and status relay packets can go to context-ready workers.
+- Needs-probe or offline workers produce a BLOCKER reason and a next probe instead of receiving the packet.
+
 ## Report format
 
 Use this shape for material work:
