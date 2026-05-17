@@ -258,12 +258,15 @@ export interface OrchestratorContext {
     summary: string;
     newest_activity_at: string | null;
     newest_checkin_at: string | null;
+    // All open + in_progress Boardroom todos. This is the operator-facing
+    // backlog count, not the sliced preview list.
     active_todo_count: number;
+    queued_todo_count: number;
+    in_progress_todo_count: number;
     // active_jobs is the strict v9 definition used by Heartbeat step 5:
     // COUNT(todos WHERE status='in_progress' AND owner_last_seen <= 24h).
-    // active_todo_count is the broader open+in_progress count kept for
-    // back-compat with the rolling snapshot list. PASS/BLOCKER reasoning
-    // should use active_jobs.
+    // PASS/BLOCKER reasoning should use active_jobs plus queued_todo_count,
+    // so "0 active jobs" never hides work waiting in Boardroom.
     active_jobs: number;
     blocker_count: number;
     active_seat_count: number;
@@ -394,10 +397,12 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
   const activeSeatCount = allProfiles.filter((profile) => isFresh(profile.last_seen_at, nowMs)).length;
   const humanOperatorTime = buildOperatorTimeContext(input.businessContext, input.generatedAt);
 
-  const activeTodos = input.todos
+  const activeTodoRows = input.todos
     .filter((todo) => todo.status === "open" || todo.status === "in_progress")
-    .sort(compareTodoPriorityThenUpdated)
-    .slice(0, 8);
+    .sort(compareTodoPriorityThenUpdated);
+  const queuedTodoCount = input.todos.filter((todo) => todo.status === "open").length;
+  const inProgressTodoCount = input.todos.filter((todo) => todo.status === "in_progress").length;
+  const activeTodos = activeTodoRows.slice(0, 8);
   // active_jobs (v9 definition pinned by todo a4cd5229): strict
   // in_progress + owner_last_seen <= 24h. Heartbeat step 5 uses the same
   // formula so state_card and PASS/BLOCKER never disagree on identical
@@ -507,12 +512,14 @@ export function buildOrchestratorContext(input: BuildOrchestratorContextInput): 
     },
     current_state_card: {
       summary: compactText(
-        `${activeJobsCount} active job${activeJobsCount === 1 ? "" : "s"}, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.${humanOperatorTime ? ` Operator time: ${humanOperatorTime.summary}.` : ""}`,
+        `${activeJobsCount} being worked now, ${queuedTodoCount} queued, ${activeSeatCount} active seat${activeSeatCount === 1 ? "" : "s"}, ${blockers.length} blocker signal${blockers.length === 1 ? "" : "s"}.${inProgressTodoCount > activeJobsCount ? ` ${inProgressTodoCount - activeJobsCount} in-progress item${inProgressTodoCount - activeJobsCount === 1 ? "" : "s"} need owner check.` : ""}${humanOperatorTime ? ` Operator time: ${humanOperatorTime.summary}.` : ""}`,
         180,
       ),
       newest_activity_at: newestActivityAt,
       newest_checkin_at: newestCheckinAt,
-      active_todo_count: activeTodos.length,
+      active_todo_count: activeTodoRows.length,
+      queued_todo_count: queuedTodoCount,
+      in_progress_todo_count: inProgressTodoCount,
       active_jobs: activeJobsCount,
       blocker_count: blockers.length,
       active_seat_count: activeSeatCount,
