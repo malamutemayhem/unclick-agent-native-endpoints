@@ -409,6 +409,46 @@ export const VISIBLE_TOOLS = [
     },
   },
   {
+    name: "refresh_taxonomy_snapshots",
+    title: "Refresh taxonomy snapshots",
+    description:
+      "Builds source-linked Memory Library taxonomy snapshots from active facts and sessions. " +
+      "Defaults to a dry run so workers can inspect planned snapshots before anything is written. " +
+      "Only pass dry_run=false after the dry-run output is safe and the job needs live write proof.",
+    inputSchema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        dry_run: {
+          type: "boolean",
+          default: true,
+          description: "When true, preview snapshot output without writing Library docs.",
+        },
+        max_sources: {
+          type: "number",
+          minimum: 1,
+          maximum: 250,
+          default: 80,
+          description: "Maximum facts or sessions to scan.",
+        },
+        max_snapshots: {
+          type: "number",
+          minimum: 1,
+          maximum: 12,
+          default: 12,
+          description: "Maximum taxonomy snapshots to build.",
+        },
+        max_sources_per_snapshot: {
+          type: "number",
+          minimum: 1,
+          maximum: 12,
+          default: 8,
+          description: "Maximum source pointers per snapshot.",
+        },
+      },
+    },
+  },
+  {
     name: "save_identity",
     title: "Save my identity",
     description:
