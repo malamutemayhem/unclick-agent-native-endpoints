@@ -13,6 +13,12 @@ const TODO_REFERENCE_RE = new RegExp(
 const NO_TODO_RE = /^no-todo:\s*(\S.*)$/gim;
 const PR_URL_RE = /github\.com\/[^\s/)]+\/[^\s/)]+\/pull\/(\d+)/gi;
 const PR_NUMBER_RE = /\bPR\s*#(\d{1,7})\b/gi;
+const LIVE_OUTCOME_RE =
+  /\b(live proof|live outcome|verified live|browser verified|screenshot(?:s)?|api verified|production proof|visible in (?:the )?(?:app|ui|site)|live ui|live api|live product|dogfood(?:ed)?|manual qa)\b/i;
+const LIVE_OUTCOME_NEGATIVE_RE =
+  /\b(no|not|missing|needs?|needed|without|blocked|waiting for|unverified)\s+(?:live\s+)?(?:proof|outcome|verification|qa|screenshot|ui|api)\b|\b(?:live\s+)?(?:proof|outcome|verification|qa|screenshot|ui|api)\s+(?:missing|needed|unverified|blocked|incomplete)\b/i;
+const LIVE_FACING_JOB_RE =
+  /\b(live|production|ui|ux|screen|page|site|admin|dashboard|api|memory|library|recall|search|workflow|automation|autopilot|job(?:s)?|boardroom|orchestrator)\b/i;
 
 function getArg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -65,6 +71,15 @@ function todoText(todo = {}) {
     todo.proof_text,
     todo.proofText,
   ).join("\n");
+}
+
+function hasLiveOutcomeProof(todo = {}) {
+  const text = todoText(todo);
+  return LIVE_OUTCOME_RE.test(text) && !LIVE_OUTCOME_NEGATIVE_RE.test(text);
+}
+
+function needsLiveOutcomeProof(todo = {}) {
+  return LIVE_FACING_JOB_RE.test(todoText(todo));
 }
 
 function dispatchText(dispatch = {}) {
@@ -248,7 +263,7 @@ export function buildInProgressReconciliationPlan({
 } = {}) {
   const nowMs = parseTime(now);
   if (nowMs === null) {
-    return { ok: false, reason: "invalid_now", auto_close: [], stale: [], unchanged: [] };
+    return { ok: false, reason: "invalid_now", auto_close: [], needs_verification: [], stale: [], unchanged: [] };
   }
 
   const mergedRefs = new Map();
@@ -270,6 +285,7 @@ export function buildInProgressReconciliationPlan({
   }
 
   const autoClose = [];
+  const needsVerification = [];
   const stale = [];
   const unchanged = [];
 
@@ -292,11 +308,12 @@ export function buildInProgressReconciliationPlan({
 
     const proofPr = findMergedPrProofForTodo(todo, pullRequests, nowMs, mergedWindowDays);
     if (proofPr) {
-      autoClose.push({
+      needsVerification.push({
         todo_id: todo.id,
         title: todo.title ?? "",
         pr: proofPr,
-        reason: "pipeline_ship_proof",
+        reason: "pipeline_ship_proof_needs_outcome_verification",
+        next: "Do not auto-close from pipeline text alone. Verify the live outcome or exact acceptance proof first.",
       });
       continue;
     }
@@ -319,6 +336,7 @@ export function buildInProgressReconciliationPlan({
     ok: true,
     reason: "reconciliation_plan",
     auto_close: autoClose,
+    needs_verification: needsVerification,
     stale,
     unchanged,
   };
@@ -424,6 +442,16 @@ export function buildJobsGithubSyncPlan({
         todo_id: todo.id,
         message: `Completed Job ${todo.id} has no visible GitHub proof link.`,
         next: "Add the PR, run, or deployment link to the Job proof so future seats can audit it.",
+      });
+    }
+
+    if (todo.status === "done" && needsLiveOutcomeProof(todo) && !hasLiveOutcomeProof(todo)) {
+      issues.push({
+        kind: "done_job_missing_live_outcome_proof",
+        severity: "high",
+        todo_id: todo.id,
+        message: `Completed Job ${todo.id} looks live-facing but has no visible live outcome proof.`,
+        next: "Attach screenshot, browser/API verification, or reopen the Job until the promised result is visible.",
       });
     }
   }

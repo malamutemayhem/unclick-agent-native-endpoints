@@ -77,7 +77,7 @@ describe("fishbowl todo reconciliation helpers", () => {
     assert.deepEqual(plan.unchanged.map((item) => item.todo_id), [TODO_B]);
   });
 
-  it("plans auto-close when an in-progress todo has pipeline ship proof for a merged PR", () => {
+  it("requires outcome verification when pipeline ship proof references a merged PR", () => {
     const plan = buildInProgressReconciliationPlan({
       now: "2026-05-08T12:00:00.000Z",
       todos: [
@@ -102,9 +102,10 @@ describe("fishbowl todo reconciliation helpers", () => {
     });
 
     assert.equal(plan.ok, true);
-    assert.deepEqual(plan.auto_close.map((item) => item.todo_id), [TODO_A]);
-    assert.equal(plan.auto_close[0].reason, "pipeline_ship_proof");
-    assert.equal(plan.auto_close[0].pr.number, 874);
+    assert.equal(plan.auto_close.length, 0);
+    assert.deepEqual(plan.needs_verification.map((item) => item.todo_id), [TODO_A]);
+    assert.equal(plan.needs_verification[0].reason, "pipeline_ship_proof_needs_outcome_verification");
+    assert.equal(plan.needs_verification[0].pr.number, 874);
   });
 
   it("does not auto-close pipeline ship proof when the referenced PR is unmerged", () => {
@@ -200,6 +201,25 @@ describe("fishbowl todo reconciliation helpers", () => {
 
     assert.equal(plan.linked.length, 1);
     assert.equal(plan.issues.some((issue) => issue.kind === "job_ready_to_complete"), true);
+  });
+
+  it("flags completed live-facing Jobs that lack live outcome proof", () => {
+    const plan = buildJobsGithubSyncPlan({
+      todos: [
+        {
+          id: TODO_A,
+          title: "Memory Library taxonomy snapshots",
+          status: "done",
+          description: "Proof: PR #699 merged. Unit tests passed.",
+        },
+      ],
+      pullRequests: [{ number: 699, body: `Closes UnClick todo: ${TODO_A}` }],
+    });
+
+    assert.equal(
+      plan.issues.some((issue) => issue.kind === "done_job_missing_live_outcome_proof" && issue.todo_id === TODO_A),
+      true,
+    );
   });
 
   it("suppresses stale WakePass blockers when a merged PR has completion proof", () => {
