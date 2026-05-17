@@ -7,6 +7,10 @@ on:
         description: Type 1 to run the opt-in OpenHands adapter checks.
         required: true
         default: "0"
+      openhands_fixture_proof:
+        description: Type 1 to run the docs-only proof runner in fixture mode.
+        required: true
+        default: "0"
 
 jobs:
   openhands-test-mode:
@@ -26,4 +30,11 @@ jobs:
           node-version: 20
 
       - name: Run adapter tests
-        run: node --test scripts/pinballwake-openhands-worker.test.mjs
+        run: node --test scripts/pinballwake-openhands-worker.test.mjs scripts/pinballwake-openhands-proof-runner.test.mjs
+
+      - name: Run docs-only fixture proof
+        if: ${{ inputs.openhands_fixture_proof == '1' }}
+        env:
+          OPENHANDS_TEST_MODE: "1"
+          OPENHANDS_PROOF_FIXTURE_PATCH: "1"
+        run: node scripts/pinballwake-openhands-proof-runner.mjs
