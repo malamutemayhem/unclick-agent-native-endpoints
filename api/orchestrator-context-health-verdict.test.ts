@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOrchestratorContext } from "./lib/orchestrator-context.js";
+import { buildOrchestratorContext, mergeOrchestratorTodoRows } from "./lib/orchestrator-context.js";
 
 describe("orchestrator-context / current_state_card.health_verdict (CommonSensePass R1)", () => {
   const NOW = "2026-05-12T12:00:00.000Z";
@@ -56,6 +56,41 @@ describe("orchestrator-context / current_state_card.health_verdict (CommonSenseP
     // active_jobs should also be 0 (no in_progress todos), so the BLOCKER is
     // entirely driven by the actionable queue depth.
     expect(context.current_state_card.active_jobs).toBe(0);
+  });
+
+  it("keeps live queue rows in the health verdict when the visible context is search-filtered", () => {
+    const context = buildOrchestratorContext({
+      generatedAt: NOW,
+      profiles: [],
+      messages: [],
+      todos: mergeOrchestratorTodoRows(
+        [],
+        [
+          {
+            id: "todo-live-open",
+            title: "Visible queue work",
+            status: "open",
+            priority: "high",
+            created_by_agent_id: "watcher",
+            assigned_to_agent_id: null,
+            created_at: NOW,
+          },
+        ],
+      ),
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.current_state_card.active_todo_count).toBe(1);
+    expect(context.current_state_card.health_verdict.verdict).toBe("BLOCKER");
+    expect(context.current_state_card.health_verdict.next_action).toBe(
+      "hydrate_queue_and_claim_one",
+    );
   });
 
   it("emits a PASS verdict when active_jobs matches a single fresh-owner in_progress todo", () => {

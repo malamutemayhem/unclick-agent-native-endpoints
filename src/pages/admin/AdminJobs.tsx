@@ -1143,7 +1143,8 @@ export default function AdminJobs() {
   );
   const activeCount = grouped.active.length;
   const queueCount = grouped.next.length + grouped.inline.length;
-  const alertCount = filteredTodos.filter(needsAttention).length;
+  const queueHydrationBlocked = activeCount === 0 && queueCount > 0;
+  const alertCount = filteredTodos.filter(needsAttention).length + (queueHydrationBlocked ? 1 : 0);
   const initialLoading = !firstLoadDone && loading;
   const visibleJobCount = todos.length + completedHistory.filter((historyJob) => !todos.some((todo) => todo.id === historyJob.id)).length;
 
@@ -1273,7 +1274,7 @@ export default function AdminJobs() {
             </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-            <p className="text-xs text-white/35">Queued</p>
+            <p className="text-xs text-white/35">Waiting</p>
             <p className="mt-1 flex min-h-7 items-center justify-center text-lg font-semibold text-white/80">
               {initialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : queueCount}
             </p>
@@ -1286,6 +1287,18 @@ export default function AdminJobs() {
           </div>
         </div>
       </header>
+
+      {queueHydrationBlocked && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-300/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-200" aria-hidden="true" />
+          <div>
+            <p className="font-medium">Worker belt is idle while jobs are waiting.</p>
+            <p className="mt-1 text-red-100/70">
+              Autopilot should pull one waiting job into active work before this board can be green.
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
