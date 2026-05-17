@@ -93,6 +93,40 @@ describe("orchestrator-context / current_state_card.health_verdict (CommonSenseP
     );
   });
 
+  it("surfaces the full queued backlog even when the preview list is capped", () => {
+    const todos = Array.from({ length: 12 }, (_, index) => ({
+      id: `todo-open-${index}`,
+      title: `Queued work ${index}`,
+      status: "open" as const,
+      priority: "high" as const,
+      created_by_agent_id: "watcher",
+      assigned_to_agent_id: null,
+      created_at: NOW,
+    }));
+
+    const context = buildOrchestratorContext({
+      generatedAt: NOW,
+      profiles: [],
+      messages: [],
+      todos,
+      comments: [],
+      dispatches: [],
+      signals: [],
+      sessions: [],
+      library: [],
+      businessContext: [],
+      conversationTurns: [],
+    });
+
+    expect(context.current_state_card.active_jobs).toBe(0);
+    expect(context.current_state_card.active_todo_count).toBe(12);
+    expect(context.current_state_card.queued_todo_count).toBe(12);
+    expect(context.current_state_card.in_progress_todo_count).toBe(0);
+    expect(context.current_state_card.next_actions).toHaveLength(6);
+    expect(context.current_state_card.summary).toContain("0 being worked now, 12 queued");
+    expect(context.current_state_card.health_verdict.verdict).toBe("BLOCKER");
+  });
+
   it("emits a PASS verdict when active_jobs matches a single fresh-owner in_progress todo", () => {
     const context = buildOrchestratorContext({
       generatedAt: NOW,
