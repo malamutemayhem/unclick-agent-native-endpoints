@@ -133,4 +133,39 @@ describe("AdminJobs", () => {
     expect(alertsCard).not.toBeNull();
     expect(within(alertsCard as HTMLElement).getByText("1")).toBeInTheDocument();
   });
+
+  it("shows proof-reset completed jobs as blocked instead of shipped", async () => {
+    currentJobs = [
+      {
+        id: "proof-reset-job",
+        title: "Memory proof reset job",
+        description: "This was reopened after proof failed.",
+        status: "done",
+        priority: "high",
+        created_by_agent_id: "tester",
+        assigned_to_agent_id: "codex-integrity-investigator",
+        created_at: "2026-05-12T12:00:00.000Z",
+        completed_at: "2026-05-13T12:00:00.000Z",
+        updated_at: "2026-05-14T12:00:00.000Z",
+        comment_count: 3,
+        pipeline_stage_count: 5,
+        pipeline_progress: 100,
+        pipeline_evidence: ["proof_missing"],
+        pipeline_source: "reopened: proof reset after audit",
+      },
+    ];
+
+    render(React.createElement(AdminJobs));
+
+    const title = await screen.findByText("Memory proof reset job");
+    const row = title.closest("li");
+
+    expect(row).not.toBeNull();
+    expect(title).not.toHaveClass("line-through");
+    expect(within(row as HTMLElement).getAllByText("blocked").length).toBeGreaterThan(0);
+    expect(within(row as HTMLElement).queryByText("ship")).not.toBeInTheDocument();
+    expect(
+      within(row as HTMLElement).getByLabelText(/Job needs attention: Job says done but proof is missing or reset/i),
+    ).toBeInTheDocument();
+  });
 });
