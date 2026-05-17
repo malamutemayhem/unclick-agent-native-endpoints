@@ -103,6 +103,8 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { evaluateFishbowlCompletionPolicy } from "./lib/fishbowl-completion-policy.js";
+import { inferFishbowlJobPipeline } from "./lib/fishbowl-job-pipeline.js";
 import { statusFromFishbowlPost } from "./lib/fishbowl-status.js";
 import {
   buildOrchestratorContext,
@@ -8514,7 +8516,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           const { data: beforeTodo, error: beforeErr } = await supabase
             .from("mc_fishbowl_todos")
-            .select("id,title,status,assigned_to_agent_id,priority")
+            .select("id,title,description,status,created_by_agent_id,assigned_to_agent_id,priority")
             .eq("api_key_hash", apiKeyHash)
             .eq("id", idRes)
             .maybeSingle();
@@ -8551,6 +8553,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const a = String(body.assigned_to_agent_id ?? "").trim();
             if (a.length > 128) return res.status(400).json({ error: "assigned_to_agent_id must be at most 128 characters" });
             update.assigned_to_agent_id = a.length === 0 ? null : a;
+          }
+
+          if (update.status === "done" && beforeTodo) {
+            const { data: proofComments, error: proofErr } = await supabase
+              .from("mc_fishbowl_comments")
+              .select("author_agent_id,text")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("target_kind", "todo")
+              .eq("target_id", idRes);
+            if (proofErr) throw proofErr;
+
+            const completionGate = evaluateFishbowlCompletionPolicy({
+              todo: {
+                id: String(beforeTodo.id),
+                title: typeof update.title === "string" ? update.title : String(beforeTodo.title ?? ""),
+                description:
+                  typeof update.description === "string"
+                    ? update.description
+                    : typeof beforeTodo.description === "string"
+                      ? beforeTodo.description
+                      : null,
+                created_by_agent_id:
+                  typeof beforeTodo.created_by_agent_id === "string" ? beforeTodo.created_by_agent_id : null,
+              },
+              comments: (proofComments ?? []).map((comment) => ({
+                author_agent_id:
+                  typeof comment.author_agent_id === "string" ? comment.author_agent_id : null,
+                text: typeof comment.text === "string" ? comment.text : null,
+              })),
+              closerAgentId: agentId,
+            });
+            if (!completionGate.allowed) {
+              return res.status(409).json({
+                error: completionGate.reason,
+                code: completionGate.code,
+                how_to_fix: completionGate.how_to_fix,
+              });
+            }
           }
 
           let laneCheck: {
@@ -8648,11 +8688,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (typeof idRes !== "string") return res.status(400).json(idRes);
           const { data: beforeTodo, error: beforeErr } = await supabase
             .from("mc_fishbowl_todos")
-            .select("id,title,status,assigned_to_agent_id,priority")
+            .select("id,title,description,status,created_by_agent_id,assigned_to_agent_id,priority")
             .eq("api_key_hash", apiKeyHash)
             .eq("id", idRes)
             .maybeSingle();
           if (beforeErr) throw beforeErr;
+          if (beforeTodo) {
+            const { data: proofComments, error: proofErr } = await supabase
+              .from("mc_fishbowl_comments")
+              .select("author_agent_id,text")
+              .eq("api_key_hash", apiKeyHash)
+              .eq("target_kind", "todo")
+              .eq("target_id", idRes);
+            if (proofErr) throw proofErr;
+
+            const completionGate = evaluateFishbowlCompletionPolicy({
+              todo: {
+                id: String(beforeTodo.id),
+                title: typeof beforeTodo.title === "string" ? beforeTodo.title : null,
+                description: typeof beforeTodo.description === "string" ? beforeTodo.description : null,
+                created_by_agent_id:
+                  typeof beforeTodo.created_by_agent_id === "string" ? beforeTodo.created_by_agent_id : null,
+              },
+              comments: (proofComments ?? []).map((comment) => ({
+                author_agent_id:
+                  typeof comment.author_agent_id === "string" ? comment.author_agent_id : null,
+                text: typeof comment.text === "string" ? comment.text : null,
+              })),
+              closerAgentId: agentId,
+            });
+            if (!completionGate.allowed) {
+              return res.status(409).json({
+                error: completionGate.reason,
+                code: completionGate.code,
+                how_to_fix: completionGate.how_to_fix,
+              });
+            }
+          }
           const nowIso = new Date().toISOString();
           const { data, error } = await supabase
             .from("mc_fishbowl_todos")
@@ -8787,119 +8859,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             countTodosByStatus("dropped"),
           ]);
 
-          const stageRank = {
-            brief: 1,
-            build: 2,
-            proof: 3,
-            review: 4,
-            ship: 5,
-          } as const;
-          const stageProgress: Record<number, number> = {
-            1: 10,
-            2: 55,
-            3: 70,
-            4: 85,
-            5: 100,
-          };
-          function positiveStageHit(text: string, positive: RegExp, negative?: RegExp): boolean {
-            if (!positive.test(text)) return false;
-            return negative ? !negative.test(text) : true;
-          }
-          function inferJobPipeline(todo: Record<string, unknown>, commentTexts: string[]) {
-            const corpus = [
-              todo.title,
-              todo.description,
-              ...commentTexts,
-            ]
-              .filter((value) => typeof value === "string" && value.trim().length > 0)
-              .join("\n")
-              .toLowerCase();
-            const status = String(todo.status ?? "");
-            const isReopened = status !== "done" && (todo.completed_at != null || /\breopened\b/i.test(corpus));
-            let activeCount = status === "done" ? stageRank.ship : status === "in_progress" ? stageRank.build : 1;
-            let source = status === "done" ? "status: done" : status === "in_progress" ? "status: active" : "status: open";
-            const evidence: string[] = [];
-
-            if (
-              positiveStageHit(
-                corpus,
-                /\b(implemented|built|build complete|patch applied|changes applied|pr\s*#?\d+|branch ready|commit(?:ted)?|ready for proof)\b/i,
-              )
-            ) {
-              activeCount = Math.max(activeCount, stageRank.build);
-              evidence.push("build");
-              source = "receipt: build";
-            }
-            if (
-              positiveStageHit(
-                corpus,
-                /\b(build passed|checks? (?:passed|green)|tests? passed|proof (?:passed|complete|attached|submitted|recorded|current|clean)|verification (?:passed|complete)|ci passed|npm run build passed)\b/i,
-                /\b(no|missing|needs?|needed|waiting for|without|incomplete|stale)\s+(?:live\s+)?proof\b|\bproof\s+(?:missing|needed|incomplete|stale|not available)\b/i,
-              )
-            ) {
-              activeCount = Math.max(activeCount, stageRank.proof);
-              evidence.push("proof");
-              source = "receipt: proof";
-            }
-            if (
-              positiveStageHit(
-                corpus,
-                /\b(qc pass|review(?:ed)?|reviewer pass|gatekeeper pass|safety pass|approved|ack:\s*pass|pass on #\d+|ready for review)\b/i,
-                /\b(no|missing|needs?|needed|waiting for|without|incomplete)\s+(?:qc|review|pass)\b|\b(blocker|hold|do not merge|do not lift)\b/i,
-              )
-            ) {
-              activeCount = Math.max(activeCount, stageRank.review);
-              evidence.push("review");
-              source = "receipt: review";
-            }
-            if (
-              positiveStageHit(
-                corpus,
-                /\b(pr\s*#?\d+\s+merged|merged\s+#?\d+|merged into main|deployed|published|shipped|live on production|production live)\b/i,
-                /\b(not merged|unmerged|do not merge|blocked from merge|merge blocked)\b/i,
-              )
-            ) {
-              activeCount = Math.max(activeCount, stageRank.ship);
-              evidence.push("ship");
-              source = "receipt: ship";
-            }
-
-            if (isReopened) {
-              activeCount = Math.min(activeCount, status === "in_progress" ? stageRank.build : stageRank.brief);
-              evidence.push("reopened");
-              source = "reopened: proof reset";
-            }
-
-            return {
-              pipeline_stage_count: activeCount,
-              pipeline_progress: stageProgress[activeCount] ?? 10,
-              pipeline_source: source,
-              pipeline_evidence: evidence,
-            };
-          }
-
           // Decorate with comment_count and stage evidence for the jobs board.
           const todos = data ?? [];
           let countMap: Record<string, number> = {};
-          let textMap: Record<string, string[]> = {};
+          let textMap: Record<string, Array<{ text: string; created_at: string | null }>> = {};
           if (todos.length > 0) {
             const ids = todos.map((t) => t.id);
             const { data: comments } = await supabase
               .from("mc_fishbowl_comments")
-              .select("target_id,text")
+              .select("target_id,text,created_at")
               .eq("api_key_hash", apiKeyHash)
               .eq("target_kind", "todo")
-              .in("target_id", ids);
+              .in("target_id", ids)
+              .order("created_at", { ascending: true });
             const commentRows = comments ?? [];
             countMap = commentRows.reduce<Record<string, number>>((acc, c) => {
               const k = c.target_id as string;
               acc[k] = (acc[k] ?? 0) + 1;
               return acc;
             }, {});
-            textMap = commentRows.reduce<Record<string, string[]>>((acc, c) => {
+            textMap = commentRows.reduce<Record<string, Array<{ text: string; created_at: string | null }>>>((acc, c) => {
               const k = c.target_id as string;
               const text = typeof c.text === "string" ? c.text : "";
-              if (text) acc[k] = [...(acc[k] ?? []), text];
+              const createdAt = typeof c.created_at === "string" ? c.created_at : null;
+              if (text) acc[k] = [...(acc[k] ?? []), { text, created_at: createdAt }];
               return acc;
             }, {});
           }
@@ -8908,7 +8891,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return {
               ...t,
               comment_count: countMap[id] ?? 0,
-              ...inferJobPipeline(t, textMap[id] ?? []),
+              ...inferFishbowlJobPipeline(t, textMap[id] ?? []),
             };
           });
           const compactTodos = decorated.map((t) => ({

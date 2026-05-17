@@ -3,6 +3,7 @@ import {
   buildJobGithubSyncSignal,
   extractJobGithubReferences,
   jobHasDeploymentFailure,
+  jobHasProofReset,
   type JobGithubSyncInput,
 } from "./jobsGithubSync";
 
@@ -79,6 +80,38 @@ describe("Jobs and GitHub sync helpers", () => {
       label: "Proof saved",
       detail: "Run 25590447727 is linked to this completed job.",
       tone: "done",
+    });
+  });
+
+  it("lets reopened or proof-reset state override stale GitHub links", () => {
+    const reopenedJob = {
+      ...baseJob,
+      title: "REOPENED: Memory Library taxonomy snapshot proof",
+      description: "Old PR #699 merged, but proof reset because the live Library still shows no snapshots.",
+      pipeline_evidence: ["https://github.com/malamutemayhem/unclick-agent-native-endpoints/pull/699"],
+    };
+
+    expect(jobHasProofReset(reopenedJob)).toBe(true);
+    expect(buildJobGithubSyncSignal(reopenedJob)).toEqual({
+      label: "Proof reset",
+      detail: "This job was reopened or blocked because proof is stale or missing.",
+      tone: "alert",
+    });
+  });
+
+  it("lets current pipeline proof clear old reopened wording", () => {
+    const recoveredJob = {
+      ...baseJob,
+      title: "REOPENED: Memory Library taxonomy snapshot proof",
+      description: "Old proof was reset because the live Library still shows no snapshots.",
+      pipeline_evidence: ["build", "proof", "review"],
+    };
+
+    expect(jobHasProofReset(recoveredJob)).toBe(false);
+    expect(buildJobGithubSyncSignal(recoveredJob)).toEqual({
+      label: "Job first",
+      detail: "Work starts here. Add a PR, run, or deployment link when code ships.",
+      tone: "quiet",
     });
   });
 });
