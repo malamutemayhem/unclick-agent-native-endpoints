@@ -6,7 +6,7 @@
  * ClaimKeyBanner is shown if the user has an unclaimed localStorage key.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSession, signOut } from "@/lib/auth";
 import ClaimKeyBanner from "@/components/ClaimKeyBanner";
@@ -27,6 +27,9 @@ import {
   ArrowRight,
   SlidersHorizontal,
   ShieldCheck,
+  Download,
+  Upload,
+  Database,
 } from "lucide-react";
 
 // Mask a saved connection secret: first 4 chars + 8 bullets + last 4.
@@ -227,6 +230,10 @@ export default function AdminYou() {
   const [timezoneSaving, setTimezoneSaving] = useState(false);
   const [timezoneError, setTimezoneError] = useState<string | null>(null);
   const timezoneAutoSyncRef = useRef<string | null>(null);
+  const [exportingData, setExportingData] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDetectedTimezone(getBrowserTimezone());
@@ -441,6 +448,45 @@ export default function AdminYou() {
     setDevices((prev) => prev.filter((d) => d.device_id !== deviceId));
   }
 
+  async function handleExportAll() {
+    if (!session) return;
+    setExportingData(true);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/memory-admin?action=admin_export_all", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setExportError(body.error ?? "Could not export your data.");
+        return;
+      }
+      const text = await res.text();
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `unclick-my-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError((e as Error).message);
+    } finally {
+      setExportingData(false);
+    }
+  }
+
+  function handleLoadDataFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportMessage(
+      "File staged locally. The review step will organize it before anything is added to memory.",
+    );
+  }
+
   const provider = user?.app_metadata?.provider ?? "email";
   const providerLabel =
     provider === "google" ? "Google" :
@@ -453,6 +499,12 @@ export default function AdminYou() {
     operatorTime?.source === "browser" ? "Browser detected" :
     detectedTimezone ? "Browser available" :
     "Not detected";
+  const youSections = [
+    { id: "you-profile", label: "Profile", hint: "Identity and time", icon: User },
+    { id: "you-api-key", label: "My API Key", hint: "Access and setup", icon: KeyRound },
+    { id: "you-my-data", label: "My Data", hint: "Export and import", icon: Database },
+    { id: "you-preferences", label: "Preferences", hint: "AI style", icon: SlidersHorizontal },
+  ];
 
   return (
     <div>
@@ -484,9 +536,28 @@ export default function AdminYou() {
           </Link>
         </div>
       ) : (
+        <>
+        <nav aria-label="You page sections" className="mb-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {youSections.map(({ id, label, hint, icon: Icon }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="group flex min-h-[76px] items-center gap-3 rounded-xl border border-white/[0.06] bg-[#111111] px-4 py-3 transition-colors hover:border-[#61C1C4]/40 hover:bg-white/[0.04]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-[#61C1C4] group-hover:bg-[#61C1C4]/10">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-white">{label}</span>
+                <span className="mt-0.5 block text-xs text-[#777]">{hint}</span>
+              </span>
+            </a>
+          ))}
+        </nav>
+
         <div className="grid gap-6 xl:grid-cols-3">
           {/* Profile card */}
-          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+          <div id="you-profile" className="scroll-mt-24 rounded-xl border border-white/[0.06] bg-[#111111] p-6">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
               <User className="h-4 w-4 text-[#E2B93B]" />
               Profile
@@ -593,7 +664,7 @@ export default function AdminYou() {
           </div>
 
           {/* AI Style card */}
-          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+          <div id="you-preferences" className="scroll-mt-24 rounded-xl border border-white/[0.06] bg-[#111111] p-6">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
               <SlidersHorizontal className="h-4 w-4 text-[#E2B93B]" />
               AI Style
@@ -620,10 +691,10 @@ export default function AdminYou() {
           </div>
 
           {/* Access card */}
-          <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6">
+          <div id="you-api-key" className="scroll-mt-24 rounded-xl border border-white/[0.06] bg-[#111111] p-6">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
               <KeyRound className="h-4 w-4 text-[#E2B93B]" />
-              Access
+              My API Key
             </h2>
 
             {generatedKey ? (
@@ -731,6 +802,66 @@ export default function AdminYou() {
             )}
           </div>
 
+          {/* My Data card */}
+          <div id="you-my-data" className="scroll-mt-24 rounded-xl border border-white/[0.06] bg-[#111111] p-6 xl:col-span-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Database className="h-4 w-4 text-[#E2B93B]" />
+              My Data
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#888]">
+              Keep a portable copy of your memory, sessions, preferences, and library. Imports are staged for review before anything changes.
+            </p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-white">Export All</p>
+                    <p className="mt-1 text-xs leading-5 text-white/50">
+                      Download your UnClick data as a JSON package.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportAll}
+                    disabled={exportingData}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[#61C1C4] px-3 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {exportingData ? "Exporting..." : "Download"}
+                  </button>
+                </div>
+                {exportError && <p className="mt-3 text-[11px] text-red-400">{exportError}</p>}
+              </div>
+
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-white">Load my Data</p>
+                    <p className="mt-1 text-xs leading-5 text-white/50">
+                      Accepts UnClick JSON, CSV, Markdown, and plain text files.
+                    </p>
+                  </div>
+                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/[0.08]">
+                    <Upload className="h-3.5 w-3.5" />
+                    Choose file
+                    <input
+                      type="file"
+                      accept=".json,.csv,.md,.markdown,.txt,application/json,text/csv,text/markdown,text/plain"
+                      className="sr-only"
+                      onChange={handleLoadDataFile}
+                    />
+                  </label>
+                </div>
+                {importFileName && (
+                  <p className="mt-3 text-[11px] text-white/60">
+                    Staged: <span className="font-mono text-white/80">{importFileName}</span>
+                  </p>
+                )}
+                {importMessage && <p className="mt-1 text-[11px] text-[#61C1C4]">{importMessage}</p>}
+              </div>
+            </div>
+          </div>
+
           {/* Security pointer */}
           <div className="rounded-xl border border-white/[0.06] bg-[#111111] p-6 xl:col-span-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -750,6 +881,7 @@ export default function AdminYou() {
           </div>
 
         </div>
+        </>
       )}
 
     </div>
