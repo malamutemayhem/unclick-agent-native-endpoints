@@ -1,13 +1,15 @@
 # PRD: Agents (Build Desk)
 
 **Status**: Shipped through Phase 5. Multi-backend worker support live.
-**Last updated**: 2026-04-25.
+**Last updated**: 2026-05-17.
 
 ## Problem statement
 
 A user who wants a coding task done has to choose a harness (Claude Code, Codex, Cursor, Gemini CLI), paste context into it, shepherd it through the work, and then track what it produced. Every harness is its own silo: different repo state, different context, different output format. A user who wants to use more than one is running three or four dashboards at once.
 
 Build Desk is the single orchestration surface: one desk, many engines. A user creates a task, picks a worker backend, and watches progress. Context and credentials come from UnClick. The harness is an interchangeable runtime.
+
+In product terms, UnClick is the factory. Claude Code, Codex, OpenHands, Cursor, Gemini CLI, and future tools are builder engines inside that factory. Build work still happens inside UnClick when UnClick owns the task, memory, routing, proof, review, and safety gates.
 
 ## Target user
 
@@ -35,16 +37,18 @@ Build Desk is the single orchestration surface: one desk, many engines. A user c
 ## Out-of-scope
 
 - **We do not embed a code editor.** Workers are external harnesses. Build Desk is the orchestration surface, not an IDE.
-- **We do not ship our own coding agent.** Backends are third-party. UnClick stays in the orchestration lane. See [ADR-0003](../adr/0003-stripe-model-not-windows.md).
-- **We do not auto-merge PRs from workers.** Completed tasks raise a PR; the human reviews and merges. No silent writes to `main`.
+- **We do not ship our own model runtime.** Backends are third-party or open-source engines. UnClick owns the factory layer around them: ScopePacks, routing, memory, proof, review, and safety. See [Builder Engine Lane](../builder-engine-lane.md) and [ADR-0003](../adr/0003-stripe-model-not-windows.md).
+- **We do not silently merge PRs from workers.** Completed tasks raise a PR. A human or role-separated reviewer lane can approve and merge only when policy allows, checks are responsive, and proof is logged. No silent writes to `main`.
 - **We do not store the worker's API keys beyond what BackstagePass holds.** Credentials used by a worker flow through BackstagePass; Build Desk does not duplicate them.
 
 ## Key decisions and why
 
 - **Worker registry instead of hardcoded backend list.** Tenants run whatever harness they prefer. Hardcoding `backends = ["claude-code", "cursor"]` would freeze the product against the user's environment.
+- **Engine routing by job shape, not brand.** OpenHands is useful for open-source issue-to-PR automation. Codex can be better for local repo surgery and integration. Claude Code can be better for edits or review when its channel is responsive. The router should choose the engine that fits the job and is live.
 - **`build_dispatch_events` as audit and debug.** Multi-backend orchestration fails in creative ways. An event log per dispatch is the only way to investigate a bad handoff.
-- **PR-gated completion.** Workers never push to `main` directly. Every task outcome is a PR against a branch the user can review. This mirrors Path 3 Vibe Kanban routing. See [ADR-0009](../adr/0009-path-3-vibe-kanban-routing.md).
+- **PR-gated completion.** Workers never push to `main` directly. Every task outcome is a PR against a branch that can be reviewed by the human or a role-separated reviewer lane. This mirrors Path 3 Vibe Kanban routing. See [ADR-0009](../adr/0009-path-3-vibe-kanban-routing.md).
 - **Context comes from UnClick, not the worker.** Memory facts, library docs, credentials all travel with the task. A Codex worker with the user's memory is a different product from a Codex worker without it.
+- **Role separation over account separation.** Normal work needs builder and reviewer roles. Risky work also needs a safety role. One subscription or tether can serve multiple roles only when the role switch is explicit and logged.
 - **No RLS on `build_*` tables today.** Documented in `docs/security/current-posture.md` as a known gap. Scoping is enforced at the service layer; RLS is planned in Phase 3 security work.
 
 ## Platform philosophy alignment
