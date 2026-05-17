@@ -29,11 +29,52 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
   }
 }
 
+function findJsonObjectAfterIndex(text: string, start: number): string | null {
+  const openIndex = text.indexOf("{", start);
+  if (openIndex < 0) return null;
+
+  let depth = 0;
+  let escaped = false;
+  let inString = false;
+
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(openIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
 export function parseScopePackFromText(value: unknown): Record<string, unknown> | null {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return null;
 
-  const label = String.raw`(?:scope[_ -]?pack|scopepack|runner[_ -]?scope|autonomous[_ -]?scope|coding[_ -]?room[_ -]?scope)`;
+  const label = String.raw`(?:scope[_ -]?pack(?:\s+json)?|scopepack|runner[_ -]?scope|autonomous[_ -]?scope|coding[_ -]?room[_ -]?scope)`;
   const fencedPatterns = [
     new RegExp(String.raw`(?:^|\n)\s*${label}\s*:?\s*\r?\n\s*` + "```(?:json)?\\s*([\\s\\S]*?)```", "gi"),
     new RegExp(String.raw`(?:^|\n)\s*${label}\s*:\s*` + "```(?:json)?\\s*([\\s\\S]*?)```", "gi"),
@@ -52,6 +93,13 @@ export function parseScopePackFromText(value: unknown): Record<string, unknown> 
   let match;
   while ((match = inlinePattern.exec(text))) {
     const parsed = parseJsonObject(match[1]);
+    if (parsed) return parsed;
+  }
+
+  const rawJsonPattern = new RegExp(String.raw`(?:^|\n)\s*${label}\s*:?\s*(?:\r?\n|\s)+`, "gi");
+  while ((match = rawJsonPattern.exec(text))) {
+    const jsonText = findJsonObjectAfterIndex(text, rawJsonPattern.lastIndex);
+    const parsed = parseJsonObject(jsonText);
     if (parsed) return parsed;
   }
 

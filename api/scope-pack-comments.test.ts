@@ -41,6 +41,25 @@ describe("ScopePack comment parsing", () => {
     });
   });
 
+  it("parses raw pretty JSON after a bare ScopePack label", () => {
+    const scopePack = parseScopePackFromText([
+      "ScopePack",
+      "{",
+      '  "todo_id": "b4331f02-3def-4801-99e5-7f6e31ca5b73",',
+      '  "owned_files": ["api/memory-admin.ts"],',
+      '  "verification": ["npx vitest run api/memory-admin.test.ts"],',
+      '  "proof_required": "Live Library count must increase after writer run {no raw transcripts}."',
+      "}",
+    ].join("\n"));
+
+    expect(scopePack).toEqual({
+      todo_id: "b4331f02-3def-4801-99e5-7f6e31ca5b73",
+      owned_files: ["api/memory-admin.ts"],
+      verification: ["npx vitest run api/memory-admin.test.ts"],
+      proof_required: "Live Library count must increase after writer run {no raw transcripts}.",
+    });
+  });
+
   it("ignores prose that is not explicit JSON", () => {
     expect(parseScopePackFromText("ScopePack needed: pick the right files later.")).toBeNull();
   });
